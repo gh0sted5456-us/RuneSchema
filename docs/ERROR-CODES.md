@@ -2,13 +2,15 @@
 
 RuneSchema's stable diagnostic catalogue. A code identifies a condition, not a crash severity: the emitted message and severity remain authoritative. **Suggested references** for older uncoded messages are labelled as suggestions, not assigned causes.
 
-The Live Console shows a readable event title, timestamp, repeated-event count and details with meaning, impact and next steps. Raw entries remain copyable; the viewer never changes disk logs.
+Helpy's **Diagnostics** workspace combines overview, grouped issues and Live Log. Raw entries remain copyable; the viewer never changes source logs. Recent activity includes normal and diagnostic messages; notifications remain limited to warnings/errors.
 
-This page contains **49 stable RS codes** and **19 bridge reason codes**. Every entry has its own permanent header link on this page. A catalogue entry is not a claim that every operation already emits that code: older messages can remain uncoded and suggested references stay explicitly labelled.
+This page contains **49 legacy reference entries**, **221 structured diagnostic entries** and **19 bridge reason codes**. Three labels exist in both legacy and structured namespaces: RS-JRN-001, RS-JRN-002 and RS-SPAWN-001. Read the namespace and source rather than inferring meaning from the label alone. Existing links are preserved, with links between both meanings.
+
+Structured reports in `RSDiagLog.jsonl` carry their own source, context and outcome. A catalogue entry does not imply that every operation emits it. `Unknown` cause means unknown; the actual emitted severity is authoritative. `Partial` can mean some changes occurred, `Deferred` means later/restart handling, and `Skipped`/`Blocked` do not establish that the entire mod failed.
 
 ## Read a code safely
 
-1. Click the code in Helpy's Live Console, or select the event and choose **Open code reference** (also available when the window is narrow). The link opens this page at that code's header.
+1. Open the code reference from Helpy's Diagnostics or Live Log. The link opens this page at that code's header; shared legacy/structured labels link to both meanings.
 2. Read the original message, level and first preceding failure. The typical level below is not a replacement for the event's actual severity.
 3. Follow the condition-specific checks below; keep last-good caches and original saves. Report the exact code, subsystem, game/storefront/framework versions and a redacted excerpt if it persists.
 
@@ -41,6 +43,24 @@ This page contains **49 stable RS codes** and **19 bridge reason codes**. Every 
 | RS-ITEM | Items |
 | RS-SRC | Content |
 | RS-GAME | Game items |
+| RS-ASSET | Structured ASSET diagnostics |
+| RS-BLD | Structured BLD diagnostics |
+| RS-BP | Structured BP diagnostics |
+| RS-CORE | Structured CORE diagnostics |
+| RS-CRS | Structured CRS diagnostics |
+| RS-ENUM | Structured ENUM diagnostics |
+| RS-EQP | Structured EQP diagnostics |
+| RS-GE | Structured GE diagnostics |
+| RS-IMP | Structured IMP diagnostics |
+| RS-JSON | Structured JSON diagnostics |
+| RS-LOAD | Structured LOAD diagnostics |
+| RS-NIA | Structured NIA diagnostics |
+| RS-NPC | Structured NPC diagnostics |
+| RS-RAW | Structured RAW diagnostics |
+| RS-REC | Structured REC diagnostics |
+| RS-RGST | Structured RGST diagnostics |
+| RS-STR | Structured STR diagnostics |
+| RS-VND | Structured VND diagnostics |
 
 <div class="rs-code-catalogue" markdown="1">
 
@@ -215,6 +235,9 @@ Keep the last-good results visible. Refresh the affected query once after source
 <section class="rs-code-card" data-rs-code="RS-SPAWN-001" data-rs-severity="warning" markdown="1">
 
 ## RS-SPAWN-001: Placement needs loaded ground {#rs-spawn-001}
+
+!!! note "Shared label: choose the namespace"
+    This is the **legacy reference**. A structured report uses a different meaning: [structured RS-SPAWN-001](#structured-rs-spawn-001). Check the original source and format.
 
 **Spawns · Typical level: warning**
 
@@ -720,6 +743,9 @@ Use the project's supported publication index. Report the rejected index/pack id
 
 ## RS-JRN-001: Journal cache is an observed subset {#rs-jrn-001}
 
+!!! note "Shared label: choose the namespace"
+    This is the **legacy reference**. A structured report uses a different meaning: [structured RS-JRN-001](#structured-rs-jrn-001). Check the original source and format.
+
 **Journal · Typical level: info**
 
 Full-game journal coverage is not certified.
@@ -747,6 +773,9 @@ Check category coverage for World, Recipes and Knowledge. Import a compatible jo
 <section class="rs-code-card" data-rs-code="RS-JRN-002" data-rs-severity="warning" markdown="1">
 
 ## RS-JRN-002: Journal cache could not be read {#rs-jrn-002}
+
+!!! note "Shared label: choose the namespace"
+    This is the **legacy reference**. A structured report uses a different meaning: [structured RS-JRN-002](#structured-rs-jrn-002). Check the original source and format.
 
 **Journal · Typical level: warning**
 
@@ -810,11 +839,11 @@ Complete stable registry evidence is unavailable.
 
 **Common reasons**
 
-Complete stable item/recipe/registry evidence is unavailable, so removal cannot be distinguished safely from incomplete loading.
+The applicable stable registry evidence is unavailable for one or more sections; incomplete loading must not be mistaken for removed content.
 
 **What RuneSchema does**
 
-Automatic pruning stays disabled; no character save is modified by this deferral.
+Uncertified sections stay unchanged. Other independently certified sections may still be cleaned; native loading continues.
 
 **What to do next**
 
@@ -822,7 +851,7 @@ Resolve readiness first; a missing lookup is not proof of removed content.
 
 **Troubleshooting checks**
 
-Resolve earlier enrollment failures and wait for stable registration. This deferral does not modify a character save. Never treat an unresolved lookup as permission to prune content.
+Review the SECTION-SKIPPED entries. Certified sections continue independently; unresolved sections are retained. Native loading still runs, using relaxed mode and rejection fallback where enabled.
 
 [Direct link to RS-SAVE-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-save-002)
 
@@ -1416,6 +1445,4436 @@ Capture the full object path and preceding lifecycle messages. This is not the R
 
 </section>
 
+## Structured diagnostic codes
+
+These entries come from the producer registry used by the current diagnostics build. They are distinct from older symptom/reference codes above. Producer paths identify the reporting subsystem, not a guarantee that the user's file has that path.
+
+<section class="rs-code-card" data-rs-code="RS-ASSET-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-ASSET-001: Asset target remained unresolved {#rs-asset-001}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Asset target remained unresolved. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
+
+**What to check**
+
+Check the exact named target and whether its content is mounted or loaded. An unresolved lookup does not, by itself, prove a misspelled path.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-ASSET-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-asset-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-ASSET-002" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-ASSET-002: Asset definition has invalid root {#rs-asset-002}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Asset definition has invalid root. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
+
+**What to check**
+
+The asset definition root was rejected. Review the file’s top-level JSONC type and structure.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-ASSET-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-asset-002)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-ASSET-003" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-ASSET-003: Asset property modification rejected {#rs-asset-003}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Asset property modification rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
+
+**What to check**
+
+The requested asset field could not be applied. Inspect the exact field path and original rejection; other fields may have succeeded.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-ASSET-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-asset-003)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BLD-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-BLD-001: Invalid building document root {#rs-bld-001}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Invalid building document root. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BLD-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BLD-002" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-BLD-002: Invalid building definition {#rs-bld-002}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Invalid building definition. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+
+**What to check**
+
+The named building entry must be an object. Review that entry in the identified building definition file.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BLD-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-002)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BLD-003" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-BLD-003: Invalid building asset reference {#rs-bld-003}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Invalid building asset reference. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BLD-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-003)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BLD-004" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-BLD-004: Invalid building properties {#rs-bld-004}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Invalid building properties. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+
+**What to check**
+
+The building Properties value must be an object. Check the named definition rather than changing unrelated building files.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BLD-004](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-004)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BLD-005" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-BLD-005: Building patch target missing {#rs-bld-005}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Building patch target missing. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+
+**What to check**
+
+A building patch could not find its target. Confirm the exact existing building identity and whether that definition is loaded.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BLD-005](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-005)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BLD-006" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-BLD-006: Invalid building patch declaration {#rs-bld-006}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Invalid building patch declaration. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BLD-006](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-006)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BLD-007" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-BLD-007: Invalid building requirements {#rs-bld-007}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Invalid building requirements. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+
+**What to check**
+
+Building Requirements must be an array. Check the failing field in the named definition.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BLD-007](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-007)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BLD-008" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-BLD-008: Protected building property {#rs-bld-008}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Protected building property. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+
+**What to check**
+
+The building patch attempted a protected managed identity change. Leave the managed identity unchanged.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BLD-008](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-008)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BLD-009" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-BLD-009: Invalid BuildableActor reference {#rs-bld-009}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Invalid BuildableActor reference. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BLD-009](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-009)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BLD-010" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-BLD-010: Invalid requirement entry {#rs-bld-010}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Invalid requirement entry. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BLD-010](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-010)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BLD-011" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-BLD-011: Unsupported building override {#rs-bld-011}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Unsupported building override. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BLD-011](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-011)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BLD-012" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-BLD-012: Invalid building unlock {#rs-bld-012}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Invalid building unlock. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BLD-012](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-012)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BLD-013" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-BLD-013: Invalid building collection placement {#rs-bld-013}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Invalid building collection placement. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BLD-013](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-013)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BLD-014" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-BLD-014: Missing building pieces array {#rs-bld-014}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Missing building pieces array. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+
+**What to check**
+
+The Base Builder import must contain a pieces array. Check the reported import source and shape.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BLD-014](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-014)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BLD-015" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-BLD-015: Building piece limit exceeded {#rs-bld-015}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Building piece limit exceeded. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BLD-015](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-015)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BLD-016" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-BLD-016: Building world assets not ready {#rs-bld-016}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Building world assets not ready. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BLD-016](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-016)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BLD-017" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-BLD-017: Native building registry unavailable {#rs-bld-017}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Native building registry unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BLD-017](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-017)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BLD-018" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-BLD-018: Building baseline restoration failed {#rs-bld-018}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Building baseline restoration failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BLD-018](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-018)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BLD-019" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-BLD-019: Native building registry incomplete {#rs-bld-019}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Native building registry incomplete. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BLD-019](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-019)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BLD-020" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-BLD-020: Building world registration aborted {#rs-bld-020}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Building world registration aborted. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BLD-020](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-020)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BLD-021" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-BLD-021: Building registry rollback failed {#rs-bld-021}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Building registry rollback failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BLD-021](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-021)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BLD-022" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-BLD-022: Building world recovery timed out {#rs-bld-022}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Building world recovery timed out. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BLD-022](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-022)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BP-001" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-BP-001: Blueprint property not found {#rs-bp-001}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Blueprint property not found. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
+
+**What to check**
+
+Compare the complete property path with the target Blueprint's current reflected properties and nested structure.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BP-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bp-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BP-002" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-BP-002: Required Blueprint lifecycle hook unavailable {#rs-bp-002}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Required Blueprint lifecycle hook unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
+
+**What to check**
+
+A required Blueprint lifecycle hook was unavailable. Review the reported hook and native build compatibility rather than assuming a property typo.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BP-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bp-002)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BP-003" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-BP-003: Blueprint changes require restart {#rs-bp-003}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Blueprint changes require restart. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
+
+**What to check**
+
+This Blueprint change was deferred by the live-reload path. Restart the game to check whether it can apply during startup.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BP-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bp-003)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BP-004" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-BP-004: Blueprint world-teardown cleanup hook unavailable {#rs-bp-004}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Blueprint world-teardown cleanup hook unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BP-004](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bp-004)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BP-005" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-BP-005: Blueprint PostLoad vtable unavailable {#rs-bp-005}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Blueprint PostLoad vtable unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BP-005](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bp-005)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BP-006" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-BP-006: Actor PostInitComponents vtable unavailable {#rs-bp-006}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Actor PostInitComponents vtable unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BP-006](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bp-006)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BP-007" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-BP-007: Runtime widget rule failed {#rs-bp-007}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Runtime widget rule failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BP-007](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bp-007)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BP-008" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-BP-008: Runtime UI rule failed {#rs-bp-008}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Runtime UI rule failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BP-008](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bp-008)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BP-009" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-BP-009: Blueprint modification failed {#rs-bp-009}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Blueprint modification failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BP-009](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bp-009)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BP-010" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-BP-010: Blueprint component template unavailable {#rs-bp-010}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Blueprint component template unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BP-010](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bp-010)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BP-011" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-BP-011: Blueprint component definition invalid {#rs-bp-011}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Blueprint component definition invalid. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsBlueprintModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BP-011](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bp-011)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CORE-001: RuneSchema startup aborted {#rs-core-001}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** RuneSchema startup aborted. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-002" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CORE-002: GameInstance vtable unavailable {#rs-core-002}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** GameInstance vtable unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-002)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-003" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CORE-003: GameInstance initialization hook unavailable {#rs-core-003}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** GameInstance initialization hook unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-003)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-004" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-CORE-004: Early DataTable observation unavailable {#rs-core-004}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Early DataTable observation unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-004](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-004)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-005" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-CORE-005: Early DataTable hook unavailable {#rs-core-005}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Early DataTable hook unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-005](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-005)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-006" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CORE-006: Dedicated-server registry boundary unavailable {#rs-core-006}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Dedicated-server registry boundary unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-006](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-006)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-007" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CORE-007: Core startup fallback unavailable {#rs-core-007}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Core startup fallback unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-007](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-007)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-008" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CORE-008: Additional PAK directory hook unavailable {#rs-core-008}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Additional PAK directory hook unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-008](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-008)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-009" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CORE-009: Additional PAK directory binding unavailable {#rs-core-009}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Additional PAK directory binding unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-009](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-009)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-010" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CORE-010: Automatic reload callback unavailable {#rs-core-010}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Automatic reload callback unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-010](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-010)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-011" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CORE-011: Mod auto-reload failed {#rs-core-011}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Mod auto-reload failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-011](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-011)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-012" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CORE-012: Building world registration disabled {#rs-core-012}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Building world registration disabled. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-012](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-012)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-013" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CORE-013: Pending string application failed {#rs-core-013}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Pending string application failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-013](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-013)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-014" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CORE-014: Data registrar unavailable {#rs-core-014}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Data registrar unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-014](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-014)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-015" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CORE-015: Networking registry bridge unavailable {#rs-core-015}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Networking registry bridge unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-015](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-015)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-016" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CORE-016: Additional PAK mounting unavailable {#rs-core-016}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Additional PAK mounting unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-016](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-016)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-017" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CORE-017: Plugin PAK order rejected {#rs-core-017}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Plugin PAK order rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-017](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-017)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-018" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CORE-018: Mod PAK order rejected {#rs-core-018}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Mod PAK order rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-018](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-018)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-019" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-CORE-019: Loader initialization exception {#rs-core-019}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Loader initialization exception. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-019](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-019)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-020" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-CORE-020: Loader finalization exception {#rs-core-020}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Loader finalization exception. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-020](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-020)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-021" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-CORE-021: Recipe reference preparation failed {#rs-core-021}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Recipe reference preparation failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-021](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-021)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-022" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-CORE-022: Definition finalization exception {#rs-core-022}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Definition finalization exception. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-022](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-022)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-023" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-CORE-023: Player appearance source skipped {#rs-core-023}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Player appearance source skipped. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-023](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-023)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-024" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-CORE-024: Mod metadata or discovery failed {#rs-core-024}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Mod metadata or discovery failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-024](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-024)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-025" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-CORE-025: Nameplate section skipped {#rs-core-025}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Nameplate section skipped. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-025](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-025)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-026" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-CORE-026: Nameplate finalization exception {#rs-core-026}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Nameplate finalization exception. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-026](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-026)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-027" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-CORE-027: Player rules section skipped {#rs-core-027}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Player rules section skipped. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-027](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-027)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-028" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-CORE-028: Player rules finalization exception {#rs-core-028}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Player rules finalization exception. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-028](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-028)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-029" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-CORE-029: Optional persistence ledger unavailable {#rs-core-029}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Optional persistence ledger unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsMainLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-029](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-029)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-030" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-CORE-030: UE4SS package preparation interrupted {#rs-core-030}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** UE4SS package preparation interrupted. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/dllmain.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-030](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-030)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-031" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-CORE-031: BP Mod Loader integration skipped {#rs-core-031}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** BP Mod Loader integration skipped. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/dllmain.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-031](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-031)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-032" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-CORE-032: HELPY service validation failed {#rs-core-032}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** HELPY service validation failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/dllmain.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-032](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-032)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-033" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CORE-033: Quest registry preparation failed {#rs-core-033}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Quest registry preparation failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `include/Loader/DragonWildsQuestLoader.h`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-033](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-033)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-034" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CORE-034: World quest registry preparation failed {#rs-core-034}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** World quest registry preparation failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `include/Loader/DragonWildsQuestLoader.h`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-034](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-034)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-035" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-CORE-035: Quest reload requires restart {#rs-core-035}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Quest reload requires restart. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `include/Loader/DragonWildsQuestLoader.h`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-035](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-035)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-036" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CORE-036: Quest initialization hook unavailable {#rs-core-036}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Quest initialization hook unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `include/Loader/DragonWildsQuestLoader.h`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-036](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-036)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-037" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-CORE-037: Dialogue reload requires restart {#rs-core-037}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Dialogue reload requires restart. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `include/Loader/DragonWildsDialogueLoader.h`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-037](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-037)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-038" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CORE-038: Native event hooks unavailable {#rs-core-038}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Native event hooks unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `include/Loader/DragonWildsEventLoader.h`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-038](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-038)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-039" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-CORE-039: Event reload requires restart {#rs-core-039}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Event reload requires restart. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `include/Loader/DragonWildsEventLoader.h`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-039](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-039)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-040" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-CORE-040: Load-order save refused {#rs-core-040}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Load-order save refused. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/ModLoadOrder.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-040](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-040)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-041" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CORE-041: Load-order save failed {#rs-core-041}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Load-order save failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/ModLoadOrder.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-041](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-041)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-042" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CORE-042: Player definition file rejected {#rs-core-042}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Player definition file rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/Spawn/PlayerRules.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-042](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-042)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-043" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CORE-043: Nameplate definition file rejected {#rs-core-043}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Nameplate definition file rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/Spawn/PlayerRules.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-043](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-043)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-044" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CORE-044: Nameplate root invalid {#rs-core-044}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Nameplate root invalid. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/Spawn/PlayerRules.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-044](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-044)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-045" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CORE-045: Nameplate entry rejected {#rs-core-045}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Nameplate entry rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/Spawn/PlayerRules.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-045](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-045)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-046" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CORE-046: Player definitions root invalid {#rs-core-046}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Player definitions root invalid. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/Spawn/PlayerRules.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-046](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-046)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-047" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CORE-047: Player rule entry rejected {#rs-core-047}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Player rule entry rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/Spawn/PlayerRules.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-047](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-047)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-048" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CORE-048: Player patch target missing {#rs-core-048}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Player patch target missing. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/Spawn/PlayerRules.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-048](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-048)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-049" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CORE-049: Player rule registration failed {#rs-core-049}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Player rule registration failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/Spawn/PlayerRules.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-049](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-049)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-050" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-CORE-050: Registry bridge attachment expired {#rs-core-050}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Registry bridge attachment expired. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Runtime/RegistryBridge.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-050](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-050)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-051" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-CORE-051: Registry bridge attachment failed {#rs-core-051}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Registry bridge attachment failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Runtime/RegistryBridge.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-051](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-051)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-052" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-CORE-052: Registry transport request rejected {#rs-core-052}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Registry transport request rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Runtime/RegistryBridge.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-052](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-052)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-053" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-CORE-053: Registry bridge update failed {#rs-core-053}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Registry bridge update failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Runtime/RegistryBridge.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-053](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-053)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-054" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-CORE-054: Registry bridge hooks unavailable {#rs-core-054}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Registry bridge hooks unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Runtime/RegistryBridge.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-054](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-054)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CORE-055" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-CORE-055: Registry bridge startup catch-up failed {#rs-core-055}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Registry bridge startup catch-up failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Runtime/RegistryBridge.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CORE-055](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-055)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CRS-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CRS-001: Course definition rejected {#rs-crs-001}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Course definition rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CRS-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CRS-002" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CRS-002: Invalid course patch {#rs-crs-002}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Invalid course patch. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CRS-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-002)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CRS-003" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CRS-003: Course patch target unavailable {#rs-crs-003}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Course patch target unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
+
+**What to check**
+
+The course patch declaration was missing or malformed. Inspect the named patch identity and source structure.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CRS-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-003)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CRS-004" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CRS-004: Course lifecycle hook unavailable {#rs-crs-004}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Course lifecycle hook unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CRS-004](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-004)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CRS-005" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-CRS-005: Course reload requires restart {#rs-crs-005}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Course reload requires restart. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CRS-005](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-005)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CRS-006" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CRS-006: Course construction failed {#rs-crs-006}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Course construction failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CRS-006](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-006)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CRS-007" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CRS-007: Course patch target malformed {#rs-crs-007}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Course patch target malformed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CRS-007](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-007)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CRS-008" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CRS-008: Course patch target ambiguous {#rs-crs-008}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Course patch target ambiguous. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CRS-008](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-008)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CRS-009" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CRS-009: Course prop lifecycle observer unavailable {#rs-crs-009}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Course prop lifecycle observer unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CRS-009](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-009)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CRS-010" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CRS-010: Course build observer unavailable {#rs-crs-010}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Course build observer unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CRS-010](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-010)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CRS-011" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-CRS-011: Required agility content unavailable {#rs-crs-011}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Required agility content unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CRS-011](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-011)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CRS-012" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-CRS-012: Course reward target unavailable {#rs-crs-012}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Course reward target unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CRS-012](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-012)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CRS-013" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-CRS-013: Course prop class unusable {#rs-crs-013}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Course prop class unusable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsCourseLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CRS-013](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-013)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-ENUM-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-ENUM-001: Enum class unavailable {#rs-enum-001}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Enum class unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsEnumLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-ENUM-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-enum-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-ENUM-002" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-ENUM-002: Enum declaration rejected {#rs-enum-002}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Enum declaration rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsEnumLoader.cpp`
+
+**What to check**
+
+The enum namespace or value is invalid for this loader. Check the exact namespace and enum entry in the source definition.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-ENUM-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-enum-002)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-EQP-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-EQP-001: Equipment target unavailable {#rs-eqp-001}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Equipment target unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsEquipmentLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-EQP-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-eqp-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-EQP-002" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-EQP-002: Equipment effect rule rejected {#rs-eqp-002}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Equipment effect rule rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsEquipmentLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-EQP-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-eqp-002)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-EQP-003" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-EQP-003: Equipment field rule rejected {#rs-eqp-003}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Equipment field rule rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsEquipmentLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-EQP-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-eqp-003)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-EQP-004" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-EQP-004: Native equipment capability unavailable {#rs-eqp-004}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Native equipment capability unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsEquipmentLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-EQP-004](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-eqp-004)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-EQP-005" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-EQP-005: Equipment behavior reload deferred {#rs-eqp-005}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Equipment behavior reload deferred. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsEquipmentLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-EQP-005](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-eqp-005)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-EQP-006" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-EQP-006: Equipment definition rejected {#rs-eqp-006}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Equipment definition rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsEquipmentLoader.cpp`
+
+**What to check**
+
+Review the identified equipment definition and the original validation error; this entry was rejected.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-EQP-006](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-eqp-006)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-GE-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-GE-001: Duplicate effect alias {#rs-ge-001}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Duplicate effect alias. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsGameplayEffectLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-GE-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-ge-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-GE-002" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-GE-002: Effect class could not be registered {#rs-ge-002}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Effect class could not be registered. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsGameplayEffectLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-GE-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-ge-002)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-GE-003" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-GE-003: Effect alias reload deferred {#rs-ge-003}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Effect alias reload deferred. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsGameplayEffectLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-GE-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-ge-003)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-GE-004" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-GE-004: Effect definition rejected {#rs-ge-004}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Effect definition rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsGameplayEffectLoader.cpp`
+
+**What to check**
+
+The Gameplay Effect definition was deferred until restart. The record does not mean the effect was applied live.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-GE-004](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-ge-004)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-IMP-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-IMP-001: Import directive rejected {#rs-imp-001}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Import directive rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
+
+**What to check**
+
+Review the rejected $Imp* directives and the exact parser error. No import was executed by the rejected request.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-IMP-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-IMP-002" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-IMP-002: Import target incompatible {#rs-imp-002}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Import target incompatible. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
+
+**What to check**
+
+Inspect the destination's Modules.Modules array and Module object-reference layout before retrying the import.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-IMP-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-002)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-IMP-003" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-IMP-003: Import remap ignored {#rs-imp-003}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Import remap ignored. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-IMP-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-003)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-IMP-004" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-IMP-004: Import source unresolved {#rs-imp-004}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Import source unresolved. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-IMP-004](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-004)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-IMP-005" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-IMP-005: Import source incompatible {#rs-imp-005}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Import source incompatible. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-IMP-005](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-005)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-IMP-006" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-IMP-006: Optional import dependency skipped {#rs-imp-006}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Optional import dependency skipped. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-IMP-006](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-006)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-IMP-007" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-IMP-007: Module dependency resolution failed {#rs-imp-007}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Module dependency resolution failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-IMP-007](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-007)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-IMP-008" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-IMP-008: Atomic import blocked during resolution {#rs-imp-008}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Atomic import blocked during resolution. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
+
+**What to check**
+
+An atomic import was blocked during dependency resolution. Review the preceding dependency errors; the destination was not changed by this batch.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-IMP-008](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-008)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-IMP-009" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-IMP-009: Module import plan rejected {#rs-imp-009}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Module import plan rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-IMP-009](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-009)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-IMP-010" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-IMP-010: Atomic import plan blocked {#rs-imp-010}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Atomic import plan blocked. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-IMP-010](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-010)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-IMP-011" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-IMP-011: Dry-run import plan blocked {#rs-imp-011}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Dry-run import plan blocked. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
+
+**What to check**
+
+This was a blocked dry-run plan, not attempted execution. Inspect the dependency and validation errors before running without $ImpDry.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-IMP-011](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-011)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-IMP-012" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-IMP-012: Import batch partially applied {#rs-imp-012}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Import batch partially applied. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsAssetModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-IMP-012](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-012)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-JRN-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-JRN-001: Journal runtime classes unavailable {#structured-rs-jrn-001}
+
+**Structured namespace · Typical level: error**
+
+This label also has a [legacy reference meaning](#rs-jrn-001); do not combine the two diagnoses.
+
+**Condition:** Journal runtime classes unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-JRN-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#structured-rs-jrn-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-JRN-002" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-JRN-002: Invalid journal document root {#structured-rs-jrn-002}
+
+**Structured namespace · Typical level: error**
+
+This label also has a [legacy reference meaning](#rs-jrn-002); do not combine the two diagnoses.
+
+**Condition:** Invalid journal document root. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
+
+**What to check**
+
+The journal definition root is invalid. Review the expected top-level structure of the source file.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-JRN-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#structured-rs-jrn-002)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-JRN-003" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-JRN-003: Invalid journal entry {#rs-jrn-003}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Invalid journal entry. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-JRN-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-003)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-JRN-004" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-JRN-004: Journal patch target unavailable {#rs-jrn-004}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Journal patch target unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-JRN-004](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-004)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-JRN-005" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-JRN-005: Journal patch rejected {#rs-jrn-005}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Journal patch rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-JRN-005](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-005)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-JRN-006" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-JRN-006: Journal ownership conflict {#rs-jrn-006}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Journal ownership conflict. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-JRN-006](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-006)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-JRN-007" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-JRN-007: Cooked journal declarations rejected {#rs-jrn-007}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Cooked journal declarations rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-JRN-007](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-007)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-JRN-008" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-JRN-008: Journal persistence event unavailable {#rs-jrn-008}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Journal persistence event unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-JRN-008](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-008)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-JRN-009" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-JRN-009: Journal persistence event layout incompatible {#rs-jrn-009}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Journal persistence event layout incompatible. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-JRN-009](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-009)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-JRN-010" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-JRN-010: Journal unlock callback failed {#rs-jrn-010}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Journal unlock callback failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-JRN-010](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-010)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-JRN-011" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-JRN-011: Journal persistence hook unavailable {#rs-jrn-011}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Journal persistence hook unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-JRN-011](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-011)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-JRN-012" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-JRN-012: Journal event component invalid {#rs-jrn-012}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Journal event component invalid. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-JRN-012](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-012)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-JRN-013" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-JRN-013: Journal unlock unavailable {#rs-jrn-013}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Journal unlock unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-JRN-013](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-013)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-JRN-014" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-JRN-014: Journal acquisition observer unavailable {#rs-jrn-014}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Journal acquisition observer unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsJournalModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-JRN-014](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-014)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-JSON-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-JSON-001: JSON definition could not be opened / parsed {#rs-json-001}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** JSON definition could not be opened / parsed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Core/JsonDocument.cpp`
+
+**What to check**
+
+Review the reported source file for JSON/JSONC syntax problems. Use line and column evidence only when the parser actually supplied them.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-JSON-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-json-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-JSON-002" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-JSON-002: Required JSON field missing {#rs-json-002}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Required JSON field missing. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Utility/Config.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-JSON-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-json-002)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-JSON-003" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-JSON-003: JSON field has wrong type {#rs-json-003}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** JSON field has wrong type. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Utility/Config.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-JSON-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-json-003)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-JSON-004" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-JSON-004: JSON safety limit exceeded {#rs-json-004}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** JSON safety limit exceeded. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Core/JsonDocument.cpp`
+
+**What to check**
+
+The JSONC input exceeded the supported document-size limit. Split definitions into smaller independent files.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-JSON-004](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-json-004)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-JSON-005" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-JSON-005: JSON file-discovery safety limit exceeded {#rs-json-005}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** JSON file-discovery safety limit exceeded. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Utility/Config.cpp`
+
+**What to check**
+
+The section exceeded its supported file-count limit. Reduce the number of files in that section.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-JSON-005](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-json-005)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-LOAD-001" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-LOAD-001: Loader folder discovery failed {#rs-load-001}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Loader folder discovery failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsModLoaderBase.cpp`
+
+**What to check**
+
+Review the affected loader directory and the original discovery failure before editing mod definitions.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-LOAD-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-load-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-LOAD-002" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-LOAD-002: Loader capability unavailable {#rs-load-002}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Loader capability unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsModLoaderBase.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-LOAD-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-load-002)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-LOAD-003" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-LOAD-003: Loader section raised an exception {#rs-load-003}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Loader section raised an exception. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsModLoaderBase.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-LOAD-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-load-003)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-LOAD-004" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-LOAD-004: Loader section raised an unknown exception {#rs-load-004}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Loader section raised an unknown exception. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsModLoaderBase.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-LOAD-004](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-load-004)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NIA-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-NIA-001: Invalid Niagara document root {#rs-nia-001}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Invalid Niagara document root. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsNiagaraLoader.cpp`
+
+**What to check**
+
+The Niagara definition root was rejected. Review the specified source file and expected root structure.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NIA-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-nia-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NIA-002" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-NIA-002: Duplicate Niagara ID {#rs-nia-002}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Duplicate Niagara ID. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsNiagaraLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NIA-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-nia-002)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NIA-003" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-NIA-003: Niagara definition rejected {#rs-nia-003}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Niagara definition rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsNiagaraLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NIA-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-nia-003)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NIA-004" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-NIA-004: Niagara reload requires restart {#rs-nia-004}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Niagara reload requires restart. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsNiagaraLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NIA-004](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-nia-004)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NPC-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-NPC-001: Merchant interaction hook unavailable {#rs-npc-001}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Merchant interaction hook unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NPC-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NPC-002" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-NPC-002: NPC client world-state presentation ignored {#rs-npc-002}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** NPC client world-state presentation ignored. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NPC-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-002)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NPC-003" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-NPC-003: NPC client replica preparation skipped {#rs-npc-003}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** NPC client replica preparation skipped. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NPC-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-003)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NPC-004" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-NPC-004: NPC lifecycle construction exhausted {#rs-npc-004}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** NPC lifecycle construction exhausted. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NPC-004](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-004)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NPC-005" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-NPC-005: NPC construction or attachment blocked {#rs-npc-005}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** NPC construction or attachment blocked. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NPC-005](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-005)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NPC-006" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-NPC-006: NPC cleanup queue failed {#rs-npc-006}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** NPC cleanup queue failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NPC-006](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-006)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NPC-007" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-NPC-007: NPC quarantine failed {#rs-npc-007}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** NPC quarantine failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NPC-007](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-007)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NPC-008" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-NPC-008: NPC retirement not confirmed {#rs-npc-008}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** NPC retirement not confirmed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NPC-008](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-008)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NPC-009" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-NPC-009: NPC interaction attachment failed {#rs-npc-009}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** NPC interaction attachment failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NPC-009](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-009)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NPC-010" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-NPC-010: NPC interaction could not open {#rs-npc-010}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** NPC interaction could not open. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NPC-010](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-010)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NPC-011" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-NPC-011: Saved quest receipt import failed {#rs-npc-011}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Saved quest receipt import failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NPC-011](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-011)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NPC-012" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-NPC-012: Saved dialogue state import failed {#rs-npc-012}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Saved dialogue state import failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsNpcLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NPC-012](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-012)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NPC-013" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-NPC-013: Quest acquisition callback encountered an exception {#rs-npc-013}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Quest acquisition callback encountered an exception. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/NpcQuestAcquisition.inl`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NPC-013](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-013)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NPC-014" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-NPC-014: Quest acquisition item resolution failed {#rs-npc-014}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Quest acquisition item resolution failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/NpcQuestAcquisition.inl`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NPC-014](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-014)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NPC-015" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-NPC-015: Quest progress notification failed {#rs-npc-015}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Quest progress notification failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/NpcQuestAcquisition.inl`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NPC-015](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-015)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NPC-016" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-NPC-016: Quest acquisition credit could not be completed {#rs-npc-016}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Quest acquisition credit could not be completed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/NpcQuestAcquisition.inl`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NPC-016](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-016)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NPC-017" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-NPC-017: Automatic quest hand-in encountered an exception {#rs-npc-017}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Automatic quest hand-in encountered an exception. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/NpcQuestCompletion.inl`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NPC-017](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-017)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NPC-018" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-NPC-018: Quest objective text presentation failed {#rs-npc-018}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Quest objective text presentation failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/NpcQuestPresentation.inl`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NPC-018](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-018)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NPC-019" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-NPC-019: Pending NPC cleanup retry failed {#rs-npc-019}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Pending NPC cleanup retry failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/NpcCleanup.inl`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NPC-019](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-019)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NPC-020" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-NPC-020: Dialogue gate evaluation failed {#rs-npc-020}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Dialogue gate evaluation failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/NpcDialogue.inl`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NPC-020](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-020)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NPC-021" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-NPC-021: Dialogue choice unlock evaluation failed {#rs-npc-021}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Dialogue choice unlock evaluation failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/NpcDialogue.inl`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NPC-021](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-021)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NPC-022" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-NPC-022: Dialogue event action encountered an exception {#rs-npc-022}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Dialogue event action encountered an exception. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/NpcDialogue.inl`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NPC-022](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-022)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NPC-023" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-NPC-023: Dialogue quest action encountered an exception {#rs-npc-023}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Dialogue quest action encountered an exception. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/NpcDialogue.inl`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NPC-023](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-023)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NPC-024" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-NPC-024: Dialogue shop opening failed {#rs-npc-024}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Dialogue shop opening failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/NpcDialogue.inl`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NPC-024](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-024)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NPC-025" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-NPC-025: Dialogue reward operation encountered an exception {#rs-npc-025}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Dialogue reward operation encountered an exception. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/NpcDialogue.inl`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NPC-025](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-025)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NPC-026" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-NPC-026: NPC equipment world state could not be refreshed {#rs-npc-026}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** NPC equipment world state could not be refreshed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/NpcEquipment.inl`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NPC-026](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-026)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NPC-027" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-NPC-027: Dialogue reward receipt remains pending {#rs-npc-027}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Dialogue reward receipt remains pending. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/NpcDialogue.inl`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NPC-027](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-027)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NPC-028" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-NPC-028: Dialogue shop transition failed {#rs-npc-028}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Dialogue shop transition failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/NpcDialogue.inl`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NPC-028](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-028)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NPC-029" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-NPC-029: Quest-scroll activation encountered an unknown exception {#rs-npc-029}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Quest-scroll activation encountered an unknown exception. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/NpcQuestScroll.inl`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-NPC-029](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-029)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-RAW-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-RAW-001: Raw patch target row not found {#rs-raw-001}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Raw patch target row not found. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsRawTableLoader.cpp`
+
+**What to check**
+
+Check the requested raw DataTable target and confirm that it exists in the current game content.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-RAW-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-raw-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-RAW-002" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-RAW-002: Raw reload target DataTable unavailable {#rs-raw-002}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Raw reload target DataTable unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsRawTableLoader.cpp`
+
+**What to check**
+
+The resolved raw target was not a usable DataTable object. Confirm the current game class and expected target type.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-RAW-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-raw-002)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-RAW-003" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-RAW-003: Registry patch plan rejected {#rs-raw-003}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Registry patch plan rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsRawTableLoader.cpp`
+
+**What to check**
+
+A raw registry plan was rejected. Inspect the planner evidence and the exact requested row or target before retrying.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-RAW-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-raw-003)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-REC-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-REC-001: Recipe definition root is invalid {#rs-rec-001}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Recipe definition root is invalid. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsRecipeModLoader.cpp`
+
+**What to check**
+
+The recipe document root was rejected. Check the expected top-level recipe format.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-REC-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rec-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-REC-002" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-REC-002: Recipe identity is reserved {#rs-rec-002}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Recipe identity is reserved. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsRecipeModLoader.cpp`
+
+**What to check**
+
+A recipe entry or its identity/body was invalid. Inspect the named recipe object and required fields.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-REC-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rec-002)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-RGST-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-RGST-001: Registry entry rejected {#rs-rgst-001}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Registry entry rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsRegistryLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-RGST-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-RGST-002" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-RGST-002: Registry document rejected {#rs-rgst-002}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Registry document rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsRegistryLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-RGST-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-002)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-RGST-003" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-RGST-003: Invalid registry owner {#rs-rgst-003}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Invalid registry owner. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsRegistryLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-RGST-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-003)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-RGST-004" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-RGST-004: Cooked registry asset rejected {#rs-rgst-004}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Cooked registry asset rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsRegistryLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-RGST-004](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-004)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-RGST-005" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-RGST-005: Cooked registry discovery limited {#rs-rgst-005}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Cooked registry discovery limited. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsRegistryLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-RGST-005](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-005)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-RGST-006" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-RGST-006: Cooked registry discovery failed {#rs-rgst-006}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Cooked registry discovery failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsRegistryLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-RGST-006](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-006)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-RGST-007" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-RGST-007: Registry changes require a restart {#rs-rgst-007}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Registry changes require a restart. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsRegistryLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-RGST-007](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-007)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-RGST-008" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-RGST-008: Native registry binding unavailable {#rs-rgst-008}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Native registry binding unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Misc/DragonWildsDataRegistrar.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-RGST-008](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-008)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-RGST-009" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-RGST-009: Native registry exclusion unavailable {#rs-rgst-009}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Native registry exclusion unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Misc/DragonWildsDataRegistrar.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-RGST-009](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-009)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-RGST-010" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-RGST-010: Native registrar unavailable {#rs-rgst-010}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Native registrar unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Misc/DragonWildsDataRegistrar.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-RGST-010](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-010)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-RGST-011" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-RGST-011: Journal native identity unverified {#rs-rgst-011}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Journal native identity unverified. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Misc/DragonWildsDataRegistrar.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-RGST-011](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-011)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-RGST-012" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-RGST-012: Cooked registry lane unavailable {#rs-rgst-012}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Cooked registry lane unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Misc/DragonWildsDataRegistrar.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-RGST-012](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-012)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-RGST-013" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-RGST-013: Cooked registry lane rejected {#rs-rgst-013}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Cooked registry lane rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Misc/DragonWildsDataRegistrar.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-RGST-013](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-013)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-RGST-014" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-RGST-014: Cooked asset discovery unavailable {#rs-rgst-014}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Cooked asset discovery unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Misc/DragonWildsDataRegistrar.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-RGST-014](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-014)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-RGST-015" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-RGST-015: Cooked discovery safety cap exceeded {#rs-rgst-015}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Cooked discovery safety cap exceeded. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Misc/DragonWildsDataRegistrar.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-RGST-015](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-015)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-SPAWN-001" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-SPAWN-001: Spawn document root is invalid {#structured-rs-spawn-001}
+
+**Structured namespace · Typical level: error**
+
+This label also has a [legacy reference meaning](#rs-spawn-001); do not combine the two diagnoses.
+
+**Condition:** Spawn document root is invalid. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
+
+**What to check**
+
+The spawn document root must be an array. Check the named file before retrying.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-SPAWN-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#structured-rs-spawn-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-SPAWN-002" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-SPAWN-002: Spawn definition was rejected {#rs-spawn-002}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Spawn definition was rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
+
+**What to check**
+
+The spawn entry or patch declaration was rejected. Inspect the named entry and its allowed fields.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-SPAWN-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-002)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-SPAWN-003" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-SPAWN-003: Spawn patch target not loaded {#rs-spawn-003}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Spawn patch target not loaded. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
+
+**What to check**
+
+The spawn patch identity was not found in the loaded spawn registry. Confirm the identity of the existing spawn record.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-SPAWN-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-003)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-SPAWN-004" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-SPAWN-004: Spawn registration rejected {#rs-spawn-004}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Spawn registration rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
+
+**What to check**
+
+Spawn registration failed validation or reported an exception. Review the exact evidence and required fields, including Location when applicable.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-SPAWN-004](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-004)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-SPAWN-005" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-SPAWN-005: Spawn authoring requires restart {#rs-spawn-005}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Spawn authoring requires restart. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
+
+**What to check**
+
+This spawn change requires restart rather than live reload. Do not interpret Deferred as a failed startup registration.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-SPAWN-005](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-005)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-SPAWN-006" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-SPAWN-006: Spawn lifecycle hook unavailable {#rs-spawn-006}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Spawn lifecycle hook unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-SPAWN-006](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-006)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-SPAWN-007" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-SPAWN-007: Spawn tick unavailable {#rs-spawn-007}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Spawn tick unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-SPAWN-007](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-007)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-SPAWN-008" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-SPAWN-008: Spawn actor property missing {#rs-spawn-008}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Spawn actor property missing. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-SPAWN-008](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-008)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-SPAWN-009" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-SPAWN-009: Spawn actor property write failed {#rs-spawn-009}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Spawn actor property write failed. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-SPAWN-009](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-009)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-SPAWN-010" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-SPAWN-010: Native AI base class unavailable {#rs-spawn-010}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Native AI base class unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-SPAWN-010](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-010)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-SPAWN-011" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-SPAWN-011: Activity observer unavailable {#rs-spawn-011}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Activity observer unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-SPAWN-011](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-011)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-SPAWN-012" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-SPAWN-012: Activity hook limit reached {#rs-spawn-012}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Activity hook limit reached. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-SPAWN-012](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-012)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-SPAWN-013" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-SPAWN-013: Native activity event unavailable {#rs-spawn-013}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Native activity event unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsSpawnLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-SPAWN-013](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-013)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-STR-001" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-STR-001: String override conflict {#rs-str-001}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** String override conflict. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsStringModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-STR-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-str-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-STR-002" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-STR-002: String replacements unmatched {#rs-str-002}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** String replacements unmatched. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsStringModLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-STR-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-str-002)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-STR-003" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+## RS-STR-003: String definition rejected {#rs-str-003}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** String definition rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsStringModLoader.cpp`
+
+**What to check**
+
+The string override document was rejected. Check the file structure before making string-level changes.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-STR-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-str-003)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-VND-001" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+## RS-VND-001: Vendor reload requires restart {#rs-vnd-001}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Vendor reload requires restart. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Producer:** `src/Loader/DragonWildsVendorLoader.cpp`
+
+**What to check**
+
+Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-VND-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-vnd-001)
+
+</section>
+
 ## Bridge reason codes
 
 These lower-level values appear as `reasonCode` in `NetworkBridgeDiagnostics.json`. Read them together with `stage`, `outcome`, `channel` and `correlationId`; accepted stages are not necessarily completed actions. Some exception classifications are coarse hints. Receipts can also carry bounded free-text detail: arbitrary detail is not a new registered code. Known reasons include a `referenceUrl` pointing here; unknown detail is preserved without inventing a diagnosis.
@@ -1738,6 +6197,6 @@ Windows error numbers, HRESULTs, HTTP status codes, UE4SS messages and EOS resul
 
 Emit a registered code at the actual decision site. Never reuse it for another condition, classify absent readings as zero, or turn performance attribution into network failure. Keep dynamic paths, counts and native details in the original message.
 
-The stable catalogue lives at `resources/diagnostics/codes.json`, condition-specific checks at `resources/diagnostics/guidance.json`, and bridge reasons at `resources/diagnostics/bridge-reasons.json`. Run `python build/generate-diagnostics.py --check` and `python build/audit-diagnostics.py`; runtime and Helpy headers, public JSON and this page must agree. Use `PS::Diagnostics::Url(entry)` for RS links and `BridgeReasonUrl(reason)` for known bridge reasons; never maintain a second reference URL or derive diagnoses from arbitrary text.
+The legacy catalogue lives at `resources/diagnostics/codes.json`, its checks at `resources/diagnostics/guidance.json`, and bridge reasons at `resources/diagnostics/bridge-reasons.json`. The structured catalogue is read from `source/raw/include/Core/StructuredDiagnosticRegistry.h`, with available condition-specific checks from Helpy's `StructuredDiagnosticAdvice.h`; it is not merged into the legacy typed-ID enum. Run `python build/generate-diagnostics.py --check` and `python build/audit-diagnostics.py`; runtime and Helpy headers, public JSON and this page must agree. Existing RS anchors are retained; shared-label structured meanings have separate namespace anchors. Never derive diagnoses from arbitrary text.
 
 See [troubleshooting](TROUBLESHOOTING.md).
