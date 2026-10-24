@@ -56,7 +56,7 @@ def source_files(root):
         for path in sorted(folder.rglob("*")):
             if path.suffix.lower() not in suffixes or any(part in {"tests", "vendor", ".cache", "__pycache__"} for part in path.relative_to(folder).parts):
                 continue
-            if path.name in {"DiagnosticCodes.h", "BridgeReasonCodes.h", "generate-diagnostics.py", "audit-diagnostics.py"}:
+            if path.name in {"DiagnosticCodes.h", "BridgeReasonCodes.h", "StructuredDiagnosticRegistry.h", "StructuredDiagnosticAdvice.h", "generate-diagnostics.py", "audit-diagnostics.py"}:
                 continue
             yield path
 
@@ -64,6 +64,9 @@ def source_files(root):
 def audit(root=ROOT):
     catalogue = json.loads((root / "resources/diagnostics/codes.json").read_text(encoding="utf-8"))["codes"]
     codes = {row["code"] for row in catalogue}
+    public = json.loads((root / "docs/assets/data/diagnostic-codes.json").read_text(encoding="utf-8"))
+    structured = public.get("structuredCodes", [])
+    codes |= {row["code"] for row in structured}
     ids = {row["id"]: row["code"] for row in catalogue}
     reasons = json.loads((root / "resources/diagnostics/bridge-reasons.json").read_text(encoding="utf-8"))
     sites, errors, scanned = {}, [], 0
@@ -100,13 +103,16 @@ def audit(root=ROOT):
     page = (root / "docs/ERROR-CODES.md").read_text(encoding="utf-8")
     anchors = re.findall(r"\{#([^}]+)\}", page)
     expected = {code.lower() for code in codes} | {"bridge-" + code.replace("_", "-") for code in reasons}
+    expected |= {row["anchor"] for row in structured}
+    expected |= {"legacy-family-"+row["code"].rsplit("-",1)[0].lower() for row in catalogue}
+    expected |= {"structured-family-"+row["code"].rsplit("-",1)[0].lower() for row in structured}
     if len(anchors) != len(set(anchors)):
         errors.append("Duplicate documentation anchors")
     for anchor in sorted(expected - set(anchors)):
         errors.append(f"Missing documentation anchor: {anchor}")
     if errors:
         raise ValueError("\n".join(errors))
-    return dict(scannedFiles=scanned, registeredCodes=len(codes), emittedCodes=len(sites),
+    return dict(scannedFiles=scanned, registeredCodes=len(codes), legacyCodes=len(catalogue), structuredCodes=len(structured), emittedCodes=len(sites),
                 catalogueOnlyCodes=sorted(codes - sites.keys()), bridgeReasons=sorted(observed_reasons),
                 sites={code: sorted(rows) for code, rows in sorted(sites.items())}, anchors=sorted(expected))
 

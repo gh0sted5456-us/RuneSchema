@@ -6,11 +6,42 @@ import re
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 REFERENCE = "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/"
+STRUCTURED_AREAS = {
+    "RS-ASSET":"Assets", "RS-BLD":"Buildings", "RS-BP":"Blueprints", "RS-CORE":"Runtime",
+    "RS-CRS":"Courses", "RS-ENUM":"Enums", "RS-EQP":"Equipment", "RS-GE":"Gameplay effects",
+    "RS-IMP":"Imports", "RS-JSON":"Configuration and definitions", "RS-LOAD":"Loaders",
+    "RS-NIA":"Niagara", "RS-NPC":"NPCs", "RS-RAW":"Data tables", "RS-REC":"Recipes",
+    "RS-RGST":"Registry", "RS-SPAWN":"Spawns", "RS-STR":"Strings", "RS-VND":"Vendors",
+    "RS-JRN":"Journal",
+}
+
+def structured_catalogue():
+    """Read the installed producer catalogue, without assigning legacy meanings."""
+    source = (ROOT / "source/raw/include/Core/StructuredDiagnosticRegistry.h").read_text(encoding="utf-8")
+    pattern = r'\{"(RS-[A-Z0-9]+-\d{3})","(Error|Warning|Info)","([^"\n]+)","([^"\n]+)",(true|false)\}'
+    rows = [dict(code=code, severity=level.lower(), title=title, producer=producer, legacyCollision=collision=="true", namespace="structured")
+            for code, level, title, producer, collision in re.findall(pattern, source)]
+    declared = int(re.search(r"std::array<Entry,(\d+)>", source)[1])
+    assert len(rows)==declared and len({row["code"] for row in rows})==len(rows)
+    advice = (ROOT / "source/helpy/source/include/Core/StructuredDiagnosticAdvice.h").read_text(encoding="utf-8")
+    checks = {code: json.loads('"'+check+'"') for code, check in re.findall(r'\{"(RS-[A-Z0-9]+-\d{3})",\s*"((?:\\.|[^"\\])*)"\}', advice)}
+    for row in rows:
+        family = row["code"].rsplit("-", 1)[0]
+        assert family in STRUCTURED_AREAS, f"Assign a diagnostics area for {family}"
+        row["category"] = STRUCTURED_AREAS[family]
+        row["anchor"] = ("structured-" if row["legacyCollision"] else "")+row["code"].lower()
+        row["url"] = REFERENCE+"#"+row["anchor"]
+        row["troubleshooting"] = checks.get(row["code"], "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod.")
+    return rows
 
 def outputs():
     document = json.loads((ROOT / "resources/diagnostics/codes.json").read_text(encoding="utf-8"))
     assert document["version"] == 1
     rows = document["codes"]
+    structured = structured_catalogue()
+    collisions = {row["code"] for row in structured if row["legacyCollision"]}
+    assert collisions == ({row["code"] for row in rows} & {row["code"] for row in structured})
+    document["structuredCodes"] = structured
     guidance = json.loads((ROOT / "resources/diagnostics/guidance.json").read_text(encoding="utf-8"))
     reasons = json.loads((ROOT / "resources/diagnostics/bridge-reasons.json").read_text(encoding="utf-8"))
     assert set(guidance) == {row["code"] for row in rows}, "Every code needs audited causes and troubleshooting"
@@ -39,14 +70,19 @@ def outputs():
                "inline const Entry& Get(Id id){return All[static_cast<std::size_t>(id)];}",
                f'inline constexpr std::string_view Reference={quote(REFERENCE)};',
                'inline std::string Url(const Entry& entry){return std::string(Reference)+"#"+std::string(entry.Anchor);}',
-               "}", ""]
+               'inline std::string_view Category(std::string_view code,bool structured=false){',
+               '    if(!structured)if(const auto* entry=Find(code))return entry->Subsystem;',
+               '    const auto family=code.substr(0,code.rfind(\'-\'));']
+    header += [f'    if(family=={quote(family)})return {quote(area)};' for family,area in STRUCTURED_AREAS.items()]
+    header += ['    return "Other diagnostics";', '}', "}", ""]
     text = "\n".join(header)
     page = ["# Diagnostic code reference", "",
             "RuneSchema's stable diagnostic catalogue. A code identifies a condition, not a crash severity: the emitted message and severity remain authoritative. **Suggested references** for older uncoded messages are labelled as suggestions, not assigned causes.", "",
-            "The Live Console shows a readable event title, timestamp, repeated-event count and details with meaning, impact and next steps. Raw entries remain copyable; the viewer never changes disk logs.", "",
-            f"This page contains **{len(rows)} stable RS codes** and **{len(reasons)} bridge reason codes**. Every entry has its own permanent header link on this page. A catalogue entry is not a claim that every operation already emits that code: older messages can remain uncoded and suggested references stay explicitly labelled.", "",
+            "Helpy's **Diagnostics** workspace combines overview, grouped issues and Live Log. Raw entries remain copyable; the viewer never changes source logs. Recent activity includes normal and diagnostic messages; notifications remain limited to warnings/errors.", "",
+            f"This page contains **{len(rows)} legacy reference entries**, **{len(structured)} structured diagnostic entries** and **{len(reasons)} bridge reason codes**. Three labels exist in both legacy and structured namespaces: RS-JRN-001, RS-JRN-002 and RS-SPAWN-001. Read the namespace and source rather than inferring meaning from the label alone. Existing links are preserved, with links between both meanings.", "",
+            "Structured reports in `RSDiagLog.jsonl` carry their own source, context and outcome. A catalogue entry does not imply that every operation emits it. `Unknown` cause means unknown; the actual emitted severity is authoritative. `Partial` can mean some changes occurred, `Deferred` means later/restart handling, and `Skipped`/`Blocked` do not establish that the entire mod failed.", "",
             "## Read a code safely", "",
-            "1. Click the code in Helpy's Live Console, or select the event and choose **Open code reference** (also available when the window is narrow). The link opens this page at that code's header.",
+            "1. Open the code reference from Helpy's Diagnostics or Live Log. The link opens this page at that code's header; shared legacy/structured labels link to both meanings.",
             "2. Read the original message, level and first preceding failure. The typical level below is not a replacement for the event's actual severity.",
             "3. Follow the condition-specific checks below; keep last-good caches and original saves. Report the exact code, subsystem, game/storefront/framework versions and a redacted excerpt if it persists.", "",
             '!!! warning "Before sharing logs"', '    Review player names, character IDs and local paths. Opening a reference page sends no log content.', "",
@@ -55,17 +91,43 @@ def outputs():
     families = {}
     for row in rows:
         families.setdefault(row["code"].rsplit("-", 1)[0], row["subsystem"])
-    page += [f'| {key} | {value} |' for key, value in families.items()]
+    for row in structured:
+        family=row["code"].rsplit("-", 1)[0]
+        families.setdefault(family,row["category"])
+    legacy_families = {row["code"].rsplit("-", 1)[0] for row in rows}
+    page += [f'| [{key}](#{"legacy" if key in legacy_families else "structured"}-family-{key.lower()}) | {value} |' for key, value in sorted(families.items())]
     page += ["", '<div class="rs-code-catalogue" markdown="1">', ""]
-    for row in rows:
+    previous_family = None
+    for row in sorted(rows,key=lambda row:row["code"]):
         code = row["code"]
+        family = code.rsplit("-", 1)[0]
+        if family != previous_family:
+            page += [f'## {families[family]} — {family} {{#legacy-family-{family.lower()}}}', ""]
+            previous_family = family
         page += [f'<section class="rs-code-card" data-rs-code="{code}" data-rs-severity="{row["severity"]}" markdown="1">', "",
-                 f'## {code}: {row["title"]} {{#{code.lower()}}}', "",
+                 f'### {code}: {row["title"]} {{#{code.lower()}}}', "",
+                 *([f'!!! note "Shared label: choose the namespace"', f'    This is the **legacy reference**. A structured report uses a different meaning: [structured {code}](#structured-{code.lower()}). Check the original source and format.', ""] if code in collisions else []),
                  f'**{row["subsystem"]} · Typical level: {row["severity"]}**', "",
                  row["summary"], "", "**Common reasons**", "", row["causes"], "",
                  "**What RuneSchema does**", "", row["impact"], "",
                  "**What to do next**", "", row["action"], "", "**Troubleshooting checks**", "", row["troubleshooting"], "",
                  f'[Direct link to {code}]({row["url"]})', "", "</section>", ""]
+    page += ["## Structured diagnostic codes", "", "These entries come from the producer registry used by the current diagnostics build. They are distinct from older symptom/reference codes above. Producer paths identify the reporting subsystem, not a guarantee that the user's file has that path.", ""]
+    previous_family = None
+    for row in sorted(structured,key=lambda row:row["code"]):
+        code = row["code"]
+        family = code.rsplit("-", 1)[0]
+        if family != previous_family:
+            page += [f'## {row["category"]} — structured {family} {{#structured-family-{family.lower()}}}', ""]
+            previous_family = family
+        page += [f'<section class="rs-code-card" data-rs-code="{code}" data-rs-namespace="structured" data-rs-severity="{row["severity"]}" markdown="1">', "",
+                 f'### {code}: {row["title"]} {{#{row["anchor"]}}}', "",
+                 f'**Structured namespace · Typical level: {row["severity"]}**', "",
+                 *([f'This label also has a [legacy reference meaning](#{code.lower()}); do not combine the two diagnoses.', ""] if row["legacyCollision"] else []),
+                 f'**Condition:** {row["title"]}. Read the actual message and context for the precise rejected, deferred or partial operation.', "",
+                 f'**Area:** {row["category"]} · **Producer:** `{row["producer"]}`', "", "**What to check**", "", row["troubleshooting"], "",
+                 "Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.", "",
+                 f'[Direct link to structured {code}]({row["url"]})', "", "</section>", ""]
     page += ["## Bridge reason codes", "",
              "These lower-level values appear as `reasonCode` in `NetworkBridgeDiagnostics.json`. Read them together with `stage`, `outcome`, `channel` and `correlationId`; accepted stages are not necessarily completed actions. Some exception classifications are coarse hints. Receipts can also carry bounded free-text detail: arbitrary detail is not a new registered code. Known reasons include a `referenceUrl` pointing here; unknown detail is preserved without inventing a diagnosis.", ""]
     reason_header = ["// Generated by build/generate-diagnostics.py; edit resources/diagnostics/bridge-reasons.json.",
@@ -89,7 +151,7 @@ def outputs():
              "`RS-GAME-*` entries are RuneSchema troubleshooting references for native game messages, not codes emitted by the game. Helpy marks symptom matches as suggested, preserves the original message and severity, and uses `RS-GAME-000` when no specific native diagnosis matches.", "",
              "## For mod authors", "",
              "Emit a registered code at the actual decision site. Never reuse it for another condition, classify absent readings as zero, or turn performance attribution into network failure. Keep dynamic paths, counts and native details in the original message.", "",
-             "The stable catalogue lives at `resources/diagnostics/codes.json`, condition-specific checks at `resources/diagnostics/guidance.json`, and bridge reasons at `resources/diagnostics/bridge-reasons.json`. Run `python build/generate-diagnostics.py --check` and `python build/audit-diagnostics.py`; runtime and Helpy headers, public JSON and this page must agree. Use `PS::Diagnostics::Url(entry)` for RS links and `BridgeReasonUrl(reason)` for known bridge reasons; never maintain a second reference URL or derive diagnoses from arbitrary text.", "",
+             "The legacy catalogue lives at `resources/diagnostics/codes.json`, its checks at `resources/diagnostics/guidance.json`, and bridge reasons at `resources/diagnostics/bridge-reasons.json`. The structured catalogue is read from `source/raw/include/Core/StructuredDiagnosticRegistry.h`, with available condition-specific checks from Helpy's `StructuredDiagnosticAdvice.h`; it is not merged into the legacy typed-ID enum. Run `python build/generate-diagnostics.py --check` and `python build/audit-diagnostics.py`; runtime and Helpy headers, public JSON and this page must agree. Existing RS anchors are retained; shared-label structured meanings have separate namespace anchors. Never derive diagnoses from arbitrary text.", "",
              "See [troubleshooting](TROUBLESHOOTING.md).", ""]
     return {
         ROOT / "source/raw/include/Core/DiagnosticCodes.h": text,
@@ -110,6 +172,8 @@ def main():
             if not path.exists() or path.read_text(encoding="utf-8") != text:
                 stale.append(str(path.relative_to(ROOT)))
         else:
+            if path.exists() and path.read_text(encoding="utf-8") == text:
+                continue
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(text, encoding="utf-8", newline="\n")
     if stale:

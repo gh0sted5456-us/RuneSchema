@@ -26,22 +26,38 @@ class Diagnostics(unittest.TestCase):
         for path, text in generated.items():
             self.assertEqual(path.read_text(encoding="utf-8"), text, str(path))
         document = json.loads(generated[ROOT / "docs/assets/data/diagnostic-codes.json"])
-        urls = [row["url"] for row in document["codes"] + document["bridgeReasons"]]
+        urls = [row["url"] for row in document["codes"] + document["structuredCodes"] + document["bridgeReasons"]]
         self.assertEqual(len(urls), len(set(urls)))
         for url in urls:
             self.assertTrue(url.startswith(generate.REFERENCE + "#"))
         for row in document["codes"] + document["bridgeReasons"]:
             self.assertTrue(row["causes"] and row["troubleshooting"])
+        self.assertEqual([row["id"] for row in document["codes"][:8]], [
+            "QuestOwnerConflict", "RegistryDeferred", "RegistryMismatch", "WearableUnenrolled",
+            "SlowWork", "CatalogUnavailable", "PlacementPending", "Unclassified"])
 
     def test_all_production_codes_are_documented(self):
         result = audit.audit()
         catalogue = json.loads((ROOT / "resources/diagnostics/codes.json").read_text(encoding="utf-8"))
-        self.assertEqual(result["registeredCodes"], len(catalogue["codes"]))
+        self.assertEqual(result["legacyCodes"], len(catalogue["codes"]))
+        self.assertEqual(result["structuredCodes"], 221)
+        self.assertEqual(result["registeredCodes"], len({row["code"] for row in catalogue["codes"]} | {row["code"] for row in generate.structured_catalogue()}))
         self.assertLessEqual(result["emittedCodes"], result["registeredCodes"])
         self.assertIn("callback_contract_mismatch", result["bridgeReasons"])
 
+    def test_every_code_has_an_area_and_family_section(self):
+        output = generate.outputs()
+        document = json.loads(output[ROOT / "docs/assets/data/diagnostic-codes.json"])
+        page = output[ROOT / "docs/ERROR-CODES.md"]
+        for kind, rows in (("legacy", document["codes"]), ("structured", document["structuredCodes"])):
+            for row in rows:
+                area = row["subsystem"] if kind == "legacy" else row["category"]
+                self.assertTrue(area)
+                family = row["code"].rsplit("-", 1)[0].lower()
+                self.assertIn("{#"+kind+"-family-"+family+"}", page)
+
     def fixture(self, root):
-        for relative in ("resources/diagnostics/codes.json", "resources/diagnostics/bridge-reasons.json", "docs/ERROR-CODES.md", "source/raw/src/Runtime/RegistryBridge.cpp"):
+        for relative in ("resources/diagnostics/codes.json", "resources/diagnostics/bridge-reasons.json", "docs/ERROR-CODES.md", "docs/assets/data/diagnostic-codes.json", "source/raw/src/Runtime/RegistryBridge.cpp"):
             path = root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / relative, path)
@@ -96,6 +112,18 @@ class Diagnostics(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Rendered heading missing"):
                 audit.rendered_anchors(site, {"rs-cache-001"})
 
+
+    def test_shared_labels_keep_both_meanings_and_existing_links(self):
+        generated = generate.outputs()
+        data = json.loads(generated[ROOT / "docs/assets/data/diagnostic-codes.json"])
+        shared = [row for row in data["structuredCodes"] if row["legacyCollision"]]
+        self.assertEqual({row["code"] for row in shared}, {"RS-JRN-001", "RS-JRN-002", "RS-SPAWN-001"})
+        page = generated[ROOT / "docs/ERROR-CODES.md"]
+        for row in shared:
+            self.assertIn("{#"+row["code"].lower()+"}", page)
+            self.assertIn("{#structured-"+row["code"].lower()+"}", page)
+        equipment = next(row for row in data["structuredCodes"] if row["code"]=="RS-EQP-006")
+        self.assertIn("definition", equipment["troubleshooting"])
 
 if __name__ == "__main__":
     unittest.main()

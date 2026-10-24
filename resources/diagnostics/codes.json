@@ -278,7 +278,7 @@
       "severity": "warning",
       "subsystem": "Save safety",
       "summary": "Complete stable registry evidence is unavailable.",
-      "impact": "Automatic pruning stays disabled; no character save is modified by this deferral.",
+      "impact": "Uncertified sections stay unchanged. Other independently certified sections may still be cleaned; native loading continues.",
       "action": "Resolve readiness first; a missing lookup is not proof of removed content."
     },
     {
@@ -460,6 +460,118 @@
       "summary":"The native registry-tag subsystem could not unregister a tagged object as expected.",
       "impact":"This concerns native gameplay-object tags, not RuneSchema persistence-ID declarations. It does not authorize save pruning.",
       "action":"Preserve the exact object and lifecycle stage. Investigate repeated failures during play separately from shutdown-only messages."
+    },
+    {
+      "id":"ConfigLoadFailed", "code":"RS-CFG-001", "title":"Configuration could not be loaded",
+      "severity":"error", "subsystem":"Configuration",
+      "summary":"Configuration loading failed; session defaults are being used.",
+      "impact":"Existing configuration files are retained. The session may not use the requested settings.",
+      "action":"Read the original exception and named configuration path. Correct the file or access problem before restarting."
+    },
+    {
+      "id":"ConfigRecovered", "code":"RS-CFG-002", "title":"Configuration saved with original backup",
+      "severity":"warning", "subsystem":"Configuration",
+      "summary":"An explicit save replaced preserved configuration with current settings after backing up the original.",
+      "impact":"The original file is retained at the reported backup path; startup settings require restart.",
+      "action":"Review the saved settings and retain the backup if an original value needs to be recovered."
+    },
+    {
+      "id":"ConfigSaveFailed", "code":"RS-CFG-003", "title":"Configuration save failed",
+      "severity":"error", "subsystem":"Configuration",
+      "summary":"The settings save was not completed.",
+      "impact":"Changes remain session-only. Any backup path in the original message should be retained.",
+      "action":"Check the exact write/validation error and path; do not assume preferences persisted."
+    },
+    {
+      "id":"PluginCatalogRejected", "code":"RS-PLUG-001", "title":"Plugin catalogue discovery failed",
+      "severity":"error", "subsystem":"Plugins",
+      "summary":"Plugin catalogue discovery threw an exception before loading could proceed.",
+      "impact":"This plugin load pass stops; RuneSchema core continues.",
+      "action":"Inspect the original discovery exception, plugin manifests and directory access."
+    },
+    {
+      "id":"PluginDllMissing", "code":"RS-PLUG-002", "title":"Declared plugin DLL is missing",
+      "severity":"warning", "subsystem":"Plugins",
+      "summary":"A plugin declares a native entry point that is not a regular file at the resolved path.",
+      "impact":"The native plugin is skipped; its PAK content remains independently available.",
+      "action":"Check the named plugin's entry point and installation layout; restore the matching DLL."
+    },
+    {
+      "id":"PluginLoadFailed", "code":"RS-PLUG-003", "title":"Windows could not load a plugin DLL",
+      "severity":"error", "subsystem":"Plugins",
+      "summary":"LoadLibraryExW returned failure for the named native plugin.",
+      "impact":"The native plugin is skipped; other plugins continue.",
+      "action":"Keep the reported Windows error number and DLL path. Check architecture, dependencies and access before replacing files."
+    },
+    {
+      "id":"PluginExportsMissing", "code":"RS-PLUG-004", "title":"Plugin API exports are missing",
+      "severity":"error", "subsystem":"Plugins",
+      "summary":"A loaded DLL lacks a mandatory Query, Initialize or Shutdown export.",
+      "impact":"The native plugin is unloaded before initialization.",
+      "action":"Install a RuneSchema plugin build with the required exports, not an arbitrary UE4SS DLL."
+    },
+    {
+      "id":"PluginIdentityRejected", "code":"RS-PLUG-005", "title":"Plugin identity or API contract rejected",
+      "severity":"error", "subsystem":"Plugins",
+      "summary":"The queried native descriptor does not satisfy the host's identity/API contract.",
+      "impact":"The incompatible native plugin is isolated; core, other plugins and PAK mounting continue.",
+      "action":"Align the manifest ID and DLL descriptor/API build. A version label alone does not repair the descriptor."
+    },
+    {
+      "id":"PluginInitFailed", "code":"RS-PLUG-006", "title":"Plugin initialization contract failed",
+      "severity":"error", "subsystem":"Plugins",
+      "summary":"Initialization failed or the plugin did not register its declared capabilities.",
+      "impact":"Its registered services/capabilities are removed and the DLL is unloaded.",
+      "action":"Read earlier plugin errors and the native result; verify that all declared capabilities are registered."
+    },
+    {
+      "id":"PluginUiFailed", "code":"RS-PLUG-007", "title":"Plugin UI initialization failed",
+      "severity":"error", "subsystem":"Plugins",
+      "summary":"A plugin UI callback rejected initialization or threw an exception.",
+      "impact":"That UI phase did not complete; the message does not establish that all plugin services stopped.",
+      "action":"Keep the named plugin and rejection/exception message. Check matching frontend/core builds and earlier UI errors."
+    },
+    {
+      "id":"PluginUnrealFailed", "code":"RS-PLUG-008", "title":"Plugin Unreal initialization failed",
+      "severity":"error", "subsystem":"Plugins",
+      "summary":"A plugin Unreal initialization callback returned failure or threw an exception.",
+      "impact":"The plugin did not confirm Unreal initialization; core and other plugin phases continue.",
+      "action":"Inspect the named plugin's preceding error and reported result, rather than treating this phase failure as a complete diagnosis."
+    },
+    {
+      "id":"WorldCleanupBufferChanged", "code":"RS-WORLD-001", "title":"World cleanup buffer changed during validation",
+      "severity":"warning", "subsystem":"World save cleanup",
+      "summary":"The native world buffer no longer matched the validated cleanup input.",
+      "impact":"Cleanup skips the buffer; the world is unchanged by this attempt.",
+      "action":"Keep the original world and backup. Check lifecycle/overlapping work before retrying; do not force stale bytes into the save."
+    },
+    {
+      "id":"WorldCleanupContractUnsafe", "code":"RS-WORLD-002", "title":"World cleanup contract is not safe",
+      "severity":"warning", "subsystem":"World save cleanup",
+      "summary":"Missing building IDs were observed but the native load contract was not safe to repair.",
+      "impact":"The cleanup attempt leaves the world unchanged.",
+      "action":"Check the preceding contract and registry evidence. Missing IDs alone do not authorize writing an unverified save format."
+    },
+    {
+      "id":"WorldCleanupRepairFailed", "code":"RS-WORLD-003", "title":"World cleanup repair did not complete",
+      "severity":"warning", "subsystem":"World save cleanup",
+      "summary":"The native world-buffer repair attempt reported an exception.",
+      "impact":"The cleanup attempt reports the world unchanged; the original exception remains authoritative.",
+      "action":"Retain the original world, backups and full error. Resolve the reported validation/repair cause before retrying."
+    },
+    {
+      "id":"WorldCleanupValidationFailed", "code":"RS-WORLD-004", "title":"World cleanup input could not be validated",
+      "severity":"warning", "subsystem":"World save cleanup",
+      "summary":"World data parsing or validation failed before a cleanup result could be accepted.",
+      "impact":"This cleanup path does not write a guessed repair.",
+      "action":"Keep the exact parser/validation exception and game build. A cleanup rejection alone does not prove the native game cannot load the world."
+    },
+    {
+      "id":"WorldCleanupHookUnavailable", "code":"RS-WORLD-005", "title":"Game Pass world cleanup hooks unavailable",
+      "severity":"warning", "subsystem":"World save cleanup",
+      "summary":"Required Game Pass world-loading hooks could not be installed.",
+      "impact":"That world cleanup path stays unavailable and does not change saves.",
+      "action":"Check the current Game Pass executable/build and matching RuneSchema bindings; preserve existing saves and use supported native loading."
     }
   ]
 }
