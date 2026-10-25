@@ -15,6 +15,51 @@ It does **not** install mods or deserialize executable loader definitions.
 
 ## Use an existing cache immediately
 
+!!! note "Next maintenance build"
+    The loading-order and passive-update controls below are in the next
+    maintenance build. The original published 0.8.0.2 ZIP retains its existing
+    cache-loading behavior; this documentation update does not replace its DLLs.
+
+Open **Home > Quick settings > Content & cache** to choose how the item
+catalogue loads. These preferences are saved in Helpy's `ui.jsonc` and apply
+to the next item query, including subsequent launches.
+
+| Preference | Behavior |
+| --- | --- |
+| **Cache first (recommended)** | Show compatible saved/imported references immediately. Discover changed native content in bounded slices when passive updates are enabled. |
+| **Game first, cache fallback** | Build the current loaded-item catalogue in bounded slices. Use saved references while a live page is unavailable or has no matching items. This does not load every asset from every PAK. |
+| **Passive content updates** | Allow the item catalogue to continue discovering content between requests. When disabled, searches and explicit refresh still work. Source verification, visible-icon requests and live action validation remain active. |
+
+With Cache first and passive updates disabled, an available imported page can
+be browsed without starting a native catalogue sweep. Missing artwork can still
+be captured on demand. Persistent artwork remains controlled separately by
+**Keep icons between launches** and the cache size limit.
+
+Quick settings keeps **Open Helpy at startup** visible. Game launch, save
+bypass and the existing advanced controls are under **Game launch & saves**.
+Those launch/save options still apply on the next game launch; changing the
+content-loading preference does not change save policy.
+
+Diagnostics records the selected policy as [RS-CACHE-011](ERROR-CODES.md#rs-cache-011)
+and game-first cache fallback as [RS-CACHE-012](ERROR-CODES.md#rs-cache-012).
+[RS-CACHE-013](ERROR-CODES.md#rs-cache-013) identifies an unsupported or malformed
+content preference. These codes have their own **Cache** category and linked
+troubleshooting reference. Policy/fallback messages are emitted on transitions,
+rather than once per frame.
+
+For manual configuration, use this object inside `ui.jsonc`:
+
+```json
+"cache": {
+  "iconCacheMB": 200,
+  "loadOrder": "cacheFirst",
+  "passiveRefresh": true
+}
+```
+
+The other supported `loadOrder` is `gameFirst`. Existing configurations that
+omit the new fields retain Cache first with passive updates enabled.
+
 1. Open **Icon cache** and choose **Import**, or **Download base-game cache**.
 2. Import verifies the whole file, portable content fingerprints and owner
    scope on a file worker. Unrelated or missing sources are skipped.
@@ -24,6 +69,23 @@ It does **not** install mods or deserialize executable loader definitions.
 4. Existing bounded runtime discovery checks current content in the background.
    Cached presentation is not proof of current-world presence, unlock/read
    state, spawnability or delivery. Gameplay actions still resolve live assets.
+
+After an import commits, Helpy refreshes the open item list and journal bundle
+references without requiring you to close the window. Existing rows stay visible
+during the handoff. Finished verification stops the temporary preview refresh
+cycle; unchanged metadata is not repeatedly parsed and sorted.
+
+On later launches, both the host and Helpy read the saved source snapshot first.
+That makes imported records and pictures available for browsing before the live
+content census finishes. Saved sources remain explicitly provisional during this
+handoff; they cannot authorize fresh native captures, exports or gameplay actions.
+Opening Helpy again within the same session reuses its resident cache.
+
+Passive catalogue rebuilding uses smaller native feed slices (up to 512 scanned
+slots and a cooperative 500 microsecond query budget), no more often than every
+50 ms. Explicit searches retain their normal interactive budget. File checks and
+bundle parsing run on workers, with the last good matching page retained after
+a temporary file-read failure.
 
 **Download base-game cache** prefers the matching executable build, then the
 latest compatible native catalogue entry. A different game-version string is

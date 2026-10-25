@@ -1,5 +1,12 @@
 # Helpy map travel
 
+In the next maintenance build, map action panels open in the center of Helpy. Their headings, coordinates
+and mode controls are centered; search fields and player selectors fill the
+available form width. Long content scrolls inside the panel, with the action
+button retained below it. Dialogs and floating tools open centered and can
+still be moved; hover details stay centered on the control that owns them and
+context menus remain beside the clicked target.
+
 In **Helpy → World → Map**, click a destination, choose **Teleport**, select the player,
 then choose **Teleport player here**. This extends Helpy only, not the game's
 normal map. Use the host's Helpy in multiplayer; remote clients do not receive a
@@ -13,7 +20,7 @@ the landing footprint against blocking ground over the native map's full height
 range. Unavailable ground, cliffs and invalid capsules prevent departure.
 
 After preparation, RuneSchema invokes the game's reflected
-`TeleportationSubsystem.TeleportWithParams` service with loading-screen support,
+`TeleportationSubsystem.TeleportWithParams` service without a second loading overlay,
 normal checks enabled (`bNoCheck=false`, `bIsATest=false`), and the verified target.
 This uses native travel rather than a raw `K2_TeleportTo` position jump or a fake
 permanent lodestone. No named lodestone, unlock, cost item or world-save record is
@@ -28,6 +35,21 @@ acceptance RuneSchema does not issue another teleport to undo an in-flight journ
 An unconfirmed arrival is reported as such, not retried automatically. Only the
 owned temporary streaming helper is retired. Spawn and Build keep their existing
 loaded-ground requirements.
+
+Terrain discovery advances past one overhead obstruction per preparation slice.
+Footprint checks retain completed samples, perform at most two new surface
+queries per slice, and yield between queries after a cooperative 2 ms budget.
+Preparation slices can resume after 20 ms; rejected candidates retain a 100 ms
+backoff. A single native physics call cannot be interrupted by that budget.
+The measured centre floor guides the remaining footprint rays, so each edge
+does not repeat full-height terrain discovery. Streaming readiness changes
+discard the partial footprint. Invalid collision contracts stop the operation
+instead of retrying an unsupported call for the entire preparation timeout.
+
+`[HELPY][MAP-TRAVEL]` phase, elapsed-time and final-result lines are written to
+both UE4SS and RuneSchema logs without requiring advanced logging. Include them
+when reporting a stalled journey. A native travel timeout remains unconfirmed;
+RuneSchema does not clear the game's teleport state or pretend arrival succeeded.
 
 The map displays a compact animated activity bar, current phase (Preparing,
 Checking ground, Travelling) and elapsed seconds. It deliberately does not show a
