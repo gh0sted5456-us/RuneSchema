@@ -115,6 +115,41 @@ int main()
             throw std::runtime_error("Incomplete unrelated registry remained a global cleanup barrier");
     }
 
+    {
+        auto unusual=source;
+        unusual["FutureRoot"]={{"Opaque",Json::array({42,"unchanged"})}};
+        auto& game=unusual["GameProgress"];
+        game["FutureData"]={{"Opaque",Json::array({1,"unchanged"})}};
+        game["PersonalInventory"]="future storage layout";
+        game["Loadout"]={{"0",{{"PlayerInventoryItemIndex",1}}},
+            {"1",{{"PlayerInventoryItemIndex",uint64_t(4294967297ULL)}}},
+            {"2",{{"PlayerInventoryItemIndex",-1}}},
+            {"3",{{"PlayerInventoryItemIndex",uint64_t(-1)}}}};
+        const auto cleaned=PlanAvailable(unusual,registry);
+        const auto& result=cleaned.Save["GameProgress"];
+        if(result["Inventory"].contains("1")||result["Loadout"].contains("0")||result["Loadout"].size()!=3
+            ||result["PersonalInventory"]!=game["PersonalInventory"]||result["FutureData"]!=game["FutureData"]
+            ||cleaned.Save["FutureRoot"]!=unusual["FutureRoot"]||cleaned.Skipped.empty())
+            throw std::runtime_error("Unfamiliar storage blocked verified cleanup or an out-of-range equipment index was truncated");
+        if(PlanAvailable(cleaned.Save,registry).Save!=cleaned.Save)throw std::runtime_error("Unfamiliar storage cleanup was not idempotent");
+        game["Inventory"]="future inventory layout";
+        game["PersonalInventory"]={{"0",{{"ItemData","missing-item"}}},{"1",{{"ItemData","item0"}}}};
+        const auto personal=PlanAvailable(unusual,registry).Save["GameProgress"];
+        if(personal["Inventory"]!=game["Inventory"]||personal["PersonalInventory"].contains("0")||!personal["Loadout"].contains("0"))
+            throw std::runtime_error("Opaque inventory blocked independent storage cleanup or fabricated an equipment dependency");
+
+        game["QuestProgress"]={{"QuestTracked","future-quest"},{"Quests",Json::array({
+            {{"QuestId","future-quest"},{"QuestState","future state"}},
+            {{"QuestId","orphan"},{"QuestState",1},{"QuestInts",Json::array({
+                {{"QuestVariableName","RuneSchema.Location:shared"},{"QuestVariableValue",DragonWilds::Quests::OwnershipVersion}}})}}})},
+            {"QuestLocations",Json::array({{{"QuestLocationId","shared"}}})}};
+        const auto quests=PlanAvailable(unusual,registry);
+        const auto& progress=quests.Save["GameProgress"]["QuestProgress"];
+        if(progress["Quests"].size()!=1||progress["Quests"][0]!=game["QuestProgress"]["Quests"][0]
+            ||progress["QuestTracked"]!="future-quest"||progress["QuestLocations"]!=game["QuestProgress"]["QuestLocations"]||quests.Skipped.empty())
+            throw std::runtime_error("Unfamiliar quest lost tracking/locations or blocked a verified orphan removal");
+    }
+
     auto earlyRegistry = registry;
     earlyRegistry.QuestsComplete = false;
     earlyRegistry.JournalsComplete = false;
@@ -202,6 +237,19 @@ int main()
         throw std::runtime_error("Baseline recovery is not idempotent");
     if (MergeBaseline(live, baseline, registry, {}).Save != live)
         throw std::runtime_error("Disabled baseline categories changed the live save");
+    {
+        auto invalid=baseline;
+        invalid["GameProgress"]["Loadout"]={{"Head",{{"PlayerInventoryItemIndex",uint64_t(4294967298ULL)}}},
+            {"Hand",{{"ItemData","item0"},{"PlayerInventoryItemIndex",-1}}}};
+        const auto restored=MergeBaseline(live,invalid,registry,{.Items=true});
+        if(!restored.Save["GameProgress"]["Loadout"].empty())
+            throw std::runtime_error("Baseline restore accepted an invalid equipment index");
+        auto owned=source;owned["GameProgress"]["Loadout"]={{"Head",{{"PlayerInventoryItemIndex",uint64_t(4294967297ULL)}}},
+            {"Hand",{{"PlayerInventoryItemIndex",1}}}};
+        const auto pruned=PlanOwned(owned,{{"missing-item","Example"}},{});
+        if(!pruned.Save["GameProgress"]["Loadout"].contains("Head")||pruned.Save["GameProgress"]["Loadout"].contains("Hand"))
+            throw std::runtime_error("Owned cleanup truncated an equipment index to an unrelated retired slot");
+    }
     if (AppearanceProfile(defaultAppearance).at("Customization")
             != defaultAppearance.at("Customization"))
         throw std::runtime_error("Appearance baseline extraction changed the profile");

@@ -302,7 +302,7 @@ try {
     if ($FinalizeBuild) {
         $buildScript = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'build/build.ps1') -Raw
         $versionMatch = [regex]::Match($buildScript, '(?m)^\$Version\s*=\s*''([^'']+)''')
-        if (-not $versionMatch.Success -or $versionMatch.Groups[1].Value -notmatch '^\d+\.\d+\.\d+(?:\.\d+(?:[em]|-alpha(?:\.\d+)?)?)?$') {
+        if (-not $versionMatch.Success -or $versionMatch.Groups[1].Value -notmatch '^\d+\.\d+\.\d+(?:\.\d+(?:[bem]|-alpha(?:\.\d+)?)?)?$') {
             throw 'Could not determine the current package version from build/build.ps1.'
         }
         $version = $versionMatch.Groups[1].Value

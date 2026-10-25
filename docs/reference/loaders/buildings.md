@@ -25,6 +25,12 @@ rules, stability, shelter checks, snapping, health, and station behavior.
 Use `/buildings` to register an existing `BuildingPieceData` asset or clone one
 as a separate build-menu entry.
 
+Development builds also accept property-free cooked building enrollment and
+menu placement in the mod's registry asset. A loose `Asset` definition may
+override individual settings while retaining omitted cooked placement/unlock
+defaults. See [cooked building enrollment](../../COOKED-PAK-REGISTRY-MANIFEST.md#cooked-buildings-and-station-placement-development-extension).
+This extension is not available in the published `0.8.0.1` DLLs.
+
 ```jsonc
 {
   "MyWall": {

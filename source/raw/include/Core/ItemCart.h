@@ -26,6 +26,19 @@ public:
     const std::vector<Entry>& Entries() const {return m_entries;}
     std::uint64_t Delivery() const {return m_delivery;}
     const std::vector<Outcome>& Outcomes()const{return m_outcomes;}
+    bool Reorder(const std::string& path={}) {
+        if(m_delivery)return false;
+        auto staged=*this;bool added=false;
+        for(const auto& outcome:m_outcomes) {
+            if(outcome.State!="Confirmed"||(!path.empty()&&outcome.Item.Path!=path))continue;
+            const auto& item=outcome.Item;int quantity=item.Quantity;
+            for(const auto& entry:staged.m_entries)if(entry.Path==item.Path)quantity+=entry.Quantity;
+            if(quantity>10000||!staged.Add(item.Row))return false;
+            staged.SetQuantity(item.Path,quantity);staged.m_checks.erase(item.Path);added=true;
+        }
+        if(added){m_entries=std::move(staged.m_entries);m_checks=std::move(staged.m_checks);}
+        return added;
+    }
     const Check* Validation(const std::string& path)const{const auto i=m_checks.find(path);return i==m_checks.end()?nullptr:&i->second;}
     void ClearValidation(){m_checks.clear();}
     void ApplyValidation(const json& rows){
@@ -117,7 +130,10 @@ public:
                     message=row.contains("Message")&&row["Message"].is_string()?row["Message"].get<std::string>():std::string{};
                 }
                 auto entry=std::find_if(m_entries.begin(),m_entries.end(),[&](const auto& item){return item.Path==path;});
-                if(entry!=m_entries.end())m_outcomes.push_back({*entry,matches==1&&exact?"Confirmed":matches==1&&rejected?"Rejected":"Unconfirmed",message});
+                if(entry!=m_entries.end()){
+                    auto delivered=*entry;delivered.Quantity=sent.at("Count").get<int>();
+                    m_outcomes.push_back({std::move(delivered),matches==1&&exact?"Confirmed":matches==1&&rejected?"Rejected":"Unconfirmed",message});
+                }
                 if(matches==1&&(exact||rejected)){
                     const auto removed=std::erase_if(m_entries,[&](const auto& entry){return entry.Path==path;});
                     if(exact)confirmed+=removed;m_checks.erase(path);

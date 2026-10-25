@@ -4,7 +4,7 @@ RuneSchema's stable diagnostic catalogue. A code identifies a condition, not a c
 
 Helpy's **Diagnostics** workspace combines overview, grouped issues and Live Log. Raw entries remain copyable; the viewer never changes source logs. Recent activity includes normal and diagnostic messages; notifications remain limited to warnings/errors.
 
-This page contains **65 legacy reference entries**, **221 structured diagnostic entries** and **19 bridge reason codes**. Three labels exist in both legacy and structured namespaces: RS-JRN-001, RS-JRN-002 and RS-SPAWN-001. Read the namespace and source rather than inferring meaning from the label alone. Existing links are preserved, with links between both meanings.
+This page contains **65 legacy reference entries**, **222 structured diagnostic entries** and **19 bridge reason codes**. Three labels exist in both legacy and structured namespaces: RS-JRN-001, RS-JRN-002 and RS-SPAWN-001. Read the namespace and source rather than inferring meaning from the label alone. Existing links are preserved, with links between both meanings.
 
 Structured reports in `RSDiagLog.jsonl` carry their own source, context and outcome. A catalogue entry does not imply that every operation emits it. `Unknown` cause means unknown; the actual emitted severity is authoritative. `Partial` can mean some changes occurred, `Deferred` means later/restart handling, and `Skipped`/`Blocked` do not establish that the entire mod failed.
 
@@ -2447,6 +2447,26 @@ Read the original message, affected mod/file and target or property. Check the f
 Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
 
 [Direct link to structured RS-BLD-022](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-022)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-BLD-023" data-rs-namespace="structured" data-rs-severity="error" markdown="1">
+
+### RS-BLD-023: Cooked building enrollment rejected {#rs-bld-023}
+
+**Structured namespace · Typical level: error**
+
+**Condition:** Cooked building enrollment rejected. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Area:** Buildings · **Producer:** `src/Loader/DragonWildsBuildingModLoader.cpp`
+
+**What to check**
+
+Check the exact cooked BuildingPieceData path, native PersistenceID/InternalName and optional assertions. Keep gameplay in the cooked asset; only AddTo and Unlock are enrollment metadata. World cleanup remains deferred for rejected content; unrelated character lanes can continue.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-BLD-023](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-023)
 
 </section>
 

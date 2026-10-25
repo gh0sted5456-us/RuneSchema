@@ -21,9 +21,9 @@ BEGIN
   BEGIN
    VALUE "CompanyName", "RuneSchema Community Team"
    VALUE "FileDescription", "RSMK (RuneSchema Modding Kit)"
-   VALUE "FileVersion", "0.8.0.1"
+   VALUE "FileVersion", "0.8.0.1b"
    VALUE "ProductName", "RuneSchema Modding Kit"
-   VALUE "ProductVersion", "0.8.0.1"
+   VALUE "ProductVersion", "0.8.0.1b"
    VALUE "LegalCopyright", "Copyright (c) 2026 RSDW Modding Community"
   END
  END

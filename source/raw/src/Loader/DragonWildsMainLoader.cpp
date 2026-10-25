@@ -1652,14 +1652,18 @@ namespace DragonWilds {
             for(auto& loader:m_loaders){
                 const auto& kind=loader->GetModFolderType();
                 if(!PS::PSConfig::Get()->IsLoaderEnabled(kind)){
-                    const std::string lane=kind=="recipes"?"Recipes":kind=="journal"?"Journals":kind=="lore"?"Lore":"";
+                    const std::string lane=kind=="recipes"?"Recipes":kind=="journal"?"Journals":kind=="lore"?"Lore":kind=="buildings"?"Buildings":"";
                     if(!lane.empty())for(const auto& manifest:PS::CookedPakRegistryManifest::Snapshot()){
                         const bool declared=manifest.LoaderDefinitions.contains(lane)||std::any_of(manifest.AssetLanes.begin(),manifest.AssetLanes.end(),[&](const auto& value){return value.Name==lane;});
-                        if(declared)PS::RegistryEnrollment::Reject(manifest.Source,"required loader is disabled: "+kind,PS::RegistryEnrollment::KindForLane(lane));
+                        if(declared){
+                            if(kind=="buildings")static_cast<DragonWildsBuildingModLoader*>(loader.get())->RejectCleanup("required loader is disabled: "+kind);
+                            else PS::RegistryEnrollment::Reject(manifest.Source,"required loader is disabled: "+kind,PS::RegistryEnrollment::KindForLane(lane));
+                        }
                     }
                     continue;
                 }
                 if(kind=="recipes")static_cast<DragonWildsRecipeModLoader*>(loader.get())->ImportCookedDefinitions();
+                if(kind=="buildings")static_cast<DragonWildsBuildingModLoader*>(loader.get())->ImportCookedDefinitions();
                 if(kind=="journal"||kind=="lore")static_cast<DragonWildsJournalModLoader*>(loader.get())->ImportCookedDefinitions();
                 if(kind=="recipes")for(const auto& path:static_cast<DragonWildsRecipeModLoader*>(loader.get())->CookedReferencePaths())plan.Add(path);
                 if(kind=="assets")for(const auto& path:static_cast<DragonWildsAssetModLoader*>(loader.get())->CookedReferencePaths())plan.Add(path);

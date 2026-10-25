@@ -12,8 +12,19 @@ static void Require(bool value,const char* message) {
     if(!value)throw std::runtime_error(message);
 }
 int main(int argc,char** argv) {
-    Require(argc==6,"Expected main, recipe, journal, registry loader and registrar");
+    Require(argc==7,"Expected main, recipe, journal, registry loader, registrar and building loader");
     const auto main=Read(argv[1]),recipe=Read(argv[2]),journal=Read(argv[3]),registry=Read(argv[4]),registrar=Read(argv[5]);
+    const auto building=Read(argv[6]);
+    Require(main.contains("static_cast<DragonWildsBuildingModLoader*>(loader.get())->ImportCookedDefinitions()")
+        &&main.contains("static_cast<DragonWildsBuildingModLoader*>(loader.get())->RejectCleanup"),
+        "Cooked buildings must import before application and preserve disabled-loader cleanup guards");
+    Require(building.contains("CookedPakRegistryManifest::Definitions(\"Buildings\")")
+        &&building.contains("definition.DeclaredPersistenceID=id")&&building.contains("definition.DeclaredInternalName=name")
+        &&building.contains("if(!definition.UnlockAuthored)")&&building.contains("definition.InheritSourcePlacement&&!targets.empty()")
+        &&building.contains("if(phase==EEngineLifecyclePhase::GameInstanceInit)ApplyDefinitions()")
+        &&building.contains("EnsureStabilityProfile(building,!definition.Declared)")
+        &&registrar.contains("if(lane.Name==\"Buildings\")continue;"),
+        "Cooked buildings must retain identity, overlay only authored loose settings and use the world registrar");
     const auto import=main.find("->ImportCookedDefinitions();");
     Require(import!=std::string::npos && import<main.find("PrefetchCookedAssets(plan)")
         && import<main.find("->PrepareReferences();"),"Cooked definitions must precede recipe reference consumers");

@@ -43,6 +43,9 @@
 #include "Runtime/Storefront.h"
 #include "Loader/DragonWildsBuildingModLoader.h"
 #include "Runtime/SlowWork.h"
+#include "Core/CookedPakRegistryManifest.h"
+#include "Core/RegistryEnrollment.h"
+#include "SDK/Helper/ReflectedContract.h"
 
 using namespace RC;
 using namespace RC::Unreal;
@@ -187,7 +190,81 @@ namespace DragonWilds {
         PS::JsonHelpers::ParseJsonFileInPath(modFilePath, [&](const nlohmann::json& data) {
             ReadDefinitions(data, modName, PS::StructuredDiagnosticB2::Utf8Path(modFilePath.filename()));
         });
+        m_cookedImported=false;
+        ImportCookedDefinitions();
         ApplyDefinitions();
+    }
+
+    void DragonWildsBuildingModLoader::ImportCookedDefinitions()
+    {
+        if(m_cookedImported)return;
+        m_cookedImported=true;
+        try{
+        std::unordered_map<std::string,std::vector<size_t>> existingPaths;
+        for(size_t index=0;index<m_definitions.size();++index)if(!m_definitions[index].Clone)
+            existingPaths[PS::CookedPakRegistryManifest::Detail::Fold(RC::to_string(m_definitions[index].AssetPath))].push_back(index);
+        for(const auto& declaration:PS::CookedPakRegistryManifest::Definitions("Buildings"))try{
+            const auto path=RC::to_generic_string(declaration.Path);
+            auto* object=LoadObject(path);
+            if(!object||!m_buildingPieceClass||!object->IsA(m_buildingPieceClass)
+                ||object->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed|RF_NeedLoad|RF_NeedPostLoad|RF_NeedInitialization)))
+                throw std::runtime_error("Cooked building is unresolved, incomplete or not BuildingPieceData: "+declaration.Path);
+            const auto identity=[&](const TCHAR* field){
+                auto* property=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(object->GetClassPrivate(),field));
+                if(!property||!ReflectedContract::Fits(property,object->GetClassPrivate()->GetPropertiesSize())
+                    ||property->GetArrayDim()!=1||property->GetElementSize()!=sizeof(FString))
+                    throw std::runtime_error("Cooked building identity field is unavailable");
+                return RC::to_string(*property->GetPropertyValue(property->ContainerPtrToValuePtr<void>(object)));
+            };
+            const auto id=identity(TEXT("PersistenceID")),name=identity(TEXT("InternalName"));
+            (void)PS::NativeDataFamilies::Order({{id,name,RC::to_string(object->GetName()),declaration.Path,0}});
+            for(const auto& [field,actual]:{std::pair{"PersistenceID",id},std::pair{"InternalName",name}})
+                if(declaration.Body.contains(field)&&declaration.Body.at(field)!=actual)
+                    throw std::runtime_error("Cooked building identity assertion does not match: "+declaration.Path+" "+field);
+            std::vector<Placement> targets;
+            if(declaration.Body.contains("AddTo")){
+                const auto& placement=declaration.Body.at("AddTo");
+                for(const auto& entry:placement.is_array()?placement:nlohmann::json::array({placement}))
+                    targets.push_back({entry.value("PageIndex",int32{0}),RC::to_generic_string(entry.at("Collection").get<std::string>())});
+            }
+            bool overridden=false;
+            const auto found=existingPaths.find(PS::CookedPakRegistryManifest::Detail::Fold(declaration.Path));
+            if(found!=existingPaths.end())for(const auto index:found->second){
+                auto& definition=m_definitions[index];
+                // Loose fields override cooked metadata; omitted fields keep the cooked defaults.
+                if(!definition.UnlockAuthored)definition.Unlock=declaration.Body.value("Unlock",false);
+                if(definition.InheritSourcePlacement&&!targets.empty()){
+                    definition.Targets=targets;definition.InheritSourcePlacement=false;
+                }
+                definition.Declared=true;definition.DeclaredPersistenceID=id;
+                definition.DeclaredInternalName=name;definition.DeclaredInternalNameAsserted=true;
+                overridden=true;
+            }
+            if(!overridden){
+                BuildingDefinition definition{};
+                definition.SourceFile=declaration.Source;definition.Owner=RC::to_generic_string(declaration.Owner);
+                definition.Key=path;definition.AssetPath=path;definition.Targets=std::move(targets);
+                definition.InheritSourcePlacement=false;definition.Unlock=declaration.Body.value("Unlock",false);
+                definition.Declared=true;definition.DeclaredPersistenceID=id;
+                definition.DeclaredInternalName=name;definition.DeclaredInternalNameAsserted=true;
+                existingPaths[PS::CookedPakRegistryManifest::Detail::Fold(declaration.Path)].push_back(m_definitions.size());
+                m_definitions.push_back(std::move(definition));
+            }
+        }catch(const std::exception& error){
+            RejectCleanup(error.what());
+            PS::RegistryEnrollment::RecordDeclaration(declaration.Owner,declaration.Source,error.what());
+            if(!PS::StructuredDiagnosticB3B::Report("RS-BLD-023","Error","Skipped","BuildingLoader",
+                "Cooked building enrollment rejected",error.what(),declaration.Owner,declaration.Source,declaration.Path,"Validation"))
+                PS::Log<LogLevel::Error>(STR("[BUILDING-ENROLLMENT][REJECTED] owner='{}' asset='{}': {}; world cleanup is deferred.\n"),
+                    PS::ToWideSafe(declaration.Owner),PS::ToWideSafe(declaration.Path),PS::ToWideSafe(error.what()));
+        }
+        }catch(const std::exception& error){RejectCleanup(error.what());
+            PS::Log<LogLevel::Error>(STR("Cooked building declarations rejected; world cleanup is deferred: {}.\n"),PS::ToWideSafe(error.what()));}
+    }
+
+    void DragonWildsBuildingModLoader::OnFinalizeLoad(const EEngineLifecyclePhase& phase)
+    {
+        if(phase==EEngineLifecyclePhase::GameInstanceInit)ApplyDefinitions();
     }
 
     bool DragonWildsBuildingModLoader::CanInitialize(
@@ -698,6 +775,7 @@ namespace DragonWilds {
                     continue;
                 }
                 definition.Unlock = body.at("Unlock").get<bool>();
+                definition.UnlockAuthored = true;
             }
 
             if (body.contains("AddTo"))
@@ -830,6 +908,7 @@ namespace DragonWilds {
                     return;
                 }
                 existing->Unlock = value.get<bool>();
+                existing->UnlockAuthored = true;
             }
             else if (name == "AddTo")
             {
@@ -956,7 +1035,7 @@ namespace DragonWilds {
                 }
             }
 
-            if (!EnsureStabilityProfile(building))
+            if (!EnsureStabilityProfile(building,!definition.Declared))
             {
                 PS::Log<LogLevel::Error>(
                     STR("Building '{}': stability profile is unavailable.\n"),
@@ -1810,7 +1889,7 @@ namespace DragonWilds {
         return true;
     }
 
-    bool DragonWildsBuildingModLoader::EnsureStabilityProfile(UObject* building)
+    bool DragonWildsBuildingModLoader::EnsureStabilityProfile(UObject* building,bool allowFallback)
     {
         auto* handleProperty = CastField<FStructProperty>(
             PropertyHelper::GetPropertyByName(
@@ -1829,6 +1908,7 @@ namespace DragonWilds {
         auto* tableAddress = tableProperty->ContainerPtrToValuePtr<void>(handle);
         UObject* currentTable = nullptr;
         std::memcpy(&currentTable, tableAddress, sizeof(currentTable));
+        if(!currentTable&&!allowFallback)return false;
         if (!currentTable)
         {
             auto* table = LoadObject(StabilityProfilePath);

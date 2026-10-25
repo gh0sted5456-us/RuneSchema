@@ -8,8 +8,19 @@ state; kit files still contain only item paths/counts and never grant authority.
 One explicit Give items action snapshots both recipients and quantities. The
 host sends one bounded GiveItems request at a time, waits for its correlated
 native inventory-delta receipt, then advances. Editing is locked while delivery
-is pending. An item leaves the cart only after every chosen recipient has one
-exact confirmation for its path and count.
+is pending. Confirmed items leave the cart after every chosen recipient has one
+exact confirmation for its path and count. Definite rejected items also leave
+the active cart, with their rejection retained in Last delivery.
+
+Right-click a confirmed Last delivery item to **Reorder**, or right-click the
+Last delivery heading to reorder all confirmed items. This adds the actual
+delivered quantities once per selected player, not multiplied by the previous
+recipient count. Stack-size delivery modes retain their sent quantities.
+Existing cart contents and the current player/equip selections are retained.
+Nothing is sent until the user reviews the cart and clicks Give items again.
+Rejected or uncertain receipts are not reorderable; an inventory-review lock
+must be resolved first. Reorder is all-or-nothing within the normal 64-item /
+10000-per-item cart limits and refreshes validation for the staged items.
 
 An unconfirmed result, timeout or world change stops the batch. Unconfirmed
 items stay staged; the UI shows delivery results and requires an explicit

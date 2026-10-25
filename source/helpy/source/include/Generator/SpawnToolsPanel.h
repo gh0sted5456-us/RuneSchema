@@ -383,11 +383,38 @@ inline void RenderCartDock(ImVec2 size,const std::function<void()>& recipient) {
             ImGui::EndDisabled();
             if(!cart.Outcomes().empty()){
                 ImGui::SeparatorText("Last delivery");
+#if defined(HELPY_PREVIEW)
+                HelpyPreviewHooks::DeliveryHeading=HelpyPreviewHooks::LastRect();
+#endif
+                const auto reorder=[&](const std::string& path={}){
+                    if(cart.Reorder(path))ItemGridPicker::CartStatus="Reordered into cart. Review quantities and players, then choose Give items.";
+                    else ItemGridPicker::CartStatus="Reorder could not fit in the cart. Keep at most 64 items and 10000 of each.";
+                };
+                if(ImGui::BeginPopupContextItem("##last-delivery-actions")){
+                    const bool confirmed=std::any_of(cart.Outcomes().begin(),cart.Outcomes().end(),[](const auto& outcome){return outcome.State=="Confirmed";});
+                    if(ImGui::MenuItem("Reorder confirmed items",nullptr,false,confirmed&&!delivering&&!CartNeedsReview))reorder();
+#if defined(HELPY_PREVIEW)
+                    HelpyPreviewHooks::ReorderAction=HelpyPreviewHooks::LastRect();
+#endif
+                    ImGui::EndPopup();
+                }
                 size_t outcomeIndex=0;for(const auto& outcome:cart.Outcomes()){
                     if(outcomeIndex++%columns)ImGui::SameLine();ImGui::BeginGroup();
+                    ImGui::PushID(outcome.Item.Path.c_str());
                     const auto start=ImGui::GetCursorScreenPos();
-                    ImGui::Dummy({cardWidth,cardHeight});ItemGridPicker::DrawPlacard(outcome.Item.Row,start,{start.x+cardWidth,start.y+cardHeight},false,false,theme.X(20));
+                    ImGui::InvisibleButton("##last-delivery-item",{cardWidth,cardHeight});ItemGridPicker::DrawPlacard(outcome.Item.Row,start,{start.x+cardWidth,start.y+cardHeight},false,ImGui::IsItemHovered(),theme.X(20));
+#if defined(HELPY_PREVIEW)
+                    HelpyPreviewHooks::DeliveryRects[outcome.Item.Path]=HelpyPreviewHooks::LastRect();
+#endif
+                    if(ImGui::BeginPopupContextItem("##reorder-item")){
+                        if(ImGui::MenuItem("Reorder",nullptr,false,outcome.State=="Confirmed"&&!delivering&&!CartNeedsReview))reorder(outcome.Item.Path);
+#if defined(HELPY_PREVIEW)
+                        HelpyPreviewHooks::ReorderAction=HelpyPreviewHooks::LastRect();
+#endif
+                        ImGui::EndPopup();
+                    }
                     DrawCartCheck({start.x,start.y+cardHeight},outcome.State,outcome.Message);
+                    ImGui::PopID();
                     ImGui::EndGroup();
                 }
             }

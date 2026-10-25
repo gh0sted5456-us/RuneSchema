@@ -9,10 +9,12 @@
 int RunLoaderSchemas(int argc,char** argv) {
     const auto schemas=PS::JsonSchemaGenerator::LoaderSchemas();
     assert(schemas.size()==22);
-    assert(schemas["registry"]["properties"]["NativeRegistries"]["properties"].size()==23);
+    assert(schemas["registry"]["properties"]["NativeRegistries"]["properties"].size()==24);
     for(const auto& family:PS::NativeDataFamilies::Families)assert(schemas["registry"]["properties"]["NativeRegistries"]["properties"][family.Lane]["items"]["type"]=="string");
     for(const auto* lane:{"Skills","SkillPerks","Enums"})assert(schemas["registry"]["properties"]["NativeRegistries"]["properties"][lane]["$ref"]=="#/definitions/modOwnedCookedPaths");
-    assert(schemas["registry"]["properties"]["LoaderDefinitions"]["properties"].size()==3);
+    assert(schemas["registry"]["properties"]["LoaderDefinitions"]["properties"].size()==4);
+    assert(schemas["registry"]["properties"]["NativeRegistries"]["properties"]["Buildings"]["items"]["type"]=="string");
+    assert(schemas["registry"]["properties"]["LoaderDefinitions"]["properties"]["Buildings"]["additionalProperties"]["additionalProperties"]==false);
     assert(schemas["assets"]["patternProperties"]["^(?!(?:RuneSchema|Modded)$)[^$]"]["properties"]["$WearableBridge"]["type"]=="boolean");
     const auto& humanEquipment=schemas.at("npc").at("anyOf").at(0).at("anyOf").at(0).at("properties").at("Equipment");
     assert(humanEquipment.at("properties").contains("Necklace"));

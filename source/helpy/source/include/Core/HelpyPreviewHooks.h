@@ -14,6 +14,8 @@ inline ImVec4 DeliveryBadge{};inline ImVec2 DeliveryBadgeBottomLeft{};
 inline ImVec4 CacheDetach{},CacheAdvanced{};
 inline size_t BayDetailsFacts=0;
 inline std::map<std::string,ImVec4> ItemRects,CartRects;
+inline std::map<std::string,ImVec4> DeliveryRects;
+inline ImVec4 DeliveryHeading{},ReorderAction{};
 inline std::map<std::string,ImVec4> RecipientRemove;
 inline ImVec4 RecipientsClear{};
 inline std::map<std::string,ImVec4> AuthoringButtons;

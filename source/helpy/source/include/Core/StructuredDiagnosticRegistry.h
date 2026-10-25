@@ -4,7 +4,7 @@
 #include <string_view>
 namespace PS::StructuredDiagnosticRegistry {
 struct Entry { std::string_view Code, TypicalSeverity, Description, ProducerSite; bool LegacyCollision; };
-inline constexpr std::array<Entry,221> All{{
+inline constexpr std::array<Entry,222> All{{
     {"RS-ASSET-001","Error","Asset target remained unresolved","src/Loader/DragonWildsAssetModLoader.cpp",false},
     {"RS-ASSET-002","Warning","Asset definition has invalid root","src/Loader/DragonWildsAssetModLoader.cpp",false},
     {"RS-ASSET-003","Warning","Asset property modification rejected","src/Loader/DragonWildsAssetModLoader.cpp",false},
@@ -30,6 +30,7 @@ inline constexpr std::array<Entry,221> All{{
     {"RS-BLD-020","Error","Building world registration aborted","src/Loader/DragonWildsBuildingModLoader.cpp",false},
     {"RS-BLD-021","Error","Building registry rollback failed","src/Loader/DragonWildsBuildingModLoader.cpp",false},
     {"RS-BLD-022","Warning","Building world recovery timed out","src/Loader/DragonWildsBuildingModLoader.cpp",false},
+    {"RS-BLD-023","Error","Cooked building enrollment rejected","src/Loader/DragonWildsBuildingModLoader.cpp",false},
     {"RS-BP-001","Warning","Blueprint property not found","src/Loader/DragonWildsBlueprintModLoader.cpp",false},
     {"RS-BP-002","Error","Required Blueprint lifecycle hook unavailable","src/Loader/DragonWildsBlueprintModLoader.cpp",false},
     {"RS-BP-003","Warning","Blueprint changes require restart","src/Loader/DragonWildsBlueprintModLoader.cpp",false},

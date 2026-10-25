@@ -38,6 +38,11 @@ includes the folder layout, enable line, JSONC example, downloadable starter,
 and verification steps. `NativeRegistries` and `LoaderDefinitions` are accepted
 from enabled loose registry documents as well as cooked declaration assets.
 
+For a complete unchanged-PAK layout, use the
+[legacy sidecar conversion walkthrough](examples/LegacyPakRegistration/README.md).
+JSONC is an explicit fallback when the PAK has no declaration, not an automatic
+scan of all of its assets or a way to suppress rejected cooked metadata.
+
 Use one declaration route per reference. Neither route creates missing cooked
 content or substitutes for its stable native identity. Ordinary item clones
 created by `/assets` already use their owning loader's registration route.
@@ -87,6 +92,84 @@ loader. Registry enrollment does not make a recipe appear at a station on its
 own.
 
 ## Supported declaration fields
+
+### Cooked buildings and station placement — development extension
+
+This extension is not part of the published `0.8.0.1` DLLs. It adds
+`NativeRegistries.Buildings` for exact existing `BuildingPieceData` object paths.
+Stations use this same lane; their actor behavior, recipes, costs, stability,
+meshes and interactions remain cooked. A bare declaration registers identity
+without granting the piece to players or inventing a build-menu location.
+
+To cook menu placement into the registry asset, use `LoaderDefinitions.Buildings`:
+
+```jsonc
+{
+  "SchemaVersion": 1,
+  "Entries": [],
+  "LoaderDefinitions": {
+    "Buildings": {
+      "/Example/Buildings/BUILDING_Workbench.BUILDING_Workbench": {
+        "AddTo": {"Collection": "Modded Buildings", "PageIndex": 0},
+        "Unlock": false
+      }
+    }
+  }
+}
+```
+
+The path also announces the building; do not repeat it in `NativeRegistries.Buildings`.
+`AddTo` accepts one placement or an array of up to 64. `PageIndex` is a
+nonnegative int32; omitted indices default to zero. Optional `PersistenceID`
+and `InternalName` fields are **assertions** against the cooked asset, never
+replacement identities. `Unlock` defaults to false. Native cooked catalogue
+references remain intact; this does not automatically merge arbitrary mod-owned
+catalogue assets into the game's menu.
+
+A loose `/buildings/*.jsonc` definition targeting the same `Asset` can override
+individual settings. Omitted menu/unlock settings inherit the cooked registry
+metadata; supplied `AddTo` replaces that placement list rather than appending.
+Existing loose definitions without a cooked declaration retain their old defaults.
+For example, this keeps the cooked placement while overriding health:
+
+```jsonc
+{
+  "WorkbenchOverride": {
+    "Asset": "/Example/Buildings/BUILDING_Workbench.BUILDING_Workbench",
+    "Overrides": {"Health": {"MaxHealth": 2500}}
+  }
+}
+```
+
+Cooked building metadata rejects `Properties`, `Overrides`, `Requirements`,
+clones and arbitrary class references. Use the normal loose building loader for
+intentional gameplay overrides. An already-published runtime clone is not an
+automatic migration to a differently identified cooked asset.
+
+Enrollment uses the existing building catalogue and world registrar on clients
+and dedicated servers. Keep the `buildings` loader enabled and install matching
+content/load order everywhere. An identity/type/assertion failure reports
+`RS-BLD-023` and defers world-building cleanup; unrelated character lanes are
+not vetoed by this building-specific failure. Test old-save load, placement,
+deconstruction, host/client interaction, world exit and re-entry before release.
+
+### Enrollment scope
+
+Loose and cooked declarations share the same supported lanes and schemas.
+They name exact assets; they do not search every object in a PAK.
+
+| Registry lanes | Enrollment boundary |
+| --- | --- |
+| Items, Recipes, Quests | Existing native identities; recipes still need station/discovery relationships. |
+| Buildings (development) | Existing BuildingPieceData through the building/world registrar, with optional menu metadata. |
+| Journals, Lore | Existing journal identities through the owning journal/lore service. |
+| CombatSpells, UtilitySpells, EquipmentEffects | Existing native data; the mod supplies its gameplay consumers. |
+| ContainerContents, FarmPlants, Trees, TreeGrowth | Cooked native-family identities; consumer behavior/lifecycle is not certified by declaration acceptance. |
+| FixedTextNotifications, FTUENotifications, PlayerHooks, WorldHooks | Cooked native-family identities; enrollment does not fire a notification or activate a hook. |
+| WearableMeshData | Dependency resolution/class checking, not a persistence entry. |
+| Enums | Read-only verification of mod-owned cooked enum symbols. |
+| Skills, SkillPerks | Explicitly blocked until native progression and consumer lifecycle are verified. |
+| MeleeAttackClasses, RangedAttackClasses, CacheAssets | Optional attack metadata/artwork ownership, not universal gameplay registries; see their limits below. |
 
 | Field | What RuneSchema does | What the mod must still provide |
 | --- | --- | --- |
@@ -271,3 +354,10 @@ and declaration. A line set to `0` contributes neither on the next launch.
 Avoid reusing another mod's content path or persistence identity. RuneSchema's
 save cleanup checks the applicable settled live registry; the declaration
 itself is not a cleanup authority.
+
+Cooked object-path comparisons are case-insensitive across native paths,
+loader metadata and Schema provenance. Case aliases cannot enroll the same
+asset twice, hide conflicting policies, or split a journal asset between Lore
+and Journals. Conflicting publication rejects the new batch without changing
+the previous declarations. Original object paths and persistence identities
+are not rewritten.

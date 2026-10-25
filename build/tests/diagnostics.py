@@ -40,7 +40,7 @@ class Diagnostics(unittest.TestCase):
         result = audit.audit()
         catalogue = json.loads((ROOT / "resources/diagnostics/codes.json").read_text(encoding="utf-8"))
         self.assertEqual(result["legacyCodes"], len(catalogue["codes"]))
-        self.assertEqual(result["structuredCodes"], 221)
+        self.assertEqual(result["structuredCodes"], 222)
         self.assertEqual(result["registeredCodes"], len({row["code"] for row in catalogue["codes"]} | {row["code"] for row in generate.structured_catalogue()}))
         self.assertLessEqual(result["emittedCodes"], result["registeredCodes"])
         self.assertIn("callback_contract_mismatch", result["bridgeReasons"])

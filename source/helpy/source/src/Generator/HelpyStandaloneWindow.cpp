@@ -2699,6 +2699,22 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 const auto check=[](bool value,const char* message){if(!value)throw std::runtime_error(message);};
                 const auto center=[](const ImVec4& rect){return ImVec2((rect.x+rect.z)*0.5f,(rect.y+rect.w)*0.5f);};
                 const auto mouse=[&](ImVec2 point,bool down,int frames=2){Hooks::MouseEnabled=true;Hooks::Mouse=point;Hooks::MouseDown=down;for(int i=0;i<frames;++i)RenderFrame();};
+                {
+                    auto& cart=ItemGridPicker::SharedCart;
+                    check(cart.Add(items[0]),"Reorder fixture could not stage an item");cart.SetQuantity(stagedPath,4);
+                    check(cart.BeginDelivery(1000),"Reorder fixture could not start");
+                    check(cart.CompleteDelivery(1000,{{"GrantResults",nlohmann::json::array({{{"Item",stagedPath},{"Count",4},{"State","Confirmed"}}})}})==1,"Reorder fixture was not confirmed");
+                    mouse({-100,-100},false,3);
+                    for(int heading=0;heading<2;++heading){
+                        mouse(center(heading?Hooks::DeliveryHeading:Hooks::DeliveryRects.at(stagedPath)),false);
+                        Hooks::RightDown=true;RenderFrame();Hooks::RightDown=false;RenderFrame();RenderFrame();
+                        check(ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId),"Last delivery right-click did not open Reorder");
+                        PreviewCapture=output/(heading?"cart-reorder-all.png":"cart-reorder-item.png");RenderFrame();PreviewCapture.clear();
+                        const auto action=center(Hooks::ReorderAction);mouse(action,true);mouse(action,false,3);
+                        check(cart.Entries().size()==1&&cart.Payload()[0]["Count"]==(heading?8:4)&&!cart.Delivery(),"Reorder did not stage sent quantities without delivering");
+                    }
+                    ItemGridPicker::ClearSharedCart();mouse({-100,-100},false,3);
+                }
                 const auto drag=[&](ImVec2 from,ImVec2 to,const char* kind=nullptr,const char* capture=nullptr){const auto savedOrder=HelpyNavigationOrder::Orders;mouse(from,false);mouse(from,true);mouse(ImVec2(from.x+12,from.y+12),true);mouse(to,true,3);
                     if(kind){check(DragFeedback::LastFrame==ImGui::GetFrameCount()&&DragFeedback::Kind==kind&&!DragFeedback::Label.empty(),"Held drag card did not identify the current payload");const auto card=DragFeedback::Card;check(card.z>card.x&&card.w>card.y,"Held drag card has no visible bounds");}
                     check(HelpyNavigationOrder::Orders==savedOrder,"Navigation was reordered before releasing the dragged item");

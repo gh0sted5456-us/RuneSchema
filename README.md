@@ -2,7 +2,11 @@
 
 Runtime schema and data-editing framework for **RuneScape: Dragonwilds**.
 
-**RuneSchema and Helpy 0.8.0.1**, released October 24, 2026.
+**Current source: RuneSchema and Helpy 0.8.0.1b — Quick bug fixes.**
+Read the [short changelog](docs/CHANGELOG-0.8.0.1b.md).
+This source update does not replace the existing release tag or downloads.
+
+**Published download: RuneSchema and Helpy 0.8.0.1**, released October 24, 2026.
 Read the [implemented/removed changes, line by line](docs/CHANGELOG-0.8.0.1.md)
 and [exact package/defaults/verification](docs/RELEASE-0.8.0.1.md).
 The release publishes the current runtime source on `main` and `experimental`,

@@ -17,6 +17,12 @@ int main(){
     assert(Parse("v0.8.0.0")&&Parse("RuneSchema-0.8.0.0"));
     assert(Compare("0.7.8.0-alpha","0.8.0.0")==Comparison::Newer);
     assert(Compare("0.8.0.0","0.8.0.0")==Comparison::Current);
+    assert(Parse("v0.8.0.1b")&&Parse("RuneSchema-0.8.0.1b"));
+    assert(Compare("0.8.0.1","0.8.0.1b")==Comparison::Newer);
+    assert(Compare("0.8.0.1b","0.8.0.1")==Comparison::Ahead);
+    assert(Compare("0.8.0.1b","0.8.0.1b")==Comparison::Current);
+    assert(Compare("0.8.0.1b","0.8.0.2")==Comparison::Newer);
+    assert(Compare("0.8.0.1b","0.8.0.1e")==Comparison::DifferentBuild);
     assert(MainVersion("inline constexpr char Version[] = \"0.7.7.9m\";\n")=="0.7.7.9m");
     assert(!MainVersion("<html>Version: latest</html>")&&!MainVersion("char Version[] = \"oops\";"));
     const auto post=[](const char* title,long long date){return nlohmann::json{{"title",title},{"date",date},{"url","https://steamcommunity.com/games/1374490/announcements/detail/123"},{"feedname","steam_community_announcements"}};};

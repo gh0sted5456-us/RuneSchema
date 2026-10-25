@@ -174,4 +174,68 @@ int main()
         auto malformed=rows;malformed[0].Internal=bad;failed=false;try{PS::NativeDataFamilies::Order(malformed);}catch(const std::exception&){failed=true;}assert(failed);
     }
     failed=false;try{PS::NativeDataFamilies::Order(std::vector<Identity>(4097,rows[0]));}catch(const std::exception&){failed=true;}assert(failed);
+
+    Reset();
+    const std::string building="/Example/Buildings/BUILDING_Workbench.BUILDING_Workbench";
+    const nlohmann::json bareBuilding={{"NativeRegistries",{{"Buildings",{building}}}}};
+    assert(Publish(bareBuilding,"Example","bare.jsonc"));
+    assert(Definitions("Buildings").size()==1&&Definitions("Buildings")[0].Body==nlohmann::json({{"Unlock",false}}));
+    const nlohmann::json buildingBody={{"PersistenceID","existing-save-id"},{"InternalName","ExistingWorkbench"},
+        {"AddTo",{{"Collection","Modded Buildings"},{"PageIndex",0}}}};
+    assert(Publish({{"LoaderDefinitions",{{"Buildings",{{building,buildingBody}}}}}},"Example","metadata.jsonc"));
+    assert(Definitions("Buildings")[0].Body.at("Unlock")==false);
+    assert(Definitions("Buildings")[0].Body.at("PersistenceID")=="existing-save-id");
+    const auto rejectBuilding=[&](const nlohmann::json& value){bool failed=false;
+        try{Parse(value,"Example","invalid-building.jsonc");}catch(const std::exception&){failed=true;}assert(failed);};
+    auto conflicting=buildingBody;conflicting["AddTo"]["PageIndex"]=1;
+    bool conflictRejected=false;
+    try{Publish({{"LoaderDefinitions",{{"Buildings",{{building,conflicting}}}}}},"Example","conflict.jsonc");}
+    catch(const std::exception&){conflictRejected=true;}assert(conflictRejected);
+    for(const auto* field:{"Properties","Overrides","Requirements","Asset","$Clone","Class"}){
+        auto body=buildingBody;body[field]=nlohmann::json::object();
+        rejectBuilding({{"LoaderDefinitions",{{"Buildings",{{building,body}}}}}});
+    }
+    for(const auto& bad:nlohmann::json::array({"/Example/NoObject","/Example/A.A:Subobject",{{"Path",building},{"Source","Schema"}}}))
+        rejectBuilding({{"NativeRegistries",{{"Buildings",nlohmann::json::array({bad})}}}});
+    for(const auto& bad:nlohmann::json::array({-1,2147483648LL,"0",0.5})){
+        auto body=buildingBody;body["AddTo"]["PageIndex"]=bad;
+        rejectBuilding({{"LoaderDefinitions",{{"Buildings",{{building,body}}}}}});
+    }
+    auto alias=bareBuilding;alias["NativeRegistries"]["Buildings"].push_back("/example/buildings/building_workbench.building_workbench");rejectBuilding(alias);
+    for(const auto& bad:nlohmann::json::array({"",std::string("a\0b",3),"wrong\nidentity",42})){
+        auto body=buildingBody;body["PersistenceID"]=bad;
+        rejectBuilding({{"LoaderDefinitions",{{"Buildings",{{building,body}}}}}});
+    }
+    // Owner conflicts and explicit-body conflicts must leave publication unchanged.
+    rejectDocument(bareBuilding);
+    assert(Snapshot().size()==2&&Definitions("Buildings").size()==1);
+    Reset();
+    for(const auto* lane:{"Items","Recipes","Journals","Lore","WearableMeshData","CacheAssets"}){
+        bool duplicateRejected=false;
+        try{Parse({{"NativeRegistries",{{lane,{"/Example/A.A","/example/a.a"}}}}},"Example","duplicate.jsonc");}
+        catch(const std::exception&){duplicateRejected=true;}assert(duplicateRejected);
+    }
+    const std::string mixed="/Example/Mixed.Mixed",lower="/example/mixed.mixed";
+    for(const auto* lane:{"Recipes","Journals","Lore","Buildings"}){
+        Reset();
+        assert(Publish({{"NativeRegistries",{{lane,{mixed}}}}},"Example","bare.jsonc"));
+        assert(Publish({{"LoaderDefinitions",{{lane,{{lower,{{"Unlock",true}}}}}}}},"Example","explicit.jsonc"));
+        assert(Definitions(lane).size()==1&&Definitions(lane)[0].Body.at("Unlock")==true&&Definitions(lane)[0].Path==lower);
+        const auto before=Snapshot().size();bool conflict=false;
+        try{Publish({{"LoaderDefinitions",{{lane,{{mixed,{{"Unlock",false}}}}}}}},"Example","conflict.jsonc");}
+        catch(const std::exception&){conflict=true;}assert(conflict&&Snapshot().size()==before&&Definitions(lane)[0].Body.at("Unlock")==true);
+        bool duplicate=false;
+        try{Parse({{"LoaderDefinitions",{{lane,{{mixed,nlohmann::json::object()},{lower,nlohmann::json::object()}}}}}},"Example","aliases.jsonc");}
+        catch(const std::exception&){duplicate=true;}assert(duplicate);
+    }
+    Reset();
+    assert(Publish({{"NativeRegistries",{{"Journals",{mixed}}}}},"Example","journal.jsonc"));
+    bool crossLane=false;
+    try{Publish({{"LoaderDefinitions",{{"Lore",{{lower,nlohmann::json::object()}}}}}},"Example","lore.jsonc");}
+    catch(const std::exception&){crossLane=true;}assert(crossLane&&Snapshot().size()==1);
+    bool schemaAlias=false;
+    try{Parse({{"NativeRegistries",{{"Recipes",nlohmann::json::array({{{"Path",mixed},{"Source","Schema"}}})}}},
+        {"LoaderDefinitions",{{"Recipes",{{lower,nlohmann::json::object()}}}}}},"Example","schema-alias.jsonc");}
+    catch(const std::exception&){schemaAlias=true;}assert(schemaAlias);
+    Reset();
 }

@@ -1,0 +1,7 @@
+// Optional loose override: omitted placement/unlock settings keep cooked defaults.
+{
+  "WorkbenchOverride": {
+    "Asset": "/Example/Buildings/BUILDING_Workbench.BUILDING_Workbench",
+    "Overrides": {"Health": {"MaxHealth": 2500}}
+  }
+}

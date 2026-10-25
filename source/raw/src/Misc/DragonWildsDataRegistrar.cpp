@@ -766,6 +766,8 @@ namespace DragonWilds {
 
             for (const auto& lane : manifest.AssetLanes)
             {
+                // BuildingPieceData uses its catalogue/world registrar, never ItemSubsystem.
+                if(lane.Name=="Buildings")continue;
                 // Dedicated cooked-only enrollment runs at the existing startup boundary.
                 if(PS::NativeDataFamilies::Find(lane.Name))continue;
                 // Reflected base maps alone do not verify a subsystem's startup caches or consumers.
@@ -802,7 +804,7 @@ namespace DragonWilds {
                 // These lanes use the established journal/lore service for
                 // native registration, placement and unlock triggers.
                 if(lane.Name=="Journals"||lane.Name=="Lore"){
-                    for(const auto& path:lane.Paths)if(manifest.SchemaPaths.contains(path)){
+                    for(const auto& path:lane.Paths)if(manifest.SchemaPaths.contains(PS::CookedPakRegistryManifest::Detail::Fold(path))){
                         bool verified=false;
                         try{
                             auto* entry=ActorHelper::ResolveObject(PS::ToWideSafe(path.c_str()));

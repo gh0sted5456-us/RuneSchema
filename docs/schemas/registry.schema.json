@@ -220,6 +220,83 @@
     "LoaderDefinitions": {
       "additionalProperties": false,
       "properties": {
+        "Buildings": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "properties": {
+              "AddTo": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "Collection": {
+                        "maxLength": 256,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "PageIndex": {
+                        "maximum": 2147483647,
+                        "minimum": 0,
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "Collection"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "Collection": {
+                          "maxLength": 256,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "PageIndex": {
+                          "maximum": 2147483647,
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "Collection"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 64,
+                    "minItems": 1,
+                    "type": "array"
+                  }
+                ]
+              },
+              "InternalName": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              "PersistenceID": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              "Unlock": {
+                "default": false,
+                "type": "boolean"
+              }
+            },
+            "type": "object"
+          },
+          "maxProperties": 4096,
+          "propertyNames": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+            "type": "string"
+          },
+          "type": "object"
+        },
         "Journals": {
           "additionalProperties": {
             "type": "object"
@@ -247,6 +324,18 @@
     "NativeRegistries": {
       "additionalProperties": false,
       "properties": {
+        "Buildings": {
+          "description": "Existing cooked BuildingPieceData only. Preserves native identity and gameplay; no schema clones or automatic unlock.",
+          "items": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
         "CacheAssets": {
           "description": "Original artwork references; not gameplay registry identities.",
           "items": {

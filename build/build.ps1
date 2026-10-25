@@ -9,14 +9,14 @@ $ErrorActionPreference = 'Stop'
 if ($ManagedUE4SSHost) {
     throw 'Custom UE4SS hosts are retired. RuneSchema must run on an unmodified UE4SS.dll; build a framework-only package instead.'
 }
-$Version = '0.8.0.1'
+$Version = '0.8.0.1b'
 $BuildRoot = [IO.Path]::GetFullPath($PSScriptRoot)
 if (-not (Test-Path -LiteralPath (Join-Path $BuildRoot 'source\raw\CMakeLists.txt') -PathType Leaf)) {
     $BuildRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 }
-$releaseVersionPattern = '^\d+\.\d+\.\d+(?:\.\d+(?:[em]|-alpha(?:\.\d+)?)?)?$'
+$releaseVersionPattern = '^\d+\.\d+\.\d+(?:\.\d+(?:[bem]|-alpha(?:\.\d+)?)?)?$'
 if ($Version -cnotmatch $releaseVersionPattern) {
-    throw "Expected a three- or four-part RuneSchema version, optionally using a legacy four-part channel suffix: $Version"
+    throw "Expected a three- or four-part RuneSchema version, optionally using a lowercase b bugfix or legacy channel suffix: $Version"
 }
 $releaseBranch = $env:GITHUB_REF_NAME
 if ([string]::IsNullOrWhiteSpace($releaseBranch) -and (Test-Path -LiteralPath (Join-Path $BuildRoot '.git'))) {

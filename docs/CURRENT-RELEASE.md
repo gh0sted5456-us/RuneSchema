@@ -1,4 +1,10 @@
-# RuneSchema 0.8.0.1
+# RuneSchema downloads and source updates
+
+The latest source on main and experimental is **0.8.0.1b — Quick bug fixes**.
+[Read the short changelog](CHANGELOG-0.8.0.1b.md).
+This commit does not create a new release asset or move the existing 0.8.0.1 tag.
+
+## Published download: 0.8.0.1
 
 The current release is **0.8.0.1**, published October 24, 2026.
 [Download 0.8.0.1](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.0.1/RuneSchema-0.8.0.1.zip)

@@ -22,30 +22,12 @@
         "pattern": "^/Game/Mods/([A-Za-z0-9_]{1,64})/Registry/Shards/(RSREG_\\1_[A-Za-z0-9_]+)\\.\\2$"}
     },
     "RegistryShard": {"description": "Child-only marker. Shards cannot be independently enrolled or include other shards.", "const": true},
-    "NativeRegistries": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "Skills": {"$ref": "registry.schema.json#/definitions/modOwnedCookedPaths", "description": "Declared but blocked: custom skill consumers and native lifecycle are not verified."},
-        "SkillPerks": {"$ref": "registry.schema.json#/definitions/modOwnedCookedPaths", "description": "Declared but blocked: perk startup/cache and unlock lifecycle are not verified."},
-        "Enums": {"$ref": "registry.schema.json#/definitions/modOwnedCookedPaths", "description": "Verify a mod-owned cooked UserDefinedEnum without changing its symbols or native consumers."},
-        "Items": {"$ref": "#/definitions/paths"},
-        "Recipes": {"$ref": "#/definitions/paths"},
-        "Quests": {"$ref": "#/definitions/paths"},
-        "Journals": {"$ref": "#/definitions/paths"},
-        "Lore": {"$ref": "#/definitions/paths"},
-        "CombatSpells": {"$ref": "#/definitions/paths"},
-        "UtilitySpells": {"$ref": "#/definitions/paths"},
-        "EquipmentEffects": {"$ref": "#/definitions/paths"},
-        "WearableMeshData": {"$ref": "#/definitions/paths"},
-        "MeleeAttackClasses": {"$ref": "#/definitions/paths"},
-        "RangedAttackClasses": {"$ref": "#/definitions/paths"}
-      }
-    },
+    "NativeRegistries": {"$ref": "registry.schema.json#/properties/NativeRegistries"},
     "LoaderDefinitions": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "Buildings": {"$ref": "registry.schema.json#/properties/LoaderDefinitions/properties/Buildings"},
         "Recipes": {"$ref": "#/definitions/recipeLoaderMap"},
         "Journals": {"$ref": "#/definitions/loaderMap"},
         "Lore": {"$ref": "#/definitions/loaderMap"}

@@ -24,6 +24,7 @@ namespace DragonWilds {
         DragonWildsBuildingModLoader();
         ~DragonWildsBuildingModLoader() override;
         void ActivateWorldRegistration();
+        void ImportCookedDefinitions();
         std::vector<PS::WorldBuildingRegistryValidation::Expected> CleanupExpectations();
         void RejectCleanup(const std::string& reason);
         std::function<void(const nlohmann::json&,const RC::StringType&)> ImportPlacements;
@@ -36,6 +37,7 @@ namespace DragonWilds {
             const std::filesystem::path& modFilePath) override;
         bool CanInitialize(const EEngineLifecyclePhase& engineLifecyclePhase) override;
         bool OnInitialize() override;
+        void OnFinalizeLoad(const EEngineLifecyclePhase& phase) override;
 
     private:
         struct Placement {
@@ -54,6 +56,7 @@ namespace DragonWilds {
             std::vector<Placement> Targets;
             bool InheritSourcePlacement = true;
             bool Unlock = true;
+            bool UnlockAuthored = false;
             bool Clone = false;
             bool Declared = false;
             std::string DeclaredPersistenceID;
@@ -95,7 +98,7 @@ namespace DragonWilds {
             const BuildingDefinition& definition);
         bool ApplyOverrides(RC::Unreal::UObject* building,
             const BuildingDefinition& definition, LoadResult& result);
-        bool EnsureStabilityProfile(RC::Unreal::UObject* building);
+        bool EnsureStabilityProfile(RC::Unreal::UObject* building,bool allowFallback=true);
         bool AddPersistenceIdentity(RC::Unreal::UObject* building);
         std::vector<Placement> FindSourcePlacements(RC::Unreal::UObject* source) const;
         bool AddToMenu(RC::Unreal::UObject* building, const Placement& placement);
@@ -145,6 +148,7 @@ namespace DragonWilds {
         std::vector<RC::Unreal::UObject*> m_createdBuildings;
         NativeRegistrySnapshot m_nativeRegistrySnapshot;
         bool m_hooksRegistered = false;
+        bool m_cookedImported = false;
         RC::Unreal::Hook::GlobalCallbackId m_initGameStateCallbackId = RC::Unreal::Hook::ERROR_ID;
         RC::Unreal::Hook::GlobalCallbackId m_unlockGameStateCallbackId = RC::Unreal::Hook::ERROR_ID;
         RC::Unreal::Hook::GlobalCallbackId m_recoveryTickCallbackId = RC::Unreal::Hook::ERROR_ID;

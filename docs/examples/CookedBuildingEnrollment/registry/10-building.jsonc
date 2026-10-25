@@ -1,0 +1,18 @@
+// Development extension, not supported by the published 0.8.0.1 DLLs.
+// Replace every example path with an inspected, complete cooked asset.
+// This same document may be embedded in RuneSchemaRegistryJson instead.
+{
+  "SchemaVersion": 1,
+  "Entries": [],
+  "NativeRegistries": {
+    "Items": ["/Example/Items/ITEM_Tool.ITEM_Tool"]
+  },
+  "LoaderDefinitions": {
+    "Buildings": {
+      "/Example/Buildings/BUILDING_Workbench.BUILDING_Workbench": {
+        "AddTo": {"Collection": "Modded Buildings", "PageIndex": 0},
+        "Unlock": false
+      }
+    }
+  }
+}
