@@ -4,7 +4,7 @@ RuneSchema's stable diagnostic catalogue. A code identifies a condition, not a c
 
 Helpy's **Diagnostics** workspace combines overview, grouped issues and Live Log. Raw entries remain copyable; the viewer never changes source logs. Recent activity includes normal and diagnostic messages; notifications remain limited to warnings/errors.
 
-This page contains **65 legacy reference entries**, **222 structured diagnostic entries** and **19 bridge reason codes**. Three labels exist in both legacy and structured namespaces: RS-JRN-001, RS-JRN-002 and RS-SPAWN-001. Read the namespace and source rather than inferring meaning from the label alone. Existing links are preserved, with links between both meanings.
+This page contains **68 legacy reference entries**, **222 structured diagnostic entries** and **19 bridge reason codes**. Three labels exist in both legacy and structured namespaces: RS-JRN-001, RS-JRN-002 and RS-SPAWN-001. Read the namespace and source rather than inferring meaning from the label alone. Existing links are preserved, with links between both meanings.
 
 Structured reports in `RSDiagLog.jsonl` carry their own source, context and outcome. A catalogue entry does not imply that every operation emits it. `Unknown` cause means unknown; the actual emitted severity is authoritative. `Partial` can mean some changes occurred, `Deferred` means later/restart handling, and `Skipped`/`Blocked` do not establish that the entire mod failed.
 
@@ -346,6 +346,90 @@ Use a newer .rsmk-cache bundle when published; a sweep is optional.
 Pictures may still be useful; this is not an integrity failure. Import a compatible .rsmk-cache for item identities, pathing, persistence IDs and journal records when available.
 
 [Direct link to RS-CACHE-010](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-cache-010)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CACHE-011" data-rs-severity="info" markdown="1">
+
+### RS-CACHE-011: Helpy content loading preference {#rs-cache-011}
+
+**Cache · Typical level: info**
+
+An item query selected cache-first or game-first browsing and its passive refresh policy.
+
+**Common reasons**
+
+An item query selected cache-first or game-first browsing and its passive refresh policy.
+
+**What RuneSchema does**
+
+This controls item presentation and bounded discovery; live action validation remains enabled.
+
+**What to do next**
+
+Use Quick settings > Content & cache to choose a loading order and passive updates.
+
+**Troubleshooting checks**
+
+Use Quick settings > Content & cache to choose a loading order and passive updates. This controls item presentation and bounded discovery; live action validation remains enabled.
+
+[Direct link to RS-CACHE-011](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-cache-011)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CACHE-012" data-rs-severity="info" markdown="1">
+
+### RS-CACHE-012: Cached references used as fallback {#rs-cache-012}
+
+**Cache · Typical level: info**
+
+Game-first browsing has no ready or matching live item page and is displaying saved references.
+
+**Common reasons**
+
+Game-first browsing has no ready or matching live item page and is displaying saved references.
+
+**What RuneSchema does**
+
+Pictures and references remain available; a reference alone does not prove an item is loaded or deliverable.
+
+**What to do next**
+
+Wait for bounded discovery, search again, or use Cache first for immediate browsing.
+
+**Troubleshooting checks**
+
+Wait for bounded discovery, search again, or use Cache first for immediate browsing. Pictures and references remain available; a reference alone does not prove an item is loaded or deliverable.
+
+[Direct link to RS-CACHE-012](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-cache-012)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CACHE-013" data-rs-severity="error" markdown="1">
+
+### RS-CACHE-013: Unsupported content loading preference {#rs-cache-013}
+
+**Cache · Typical level: error**
+
+The cache loadOrder setting is neither cacheFirst nor gameFirst.
+
+**Common reasons**
+
+The cache loadOrder setting is neither cacheFirst nor gameFirst.
+
+**What RuneSchema does**
+
+The invalid preference is rejected; the original configuration is retained.
+
+**What to do next**
+
+Correct cache.loadOrder in ui.jsonc, then reload Helpy. Use cacheFirst or gameFirst.
+
+**Troubleshooting checks**
+
+Correct cache.loadOrder in ui.jsonc, then reload Helpy. Use cacheFirst or gameFirst. The invalid preference is rejected; the original configuration is retained.
+
+[Direct link to RS-CACHE-013](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-cache-013)
 
 </section>
 

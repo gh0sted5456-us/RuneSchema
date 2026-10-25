@@ -572,6 +572,36 @@
       "summary":"Required Game Pass world-loading hooks could not be installed.",
       "impact":"That world cleanup path stays unavailable and does not change saves.",
       "action":"Check the current Game Pass executable/build and matching RuneSchema bindings; preserve existing saves and use supported native loading."
+    },
+    {
+      "id": "CacheLoadPolicy",
+      "code": "RS-CACHE-011",
+      "title": "Helpy content loading preference",
+      "severity": "info",
+      "subsystem": "Cache",
+      "summary": "An item query selected cache-first or game-first browsing and its passive refresh policy.",
+      "impact": "This controls item presentation and bounded discovery; live action validation remains enabled.",
+      "action": "Use Quick settings > Content & cache to choose a loading order and passive updates."
+    },
+    {
+      "id": "CacheFallback",
+      "code": "RS-CACHE-012",
+      "title": "Cached references used as fallback",
+      "severity": "info",
+      "subsystem": "Cache",
+      "summary": "Game-first browsing has no ready or matching live item page and is displaying saved references.",
+      "impact": "Pictures and references remain available; a reference alone does not prove an item is loaded or deliverable.",
+      "action": "Wait for bounded discovery, search again, or use Cache first for immediate browsing."
+    },
+    {
+      "id": "CachePolicyInvalid",
+      "code": "RS-CACHE-013",
+      "title": "Unsupported content loading preference",
+      "severity": "error",
+      "subsystem": "Cache",
+      "summary": "The cache loadOrder setting is neither cacheFirst nor gameFirst.",
+      "impact": "The invalid preference is rejected; the original configuration is retained.",
+      "action": "Correct cache.loadOrder in ui.jsonc, then reload Helpy. Use cacheFirst or gameFirst."
     }
   ]
 }
