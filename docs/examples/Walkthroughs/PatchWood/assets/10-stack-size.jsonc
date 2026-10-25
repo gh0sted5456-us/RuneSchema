@@ -1,0 +1,8 @@
+{
+  "ash_stack_size": {
+    "$Patch": "/Game/Gameplay/Items/Resources/Wood/ITEM_Resources_Wood_Ash.ITEM_Resources_Wood_Ash",
+    "$Target": {
+      "MaxStackSize": 100
+    }
+  }
+}

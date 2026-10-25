@@ -4,6 +4,20 @@ Work from the first failed step instead of changing several files at once. A
 PAK can mount while an item inside it still fails to load, and an item can load
 while its recipe still points to the wrong station.
 
+## Start here
+
+| Symptom | First check |
+| --- | --- |
+| RuneSchema never starts | Active UE4SS installation, `Mods/mods.txt`, then the first startup failure |
+| Helpy stays closed | F2, enabled Helpy plugin, then Home → Quick settings → Open Helpy when the game starts |
+| Item is listed but its picture is blank | Native icon/cache status; do not delete the item mod or save |
+| PAK mounts but content is absent | Exact cooked path, native enrollment and its recipe/build/station connection |
+| A patch changes nothing | Correct loader, case-sensitive field/directive, target class/row and first rejected field |
+| Save rejects entry after changing mods | Back up the original, inspect failed mounts and cleanup messages; retain the last working mod set |
+
+Open **Diagnostics** for grouped issues and its **Live Log** view. Start with the
+first failure from the same launch, rather than a later symptom.
+
 ## Heavy Blueprint/Lua editors and building registry compatibility
 
 The RSHC author reported editor slowdown alongside RuneSchema and supplied a
@@ -88,14 +102,14 @@ Automatic styling preserves minimap/world-map image and border brushes,
 including RuneUI's live map artwork. Unclassified controls retain their native
 appearance; the unsafe spell Cost subtree remains deferred rather than traversed.
 
-## Helpy Live Log and help codes
+## Helpy Diagnostics, Live Log and help codes {#helpy-live-log-and-help-codes}
 
 The [diagnostic code reference](ERROR-CODES.md) explains each stable code,
 its effect and the next step. Older uncoded messages can show a **suggested
 reference**, not a diagnosed cause. Consecutive repeats can be grouped without
 dropping the underlying entries from a filtered export.
 
-Open **Live Log** in Helpy's left navigation. The **RuneSchema** tab reads
+Open **Diagnostics → Live Log** in Helpy. The **RuneSchema** source reads
 `RuneSchema/RuneSchema.log`; the **UE4SS** tab reads the host's `ue4ss/UE4SS.log`.
 Each tab retains its own search, filters, selection and scroll position.
 The **Game** tab discovers a recent Dragonwilds log under the game's saved-log
@@ -123,7 +137,8 @@ by a filtered export.
 Review player names, IDs and local paths before sharing an export.
 
 To open Helpy once at game startup, enable **Home > Quick settings > Open
-Helpy when the game starts**. It is opt-in and takes effect next launch.
+Helpy when the game starts**. It takes effect next launch. The current package
+enables this by default; an existing installation retains its own saved choice.
 F2 still closes/reopens the window. It never enters a world.
 
 For slow item discovery, sharing caches or changed mods, see
@@ -151,7 +166,10 @@ Do not delete quest progress or character files to hide the error.
 
 Read the complete rejection reason. Deferred certification means RuneSchema
 has not proved the whole registry safe; it is not proof every asset failed.
-Automatic destructive cleanup remains disabled when certification is missing.
+The affected registry kind can be skipped when authority is unavailable;
+independently verified sections can still be cleaned after a verified backup.
+Incomplete registry checks do not suspend every cleanup lane. Exact pending
+declarations and uncertain records remain protected.
 Check required mounts, duplicate identities, registration capacity and the
 first failed enrollment message. Fix the source or installation before using
 an important save. Never force certification or manually remove save entries.
@@ -217,12 +235,13 @@ RuneSchema : 1
 
 Confirm the RuneSchema DLL is in the expected `RuneSchema/dlls` location and
 that the game was fully closed before the DLL was replaced.
-For the current main package, confirm RuneSchema and RSMK identify `0.8.0.0`.
-An older label means an older DLL is still being loaded.
+Compare both DLL identities with the package you installed: the published ZIP
+is `0.8.0.1`; the newer source/tag is `0.8.0.1b`. Mixed versions or an unexpected
+older label can indicate a second installation or an old DLL.
 
 ## A LogicMod starts on a dedicated server
 
-The 0.7.7.7 build clears RuneSchema's client LogicMod handoff lists during
+RuneSchema clears its client LogicMod handoff lists during
 dedicated-server startup. Confirm the log shows
 `[LOGIC-PAK][SERVER] Client ModActor handoff cleared.` If it instead reports
 `[PARTIAL]`, preserve that line and check folder write access. Also check for
@@ -276,11 +295,16 @@ station, and unlock relationships that cause the game to load the content.
 Compare the log's mounted and live-registration totals, and look for duplicate
 persistence IDs or internal names.
 
+Use a [cooked declaration or loose `registry` sidecar](COOKED-PAK-REGISTRY-MANIFEST.md)
+for supported enrollment lanes. A loose sidecar can register an older PAK's
+existing items without recooking it; it cannot supply missing assets or implement
+a declaration-only family. Skills and SkillPerks are not active enrollment lanes.
+
 By default, RuneSchema warns above 50,000 authored recipes. The warning is
 advisory: RuneSchema continues loading them and does not disable the mod.
 Advanced settings lets you turn the notice off or change its threshold.
 In `settings.ini` under `[diagnostics]` (or legacy JSONC), use `largeRecipeWorkloadWarning` and
-`diagnostics.largeRecipeWarningThreshold` for the same controls.
+`largeRecipeWarningThreshold` for the same controls.
 
 ## The recipe reports a missing item
 
@@ -288,8 +312,9 @@ Use the full item object path in `ItemsConsumed` and `ItemsCreated`. The output
 must already load as a valid item. A display name, filename, or short internal
 name is not a substitute for the object path.
 
-If the recipe uses a RuneSchema-created item copy, put the item file before the
-recipe file and keep the item mod above dependent mods in `runeschema.txt`.
+If the recipe uses a RuneSchema-created copy, confirm its resolved runtime path
+and keep the provider mod above dependent mods in `runeschema.txt`. Numbered
+filenames order files within a loader; they do not reorder loader phases.
 
 ## The recipe exists but is not in the station
 
@@ -358,3 +383,7 @@ Include:
 - `runeschema.txt`;
 - recently changed mods;
 - the exact item, recipe, station, or object path involved.
+
+Review logs for account names, IDs, local paths and connection details before
+sharing. Helpy's [bug-report form](HELPY-BUG-REPORTS.md) opens a prefilled GitHub
+issue for review; it does not silently upload logs or submit an issue.

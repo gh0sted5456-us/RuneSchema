@@ -1,4 +1,12 @@
+---
+search:
+  exclude: true
+---
+
 # Backup-first pruning candidate — 2026-10-22
+
+Historical implementation note. For current behavior and removal instructions,
+use [save safety](SAFE-SAVE-AND-LEDGER.md) and [settings](SETTINGS-INI.md).
 
 Companion Recovery is retired from runtime load, registration and world-cleanup
 paths. The Quick Settings toggle is replaced by a backup-first explanation.

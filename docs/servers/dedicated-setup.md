@@ -78,9 +78,9 @@ as evidence that its loaders failed.
 
 ## Edit DedicatedServer.ini in the server's Helpy
 
-On a server with an interactive desktop, open **Dedicated Server** in the
-local Helpy window. This section does not appear in the client navigation and
-does not provide remote configuration access.
+On a server with an interactive desktop, open **Server / Co-op** in its local
+Helpy window. Dedicated configuration is available on that server; the optional
+client co-op workspace does not provide remote server-configuration access.
 
 The default candidate is `RSDragonwilds/Saved/Config/WindowsServer/DedicatedServer.ini`.
 Confirm it is the active profile; for a custom `-UserDir` or save directory,

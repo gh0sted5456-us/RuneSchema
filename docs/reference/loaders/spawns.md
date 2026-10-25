@@ -2,10 +2,8 @@
 
 ## Step-by-step workflow
 
-Use `RuneSchema/mods/MyMod/spawns/` for this example. JSONC blocks are
-**mock-ups**, not an automatically installed feature: replace placeholder paths,
-IDs, coordinates and reflected fields with values from your content. New art or
-classes must be cooked/mounted separately. Keep published identities stable.
+Examples with placeholder paths/IDs are templates. Use inspected values and the
+[shared testing checklist](../../modders/testing-and-compatibility.md) before sharing.
 
 1. Select an actual compatible AI/resource actor class, not an attack asset or arbitrary Blueprint.
 2. Create `spawns/10-camp-actors.jsonc`; replace the mock-up class and coordinates.

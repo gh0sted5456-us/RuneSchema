@@ -49,7 +49,7 @@ A basic item copy looks like this:
 
 ```jsonc
 {
-  "/Game/RuneSchema/GoldenArsenal/Items/ITEM_GoldenSpear.ITEM_GoldenSpear": {
+  "/Game/RuneSchema/GoldenArsenal/Items/golden_arsenal_spear.golden_arsenal_spear": {
     "$Clone": "/Game/Gameplay/Items/Weapons/EXACT_SOURCE.EXACT_SOURCE",
     "InternalName": "golden_arsenal_spear",
     "PersistenceID": "PASTE_THE_ID_GENERATED_BY_HELPY",
@@ -62,6 +62,12 @@ A basic item copy looks like this:
 Replace the source path with a path copied from the running game. Replace the
 persistence ID with the valid ID generated for this item. Do not release the
 placeholder text above.
+
+Runtime clone paths derive from the sanitized mod folder and `InternalName`;
+keep the destination key consistent. Follow [the complete clone walkthrough](modders/item-clones.md)
+for a real donor path and numbered field explanations. To change an existing
+item while keeping its identity, use [a cooked-item patch](modders/cooked-item-patches.md)
+instead of creating a clone.
 
 Only override values you intend to change. Inherited fields are often what keep
 the item's equip, animation, repair, and interaction behavior working.

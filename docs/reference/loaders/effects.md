@@ -2,10 +2,8 @@
 
 ## Step-by-step workflow
 
-Use `RuneSchema/mods/MyMod/effects/` for this example. JSONC blocks are
-**mock-ups**, not an automatically installed feature: replace placeholder paths,
-IDs, coordinates and reflected fields with values from your content. New art or
-classes must be cooked/mounted separately. Keep published identities stable.
+Examples with placeholder paths/IDs are templates. Use inspected values and the
+[shared testing checklist](../../modders/testing-and-compatibility.md) before sharing.
 
 1. Cook and mount a GameplayEffect class with the native behavior your feature requires.
 2. Create `effects/10-camp-effects.jsonc`; replace the mock-up's class path with that mounted generated class.

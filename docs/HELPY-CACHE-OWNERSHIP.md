@@ -18,7 +18,7 @@ Links inside managed data remain forbidden.
 
 To reset generated caches, close all games/Helpys that use them and remove only
 the cache folder shown by **Open cache folder**. Missing cache data is rebuilt.
-Do not delete profile, loadout, progress or Recovery files as a cache reset.
+Do not delete profiles, loadouts, progress, backups or legacy recovery files as a cache reset.
 
 In the cache window, choose a mod source and **Share selected mod cache in
 core** to publish its current verified bundle to
@@ -28,8 +28,10 @@ content hashes and current exact ownership are still required; mismatches are
 skipped. This is a snapshot, not automatic recapture, and sharing does not mount
 content or make cached items available. Each mod remains independently scoped.
 
-The source worker reads the bounded directory indexes of modern PAK v10/v11
-and unencrypted, indexed IoStore v3–v8 containers. UCAS payloads are not
+The source worker reads bounded directory indexes of supported PAKs, including
+legacy v3 and modern v10/v11, and unencrypted, indexed IoStore v3–v8 containers.
+The native global container can be recognized as metadata-only, without claiming
+asset ownership. UCAS payloads are not
 extracted. Startup read directories retain their RuneSchema mod/plugin owner,
 including enabled PAK-only mods without registry declarations. Disabled
 managed mod folders are excluded. Native content containers are inspected too.
@@ -88,6 +90,6 @@ cache. These proofs apply to manual source exports/imports and packaged
 `mods/<mod>/cache/*.rsmk-cache` imports. They do not grant gameplay authority,
 load missing mods, or fix broken cooked assets.
 
-This experimental contract requires the matching core and Helpy build in the
+This contract requires the matching core and Helpy build in the
 0.8.0.1 refresh. Automated checks are not live certification of every source,
 platform or cache consumer; ownership never becomes gameplay authority.

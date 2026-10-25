@@ -49,6 +49,11 @@ incomplete cooked class. For very large catalogues, use normal cooked
 relationships and the supported [registry declaration](../COOKED-PAK-REGISTRY-MANIFEST.md)
 instead of repeating this file thousands of times.
 
+If the PAK has no declaration, a [loose `registry` sidecar](../reference/loaders/registry.md#register-a-cooked-item-without-cooking-a-registry-declaration)
+can name the existing item without recooking it. For a property change rather
+than enrollment alone, follow [patching a cooked item](cooked-item-patches.md).
+Use one appropriate enrollment route rather than duplicating declarations.
+
 ## 4. Make it obtainable
 
 Item registration alone does not add a crafting recipe. Add a `recipes` file

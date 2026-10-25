@@ -1,6 +1,6 @@
-# Helpy map travel (alpha)
+# Helpy map travel
 
-In **Helpy → Map**, click a destination, choose **Teleport**, select the player,
+In **Helpy → World → Map**, click a destination, choose **Teleport**, select the player,
 then choose **Teleport player here**. This extends Helpy only, not the game's
 normal map. Use the host's Helpy in multiplayer; remote clients do not receive a
 new unauthenticated teleport command.

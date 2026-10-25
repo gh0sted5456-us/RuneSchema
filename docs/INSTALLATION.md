@@ -22,8 +22,9 @@ Choose the [0.8.0.1 release package](https://github.com/gh0sted5456-us/RuneSchem
 and read its [defaults and verification](RELEASE-0.8.0.1.md).
 There is one `RuneSchema-<version>.zip` per release, with the registry and
 networking bridges and Helpy included. No separate Core or Universal choice is
-needed. Older `e`/`m` suffixes are historical; current tags use plain versions
-and GitHub marks experimental packages as prereleases.
+needed. Older `e`/`m` suffixes are historical. The published 0.8.0.1 download is
+a release; the newer 0.8.0.1b tag currently identifies a source update, not a new
+download. Check [downloads and source updates](CURRENT-RELEASE.md) before choosing.
 
 The cleaned 0.8.0.1 ZIP contains no generated mapping or loose UI artwork.
 Mappings build/reuse the platform AppData cache; optional pictures can be
@@ -169,8 +170,9 @@ the same as a failed start.
 If RuneSchema cannot start at all, the log should state the reason. Fix that
 first before judging whether an individual mod worked.
 
-For this release, both RuneSchema and Helpy should report `0.8.0.1`.
-If either shows an earlier version, check
+For the published ZIP, both RuneSchema and Helpy should report `0.8.0.1`.
+A build of the newer source reports `0.8.0.1b`. Compare against what you installed.
+If the versions are mixed or unexpectedly old, check
 for an old DLL in the active UE4SS installation before troubleshooting the mod.
 
 ## Remove RuneSchema temporarily

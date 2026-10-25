@@ -14,7 +14,27 @@ hide:
   <a href="../EXAMPLES/">Browse examples<small>Compare working layouts and definitions.</small></a>
 </div>
 
-## Follow the content chain
+## Learn with real mod patterns
+
+Start with [FModel export to mod](fmodel-to-mod.md). It explains which parts of
+an export identify the object and which parts become a small RuneSchema patch.
+The reconstructed export fixtures are labeled; they are not full game dumps.
+
+| Goal | Walkthrough |
+| --- | --- |
+| Increase chest capacity | [Bigger chests](bigger-chests.md), based on Increased Storage |
+| Increase inventory pages and show the slots | [Bigger inventory](bigger-inventory.md) |
+| Add a creature drop while keeping its other drops | [Creature drops](creature-drops.md), based on ResourcesAndLoot |
+| Change one field on an existing cooked item | [Cooked item patches](cooked-item-patches.md) |
+| Create a compatible item variant with its own identity | [Item clones](item-clones.md) |
+| Choose replacement, `$Append` or a matched array edit | [Append and targeted patches](append-and-targeted-patches.md) |
+| Check saves, compatibility and packaging | [Testing checklist](testing-and-compatibility.md) |
+
+Each tutorial includes a file layout, numbered JSONC, an explanation of the
+fields, and a focused test. [Downloadable examples](../examples/Walkthroughs/README.md)
+match the code shown in the guides.
+
+## Connect new cooked content
 
 For a cooked feature, check each stage separately: the PAK contains its dependencies, RuneSchema mounts it, the object path resolves, any required native registry accepts it, and the feature works in-game. A successful mount does not establish the later stages.
 

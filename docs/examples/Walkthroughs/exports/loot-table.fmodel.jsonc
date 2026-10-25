@@ -1,0 +1,26 @@
+// Reconstructed excerpt of a DataTable export, not a complete vanilla table.
+// Row/drop fields and reference come from the author's ResourcesAndLoot file.
+[
+  {
+    "Type": "DataTable",
+    "Name": "DT_LootDropTable",
+    "Rows": {
+      "AbyssalDemon": {
+        "Resources": [
+          {
+            "SpawnedItemData": {
+              "ObjectName": "ItemData'ITEM_Resources_Abyssal_Ashes'",
+              "ObjectPath": "/Game/Gameplay/Items/Resources/Animal/ITEM_Resources_Abyssal_Ashes.0"
+            },
+            "MinimumDropAmount": 1,
+            "MaximumDropAmount": 1,
+            "DropChance": 5.625,
+            "bOneInstancePerPlayerOnlyVisibleToThem": false,
+            "bAutoAddToInventory": false,
+            "bOnlyForPlayersThatInflictedDamage": false
+          }
+        ]
+      }
+    }
+  }
+]

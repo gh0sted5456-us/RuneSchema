@@ -1,4 +1,12 @@
+---
+search:
+  exclude: true
+---
+
 # Helpy Admin — design and outstanding integration
+
+Design reference, not an implemented administration guide. See
+[profiles](HELPY-PROFILES.md#not-implemented-in-this-build) for current limits.
 
 Status: **read-only role badges implemented; full native-role integration still
 requires live-server validation**. The Admin tab, native owner-account

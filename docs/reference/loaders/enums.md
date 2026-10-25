@@ -2,10 +2,8 @@
 
 ## Step-by-step workflow
 
-Use `RuneSchema/mods/MyMod/enums/` for this example. JSONC blocks are
-**mock-ups**, not an automatically installed feature: replace placeholder paths,
-IDs, coordinates and reflected fields with values from your content. New art or
-classes must be cooked/mounted separately. Keep published identities stable.
+Examples with placeholder paths/IDs are templates. Use inspected values and the
+[shared testing checklist](../../modders/testing-and-compatibility.md) before sharing.
 
 1. Identify a supported loaded enum and confirm the consumer already handles the proposed values.
 2. Create `enums/10-camp-values.jsonc` using the mock-up below.

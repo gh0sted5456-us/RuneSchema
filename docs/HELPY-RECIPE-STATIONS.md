@@ -26,5 +26,5 @@ array and 262,144 references per inspection. Large crafting categories (includin
 the 21,982-recipe regression fixture) can therefore resolve the correct station
 without lifting unrelated item-editor limits.
 
-These are source/build-tested alpha changes. Native station textures and physical
+These paths have source/build checks. Native station textures and physical
 placement coverage still require an in-game check on Steam and Game Pass.

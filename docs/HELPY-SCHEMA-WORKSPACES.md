@@ -1,16 +1,17 @@
-# RSMK schema and workspace improvements
+# Helpy workspaces and mapping reuse
 
-The desktop title is RSMK (RuneSchema Modding Kit). Backend plugin IDs, DLL
-filenames, settings and AppData paths remain `RuneSchema.Helpy`; users do not
-need to move existing state. The sidebar logo's R follows the chosen accent
+The desktop frame uses the RuneSchema icon and themed background, with window
+controls at the right. Plugin IDs and DLL filenames remain `RuneSchema.Helpy`.
+The sidebar logo's R follows the chosen accent
 without changing its brackets or generating new icon captures.
 
 ## Home
 
 Home is the initial workspace. Its non-blocking Dragonwilds-to-RuneSchema logo
 crossfade follows Windows' client-area animation preference; the R keeps the
-chosen app accent and the brackets retain their artwork. Shortcuts open Item
-Service, Map, Recipes and the icon-cache tools without adding a startup wizard.
+chosen app accent and the brackets retain their artwork. Shortcuts open Players,
+World and the other workspaces without adding a startup wizard. The runtime
+icon is centered above Home's social links; window controls stay on the right.
 
 Quick switches use the existing checked local settings service. Each writes
 only its own setting, checks the expected file contents and creates the usual
@@ -20,7 +21,9 @@ not to the current session or a connected remote server.
 
 ## Optional workspaces and tool windows
 
-Settings > Workspaces enables **Authoring Tools**, **Tools**, and **Live Log**.
+Settings > Workspaces controls optional tool visibility. Authoring is under
+**Tools → Authoring**; **Diagnostics** contains the integrated overview, issues
+and Live Log views, without a second Advanced Diagnostics wrapper.
 **Character** is always available within [Profile](HELPY-PROFILES.md). The advanced
 workspaces remain opt-in; Settings and Profile remain reachable. Hiding a
 workspace is a presentation preference, not an authority or server permission.
@@ -87,7 +90,7 @@ content revisions still require verification. Normal source checks retain their
 Use **Detach Item Bay** to open a separate movable/resizable desktop window.
 Drag from that window into the main Transmog, Creation or Recipes workspace.
 **Dock back**, or closing only the Bay, returns it to the main window without
-losing its selection/filter state or closing RSMK. F2 hides both windows and
+losing its selection/filter state or closing Helpy. F2 hides both windows and
 returns to the game. This is one shared catalogue/context, not a second scan.
 Detached state is session-only.
 
@@ -129,8 +132,9 @@ asset-load sweep at startup.
 ## Schema and native registry parity
 
 See [asset patches](reference/loaders/assets.md) for `$WearableBridge`, and
-[registry declarations](reference/loaders/registry.md) for the eleven supported
-native lanes and explicit `Source: Schema` references. Schema-created wearables
+[registry declarations](reference/loaders/registry.md) for the current supported
+native lanes and explicit `Source: Schema` references. Skills and SkillPerks
+remain declaration-only, not live enrollment. Schema-created wearables
 join the bridge after successful native identity registration. A bridge refresh
 does not allocate IDs or bypass reverse-map validation. Server-deferred items
 remain in the normal settled registrar lifecycle.
@@ -140,14 +144,15 @@ loaders construct their supported asset types. It cannot conjure missing mesh,
 texture, skeleton, material or Blueprint content. Live application to already
 equipped items still needs a re-equip/cache-refresh test.
 
-These are source/candidate changes. Standalone tests and previews do not prove
+The [current download/source page](CURRENT-RELEASE.md) distinguishes the binary
+release from newer source changes. Standalone tests and previews do not prove
 live-game rendering, wearable refresh, multiplayer enrollment or every mod's
 recipe coverage. Install and perform a world acceptance test separately.
 
 ## Game-update reflection mappings
 
 `[RuneSchema] autoUpdateMappings = true` enables a native UE4SS `DumpUSMAP`
-request when the running game/mod setup differs from the last verified build.
+request when the running game identity lacks a compatible verified snapshot.
 The first request is delayed 15 seconds; subsequent launches reuse the validated
 mapping without another dump. Changing this setting requires a game restart.
 `RUNESCHEMA_DISABLE_AUTO_MAPPING` is also available as a process-level opt-out.

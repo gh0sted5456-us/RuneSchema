@@ -2,10 +2,8 @@
 
 ## Step-by-step workflow
 
-Use `RuneSchema/mods/MyMod/lore/` for this example. JSONC blocks are
-**mock-ups**, not an automatically installed feature: replace placeholder paths,
-IDs, coordinates and reflected fields with values from your content. New art or
-classes must be cooked/mounted separately. Keep published identities stable.
+Examples with placeholder paths/IDs are templates. Use inspected values and the
+[shared testing checklist](../../modders/testing-and-compatibility.md) before sharing.
 
 1. Write the pages and choose a stable mod-owned lore key, or resolve an existing cooked lore asset.
 2. Create `lore/10-camp-book.jsonc`; keep Type as Lore and replace the mock-up page text.

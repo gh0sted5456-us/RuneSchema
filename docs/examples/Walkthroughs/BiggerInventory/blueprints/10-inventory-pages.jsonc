@@ -1,0 +1,35 @@
+// Selected rules from the author's installed Bigger Inventory profile.
+// These four pages total 304 slots. 312 is that profile's overall capacity,
+// not a total inferred from these four changes; inspect unmodified pages too.
+{
+  "/Game/Gameplay/Character/Components/BP_Components_Inventory": {
+    "InventoryPages": {
+      "$Patch": [
+        {"$Match": {"SlotType": "EInventorySlotType::InventoryItems"}, "$Target": {"NumSlots": 120}},
+        {"$Match": {"SlotType": "EInventorySlotType::InventoryRunes"}, "$Target": {"NumSlots": 56}},
+        {"$Match": {"SlotType": "EInventorySlotType::InventoryAmmunition"}, "$Target": {"NumSlots": 56}},
+        {"$Match": {"SlotType": "EInventorySlotType::InventoryQuestItems"}, "$Target": {"NumSlots": 72}}
+      ]
+    },
+    "MaxSlotCount": 312
+  },
+  "/Game/Gameplay/Character/Player/BP_PlayerController": {
+    "BP_Components_Inventory": {
+      "InventoryPages": {
+        "$Patch": [
+          {"$Match": {"SlotType": "EInventorySlotType::InventoryItems"}, "$Target": {"NumSlots": 120}},
+          {"$Match": {"SlotType": "EInventorySlotType::InventoryRunes"}, "$Target": {"NumSlots": 56}},
+          {"$Match": {"SlotType": "EInventorySlotType::InventoryAmmunition"}, "$Target": {"NumSlots": 56}},
+          {"$Match": {"SlotType": "EInventorySlotType::InventoryQuestItems"}, "$Target": {"NumSlots": 72}}
+        ]
+      },
+      "MaxSlotCount": 312
+    }
+  },
+  "/Game/UI/Inventory/WBP_Inventory_VerticalNavigation": {
+    "InventoryBody_Items": {"RowCount": 15},
+    "InventoryBody_Runes": {"RowCount": 7},
+    "InventoryBody_Ammunition": {"RowCount": 7},
+    "InventoryBody_QuestItems": {"RowCount": 9}
+  }
+}

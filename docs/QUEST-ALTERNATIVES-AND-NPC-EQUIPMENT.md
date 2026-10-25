@@ -77,7 +77,8 @@ paths or canonical PersistenceIDs and must pass the native wearable-slot check.
 Changing the quest associated with a latched rule is rejected; use a new rule ID.
 
 Authority atomically persists the rule latch under
-`RuneSchema/runtime/live/saved/progress/worlds/<native-WorldSaveGuid>/npc-equipment.json`.
+`%LOCALAPPDATA%/RSDragonwilds/RuneSchema/<platform>/runtime/saved/progress/worlds/<native-WorldSaveGuid>/npc-equipment.json`,
+where `<platform>` is `steam`, `gamepass`, `epic` or `server`.
 The world GUID is read from reflected PersistenceSubsystem settings, never a
 display name, network session ID or executable offset. The file is a RuneSchema
 sidecar, not an edit to the game's world save. Back up/restore/move it together

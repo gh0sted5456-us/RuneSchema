@@ -1,4 +1,4 @@
-# Helpy profiles (experimental)
+# Helpy profiles
 
 Profile sits beside Home in the sidebar and beside Quick settings on Home.
 It contains account details and the Character workspace.
@@ -38,7 +38,7 @@ counterpart is absent. An established core folder takes priority; neither
 location is moved, merged or overwritten.
 Native character/world saves and Xbox WGS stay in their game-managed locations.
 The shared core folder also holds Helpy settings, caches and health history.
-Profiles, portraits, loadouts and Recovery archives are durable user data, not
+Profiles, portraits, loadouts and any legacy recovery archives are user data, not
 disposable caches. Deleting them is not required to rebuild generated caches.
 
 - `profile.json`: established profile name, public links, observed platforms and
@@ -68,9 +68,9 @@ string property, extent and a 128-byte visible-text limit. Empty/unavailable nam
 stay unavailable. Platform-icon hovers show these names; links remain clearly
 self-declared. This is not independent platform-account verification.
 
-The read-only mapping evidence for this contract is
-`.cache/profile-native-contract-20261021/usmap-native-contract-20261017.json`
-in the development workspace. Actual Steam/Game Pass population needs live QA.
+An unavailable account remains unavailable; a character name is not substituted
+for a platform account. Local Steam persona reporting and remote/native roster
+reporting have different sources and should be tested separately.
 
 ## Public sharing
 
@@ -101,9 +101,8 @@ Those actions require verified native contracts and server-owned authorization.
 Editing a profile cannot grant them. Do not use profile names, profile IDs,
 character names or social links as proof of server ownership.
 
-The agreed portrait-transfer schedule is once per session, with cached portraits
-provided to newly connecting players. It should not continuously republish
-profiles. This remains planned work, not a capability of this candidate.
+Network portrait transfer remains unimplemented; local portrait support does
+not imply that another client receives the image.
 
 ## Sharing browser presets
 

@@ -1,0 +1,18 @@
+{
+  "$Patch": "/Game/Gameplay/Items/LootDropTables/DT_LootDropTable.DT_LootDropTable:AbyssalDemon",
+  "$Target": {
+    "$Append": {
+      "Resources": [
+        {
+          "SpawnedItemData": "/Game/Gameplay/Items/Resources/Animal/ITEM_Resources_Abyssal_Ashes.ITEM_Resources_Abyssal_Ashes",
+          "MinimumDropAmount": 1,
+          "MaximumDropAmount": 1,
+          "DropChance": 5.625,
+          "bOneInstancePerPlayerOnlyVisibleToThem": false,
+          "bAutoAddToInventory": false,
+          "bOnlyForPlayersThatInflictedDamage": false
+        }
+      ]
+    }
+  }
+}

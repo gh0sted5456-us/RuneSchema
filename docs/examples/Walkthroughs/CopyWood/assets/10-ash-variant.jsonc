@@ -1,0 +1,10 @@
+// Generate YOUR OWN canonical ID once before distributing this item.
+{
+  "/Game/RuneSchema/CopyWood/Items/copywood_ash.copywood_ash": {
+    "$Clone": "/Game/Gameplay/Items/Resources/Wood/ITEM_Resources_Wood_Ash.ITEM_Resources_Wood_Ash",
+    "PersistenceID": "AAECAwQFBgcICQoLDA0ODw",
+    "InternalName": "copywood_ash",
+    "Name": "Workshop Ash Wood",
+    "MaxStackSize": 100
+  }
+}

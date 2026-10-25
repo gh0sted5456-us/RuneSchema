@@ -2,10 +2,8 @@
 
 ## Step-by-step workflow
 
-Use `RuneSchema/mods/MyMod/strings/` for this example. JSONC blocks are
-**mock-ups**, not an automatically installed feature: replace placeholder paths,
-IDs, coordinates and reflected fields with values from your content. New art or
-classes must be cooked/mounted separately. Keep published identities stable.
+Examples with placeholder paths/IDs are templates. Use inspected values and the
+[shared testing checklist](../../modders/testing-and-compatibility.md) before sharing.
 
 1. Identify the exact displayed source text and its supported named/global scope.
 2. Create `strings/10-camp-text.jsonc` using the replacement-map mock-up.

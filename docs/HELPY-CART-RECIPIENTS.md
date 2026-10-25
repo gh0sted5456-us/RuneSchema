@@ -12,7 +12,7 @@ is pending. Confirmed items leave the cart after every chosen recipient has one
 exact confirmation for its path and count. Definite rejected items also leave
 the active cart, with their rejection retained in Last delivery.
 
-Right-click a confirmed Last delivery item to **Reorder**, or right-click the
+In **0.8.0.1b source**, right-click a confirmed Last delivery item to **Reorder**, or right-click the
 Last delivery heading to reorder all confirmed items. This adds the actual
 delivered quantities once per selected player, not multiplied by the previous
 recipient count. Stack-size delivery modes retain their sent quantities.

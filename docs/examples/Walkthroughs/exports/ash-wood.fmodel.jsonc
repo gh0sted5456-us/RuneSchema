@@ -1,0 +1,12 @@
+// Reconstructed teaching excerpt. The starting stack count is illustrative.
+// Do not install this FModel-shaped document in /assets.
+[
+  {
+    "Type": "ItemData",
+    "Name": "ITEM_Resources_Wood_Ash",
+    "Properties": {
+      "InternalName": "example_original_ash_identity_do_not_copy",
+      "MaxStackSize": 50
+    }
+  }
+]
