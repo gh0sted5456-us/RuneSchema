@@ -101,8 +101,9 @@ framework inside every add-on.
 
 !!! note "Download and source version"
     Download the build identified by the [current release page](CURRENT-RELEASE.md).
-    The published ZIP is **0.8.0.1**; **0.8.0.1b** is the newer source/tag update.
-    Read the [release notes](RELEASE-0.8.0.1.md) and [source changes](CHANGELOG-0.8.0.1b.md).
+    The published ZIP and current source are **0.8.0.2**, including the earlier
+    0.8.0.1b fixes. Read the [release notes](RELEASE-0.8.0.2.md) and
+    [changelog](CHANGELOG-0.8.0.2.md).
     Automated checks are not a guarantee
     that every authored feature has passed live-world or multiplayer testing.
 

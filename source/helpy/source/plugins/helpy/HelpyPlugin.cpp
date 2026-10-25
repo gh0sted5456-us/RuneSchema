@@ -63,9 +63,12 @@ bool CallCore(State* state,const nlohmann::json& request,nlohmann::json& respons
     }catch(...){return false;}
 }
 int32_t RS_PLUGIN_CALL About(void*,const char*,char* response,uint32_t capacity,uint32_t* size) {
-    constexpr char value[]=R"({"plugin":"RuneSchema.Helpy","version":"0.8.0.1","ui":"plugin-dll","umg":false})";
-    if(!size)return RS_PLUGIN_INVALID_ARGUMENT;*size=static_cast<uint32_t>(sizeof(value));
-    if(!response||capacity<sizeof(value))return RS_PLUGIN_BUFFER_TOO_SMALL;std::memcpy(response,value,sizeof(value));return RS_PLUGIN_OK;
+    if(!size)return RS_PLUGIN_INVALID_ARGUMENT;
+    try{
+        static const auto value=nlohmann::json{{"plugin",Descriptor.Id},{"version",Descriptor.Version},{"ui","plugin-dll"},{"umg",false}}.dump();
+        *size=static_cast<uint32_t>(value.size()+1);
+        if(!response||capacity<*size)return RS_PLUGIN_BUFFER_TOO_SMALL;std::memcpy(response,value.c_str(),*size);return RS_PLUGIN_OK;
+    }catch(...){return RS_PLUGIN_FAILED;}
 }
 int32_t RS_PLUGIN_CALL InventoryService(void* context,const char* requestJson,char* response,uint32_t capacity,uint32_t* size){
     auto* state=static_cast<State*>(context);if(!state||!requestJson||!size)return RS_PLUGIN_INVALID_ARGUMENT;

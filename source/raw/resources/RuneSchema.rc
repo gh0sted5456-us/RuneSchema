@@ -1,8 +1,8 @@
 #include <windows.h>
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 0,8,0,1
- PRODUCTVERSION 0,8,0,1
+ FILEVERSION 0,8,0,2
+ PRODUCTVERSION 0,8,0,2
  FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
  FILEFLAGS 0
  FILEOS VOS_NT_WINDOWS32
@@ -15,9 +15,9 @@ BEGIN
   BEGIN
    VALUE "CompanyName", "RuneSchema Community Team"
    VALUE "FileDescription", "RuneSchema"
-   VALUE "FileVersion", "0.8.0.1b"
+   VALUE "FileVersion", "0.8.0.2"
    VALUE "ProductName", "RuneSchema"
-   VALUE "ProductVersion", "0.8.0.1b"
+   VALUE "ProductVersion", "0.8.0.2"
    VALUE "LegalCopyright", "Copyright (c) 2026 RSDW Modding Community"
   END
  END

@@ -18,15 +18,15 @@ You need:
 
 Close the game before replacing RuneSchema, UE4SS, or any PAK files.
 
-Choose the [0.8.0.1 release package](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.0.1/RuneSchema-0.8.0.1.zip)
-and read its [defaults and verification](RELEASE-0.8.0.1.md).
+Choose the [0.8.0.2 release package](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.0.2/RuneSchema-0.8.0.2.zip)
+and read its [defaults and verification](RELEASE-0.8.0.2.md).
 There is one `RuneSchema-<version>.zip` per release, with the registry and
 networking bridges and Helpy included. No separate Core or Universal choice is
-needed. Older `e`/`m` suffixes are historical. The published 0.8.0.1 download is
-a release; the newer 0.8.0.1b tag currently identifies a source update, not a new
-download. Check [downloads and source updates](CURRENT-RELEASE.md) before choosing.
+needed. Older `e`/`m` suffixes are historical. The published 0.8.0.2 download
+includes the earlier 0.8.0.1b source-only fixes. Check
+[downloads and source updates](CURRENT-RELEASE.md) before choosing.
 
-The cleaned 0.8.0.1 ZIP contains no generated mapping or loose UI artwork.
+The cleaned runtime ZIP contains no generated mapping or loose UI artwork.
 Mappings build/reuse the platform AppData cache; optional pictures can be
 downloaded from Helpy. Preserve existing settings when updating. The supplied
 defaults enable automatic Helpy opening and detailed logging; both are adjustable.
@@ -170,8 +170,8 @@ the same as a failed start.
 If RuneSchema cannot start at all, the log should state the reason. Fix that
 first before judging whether an individual mod worked.
 
-For the published ZIP, both RuneSchema and Helpy should report `0.8.0.1`.
-A build of the newer source reports `0.8.0.1b`. Compare against what you installed.
+For the current published ZIP, both RuneSchema and Helpy should report `0.8.0.2`.
+Compare against the version of the package you installed.
 If the versions are mixed or unexpectedly old, check
 for an old DLL in the active UE4SS installation before troubleshooting the mod.
 

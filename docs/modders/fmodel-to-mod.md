@@ -2,9 +2,8 @@
 
 This learning path uses real patterns from the author's Increased Storage - 3,
 Bigger Inventory and ResourcesAndLoot mods. It targets the
-[0.8.0.1b source/tag](../CHANGELOG-0.8.0.1b.md); check the
-[download page](../CURRENT-RELEASE.md) before assuming a published ZIP contains
-a newer source feature.
+[0.8.0.2 release](../RELEASE-0.8.0.2.md), which includes the earlier 0.8.0.1b
+source fixes. Check the [download page](../CURRENT-RELEASE.md) for the current package.
 
 You will learn to identify the object that owns a value, discard export-only
 wrappers, keep only your changes, and place the result in the correct loader.

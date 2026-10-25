@@ -2,20 +2,16 @@
 
 Runtime schema and data-editing framework for **RuneScape: Dragonwilds**.
 
-**Current source: RuneSchema and Helpy 0.8.0.1b — Quick bug fixes.**
-Read the [short changelog](docs/CHANGELOG-0.8.0.1b.md).
-The `0.8.0.1b` tag identifies that source update. The historical `0.8.0.1` tag
-and published downloads remain unchanged.
+**Current source and download: RuneSchema and Helpy 0.8.0.2**, October 25, 2026.
+Both DLLs are rebuilt from the tagged source, compressed and packaged together.
+Read the [changelog](docs/CHANGELOG-0.8.0.2.md) and
+[package/defaults/verification](docs/RELEASE-0.8.0.2.md).
+This includes the earlier 0.8.0.1b source fixes and the independent cache feed.
 
-**Published download: RuneSchema and Helpy 0.8.0.1**, released October 24, 2026.
-Read the [implemented/removed changes, line by line](docs/CHANGELOG-0.8.0.1.md)
-and [exact package/defaults/verification](docs/RELEASE-0.8.0.1.md).
-The release publishes the current runtime source on `main` and `experimental`,
-with the `0.8.0.1` tag aligned to the source used for the rebuilt DLL pair.
-The cleaned package is locally built and verified, not a hosted CI artifact.
-
-[Download the full runtime](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.0.1).
-The [0.8.0.0 release notes](docs/RELEASE-0.8.0.0.md) and historical tag remain available.
+[Download the full runtime](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.0.2).
+The source is published on `main` and `experimental`; `0.8.0.2` identifies the
+release source. The ZIP is locally built and verified, not a hosted CI artifact.
+Historical releases and tags remain available.
 
 Helpy opens in its own window with F2; the old Canvas experiment is retired.
 The item browser is above a staging cart: drag an item down, or right-click
@@ -51,7 +47,7 @@ do not repeatedly download the same runtime with every RuneSchema source
 snapshot.
 
 Generated mappings live in platform-specific AppData caches. The cleaned
-0.8.0.1 ZIP excludes loose UI artwork; optional artwork remains downloadable.
+runtime ZIP excludes loose UI artwork; optional artwork remains downloadable.
 Its supplied settings enable detailed logging and automatic Helpy opening;
 see the release notes before replacing an established configuration.
 

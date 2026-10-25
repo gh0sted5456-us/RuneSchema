@@ -15,24 +15,23 @@ hide:
   <p>A shared runtime for Dragonwilds mods. Install content, create something new, or bring your community together.</p>
   <div class="rs-actions">
     <a class="md-button md-button--primary" href="INSTALLATION/">Get started <span aria-hidden="true">→</span></a>
-    <a class="rs-text-link" href="CURRENT-RELEASE/">Current release · 0.8.0.1</a>
+    <a class="rs-text-link" href="CURRENT-RELEASE/">Current release · 0.8.0.2</a>
     <a class="rs-text-link" href="MOD-HOSTS-AND-GETTING-STARTED/">What is RuneSchema? <span aria-hidden="true">↗</span></a>
   </div>
 </section>
 
 <aside class="rs-release" aria-label="Current release">
   <span class="rs-release__tag">Released on main</span>
-  <p><strong>0.8.0.1</strong> — refined Helpy, source-aware caching, expanded diagnostics, and runtime hardening.</p>
-  <a href="RELEASE-0.8.0.1/">Release notes and verification <span aria-hidden="true">→</span></a>
+  <p><strong>0.8.0.2</strong> — both DLLs rebuilt, reusable native artwork, an independent cache feed, and offline PAK cache tooling.</p>
+  <a href="RELEASE-0.8.0.2/">Release notes and verification <span aria-hidden="true">→</span></a>
 </aside>
 
-<p>0.8.0.1 includes a cleaned package and a complete
+<p>The earlier 0.8.0.1 release includes a cleaned package and a complete
 <a href="CHANGELOG-0.8.0.1/">line-by-line implemented and removed changelog</a>.
 Historical releases and tags remain available.</p>
-<p><strong>Source update: 0.8.0.1b.</strong> Main, experimental and the
-<a href="https://github.com/gh0sted5456-us/RuneSchema/tree/0.8.0.1b">0.8.0.1b tag</a>
-include the <a href="CHANGELOG-0.8.0.1b/">quick bug fixes</a>. The published
-download above is still 0.8.0.1; source-only additions are identified in the guides.</p>
+<p><strong>Source and binaries together: 0.8.0.2.</strong> Main, experimental and
+the release tag include the earlier <a href="CHANGELOG-0.8.0.1b/">quick bug fixes</a>
+and the <a href="CHANGELOG-0.8.0.2/">current cache and authoring improvements</a>.</p>
 
 <h2 class="rs-section-heading">Choose your path</h2>
 <div class="rs-paths">

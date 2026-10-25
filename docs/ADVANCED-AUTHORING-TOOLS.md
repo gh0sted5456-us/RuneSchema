@@ -56,7 +56,7 @@ confirmed and rejected entries are cleared and recorded in **Delivery results**.
 Interrupted or unconfirmed work can remain staged for review, without automatic
 retries. Inspect the recipient's inventory before retrying.
 
-In **0.8.0.1b source**, right-click a confirmed **Last delivery** item to
+In **0.8.0.2**, right-click a confirmed **Last delivery** item to
 **Reorder**, or its heading to stage all confirmed items. This rebuilds the
 cart only; it does not deliver automatically or replay uncertain grants.
 
