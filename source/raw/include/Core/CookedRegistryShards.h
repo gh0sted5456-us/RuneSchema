@@ -104,7 +104,7 @@ inline Group Resolve(const std::string& rootPath,const Asset& root,const std::fu
         try{auto child=load(path);Envelope(child.Document,true);append(path,child,true);}
         catch(const std::exception& error){throw std::runtime_error("Registry shard '"+path+"': "+error.what());}
     }
-    for(const auto* lane:{"Recipes","Journals","Lore"})(void)CookedPakRegistryManifest::MergeDefinitions(result.Manifests,lane);
+    for(const auto* lane:{"Recipes","Journals","Lore","Buildings"})(void)CookedPakRegistryManifest::MergeDefinitions(result.Manifests,lane);
     return result;
 }
 }

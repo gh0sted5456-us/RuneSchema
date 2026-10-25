@@ -148,6 +148,10 @@ if(PROJECT_IS_TOP_LEVEL)
         add_test(NAME ${test} COMMAND ${test})
     endforeach()
     add_executable(ModFolderLayoutTests ../tests/ModFolderLayoutTests.cpp)
+    add_executable(helpy-item-cart ../../helpy/source/tests/item-cart.cpp)
+    target_include_directories(helpy-item-cart BEFORE PRIVATE ../../helpy/source/include)
+    target_link_libraries(helpy-item-cart PRIVATE RuneSchemaJsonCore)
+    add_test(NAME helpy-item-cart COMMAND helpy-item-cart)
     target_link_libraries(ModFolderLayoutTests PRIVATE RuneSchemaJsonCore)
     add_test(NAME mod-folder-layout COMMAND ModFolderLayoutTests "${CMAKE_CURRENT_BINARY_DIR}/mod-folder-fixtures")
     add_executable(example-mods ../tests/example-mods.cpp)
@@ -195,6 +199,10 @@ if(PROJECT_IS_TOP_LEVEL)
         add_test(NAME ${test} COMMAND ${test})
     endforeach()
     add_executable(quest-cancellations ../tests/quest-cancellations.cpp)
+    add_executable(legacy-pak-registry-fallback ../tests/legacy-pak-registry-fallback.cpp)
+    target_link_libraries(legacy-pak-registry-fallback PRIVATE RuneSchemaJsonCore)
+    add_test(NAME legacy-pak-registry-fallback COMMAND legacy-pak-registry-fallback
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../../docs/examples/LegacyPakRegistration")
     add_executable(questboard-walkthrough ../tests/questboard-walkthrough.cpp)
     target_link_libraries(questboard-walkthrough PRIVATE RuneSchemaJsonCore)
     add_test(NAME questboard-walkthrough COMMAND questboard-walkthrough "${CMAKE_CURRENT_SOURCE_DIR}/../../../docs/examples/QuestBoardWalkthrough")
@@ -457,7 +465,8 @@ if(PROJECT_IS_TOP_LEVEL)
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsRecipeModLoader.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsJournalModLoader.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsRegistryLoader.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Misc/DragonWildsDataRegistrar.cpp")
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Misc/DragonWildsDataRegistrar.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsBuildingModLoader.cpp")
     add_test(NAME cooked-registry-discovery-contract COMMAND cooked-registry-discovery-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsRegistryLoader.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsMainLoader.cpp"

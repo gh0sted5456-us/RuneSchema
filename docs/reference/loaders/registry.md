@@ -46,7 +46,18 @@ not grant permission by itself.
 
 ## Simple rules
 
+For the complete lane/status table and the development cooked building/menu
+extension, see [enrollment scope](../../COOKED-PAK-REGISTRY-MANIFEST.md#enrollment-scope).
+The loose and cooked routes use the same parser; do not invent an `Enrollment`
+root field or assume declaration acceptance means the native consumer works.
+
 ### Register a cooked item without cooking a registry declaration
+
+For an unchanged older PAK with several content types, use the
+[legacy PAK sidecar walkthrough and JSONC starter](../../examples/LegacyPakRegistration/README.md).
+The same loose document can announce items and recipes; development builds
+also accept cooked building enrollment/menu metadata without a registry asset
+inside the PAK. No shared bridge inheritance is required for a plain sidecar.
 
 You can ship the declaration as loose JSON or JSONC instead of recooking the
 PAK just to add an `RSREG_` or `DA_RuneSchemaRegistry` asset. RuneSchema reads
@@ -140,6 +151,13 @@ WearableMeshData, MeleeAttackClasses and RangedAttackClasses. The metadata-only
 `CacheAssets` field is also accepted in both formats for exact original artwork
 ownership. It does not register textures as gameplay items. The PAK container
 is not a prerequisite for announcing these references.
+
+The eight cooked native-data-family lanes also use this route:
+`ContainerContents`, `FarmPlants`, `Trees`, `TreeGrowth`,
+`FixedTextNotifications`, `FTUENotifications`, `PlayerHooks` and `WorldHooks`.
+Their [consumer-lifecycle limits](../../COOKED-NATIVE-DATA-FAMILIES.md) still
+apply. Development `Buildings` declarations likewise work from JSONC; they are
+not restricted to embedded PAK manifests.
 
 Development-only additions: `Skills` and `SkillPerks` are declaration-only,
 explicitly blocked native adapters, not working custom progression support.

@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
+# CMake requires numeric VERSION; display/package version is 0.8.0.1b.
 project(RuneSchema VERSION 0.8.0.1 LANGUAGES CXX RC)
 
 # Reject leftover source files from the postponed RSDK Workspace/Inspector branch.

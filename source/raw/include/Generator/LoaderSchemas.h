@@ -875,6 +875,20 @@ inline nlohmann::json LoaderSchemas() {
     result["registry"]["properties"]["LoaderDefinitions"]={{"type","object"},{"additionalProperties",false},{"properties",json::object()}};
     for(const auto* lane:{"Recipes","Journals","Lore"})result["registry"]["properties"]["LoaderDefinitions"]["properties"][lane]=
         {{"type","object"},{"maxProperties",4096},{"additionalProperties",{{"type","object"}}}};
+    nativeRegistries["properties"]["Buildings"]={{"type","array"},{"maxItems",4096},{"uniqueItems",true},{"items",nativePath},
+        {"description","Existing cooked BuildingPieceData only. Preserves native identity and gameplay; no schema clones or automatic unlock."}};
+    result["registry"]["properties"]["NativeRegistries"]=nativeRegistries;
+    const json cookedBuildingPlacement={{"type","object"},{"additionalProperties",false},{"required",{"Collection"}},
+        {"properties",{{"Collection",{{"type","string"},{"minLength",1},{"maxLength",256}}},
+            {"PageIndex",{{"type","integer"},{"minimum",0},{"maximum",2147483647}}}}}};
+    result["registry"]["properties"]["LoaderDefinitions"]["properties"]["Buildings"]=
+        {{"type","object"},{"maxProperties",4096},{"propertyNames",nativePath},
+        {"additionalProperties",{{"type","object"},{"additionalProperties",false},{"properties",{
+            {"PersistenceID",{{"type","string"},{"minLength",1},{"maxLength",1024}}},
+            {"InternalName",{{"type","string"},{"minLength",1},{"maxLength",1024}}},
+            {"Unlock",{{"type","boolean"},{"default",false}}},
+            {"AddTo",{{"anyOf",{cookedBuildingPlacement,{{"type","array"},{"minItems",1},{"maxItems",64},{"items",cookedBuildingPlacement}}}}}}
+        }}}}};
     for(auto& [name,schema]:result.items()) {
         if(name=="registry") {
             schema["$schema"]="http://json-schema.org/draft-07/schema#";

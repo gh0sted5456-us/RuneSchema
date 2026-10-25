@@ -1,0 +1,22 @@
+// Sidecar declaration for an unchanged older PAK. Replace all example paths.
+// No cooked registry asset or shared bridge inheritance is required.
+// Buildings metadata requires the enrollment development build.
+{
+  "SchemaVersion": 1,
+  "Entries": [],
+  "NativeRegistries": {
+    // Folder ownership does not rename the original PAK mount or its assets.
+    "Items": ["/OriginalWeapons/Items/ITEM_Rifle.ITEM_Rifle"]
+  },
+  "LoaderDefinitions": {
+    "Recipes": {
+      "/OriginalWeapons/Recipes/RECIPE_Rifle.RECIPE_Rifle": {"Unlock": false}
+    },
+    "Buildings": {
+      "/OriginalWeapons/Buildings/BUILDING_Bench.BUILDING_Bench": {
+        "AddTo": {"Collection": "Modded Buildings", "PageIndex": 0},
+        "Unlock": false
+      }
+    }
+  }
+}

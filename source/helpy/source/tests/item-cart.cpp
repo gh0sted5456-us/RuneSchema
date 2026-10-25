@@ -59,6 +59,29 @@ int main(){
     invalid=kit;invalid["Items"][0]["Script"]="run()";assert(rejects(invalid));
     invalid=kit;invalid["Name"]=std::string(129,'x');assert(rejects(invalid));
     invalid=kit;invalid["Items"]=nlohmann::json::array();assert(rejects(invalid));
+    {
+        PS::ItemCart::Model recent;
+        assert(recent.Add(row));recent.SetQuantity("/Game/Items/A.A",3);
+        assert(recent.Add({{"Path","/Game/Items/B.B"}}));
+        assert(recent.BeginDelivery(100,3));
+        assert(!recent.Reorder());
+        assert(recent.CompleteDelivery(100,{{"GrantResults",nlohmann::json::array({
+            {{"Item","/Game/Items/A.A"},{"Count",20},{"State","Confirmed"}},
+            {{"Item","/Game/Items/B.B"},{"Count",1},{"State","Unconfirmed"}}})}})==1);
+        assert(recent.Outcomes()[0].Item.Quantity==20);
+        assert(!recent.Reorder("/Game/Items/B.B"));
+        assert(recent.Reorder("/Game/Items/A.A")&&!recent.Delivery());
+        assert(recent.Payload().size()==2&&recent.Payload()[1]["Count"]==20);
+        recent.ApplyValidation(nlohmann::json::array({{{"Item","/Game/Items/A.A"},{"Valid",true}}}));
+        assert(recent.Reorder()&&recent.Payload()[1]["Count"]==40&&!recent.Validation("/Game/Items/A.A"));
+        assert(recent.Outcomes().size()==2); // Reorder cannot invalidate rendered receipt rows.
+        recent.SetQuantity("/Game/Items/A.A",10000);const auto full=recent.Payload();
+        assert(!recent.Reorder()&&recent.Payload()==full);
+        assert(recent.Remove("/Game/Items/A.A"));
+        for(size_t i=recent.Entries().size();i<recent.Limit;++i)assert(recent.Add({{"Path","/Game/Items/F"+std::to_string(i)+".F"}}));
+        const auto capacity=recent.Payload();assert(!recent.Reorder()&&recent.Payload()==capacity);
+        recent.Clear();assert(!recent.Reorder());
+    }
     assert(!PS::ItemBadges::Masterwork({{"Name","Masterwork Axe"},{"PowerLevel",100}}));
     assert(PS::ItemBadges::Masterwork({{"Masterwork",true}}));assert(!PS::ItemBadges::Masterwork({{"Masterwork",1}}));
     assert(PS::ItemBadges::Power({{"PowerLevel",25}})==25);assert(!PS::ItemBadges::Power({{"PowerLevel",-1}}));

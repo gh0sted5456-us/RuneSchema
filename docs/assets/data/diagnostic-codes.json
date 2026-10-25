@@ -1149,6 +1149,18 @@
       "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
     },
     {
+      "code": "RS-BLD-023",
+      "severity": "error",
+      "title": "Cooked building enrollment rejected",
+      "producer": "src/Loader/DragonWildsBuildingModLoader.cpp",
+      "legacyCollision": false,
+      "namespace": "structured",
+      "category": "Buildings",
+      "anchor": "rs-bld-023",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-023",
+      "troubleshooting": "Check the exact cooked BuildingPieceData path, native PersistenceID/InternalName and optional assertions. Keep gameplay in the cooked asset; only AddTo and Unlock are enrollment metadata. World cleanup remains deferred for rejected content; unrelated character lanes can continue."
+    },
+    {
       "code": "RS-BP-001",
       "severity": "warning",
       "title": "Blueprint property not found",

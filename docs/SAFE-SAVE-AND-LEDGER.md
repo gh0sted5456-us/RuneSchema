@@ -17,6 +17,15 @@ changed, and it does not depend on a separate history file.
    identities are retained wherever the applicable list is not certified.
 6. If nothing is missing, RuneSchema makes no change.
 
+An unfamiliar Inventory, PersonalInventory or Loadout container is preserved
+without blocking its readable siblings. Valid Inventory and Loadout sections
+still share slot-removal dependencies. Nonstandard equipment indices are never
+truncated to an unrelated slot. Opaque quest records retain their tracking and
+location dependencies while other verified orphan quests can be removed.
+Unfamiliar rows/sections appear in skipped-section diagnostics, with repeated
+row warnings grouped per section. Unknown fields remain untouched; this does
+not claim to decode future save formats or repair unsupported world/SPUD data.
+
 The JSON check occurs at the first character-load point for that game launch.
 A separate post-hydration check handles RuneSchema-owned orphan quests whose
 native state becomes available later. Active or unfinished status does not

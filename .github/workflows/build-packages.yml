@@ -37,7 +37,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = "${{ github.ref_name }}"
-          $tagMatch = [regex]::Match($tag, '^v?(\d+\.\d+\.\d+(?:\.\d+(?:[em]|-alpha(?:\.\d+)?)?)?)$')
+          $tagMatch = [regex]::Match($tag, '^v?(\d+\.\d+\.\d+(?:\.\d+(?:[bem]|-alpha(?:\.\d+)?)?)?)$')
           if (-not $tagMatch.Success) {
             throw "Unsupported RuneSchema release tag: $tag"
           }

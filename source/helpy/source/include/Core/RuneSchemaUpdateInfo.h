@@ -51,6 +51,8 @@ inline Comparison Compare(std::string_view installed,std::string_view remote) {
     if(local->Parts<latest->Parts)return Comparison::Newer;
     if(local->Parts>latest->Parts)return Comparison::Ahead;
     if(local->Suffix==latest->Suffix)return Comparison::Current;
+    if(local->Suffix.empty()&&latest->Suffix=="b")return Comparison::Newer;
+    if(local->Suffix=="b"&&latest->Suffix.empty())return Comparison::Ahead;
     if(local->Suffix.starts_with('-')&&latest->Suffix.empty())return Comparison::Newer;
     if(local->Suffix.empty()&&latest->Suffix.starts_with('-'))return Comparison::Ahead;
     if(local->Suffix.starts_with('-')&&latest->Suffix.starts_with('-')) {
