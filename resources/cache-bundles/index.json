@@ -4,6 +4,25 @@
   "Packs": [
     {
       "Runtime": "Steam",
+      "GameVersion": "++dominion+hotfix-CL-254097",
+      "Locale": "en-US",
+      "Sources": {
+        "agility": "a71148ee36ac0f567426121a58631cb1e7cd9f811c8297a2d7b93af94dcca74a",
+        "dowdunreach": "a3ac1fc374dae9fae8a8e51cb72b2a17756cea8f2634a066ac910cdc1998434c",
+        "fishing": "82ba2d0b67b8802c2d6d4ea12f78f86836f09f1ea49f658f2c26dfdb1b0f6b21",
+        "futuremajorversion": "68983eb3cc0aa663c654e16b9e0601e1e4c8e39b99b1141499eeafd29aa671a8",
+        "game": "23feb8e6c8bba98269f52ada2d239dfaa9184cd8e3512adea54329541527ed5f",
+        "scornedwilderness": "2bc7a48e402c03415611b9f310081c1027336be9588b8c0cf1a03deccd0813d8",
+        "umbralsands": "b4cc6f1aa3b6767bc9a7ebbb4cbb08d0b7c36920f310a2f4fef4da89bba58348"
+      },
+      "SHA256": "c4e97164718f69d459d88ebbc137e79975c5d9bdef97521d73d9cc5ac516df47",
+      "Bytes": 61566505,
+      "RecordCount": 2903,
+      "IconCount": 4246,
+      "RecordCoverage": "Partial"
+    },
+    {
+      "Runtime": "Steam",
       "GameVersion": "++dominion+live-CL-251392",
       "Locale": "en-US",
       "Sources": {

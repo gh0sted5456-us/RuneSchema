@@ -179,6 +179,7 @@ nav:
       - Diagnostic codes: ERROR-CODES.md
       - Cache bundle format: CACHE-BUNDLES.md
       - Cache ownership and paths: HELPY-CACHE-OWNERSHIP.md
+      - Build a cache from PAKs: modders/offline-helpy-cache.md
       - Recipe discovery: RECIPE-DISCOVERY.md
       - Recipe station inspection: HELPY-RECIPE-STATIONS.md
       - Character copies: CHARACTER-EDITOR-NATIVE.md

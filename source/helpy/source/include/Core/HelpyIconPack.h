@@ -83,7 +83,9 @@ inline fs::path Target(const fs::path& cache,const HelpySourceCache::Snapshot& s
 // Hash real content on an explicit import/export worker, never the render/game
 // thread or normal startup. Memoization is local and keyed by file metadata.
 // Package identities exclude absolute paths, timestamps and storefront binaries.
-inline std::map<std::string,std::string> Portable(const fs::path& root,const HelpySourceCache::Snapshot& sources,const std::set<std::string>& wanted,const fs::path& cache,Progress& progress,bool nativeOnly=false){
+inline std::map<std::string,std::string> Portable(const fs::path& root,const HelpySourceCache::Snapshot& sources,const std::set<std::string>& wanted,const fs::path& cache,Progress& progress,bool nativeOnly=false,const std::string& contentOwner={}){
+    if(!contentOwner.empty()&&(!contentOwner.starts_with("mods/")||ContentSource::Mod(contentOwner.substr(5))!=contentOwner))throw std::runtime_error("Invalid portable cache owner");
+    const auto selectedOwner=[&](const std::string& owner){return contentOwner.empty()||contentOwner=="mods/"+owner;};
     HelpyCacheSources::Plan plan;plan.Authoritative=true;plan.Revision=sources.PlanRevision;plan.Owners=sources.Owners;for(const auto& [group,key]:sources.SourceKeys)plan.Registered.insert(group);
     const auto inspected=HelpySourceCache::Inspect(root,plan);
     if(inspected.Key!=sources.Key)throw std::runtime_error("[RS-CACHE-001] Content changed. Wait for the source list to refresh, then retry the bundle.");
@@ -97,7 +99,7 @@ inline std::map<std::string,std::string> Portable(const fs::path& root,const Hel
     try{const auto bytes=Read(memoFile,16*1024*1024);memo=Json(bytes);if(!memo.is_object())memo=nlohmann::json::object();}catch(...){memo=nlohmann::json::object();}
     const auto previousMemo=memo;
     std::set<fs::path> files;for(const auto& [name,path]:baseFiles)files.insert(path);
-    if(!nativeOnly)for(const auto& group:wanted)if(sources.SourceKeys.contains(group)){const auto found=sources.Owners.find(group);if(found!=sources.Owners.end())for(const auto& owner:found->second)for(const auto& [name,path]:ownerFiles[owner])files.insert(path);}
+    if(!nativeOnly)for(const auto& group:wanted)if(sources.SourceKeys.contains(group)){const auto found=sources.Owners.find(group);if(found!=sources.Owners.end())for(const auto& owner:found->second)if(selectedOwner(owner))for(const auto& [name,path]:ownerFiles[owner])files.insert(path);}
     uint64_t sourceBytes=0;for(const auto& path:files){Check(progress);sourceBytes+=fs::file_size(path);}
     progress.Begin(Phase::Verify,files.size(),sourceBytes);std::map<fs::path,std::string> hashes;
     for(const auto& path:files){Check(progress);Safe(path);const auto size=fs::file_size(path);const auto stamp=fs::last_write_time(path).time_since_epoch().count();const auto key=path.generic_string();
@@ -113,7 +115,7 @@ inline std::map<std::string,std::string> Portable(const fs::path& root,const Hel
     Sha256 base; base.Add("rsmk-icon-content-v1\n");for(const auto& [name,path]:baseFiles)base.Add(name+"|"+hashes.at(path)+"\n");const auto baseKey=base.Finish();
     std::map<std::string,std::string> result;
     for(const auto& group:wanted){if(!sources.SourceKeys.contains(group))continue;Sha256 sha;sha.Add(baseKey+"|"+group+"\n");bool complete=true;
-        const auto owners=sources.Owners.find(group);if(!nativeOnly&&owners!=sources.Owners.end())for(const auto& owner:owners->second){if(ownerFiles[owner].empty()){complete=false;break;}for(const auto& [name,path]:ownerFiles[owner])sha.Add(name+"|"+hashes.at(path)+"\n");}
+        const auto owners=sources.Owners.find(group);if(!nativeOnly&&owners!=sources.Owners.end())for(const auto& owner:owners->second){if(!selectedOwner(owner))continue;if(ownerFiles[owner].empty()){complete=false;break;}for(const auto& [name,path]:ownerFiles[owner])sha.Add(name+"|"+hashes.at(path)+"\n");}
         if(complete)result[group]=sha.Finish();
     }
     // Recheck the cheap metadata plan after lengthy reads; an update must not
@@ -121,17 +123,19 @@ inline std::map<std::string,std::string> Portable(const fs::path& root,const Hel
     if(HelpySourceCache::Inspect(root,plan).Key!=sources.Key)throw std::runtime_error("Source changed during verification; retry later");return result;
 }
 struct Entry {std::string Icon,Source,SHA256;uint32_t Bytes=0;uint64_t Offset=0;std::set<std::string> Origins;};
-struct Manifest {nlohmann::json Sources;std::vector<Entry> Icons;nlohmann::json Coverage;std::vector<CacheBundle::Record> Records;std::string Locale;int Version=1;};
+struct Manifest {nlohmann::json Sources;std::vector<Entry> Icons;nlohmann::json Coverage;std::vector<CacheBundle::Record> Records;std::string Locale,ContentOwner;int Version=1;};
 inline Manifest Parse(const nlohmann::json& value,uint64_t payload){
     const auto version=value.value("Version",0);
     if(!value.is_object()||(version!=1&&version!=2)||!value.contains("Sources")||!value["Sources"].is_object()||value["Sources"].size()>512
         ||!value.contains("Icons")||!value["Icons"].is_array()||(version==1&&value["Icons"].empty())||value["Icons"].size()>MaxIcons)throw std::runtime_error("[RS-CACHE-002] Invalid cache bundle manifest");
     Manifest result;result.Sources=value["Sources"];for(const auto& [group,key]:result.Sources.items())if(HelpyCacheSources::Source("/"+group+"/x.x")!=group||!key.is_string()||!Digest(key.get<std::string>()))throw std::runtime_error("Invalid icon pack source");
     result.Version=version;
+    result.ContentOwner=value.value("ContentOwner",std::string{});
+    if(!result.ContentOwner.empty()&&(version!=2||!result.ContentOwner.starts_with("mods/")||ContentSource::Mod(result.ContentOwner.substr(5))!=result.ContentOwner))throw std::runtime_error("Invalid bundle content owner");
     if(version==2){
         if(value.value("Kind",std::string{})!="RuneSchemaCacheBundle"||!value.contains("Locale")||!CacheBundle::Text(value["Locale"],64)||value["Locale"].get_ref<const std::string&>().empty())throw std::runtime_error("[RS-CACHE-002] Invalid bundle kind or locale");
         result.Locale=value["Locale"].get<std::string>();result.Records=CacheBundle::Records(value.at("Records"));
-        for(const auto& row:result.Records)if(!result.Sources.contains(row.Source))throw std::runtime_error("[RS-CACHE-002] Record has no source fingerprint");
+        for(const auto& row:result.Records)if(!result.Sources.contains(row.Source)||(!result.ContentOwner.empty()&&row.Owner!=result.ContentOwner))throw std::runtime_error("[RS-CACHE-002] Record has no source fingerprint or escapes its content owner");
         if(result.Records.empty()&&value["Icons"].empty())throw std::runtime_error("[RS-CACHE-002] Empty cache bundle");
     }
     uint64_t offset=0;std::set<std::string> paths;
@@ -162,12 +166,16 @@ inline std::vector<char> Blob(std::ifstream& input,const Entry& entry,uint64_t s
     if(Hash(bytes)!=entry.SHA256)throw std::runtime_error("[RS-CACHE-004] Cached artwork checksum mismatch");return bytes;
 }
 struct Result {size_t Imported=0,Skipped=0,Exported=0;std::string Message;size_t Unchanged=0;std::vector<std::string> ChangedIcons;size_t Packs=0,Warnings=0,RecordsImported=0,RecordsExported=0;};
-enum class ImportPolicy { VerifiedContent,ServerDisplayOnly };
+enum class ImportPolicy { VerifiedContent,ServerDisplayOnly,NativeArtworkFallback };
 inline Result Import(const fs::path& file,const fs::path& root,const fs::path& cache,const HelpySourceCache::Snapshot& snapshot,uint64_t budget,Progress& progress,ImportPolicy policy=ImportPolicy::VerifiedContent,const std::string& source={},const std::set<std::string>& allowedGroups={},const std::string& allowedOwner={}){
     if(!source.empty()&&!ContentSource::Valid(source))throw std::runtime_error("Invalid cache source selection");
     Safe(file);const auto size=fs::file_size(file);std::ifstream input(file,std::ios::binary);uint64_t start=0;const auto manifest=Header(input,start,size);
     HelpyCacheSources::Plan originPlan;originPlan.Owners=snapshot.Owners;
-    const auto recordScope=[&](const CacheBundle::Record& row){return policy==ImportPolicy::VerifiedContent&&(source.empty()||source==row.Owner)&&(allowedOwner.empty()||row.Owner==allowedOwner)&&(allowedGroups.empty()||allowedGroups.contains(row.Source))&&CacheBundleStore::ActiveOwner(row,snapshot);};
+    const auto recordScope=[&](const CacheBundle::Record& row){return policy!=ImportPolicy::ServerDisplayOnly&&(source.empty()||source==row.Owner)&&(allowedOwner.empty()||row.Owner==allowedOwner)&&(allowedGroups.empty()||allowedGroups.contains(row.Source))&&CacheBundleStore::ActiveOwner(row,snapshot);};
+    if(!manifest.ContentOwner.empty()){
+        const auto plan=CacheBundleStore::Plan(snapshot);
+        if(!HelpyCacheSources::ActiveOwners(plan).contains(manifest.ContentOwner.substr(5))||(!source.empty()&&source!=manifest.ContentOwner)||(!allowedOwner.empty()&&allowedOwner!=manifest.ContentOwner))throw std::runtime_error("[RS-CACHE-008] Cache owner is inactive or outside the selected mod");
+    }
     std::map<std::string,std::set<std::string>> borrowed;
     for(const auto& row:manifest.Records)if(recordScope(row)&&CacheBundle::OriginalOwnerProven(row,CacheBundleStore::Plan(snapshot),snapshot.NativePlugins)){
         const auto icon=row.Data.value("Icon",std::string{}),group=HelpyCacheSources::Source(icon);
@@ -195,24 +203,31 @@ inline Result Import(const fs::path& file,const fs::path& root,const fs::path& c
         Check(progress);if(!snapshot.Authoritative||HelpySourceCache::Inspect(root,plan).Key!=snapshot.Key)throw std::runtime_error("Content changed. Refresh sources before importing display-only icons.");
         matches=wanted;
     }else{
-        const auto keys=Portable(root,snapshot,wanted,cache,progress,nativeBundle);
+        const auto keys=Portable(root,snapshot,wanted,cache,progress,nativeBundle,manifest.ContentOwner);
         for(const auto& [group,key]:keys)if(manifest.Sources.at(group)==key)matches.insert(group);
     }
     // Borrowed native artwork is admitted only with a matching owning module,
     // never merely because the pack claims a native icon as its own.
     for(auto it=borrowed.begin();it!=borrowed.end();)if(std::none_of(it->second.begin(),it->second.end(),[&](const auto& group){return matches.contains(group);}))it=borrowed.erase(it);else ++it;
-    uint64_t total=0;for(const auto& e:manifest.Icons)if(inScope(e)&&matches.contains(e.Source))total+=e.Bytes;
+    const bool nativeFallback=policy==ImportPolicy::NativeArtworkFallback&&nativeBundle&&matches.empty();
+    const auto pictureMatch=[&](const Entry& entry){
+        if(!inScope(entry))return false;if(matches.contains(entry.Source))return true;
+        if(!nativeFallback||!snapshot.SourceKeys.contains(entry.Source)||!snapshot.ContainerAssets)return false;
+        const auto found=snapshot.ContainerAssets->find(HelpyCacheSources::AssetKey(entry.Icon));
+        return found!=snapshot.ContainerAssets->end()&&found->second.size()==1&&nativeOwner(*found->second.begin());
+    };
+    uint64_t total=0;for(const auto& e:manifest.Icons)if(pictureMatch(e))total+=e.Bytes;
     uint64_t existing=0;Safe(cache);if(fs::exists(cache)){size_t inspected=0;for(auto it=fs::recursive_directory_iterator(cache);it!=fs::recursive_directory_iterator();++it){Check(progress);Safe(it->path());if(++inspected>MaxIcons*8)throw std::runtime_error("Cache has too many files; clean old caches first");if(it->is_regular_file()&&it->path().extension()==L".rsicon")existing+=it->file_size();}}
-    for(const auto& e:manifest.Icons)if(inScope(e)&&matches.contains(e.Source)){const auto target=Target(cache,snapshot,e.Icon);Safe(target);if(fs::is_regular_file(target))existing-=std::min(existing,fs::file_size(target));}
+    for(const auto& e:manifest.Icons)if(pictureMatch(e)){const auto target=Target(cache,snapshot,e.Icon);Safe(target);if(fs::is_regular_file(target))existing-=std::min(existing,fs::file_size(target));}
     if(total>budget||existing>budget-total)throw std::runtime_error("[RS-CACHE-005] Matched icons exceed your cache limit. Increase the limit or clean old caches before importing.");
     // Validate ALL pixel blobs before publishing any of them, even skipped mods.
     progress.Begin(Phase::Validate,manifest.Icons.size());
     for(const auto& e:manifest.Icons){Check(progress);(void)Blob(input,e,start);++progress.Done;}
     progress.Begin(Phase::Write,manifest.Icons.size(),total);Result result;
-    for(const auto& e:manifest.Icons){Check(progress);if(inScope(e)&&matches.contains(e.Source)){const auto target=Target(cache,snapshot,e.Icon);const auto bytes=Blob(input,e,start);
+    for(const auto& e:manifest.Icons){Check(progress);if(pictureMatch(e)){const auto target=Target(cache,snapshot,e.Icon);const auto bytes=Blob(input,e,start);
         bool unchanged=false;try{unchanged=Read(target,16+256*256*4)==bytes;}catch(...){}
         if(unchanged)++result.Unchanged;else{Publish(target,bytes);++result.Imported;result.ChangedIcons.push_back(e.Icon);}
-        Index(target,e.Icon,e.Origins,policy==ImportPolicy::ServerDisplayOnly||baselineArtwork);progress.BytesDone+=bytes.size();}else ++result.Skipped;++progress.Done;}
+        Index(target,e.Icon,e.Origins,policy==ImportPolicy::ServerDisplayOnly||baselineArtwork||nativeFallback);progress.BytesDone+=bytes.size();}else ++result.Skipped;++progress.Done;}
     std::vector<CacheBundle::Record> records;
     for(const auto& row:manifest.Records){if(manifest.Locale==CacheBundleStore::Locale()&&recordScope(row)&&matches.contains(row.Source))records.push_back(row);else ++result.Skipped;}
     // Commit metadata only after every blob passed validation and publication.
@@ -223,6 +238,7 @@ inline Result Import(const fs::path& file,const fs::path& root,const fs::path& c
     if(baselineArtwork)result.Message+=" Base-game artwork references; installed mods may override presentation. Not relabelled as mod-verified artwork.";
     if(manifest.Version==1)result.Message+=" [RS-CACHE-010] Legacy pixels-only pack; no item or journal identities included.";
     else result.Message+=" "+std::to_string(result.RecordsImported)+" new/updated path and persistence-ID references routed to their content owners. References are not live availability.";
+    if(nativeFallback)result.Message+=" Different game cook: native artwork reused as display references for existing native paths only. Item identities/IDs were not imported; live discovery supplies current data.";
     if(manifest.Coverage.is_object()&&!manifest.Coverage.value("Complete",false))result.Message+=" Warning: this pack has partial coverage ("+std::to_string(manifest.Icons.size())+" / "+std::to_string(manifest.Coverage.value("Expected",size_t{}))+"). Missing icons will be captured on demand.";
     return result;
 }
@@ -257,7 +273,9 @@ inline Result Export(const fs::path& file,const fs::path& root,const fs::path& c
     if(icons.empty()&&records.empty())throw std::runtime_error("[RS-CACHE-007] No cached presentation records or indexed icons to export yet.");
     if(icons.size()>MaxIcons)throw std::runtime_error("Too many icons for one pack");std::set<std::string> wanted;for(const auto& [icon,path]:icons)wanted.insert(HelpyCacheSources::Source(icon));
     for(const auto& row:records)wanted.insert(row.at("Source").get<std::string>());
-    const auto keys=Portable(root,snapshot,wanted,cache,progress);nlohmann::json document={{"Version",bundle?2:1},{"Sources",keys},{"Icons",nlohmann::json::array()}};
+    const auto contentOwner=bundle&&targeted?source:std::string{};
+    const auto keys=Portable(root,snapshot,wanted,cache,progress,false,contentOwner);nlohmann::json document={{"Version",bundle?2:1},{"Sources",keys},{"Icons",nlohmann::json::array()}};
+    if(!contentOwner.empty())document["ContentOwner"]=contentOwner;
     if(bundle){
         auto verified=nlohmann::json::array();for(const auto& row:records)if(keys.contains(row.at("Source").get<std::string>()))verified.push_back(row);
         document["Kind"]="RuneSchemaCacheBundle";document["Locale"]=CacheBundleStore::Locale();document["Records"]=std::move(verified);

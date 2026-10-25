@@ -29,6 +29,7 @@ The reconstructed export fixtures are labeled; they are not full game dumps.
 | Create a compatible item variant with its own identity | [Item clones](item-clones.md) |
 | Choose replacement, `$Append` or a matched array edit | [Append and targeted patches](append-and-targeted-patches.md) |
 | Check saves, compatibility and packaging | [Testing checklist](testing-and-compatibility.md) |
+| Generate a distributable Helpy cache from a cooked PAK trio | [Offline cache builder](offline-helpy-cache.md) |
 
 Each tutorial includes a file layout, numbered JSONC, an explanation of the
 fields, and a focused test. [Downloadable examples](../examples/Walkthroughs/README.md)

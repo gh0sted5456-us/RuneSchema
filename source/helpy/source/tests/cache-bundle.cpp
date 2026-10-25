@@ -155,6 +155,22 @@ int main(){try{
     assert(nativeImported.RecordsImported==1&&nativeImported.Imported==1);
     const auto baselineSidecar=HelpyIconPack::Json(HelpyIconPack::Read(HelpyIconPack::Target(nativeDestination,patched,art).wstring()+L".json",8192));
     assert(baselineSidecar.at("DisplayOnly")==true);
+    // A new cook can reuse native pictures at proven existing paths, without IDs.
+    {const auto gameFile=root.parent_path().parent_path().parent_path().parent_path().parent_path()/"Content"/"Paks"/"Game.pak";
+        assert(fs::is_regular_file(gameFile));{std::ofstream out(gameFile);out<<"new native cook";}
+        auto next=HelpySourceCache::Inspect(root,patchedPlan);
+        auto exact=std::make_shared<HelpyCacheSources::Plan::AssetOwnerMap>();(*exact)[HelpyCacheSources::AssetKey(art)]={"core"};next.ContainerAssets=exact;
+        const auto references=fixture/"native-artwork-fallback"/"item-icons";
+        auto fallback=HelpyIconPack::Import(nativeFile,root,references,next,1024*1024,progress,HelpyIconPack::ImportPolicy::NativeArtworkFallback);
+        assert(fallback.Imported==1&&fallback.RecordsImported==0&&fallback.Message.find("Different game cook")!=std::string::npos);
+        assert(HelpyIconPack::Json(HelpyIconPack::Read(HelpyIconPack::Target(references,next,art).wstring()+L".json",8192)).at("DisplayOnly")==true);
+        assert(CacheBundleStore::Read(references,root,next,locale).empty());
+        (*exact)[HelpyCacheSources::AssetKey(art)]={"mods/example"};
+        fallback=HelpyIconPack::Import(nativeFile,root,fixture/"no-mod-override"/"item-icons",next,1024*1024,progress,HelpyIconPack::ImportPolicy::NativeArtworkFallback);
+        assert(fallback.Imported==0&&fallback.RecordsImported==0);
+        exact->clear();fallback=HelpyIconPack::Import(nativeFile,root,fixture/"no-missing-path"/"item-icons",next,1024*1024,progress,HelpyIconPack::ImportPolicy::NativeArtworkFallback);
+        assert(fallback.Imported==0&&fallback.RecordsImported==0);
+    }
     // All paths generated from digests; no arbitrary member extraction.
     fs::remove_all(fixture);std::cout<<"Content bundles preserve paths/IDs, isolate owners, retain last-good state and support metadata-only round trips.\n";return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<"\n";return 1;}}

@@ -4,6 +4,7 @@
 #include "Core/HelpyUiAssets.h"
 #include "Core/HelpyBranding.h"
 #include "Core/BaseCacheDownloads.h"
+#include "Core/HelpySourceCache.h"
 #include <windows.h>
 #include <winhttp.h>
 #include <bcrypt.h>
@@ -28,7 +29,7 @@ std::filesystem::path PendingPack;std::chrono::steady_clock::time_point NextAtte
 std::filesystem::path Folder(){return HostServices::StateDirectory()/"ui-assets"/HelpyUiAssets::Version;}
 void Safe(const std::filesystem::path& path){
     for(auto current=std::filesystem::absolute(path).lexically_normal();!current.empty();){
-        const auto attributes=GetFileAttributesW(current.c_str());
+        const auto attributes=GetFileAttributesW(HelpySourceCache::NativePath(current).c_str());
         if(attributes!=INVALID_FILE_ATTRIBUTES&&(attributes&FILE_ATTRIBUTE_REPARSE_POINT))throw std::runtime_error("Download folders cannot contain links.");
         const auto parent=current.parent_path();if(parent==current)break;current=parent;
     }
@@ -44,8 +45,8 @@ std::string Hash(const Bytes& bytes){
     constexpr char digits[]="0123456789abcdef";std::string result;for(const auto c:digest){result+=digits[c>>4];result+=digits[c&15];}return result;
 }
 Bytes Read(const std::filesystem::path& path,size_t limit){
-    Safe(path);if(!std::filesystem::is_regular_file(path)||std::filesystem::file_size(path)>limit)return {};
-    const auto size=std::filesystem::file_size(path);std::ifstream input(path,std::ios::binary);Bytes bytes(static_cast<size_t>(size));
+    Safe(path);const auto native=HelpySourceCache::NativePath(path);if(!std::filesystem::is_regular_file(native)||std::filesystem::file_size(native)>limit)return {};
+    const auto size=std::filesystem::file_size(native);std::ifstream input(native,std::ios::binary);Bytes bytes(static_cast<size_t>(size));
     input.read(bytes.data(),static_cast<std::streamsize>(bytes.size()));
     if(!input||input.peek()!=std::char_traits<char>::eof())throw std::runtime_error("Cached download changed while being read.");return bytes;
 }
@@ -59,9 +60,10 @@ struct Handle {HINTERNET Value{};~Handle(){if(Value)WinHttpCloseHandle(Value);}o
 Bytes Fetch(const std::string& relative,size_t limit){
     if(Cancelled)throw std::runtime_error("Download cancelled.");
     // Callers supply only compiled artwork names or a validated hex pack name.
-    // Match the immutable release's compiled hashes. Experimental artwork is
-    // not necessarily present on stable main, and is never a runtime payload.
-    const std::string path=std::string("/gh0sted5456-us/RuneSchema/")+"86c8c20ca6a8fb696781669179b3ef942114bf08/resources/"+relative;
+    // UI images have compiled hashes; the data-only cache catalogue updates
+    // independently of DLL releases. Import still verifies digest and scope.
+    const auto ref=relative.starts_with("cache-bundles/")?"main":"86c8c20ca6a8fb696781669179b3ef942114bf08";
+    const std::string path=std::string("/gh0sted5456-us/RuneSchema/")+ref+"/resources/"+relative;
     const std::wstring wide(path.begin(),path.end());
     Handle session{WinHttpOpen(L"RuneSchema-Helpy-Assets/1",WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,WINHTTP_NO_PROXY_NAME,WINHTTP_NO_PROXY_BYPASS,0)};
     if(!session||!WinHttpSetTimeouts(session,2000,2000,2000,2000))throw std::runtime_error("Download network session unavailable.");
@@ -81,14 +83,15 @@ Bytes Fetch(const std::string& relative,size_t limit){
     }return bytes;
 }
 void Commit(const std::filesystem::path& path,const Bytes& bytes){
-    Safe(path);std::filesystem::create_directories(path.parent_path());Safe(path);
+    Safe(path);std::filesystem::create_directories(HelpySourceCache::NativePath(path.parent_path()));Safe(path);
     static std::atomic<uint64_t> stagingSequence{0};
     const auto temporary=path.parent_path()/(path.filename().wstring()+L"."+std::to_wstring(GetCurrentProcessId())+L"."+std::to_wstring(GetTickCount64())+L"."+std::to_wstring(++stagingSequence)+L".tmp");Safe(temporary);
-    HANDLE file=CreateFileW(temporary.c_str(),GENERIC_WRITE,0,nullptr,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,nullptr);
+    const auto nativeTemporary=HelpySourceCache::NativePath(temporary),nativeTarget=HelpySourceCache::NativePath(path);
+    HANDLE file=CreateFileW(nativeTemporary.c_str(),GENERIC_WRITE,0,nullptr,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,nullptr);
     if(file==INVALID_HANDLE_VALUE)throw std::runtime_error("Cannot stage download; an unfinished staging file may remain.");
     DWORD written=0;const bool ok=bytes.size()<=MAXDWORD&&WriteFile(file,bytes.data(),static_cast<DWORD>(bytes.size()),&written,nullptr)&&written==bytes.size()&&FlushFileBuffers(file);CloseHandle(file);
-    if(!ok||!MoveFileExW(temporary.c_str(),path.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)){
-        DeleteFileW(temporary.c_str());throw std::runtime_error("Download commit failed; existing file retained.");
+    if(!ok||!MoveFileExW(nativeTemporary.c_str(),nativeTarget.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)){
+        DeleteFileW(nativeTemporary.c_str());throw std::runtime_error("Download commit failed; existing file retained.");
     }
 }
 using Fetcher=std::function<Bytes(const std::string&,size_t)>;
@@ -136,7 +139,7 @@ unsigned Completed(){return Done.load();}unsigned Total(){return Count.load();}
 void Initialize(){
     if(Initialized)return;Initialized=true;
     try{const auto folder=Folder(),bundled=HelpyPaths::PluginRoot()/"assets";Worker=std::async(std::launch::async,[folder,bundled]{
-        Result result;result.ApplyArtworkState=true;result.Dismissed=std::filesystem::is_regular_file(folder/"hint-dismissed");
+        Result result;result.ApplyArtworkState=true;result.Dismissed=std::filesystem::is_regular_file(HelpySourceCache::NativePath(folder/"hint-dismissed"));
         bool bundledReady=true;for(const auto& file:HelpyUiAssets::Files)bundledReady=bundledReady&&std::filesystem::is_regular_file(bundled/file.Name);
         result.NeedsArtwork=!ArtworkReady(folder)&&!bundledReady;return result;
     });}catch(...){State.NeedsArtwork=true;State.Status="Artwork inspection unavailable; offline mode is active.";}
@@ -164,7 +167,7 @@ bool ReleaseImportedPack(const std::filesystem::path& file) noexcept{
     try{
         const auto root=std::filesystem::absolute(HostServices::CacheDirectory()/"downloads").lexically_normal(),target=std::filesystem::absolute(file).lexically_normal();
         if(target.parent_path()!=root||!Hex(target.stem().string(),64)||(target.extension()!=L".rsmk-cache"&&target.extension()!=L".rsmk-icons"))return false;
-        Safe(target);if(!std::filesystem::is_regular_file(target))return false;return DeleteFileW(target.c_str())!=0;
+        Safe(target);const auto native=HelpySourceCache::NativePath(target);if(!std::filesystem::is_regular_file(native))return false;return DeleteFileW(native.c_str())!=0;
     }catch(...){return false;}
 }
 void DismissHint(){State.HintDismissed=true;try{Commit(Folder()/"hint-dismissed",Bytes{'1'});}catch(...){};}
