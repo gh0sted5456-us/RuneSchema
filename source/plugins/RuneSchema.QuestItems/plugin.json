@@ -2,8 +2,8 @@
   "SchemaVersion": 1,
   "Id": "RuneSchema.QuestItems",
   "Name": "RuneSchema Quest Items",
-  "Version": "0.8.0.1b",
-  "BuiltForRuneSchema": "0.8.0.1b",
+  "Version": "0.8.0.2",
+  "BuiltForRuneSchema": "0.8.0.2",
   "ConsoleMessage": "RuneSchema shared quest-scroll content is available.",
   "Capabilities": ["quests.scroll-content"],
   "CookedObjects": [

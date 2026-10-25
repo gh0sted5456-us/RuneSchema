@@ -1,39 +1,36 @@
 # RuneSchema downloads and source updates
 
-The latest source on main and experimental is **0.8.0.1b — Quick bug fixes**.
-[Read the short changelog](CHANGELOG-0.8.0.1b.md).
-The `0.8.0.1b` source tag is available. It does not include a new binary release
-asset, and the historical `0.8.0.1` tag remains unchanged. Guides marked **0.8.0.1b
-source** require that source build rather than assuming the 0.8.0.1 ZIP has them.
+The current source and downloadable DLL pair are **0.8.0.2**.
+[Read the changelog](CHANGELOG-0.8.0.2.md). This release includes the earlier
+0.8.0.1b source-only fixes as well as the current cache improvements.
 
-## Published download: 0.8.0.1
+## Published download: 0.8.0.2
 
-The current release is **0.8.0.1**, published October 24, 2026.
-[Download 0.8.0.1](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.0.1/RuneSchema-0.8.0.1.zip)
-· [Package, defaults and verification](RELEASE-0.8.0.1.md)
-· [Implemented and removed changes, line by line](CHANGELOG-0.8.0.1.md).
+The current release is **0.8.0.2**, published October 25, 2026.
+[Download 0.8.0.2](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.0.2/RuneSchema-0.8.0.2.zip)
+· [Package, defaults and verification](RELEASE-0.8.0.2.md)
+· [Changes since 0.8.0.1](CHANGELOG-0.8.0.2.md).
 The release source is published on `main` and `experimental`, and the
-`0.8.0.1` tag identifies the source used for the rebuilt DLLs. The cleaned ZIP
+`0.8.0.2` tag identifies the source used for the rebuilt DLLs. The cleaned ZIP
 is locally built and verified, not a hosted CI artifact.
 
 RuneSchema loads enabled mod folders, mounts their cooked content, and connects
 supported definitions to Dragonwilds' live systems. The main release now uses
-the plain version/tag `0.8.0.1`; `m`/`e` suffixes describe historical releases.
+the plain version/tag `0.8.0.2`; `m`/`e` suffixes describe historical releases.
 The package uses one core DLL for Steam/Epic, Game Pass and servers, plus Helpy.
 
-[Previous release: 0.8.0.0](RELEASE-0.8.0.0.md)
+[Previous release: 0.8.0.1](RELEASE-0.8.0.1.md)
 · [Historical changelog](CHANGELOG-0.8.0.0.md)
 · [Installation guide](INSTALLATION.md)
 
 ## What changed
 
-This release consolidates the [implemented and retired changes](CHANGELOG-0.8.0.1.md):
-the themed Helpy desktop workspace, source-aware item/icon caches,
-Diagnostics and bug reporting, platform-separated AppData, mapping reuse,
-native registration, backup-first cleanup and reduced observer/startup/UI work.
+This release includes [registry/save/cart fixes](CHANGELOG-0.8.0.1b.md),
+the independent GitHub cache catalogue, owner-scoped mod caches, an optional
+[offline PAK cache builder](modders/offline-helpy-cache.md), current native
+item/journal cache data and expanded authoring walkthroughs.
 Both DLLs are compressed. The stock UE4SS host is not replaced.
-The release notes distinguish automated verification from outstanding live
-placement, progression and multiplayer acceptance tests.
+The release notes state the scope of automated verification.
 
 Earlier foundation improvements retained in this release:
 

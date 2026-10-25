@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
-# CMake requires numeric VERSION; display/package version is 0.8.0.1b.
-project(Helpy VERSION 0.8.0.1 LANGUAGES CXX RC)
+# Framework and bundled Helpy share this release version.
+project(Helpy VERSION 0.8.0.2 LANGUAGES CXX RC)
 if(NOT WIN32 OR NOT MSVC)
   message(FATAL_ERROR "Helpy requires the Windows x64 MSVC toolchain")
 endif()

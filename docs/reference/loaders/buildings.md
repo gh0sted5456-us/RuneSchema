@@ -23,7 +23,7 @@ rules, stability, shelter checks, snapping, health, and station behavior.
 Use `/buildings` to register an existing `BuildingPieceData` asset or clone one
 as a separate build-menu entry.
 
-The **0.8.0.1b source/tag** accepts property-free cooked building enrollment and
+The **0.8.0.2 release** accepts property-free cooked building enrollment and
 menu placement in the mod's registry asset. A loose `Asset` definition may
 override individual settings while retaining omitted cooked placement/unlock
 defaults. See [cooked building enrollment](../../COOKED-PAK-REGISTRY-MANIFEST.md#cooked-buildings-and-station-placement-development-extension).

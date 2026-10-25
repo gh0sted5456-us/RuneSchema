@@ -15,7 +15,7 @@ function Assignment-Value([string]$Name) {
 }
 $version = Assignment-Value 'Version'
 $pattern = Assignment-Value 'releaseVersionPattern'
-Require ($version -eq '0.8.0.1b') 'This release must be 0.8.0.1b'
+Require ($version -eq '0.8.0.2') 'This release must be 0.8.0.2'
 $numericVersion = [regex]::Match($version, '^\d+\.\d+\.\d+(?:\.\d+)?').Value
 $resourceVersion = $numericVersion.Replace('.', ',')
 foreach ($valid in @('0.8.0', '0.8.0.0', '0.8.0.1', '0.8.0.1b', '1.0.0', '0.7.7.9m', '0.7.7.9e', '0.7.8.0-alpha', '0.7.8.0-alpha.2')) {
