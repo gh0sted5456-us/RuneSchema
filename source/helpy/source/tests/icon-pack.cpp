@@ -28,6 +28,19 @@ int Run(){
     const auto pack=fixture/"Shared.rsmk-icons";assert(Export(pack,root,cache,first,progress).Exported==2);
     assert(progress.Stage==Phase::Complete&&progress.Done==2&&progress.Total==2);
     assert(progress.BytesTotal==2*pixels.size()&&progress.BytesDone==progress.BytesTotal);
+    // One owner's bundle must survive unrelated mods sharing its mount root.
+    {const auto neighbour=root/"mods"/"Second"/"paks"/"Second.pak";const auto stamp=fs::last_write_time(neighbour);
+        auto shared=plan;shared.Owners["firstmount"].insert("second");
+        auto snapshot=HelpySourceCache::Inspect(root,shared);
+        const auto scoped=Portable(root,snapshot,{"firstmount"},cache,progress,false,"mods/first");
+        const auto all=Portable(root,snapshot,{"firstmount"},cache,progress);
+        write(root/"mods"/"Second"/"paks"/"Second.pak","different neighbouring mod");
+        snapshot=HelpySourceCache::Inspect(root,shared);
+        assert(Portable(root,snapshot,{"firstmount"},cache,progress,false,"mods/first")==scoped);
+        assert(Portable(root,snapshot,{"firstmount"},cache,progress)!=all);
+        write(root/"mods"/"Second"/"paks"/"Second.pak","same mod content");
+        fs::last_write_time(neighbour,stamp);
+    }
     // Packaged caches never influence the content fingerprint. Automatic
     // loading is restricted to the containing mod's accepted active roots.
     first.DeclaredOwners=plan.Owners;

@@ -4,6 +4,12 @@ For typed item/journal metadata, exported paths and persistence IDs, use
 [content cache bundles](CACHE-BUNDLES.md). The default export is now
 `.rsmk-cache`; the legacy format below remains supported for pictures only.
 
+Mod authors can [build `cache/` directly from cooked PAKs](modders/offline-helpy-cache.md)
+with the optional Bash tool while the target game is closed. Updated Helpy's
+base-game downloader checks an independent GitHub catalogue; a changed build
+can reuse native pictures as display references while current item data is
+discovered normally.
+
 Helpy stores captured item icons under
 `%LOCALAPPDATA%\RSDragonwilds\RuneSchema\core\HELPY\runtime\saved\cache\item-icons`.
 Settings > Item Cache provides **Clean Icon Cache** and **Open cache folder**

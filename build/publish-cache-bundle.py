@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MAX_FILE = 256 * 1024 * 1024  # Current GitHub download client bound.
 MAX_MANIFEST = 80 * 1024 * 1024
 HEX = re.compile(r"[0-9a-f]{64}")
-PATH = re.compile(r"/[A-Za-z0-9_/-]+\.[A-Za-z0-9_-]+")
+PATH = re.compile(r"/[A-Za-z0-9_/+\-]+\.[A-Za-z0-9_+\-]+")
 KINDS = {"items", "journal", "art", "portraits", "resources"}
 DATA = {"Path", "Name", "PersistenceID", "PersistenceIDKnown", "ObservedCurrent",
         "BundleReference", "CacheOwner", "SourceKind", "SourceName", "SourceEvidence",
@@ -28,6 +28,8 @@ def inspect(data):
     doc = json.loads(data[12:12+length])
     if doc.get("Version") != 2 or doc.get("Kind") != "RuneSchemaCacheBundle":
         raise ValueError("Wrong manifest version/kind")
+    if doc.get("ContentOwner"):
+        raise ValueError("Mod-scoped bundles cannot be published as the native base cache")
     if not isinstance(doc.get("Locale"), str) or not re.fullmatch(r"[A-Za-z0-9-]{1,64}", doc["Locale"]):
         raise ValueError("Missing locale")
     sources, records, icons = doc["Sources"], doc["Records"], doc["Icons"]
@@ -124,7 +126,7 @@ def main():
              "Locale": doc["Locale"], "Sources": doc["Sources"], "SHA256": digest,
              "Bytes": len(data), "RecordCount": len(doc["Records"]),
              "IconCount": len(doc["Icons"]), "RecordCoverage": "Partial"}
-    index["Packs"] = [row for row in index["Packs"] if not (row.get("SHA256") == digest and row.get("Runtime") == args.runtime)] + [entry]
+    index["Packs"] = [entry] + [row for row in index["Packs"] if not (row.get("SHA256") == digest and row.get("Runtime") == args.runtime)]
     if len(index["Packs"]) > 128:
         raise ValueError("Index exceeds client limit")
     target = args.output/(digest+".rsmk-cache")

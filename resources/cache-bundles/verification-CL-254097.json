@@ -1,0 +1,21 @@
+{
+  "Date": "2026-10-25",
+  "Runtime": "Steam",
+  "GameVersion": "++dominion+hotfix-CL-254097",
+  "BundleSHA256": "c4e97164718f69d459d88ebbc137e79975c5d9bdef97521d73d9cc5ac516df47",
+  "Bytes": 61566505,
+  "RecordCount": 2903,
+  "IconCount": 4246,
+  "Coverage": "Partial",
+  "Validation": {
+    "Method": "Actual Helpy importer against installed native container contents; isolated cache only",
+    "ImportedIcons": 4246,
+    "ImportedRecords": 2903,
+    "ReadableRecords": 2903,
+    "Skipped": 0,
+    "RepeatNewIcons": 0,
+    "RepeatNewRecords": 0,
+    "RepeatUnchangedIcons": 4246
+  },
+  "Limits": "Presentation references only. No world was loaded, no save or game installation was changed, and no full-content coverage is claimed."
+}

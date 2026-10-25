@@ -36,6 +36,7 @@ inline std::function<bool(const nlohmann::json&,nlohmann::json&)> RemoteBuild;
 inline nlohmann::json BuildState=nlohmann::json::object();
 inline std::string SelectedSource;
 inline std::filesystem::path PendingBuildExport;
+inline std::filesystem::path PendingDownload;
 inline std::string PendingBuildSource;
 inline std::chrono::steady_clock::time_point NextBuildRead{};
 inline bool Building(){return BuildState.value("Active",false);}
@@ -45,8 +46,8 @@ inline void PollBuild(){
     nlohmann::json reply;if(RemoteBuild({{"Action","IconCacheBuildRead"}},reply)&&reply.is_object())BuildState=std::move(reply);
 }
 inline bool Busy(){return Worker.valid();}
-inline void Start(const std::filesystem::path& file,bool importing,const nlohmann::json& coverage=nlohmann::json::object()){
-    if(Busy()||Building()||SourceBanners::Busy()){Status="Wait for the active cache/artwork operation to finish.";return;}
+inline bool Start(const std::filesystem::path& file,bool importing,const nlohmann::json& coverage=nlohmann::json::object(),bool nativeArtworkFallback=false){
+    if(Busy()||Building()||SourceBanners::Busy()){Status="Wait for the active cache/artwork operation to finish.";return false;}
     try{
         const auto extension=HelpyCacheSources::Lower(file.extension().string());
         if(extension!=".rsmk-icons"&&extension!=".rsmk-cache")throw std::runtime_error("[RS-CACHE-002] Choose a .rsmk-cache bundle or legacy .rsmk-icons pack.");
@@ -55,21 +56,20 @@ inline void Start(const std::filesystem::path& file,bool importing,const nlohman
         const auto snapshot=HelpySourceCache::Current;const auto root=HostServices::ModDirectory(),cache=HelpySourceCache::Directory(false);
         Progress.Cancel=false;Progress.Begin(HelpyIconPack::Phase::Discover);Importing=importing;Packaged=false;CompletionNotify=false;ActiveFile=file;LastOperationOK=false;
         const auto source=SelectedSource;
-        const auto policy=HelpyEnvironment::Server()&&ServerDisplayOnly?HelpyIconPack::ImportPolicy::ServerDisplayOnly:HelpyIconPack::ImportPolicy::VerifiedContent;
+        const auto policy=HelpyEnvironment::Server()&&ServerDisplayOnly?HelpyIconPack::ImportPolicy::ServerDisplayOnly:nativeArtworkFallback?HelpyIconPack::ImportPolicy::NativeArtworkFallback:HelpyIconPack::ImportPolicy::VerifiedContent;
         const auto journal=HostServices::CacheDirectory()/"journal",assets=HelpyPaths::Asset("source-base-game.png").parent_path();const auto decoder=HelpyBackgrounds::Decode;
         const auto ownership=RemoteBuild;
         Worker=std::async(std::launch::async,[file,root,cache,snapshot,limit,importing,source,policy,coverage,journal,assets,decoder,ownership]{
             const auto verified=HelpyCacheOwnership::Fetch(snapshot,source,ownership);
             if(!importing)SourceBanners::EnsureBuiltins(cache,root,snapshot,assets,decoder);
             return importing?HelpyIconPack::Import(file,root,cache,verified,uint64_t(limit)*1024*1024,Progress,policy,source):HelpyIconPack::Export(file,root,cache,verified,Progress,source,coverage,CacheBundleStore::Collect(cache,root,journal,verified));
-        });Status="Verifying content sources in the background...";
-    }catch(const std::exception& error){Status=error.what();}
+        });Status="Verifying content sources in the background...";return true;
+    }catch(const std::exception& error){Status=error.what();return false;}
 }
 inline void Poll(){PollBuild();
-    static std::filesystem::path downloaded;
-    if(downloaded.empty())downloaded=HelpyDownloads::TakeBaseCache();
-    if(!downloaded.empty()&&!Busy()&&!Building()){
-        if(HelpySourceCache::Ready()&&HelpySourceCache::Current.Authoritative){const auto savedSource=SelectedSource;SelectedSource.clear();Start(downloaded,true);SelectedSource=savedSource;downloaded.clear();}
+    if(PendingDownload.empty())PendingDownload=HelpyDownloads::TakeBaseCache();
+    if(!PendingDownload.empty()&&!Busy()&&!Building()&&!SourceBanners::Busy()&&HelpyRuntimePreferences::IconCacheLimitMB.load()>0){
+        if(HelpySourceCache::Ready()&&HelpySourceCache::Current.Authoritative&&!HelpySourceCache::Current.Provisional){const auto savedSource=SelectedSource;SelectedSource.clear();const bool started=Start(PendingDownload,true,nlohmann::json::object(),true);SelectedSource=savedSource;if(started)PendingDownload.clear();}
     }
     if(!PendingBuildExport.empty()&&!Building()){
         const auto file=PendingBuildExport;
@@ -81,7 +81,7 @@ inline void Poll(){PollBuild();
                 if(!HelpySourceCache::Ready()||coverage.value("SourceKeys",nlohmann::json::object())!=nlohmann::json(HelpySourceCache::Current.SourceKeys)){
                     Status="Finishing source verification before export...";return;
                 }
-                PendingBuildExport.clear();const auto selected=SelectedSource;SelectedSource=PendingBuildSource;Start(file,false,coverage);SelectedSource=selected;PendingBuildSource.clear();
+                const auto selected=SelectedSource;SelectedSource=PendingBuildSource;const bool started=Start(file,false,coverage);SelectedSource=selected;if(started){PendingBuildExport.clear();PendingBuildSource.clear();}
             }else{PendingBuildExport.clear();Status="Build coverage could not be retrieved. Retry Export; cached icons are retained.";}
         }
         else {PendingBuildExport.clear();Status="Build/export stopped; completed thumbnails remain cached. No incomplete export was started.";}

@@ -6,11 +6,12 @@ item metadata, journal text and artwork references, plus cached preview pixels.
 It does **not** install mods or deserialize executable loader definitions.
 
 !!! note "Availability"
-    This describes the current bundle contract. The existing published base-game
-    download is a **partial, legacy icons-only pack**. A complete vanilla
-    item/journal bundle has not yet been captured and published. An empty
-    version-2 index is intentional; downloads fall back to a compatible legacy
-    pack, otherwise local discovery remains available.
+    GitHub hosts version-2 native item/journal bundles as well as legacy
+    icons-only packs. The current Steam hotfix cache
+    (`++dominion+hotfix-CL-254097`) contains **2,903 item/journal records and
+    4,246 pictures**. Coverage remains partial; this is not a full-game census.
+    Updated Helpy reads the current data-only catalogue independently of the
+    DLL's release tag.
 
 ## Use an existing cache immediately
 
@@ -23,6 +24,15 @@ It does **not** install mods or deserialize executable loader definitions.
 4. Existing bounded runtime discovery checks current content in the background.
    Cached presentation is not proof of current-world presence, unlock/read
    state, spawnability or delivery. Gameplay actions still resolve live assets.
+
+**Download base-game cache** prefers the matching executable build, then the
+latest compatible native catalogue entry. A different game-version string is
+not a hard refusal. Matching content fingerprints still admit typed metadata;
+when the native cook has changed, the download can reuse pictures only at
+existing paths proven to belong to native content. Those pictures are marked
+**display-only references**. That fallback does not import old item IDs,
+override mod-owned paths, or certify current availability. Manual mod imports
+continue to require their own matching content and active owner.
 
 The first file read is asynchronous, not literally zero-time. A cached result
 is labelled a reference while verification continues. Empty partial bundles
@@ -46,6 +56,8 @@ explicitly partial. Missing persistence IDs are exported as an empty string
 with `PersistenceIDKnown: false`; they are not replaced by an asset name.
 
 Mod authors may include `cache/*.rsmk-cache` inside their RuneSchema mod folder.
+To generate that folder directly from cooked PAKs while the target game is
+closed, use the [optional offline cache builder](modders/offline-helpy-cache.md).
 Automatic imports accept typed metadata only for that containing, active mod's
 declared content namespace. Borrowed vanilla/plugin artwork does not establish
 item ownership. A patched vanilla item remains vanilla; modifying it is not a
@@ -99,6 +111,7 @@ native gameplay validation.
 | File header | Eight ASCII bytes `RSCACHE1`, little-endian uint32 manifest length |
 | JSON manifest | Version 2, Kind `RuneSchemaCacheBundle`, Locale, Sources, Records, Icons |
 | Sources | Asset-source group → portable SHA-256 of native content and contributing owners |
+| ContentOwner (optional) | One canonical `mods/<folder>` owner; fingerprints include that owner's files, and records cannot escape that owner. Other mods sharing its mount do not invalidate its bundle. Older bundles without this field keep the existing combined-owner checks. |
 | Records | Typed presentation references, not executable item/journal definitions |
 | Icons | Exact texture path, source group, SHA-256, byte length, optional Origins |
 | Payload | Consecutive bounded `RSI3` RGBA thumbnails, in Icons order |
@@ -200,3 +213,11 @@ The index uses Format 2 / Kind `RuneSchemaCacheBundles`, and each pack declares
 Runtime, GameVersion, Locale, Sources, SHA256, Bytes and explicitly partial
 record coverage. No entry should claim all vanilla content without an
 independent coverage audit.
+
+The index is an updateable data feed; bundle filenames are immutable SHA-256
+identities. New entries are placed first while older compatible cook entries
+are retained. The client ranks the exact build ahead of cross-build artwork
+references, checks byte counts/SHA-256 before import, and keeps its existing
+cache on a network or validation failure. UI artwork still uses its separate
+compiled, immutable manifest. No DLL, script or gameplay definition is fetched
+from this cache feed.

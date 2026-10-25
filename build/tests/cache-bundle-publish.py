@@ -27,6 +27,13 @@ class Publication(unittest.TestCase):
         with self.assertRaises(ValueError):
             publisher.inspect(self.data("mods/example"))
 
+    def test_mod_scope_cannot_publish_as_native(self):
+        doc = json.loads(self.data()[12:])
+        doc["ContentOwner"] = "mods/example"
+        text = json.dumps(doc).encode()
+        with self.assertRaises(ValueError):
+            publisher.inspect(b"RSCACHE1"+struct.pack("<I",len(text))+text)
+
     def test_trailing_payload(self):
         with self.assertRaises(ValueError):
             publisher.inspect(self.data()+b"unexpected")
@@ -42,6 +49,12 @@ class Publication(unittest.TestCase):
     def test_native_hyphenated_object_name(self):
         doc = json.loads(self.data()[12:])
         doc["Records"][0]["Path"] = "/Game/Food/ITEM_Stir-Fry.ITEM_Stir-Fry"
+        text = json.dumps(doc).encode()
+        self.assertEqual(publisher.inspect(b"RSCACHE1"+struct.pack("<I",len(text))+text)["Records"][0]["Path"], doc["Records"][0]["Path"])
+
+    def test_native_plus_object_name(self):
+        doc = json.loads(self.data()[12:])
+        doc["Records"][0]["Path"] = "/Game/UI/T_Skill_Recall+.T_Skill_Recall+"
         text = json.dumps(doc).encode()
         self.assertEqual(publisher.inspect(b"RSCACHE1"+struct.pack("<I",len(text))+text)["Records"][0]["Path"], doc["Records"][0]["Path"])
 
