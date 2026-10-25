@@ -1,4 +1,14 @@
+---
+search:
+  exclude: true
+---
+
 # Startup diagnostics — 2026-10-22
+
+Historical test receipts, not current installation status. Later changes include
+the Lua property-size correction and native BuildingPiece spawn route. Use
+[troubleshooting](TROUBLESHOOTING.md) and [spawns](reference/loaders/spawns.md)
+for current guidance; do not apply an older receipt to a newer build.
 
 The pre-EXE performance changes remain in place. These corrections address the subsequent Steam startup scan without hiding failures.
 

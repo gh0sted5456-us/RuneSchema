@@ -1,0 +1,14 @@
+// Reconstructed, shortened export envelope for teaching, NOT a verbatim export.
+// Owner/component/field names come from Increased Storage - 3.
+// 24 and false are illustrative before-values; inspect your current game.
+[
+  {
+    "Type": "BP_Components_WorldItemInventory_C",
+    "Name": "BP_Components_WorldItemInventory",
+    "Outer": "Default__BP_BaseBuilding_Chest_Small_C",
+    "Properties": {
+      "MaxSlotCount": 24,
+      "bSupportsSortAndFillStacks": false
+    }
+  }
+]

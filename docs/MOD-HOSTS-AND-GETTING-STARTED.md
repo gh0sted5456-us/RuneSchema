@@ -39,7 +39,7 @@ installation.
   <article class="rs-capability">
     <span class="rs-capability__index">03 / WORKSPACE</span>
     <h3>Tools alongside the runtime</h3>
-    <p>Use Helpy/RSMK to browse content, inspect data, author supported definitions and review runtime diagnostics.</p>
+    <p>Use Helpy to browse content, inspect data, author supported definitions and review runtime diagnostics.</p>
   </article>
 </div>
 
@@ -67,14 +67,13 @@ the framework does not make arbitrary mod-list changes risk-free.
 
 ## Helpy: the companion workspace
 
-Helpy, also presented as the RuneSchema Modding Kit (RSMK), puts supported
-runtime tools in a separate desktop workspace. Item Service and the
+Helpy puts supported runtime tools in a separate desktop workspace. Players → Items and the
 detachable Item Bay make content easier to browse and inspect. Crafting,
 transmog, map and authoring workspaces bring related actions together, with
 source-aware icon caches to avoid repeatedly requesting the same pictures.
 
-RuneSchema 0.8.0.0 also includes a searchable Live Log with linked
-diagnostic codes and a server-local configuration workspace. Server edits
+Diagnostics combines grouped issues and searchable live logs with linked
+codes. Helpy also has a server-local configuration workspace. Server edits
 are staged for offline application; they are not a remote administration
 endpoint or permission bypass. Individual actions still depend on native
 readiness, world collision, player context and server authority.
@@ -100,11 +99,11 @@ idea needs. Hosting-service reviewers and mod authors can link this page to
 explain the dependency and package contents without redistributing the
 framework inside every add-on.
 
-!!! note "Current release: 0.8.0.0"
+!!! note "Download and source version"
     Download the build identified by the [current release page](CURRENT-RELEASE.md).
-    RuneSchema and RSMK now share version **0.8.0.0**, published on main with a
-    matching release tag. Read the [line-by-line changelog](CHANGELOG-0.8.0.0.md)
-    and [release notes](RELEASE-0.8.0.0.md). Automated checks are not a guarantee
+    The published ZIP is **0.8.0.1**; **0.8.0.1b** is the newer source/tag update.
+    Read the [release notes](RELEASE-0.8.0.1.md) and [source changes](CHANGELOG-0.8.0.1b.md).
+    Automated checks are not a guarantee
     that every authored feature has passed live-world or multiplayer testing.
 
 <div class="rs-functions-divider" markdown>
@@ -120,8 +119,9 @@ and how to put a small add-on together. Include only what your mod needs.
 
 The **RuneSchema framework** is the dependency installed at
 `ue4ss/Mods/RuneSchema/`. The [current release](CURRENT-RELEASE.md) ships one
-ZIP containing its native DLL, Lua helpers, settings, mapping data, optional
+ZIP containing its native DLL, Lua helpers, settings, optional
 plugins, cooked bridge packages, and consolidated license notices.
+Mapping data is generated/reused in the platform AppData cache, not bundled.
 
 A **RuneSchema add-on** normally installs as one folder beneath
 `ue4ss/Mods/RuneSchema/mods/<ModName>/`. It may contain only JSON/JSONC, or it
@@ -217,10 +217,15 @@ folders, not three more JSON loaders.
 | Lua companions | Loads supported packaged Lua behavior without changing UE4SS.dll | [Companion folders](PSEUDO-LOADERS.md) |
 | Helpy authoring | Inspects supported live data and exports reviewed definitions and reports | [Authoring tools](ADVANCED-AUTHORING-TOOLS.md) |
 | Icon caching | Uses source-scoped cached thumbnails, with import/export and bounded capture | [Icon cache](HELPY-ICON-CACHE.md) |
-| Live Log and help codes | Searches/filters recent diagnostics and exports a local snapshot with linked guidance | [Troubleshooting](TROUBLESHOOTING.md#helpy-live-log-and-help-codes) |
+| Diagnostics | Groups issues, searches recent live logs and exports reviewed local evidence | [Troubleshooting](TROUBLESHOOTING.md#helpy-live-log-and-help-codes) |
 | Server-local settings | Stages documented server settings, then applies them only with the server stopped | [Dedicated server reference](servers/dedicated-setup.md#verified-settings-and-observed-fields) |
 
 ### Make your first RuneSchema mod
+
+For a complete line-by-line lesson, use [FModel export to mod](modders/fmodel-to-mod.md)
+and the [Increased Storage chest example](modders/bigger-chests.md). Continue
+with [creature drops](modders/creature-drops.md), [cooked-item patches](modders/cooked-item-patches.md)
+or [clones](modders/item-clones.md) once that first change works.
 
 Start with one visible change to existing content. The included
 [Golden Interaction Text example](examples/GoldenInteractionText/README.md)

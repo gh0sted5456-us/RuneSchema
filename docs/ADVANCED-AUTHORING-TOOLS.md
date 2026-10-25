@@ -13,24 +13,35 @@ inspected content; a valid snippet cannot supply missing cooked dependencies.
 **Tie-ins:** [Loader walkthroughs](LOADER-WALKTHROUGHS.md), [item authoring](WEAPONS-AND-ITEMS.md), [quests and boards](modders/quests-and-questboards.md) and [cache ownership](CACHE-BUNDLES.md).
 
 
-RuneSchema 0.8.0.0 provides authoring through Helpy's separate desktop
+RuneSchema provides authoring through Helpy's separate desktop
 workspace. It can help you find a loaded record, prepare an editable JSONC
 starter, check its references, and export it. Opening the page, searching, and
 building a preview do not install a mod or change the game data.
 
 ## Open the tools
 
-### Helpy / RSMK 0.8.0.0
+### Helpy desktop workspace
 
-Open Helpy with F2. **Item Service** handles everyday browsing and delivery; **Transmog & Creation**, **Recipes** and **Authoring Tools** provide the authoring workspaces. **Tools**, **Settings** and **Live Log** have separate navigation entries. UI preferences remain in `ui.jsonc`; RuneSchema runtime settings use `settings.ini`.
+Open Helpy with **F2**. **Players → Items** handles browsing and delivery;
+**Players → Clone / Recipes** and **Tools → Authoring** provide authoring
+workspaces. **Diagnostics** combines grouped issues and **Live Log**. UI
+preferences use `ui.jsonc`; runtime settings use [`settings.ini`](SETTINGS-INI.md).
 
-The shared item bay defaults to **20 items per page** in a **5 columns × 4 rows** grid. Change the page size below the items (presets or a custom count from 1 to 100), then use **Previous / Next**. Page size changes preserve the first item's approximate position without clearing the cart. The catalog fetches only enough bounded windows to fill the requested page; it does not start a Full Scan. A partial catalog is marked “more available” rather than reporting a guessed total.
+The shared item bay defaults to **20 items per page**; columns adapt to the
+window and view settings. Change page size below the items, then use
+**Previous / Next**. Page changes preserve the cart. The catalogue fetches
+bounded windows; it does not start a Full Scan. A partial catalogue says
+“more available” rather than reporting a guessed total.
 
 Search runs after a short typing pause or immediately on Enter. **All categories** filters item types. **View** contains Grid/List and optional column/row controls; the lower divider still supports free-height resizing. Narrow windows reduce columns and short windows scroll within the page. Preferences are shared across inventory and editor bays and saved in `ui.jsonc` (`views.itemPageSize`, `itemGridColumns`, `itemGridRows`, `itemGridFitRows`).
 
 Choose an item, then **Add to cart**, or drag it into the compact cart. **Give items** is the only primary delivery action. **Loadouts** holds kit import/export; **More** holds list/player refresh and advanced scan tools. An empty cart does not reserve the height of a populated staging chest. Existing colors, scaling, list-view preferences and delivery confirmation semantics are retained.
 
-**Transmog & Creation** separates source selection, customization and the resulting item into connected cards, with the item bay below. Inspect the selected source before creating a clone. Native property and JSON overrides are in a separate expandable section. The source item is not changed.
+**Players → Clone** separates source selection, customization and the resulting
+item into connected cards. Inspect the source before creating a clone. Native
+property and JSON overrides are in a separate expandable section. The source
+item is not changed. Follow the [line-by-line clone guide](modders/item-clones.md)
+for the actual runtime path, stable identity and an installable example.
 
 **Recipes** connects inputs, station/timing and outputs. Drag items from the bottom bay into either side, or select an item and use the add buttons. Quantities are editable; a recipe can have multiple outputs. Choose a native station row and, where applicable, a labeled category. Optional processing duration has minimum and maximum bounds in seconds. These cards stack vertically when the available width is limited.
 
@@ -38,11 +49,24 @@ Use **Browse** to search native recipe metadata, or paste an exact cooked `Recip
 
 Normal catalog queries combine loaded objects with mounted asset-registry metadata. Unloaded AI/resource candidates remain visible but need **Inspect selected definition** before spawning. Inspection loads only the selected class and checks its native ancestry; native NPC-copy restrictions and resource save-exclusion checks still apply. The coverage message identifies when registry metadata is unavailable. Unknown mod directories are not guessed to be resource or AI classes: authored `/spawns` entries and the explicit Full Scan remain additional discovery paths.
 
-Drag an item into the cart, or right-click **Add to cart**, select the intended recipients and choose **Give items**. Selecting an item does not grant it. Cart editing pauses during delivery; entries leave the cart only after matching inventory-delta confirmations. Failed or unconfirmed entries stay staged for inspection, without automatic retries. Recipients can be removed individually or cleared without changing item quantities.
+Drag an item into the cart, or right-click **Add to cart**, select recipients
+and choose **Give items**. Selecting an item does not grant it. Cart editing
+pauses during delivery. Matching native inventory confirmations establish success;
+confirmed and rejected entries are cleared and recorded in **Delivery results**.
+Interrupted or unconfirmed work can remain staged for review, without automatic
+retries. Inspect the recipient's inventory before retrying.
+
+In **0.8.0.1b source**, right-click a confirmed **Last delivery** item to
+**Reorder**, or its heading to stage all confirmed items. This rebuilds the
+cart only; it does not deliver automatically or replay uncertain grants.
 
 PowerLevel badges request the native game texture and display the item's actual native value, with a text fallback. Masterwork labels use native flags/tags; detailed tooltips retain the native `MasterworkType` identifier when supplied by the item. Item names and high PowerLevel do not imply masterwork quality.
 
-Use **Export kit** to save the cart as JSON or commented JSONC. **Import kit** lists kits in the displayed `runtime/Helpy/kits` folder under RuneSchema's per-profile Saved state. Copy shared kits into that folder and choose **Refresh kits**. Selecting a file previews its name/count; **Load into cart** replaces the staged cart, not your inventory. Loaded-item metadata is refreshed on the game thread without mounting missing content. Unknown or unavailable items are checked again at delivery.
+Use **Export kit** to save the cart as JSON or commented JSONC. **Import kit**
+lists the active profile's `loadouts` directory; use the displayed path and
+**Refresh kits** after copying a kit. **Load into cart** replaces the staged cart,
+not inventory. Missing content is not installed by importing a kit. The old
+game-local `runtime/Helpy/kits` path is not the normal profile location.
 
 Exports use a versioned, data-only `RuneSchemaHelpyKit` format: a schema version, optional name and up to 64 unique cooked item paths with quantities 1..10000. Imports are limited to 128 KiB and do not contain scripts, automatic delivery, target-player selection or authority overrides. Existing exports require explicit replacement confirmation and retain a backup. The in-window kit library does not open a Windows file dialog.
 
@@ -57,11 +81,15 @@ Exports use a versioned, data-only `RuneSchemaHelpyKit` format: a schema version
 }
 ```
 
-Delivery uses the existing authoritative inventory grant and confirmation path. **Auto-equip** is disabled until an inventory-instance equip command and its native slot/result contract are mapped; importing a kit cannot enable it. Advanced mode's **Inspect native equip / unlock contracts** exports read-only function metadata without invoking those functions or editing saves.
+Delivery uses the authoritative inventory grant and confirmation path.
+**Equip on receipt** requests supported native equipment after a grant; it
+still requires a compatible available slot and verified native result. It does
+not make an incompatible item equip. Advanced mode's **Inspect native equip /
+unlock contracts** exports read-only metadata without invoking those functions.
 
 ### RuneSchema authoring workflow
 
-Open **Authoring Tools** from Helpy's navigation; the old engine-embedded
+Open **Tools → Authoring** in Helpy; the old engine-embedded
 settings page is no longer the authoring entry point. If authoring is disabled,
 review its runtime setting in **Settings** and follow the displayed restart or
 session-activation requirements. Engine-backed actions still need a ready
@@ -98,7 +126,7 @@ structural loader schemas** provides the full set.
 
 Items, recipes, journal entries, quests, NPCs, spawns, and events have focused
 content choices. Player and nameplate pages include their own guided controls;
-the Items page also points to Helpy's Transmog & Creation workspace for item authoring.
+the Items page also points to **Players → Clone** for item authoring.
 
 ## Know what each stage is for
 
@@ -114,3 +142,9 @@ the Items page also points to Helpy's Transmog & Creation workspace for item aut
 Authoring tools cannot make an incorrectly cooked PAK valid, and a preview is
 not proof that a mod works in a world. Follow the [first-mod guide](AUTHORING-GUIDE.md)
 and test first entry, return to menu, re-entry, and a full restart.
+
+For the manual workflow, use [FModel export to mod](modders/fmodel-to-mod.md),
+[chest capacity](modders/bigger-chests.md), [creature drops](modders/creature-drops.md)
+and [the testing checklist](modders/testing-and-compatibility.md).
+Live inventory deletion/scrapping is not part of this workflow. Character-copy
+tools remain separate reviewed offline edits; see [profiles](HELPY-PROFILES.md).

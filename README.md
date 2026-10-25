@@ -4,7 +4,8 @@ Runtime schema and data-editing framework for **RuneScape: Dragonwilds**.
 
 **Current source: RuneSchema and Helpy 0.8.0.1b — Quick bug fixes.**
 Read the [short changelog](docs/CHANGELOG-0.8.0.1b.md).
-This source update does not replace the existing release tag or downloads.
+The `0.8.0.1b` tag identifies that source update. The historical `0.8.0.1` tag
+and published downloads remain unchanged.
 
 **Published download: RuneSchema and Helpy 0.8.0.1**, released October 24, 2026.
 Read the [implemented/removed changes, line by line](docs/CHANGELOG-0.8.0.1.md)
@@ -26,6 +27,13 @@ with their own manifests and lifecycle.
 > **Documentation Website:** https://gh0sted5456-us.github.io/RuneSchema/
 
 [Open the RuneSchema documentation →](https://gh0sted5456-us.github.io/RuneSchema/)
+
+Learn with [FModel export to mod](docs/modders/fmodel-to-mod.md),
+[bigger chests](docs/modders/bigger-chests.md), [inventory pages](docs/modders/bigger-inventory.md),
+[creature drops](docs/modders/creature-drops.md), [cooked-item patches](docs/modders/cooked-item-patches.md)
+and [item clones](docs/modders/item-clones.md). The
+[$Append and targeted-patching guide](docs/modders/append-and-targeted-patches.md)
+explains the different operations, with [matching example files](docs/examples/Walkthroughs/README.md).
 
 ## Downloads
 

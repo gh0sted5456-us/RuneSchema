@@ -1,0 +1,8 @@
+{
+  "BP_BaseBuilding_Chest_Small_C": {
+    "BP_Components_WorldItemInventory": {
+      "MaxSlotCount": 56,
+      "bSupportsSortAndFillStacks": true
+    }
+  }
+}

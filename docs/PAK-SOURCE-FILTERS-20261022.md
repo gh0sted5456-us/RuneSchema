@@ -1,4 +1,13 @@
+---
+search:
+  exclude: true
+---
+
 # Source filter identities
+
+Historical implementation note. Its furnace refusal describes that build only;
+normal saveable stations now have a [BuildingPiece spawn route](reference/loaders/spawns.md#native-buildingpiece-placement).
+Source labels and package metadata are described in [mod packaging](MOD-PACKAGING.md).
 
 The item source selector retains its broad categories and also offers individual mod/plugin providers. Mod choices use the same ID.txt/mod.json nickname/name metadata as the mod list, with personal nicknames taking precedence. Indexed container owners, native plugins, registered mod names and current catalogue rows supply choices; the current page alone does not determine which mods can be selected.
 

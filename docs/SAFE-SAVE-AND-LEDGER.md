@@ -77,6 +77,13 @@ character, then Dragonwilds and the active store handle normal saving.
 
 ## Recommended removal process
 
+Cleanup removes supported missing identities; it is not a generic migration
+for changed capacities or item rules. Before reducing chest/inventory slots,
+empty the affected slots. Before lowering stack limits, split oversized stacks.
+Keep the old mod version and a whole-save backup. Re-enabling a mod after a
+pruned save does not replay its removed progress. See the
+[author testing checklist](modders/testing-and-compatibility.md).
+
 1. Back up the character and world.
 2. Close the game.
 3. Set the mod to `0` in `RuneSchema/mods/runeschema.txt` or remove its folder.

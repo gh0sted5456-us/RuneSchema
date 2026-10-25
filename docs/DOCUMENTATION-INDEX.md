@@ -16,6 +16,17 @@ loader reference only when you need exact folder fields.
 
 ## Modders: create content
 
+For a complete export-to-mod path, use these numbered tutorials:
+
+1. [Inspect an FModel export](modders/fmodel-to-mod.md).
+2. [Increase chest capacity](modders/bigger-chests.md) or [expand inventory pages](modders/bigger-inventory.md).
+3. [Append or tune a creature drop](modders/creature-drops.md).
+4. [Patch a cooked item](modders/cooked-item-patches.md) or [clone a new variant](modders/item-clones.md).
+5. [Understand `$Append`, `$Match` and `$Patch`](modders/append-and-targeted-patches.md).
+6. [Test and package](modders/testing-and-compatibility.md).
+
+For new cooked features and other loader families:
+
 1. [Modder start page](modders/index.md)
 2. [Your first RuneSchema mod](AUTHORING-GUIDE.md)
 3. [First cooked item walkthrough](modders/first-cooked-item.md)
@@ -44,6 +55,7 @@ loader reference only when you need exact folder fields.
 ## Reference and distribution
 
 - [Every loader folder and its purpose](LOADER-WALKTHROUGHS.md)
+- [0.8.0.1b source/tag changes](CHANGELOG-0.8.0.1b.md) — the published binary download remains 0.8.0.1.
 - [0.8.0.1 implemented and removed changes, line by line](CHANGELOG-0.8.0.1.md)
 - [0.8.0.1 package and verification](RELEASE-0.8.0.1.md)
 - [Field schemas](SCHEMAS.md)

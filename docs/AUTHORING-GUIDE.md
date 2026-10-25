@@ -3,12 +3,13 @@
 ## Step-by-step workflow
 
 1. Create and enable one stable mod folder under `RuneSchema/mods`; add only the loader folders your feature uses.
-2. Start with one JSONC mock-up from the matching loader walkthrough and replace IDs, asset paths and reflected fields.
+2. Follow [FModel export to mod](modders/fmodel-to-mod.md), then make the small [Bigger Chests patch](modders/bigger-chests.md). Inspect paths and fields in your game version before copying them.
 3. Connect the result to its consumer: an item needs a recipe/vendor, a quest needs acceptance, and a station needs its real actor row handle.
 4. Restart, inspect targeted diagnostics, then verify the feature and saved progress before distributing it.
 
-JSONC snippets are authoring mock-ups. Replace example paths, IDs and values with
-inspected content; a valid snippet cannot supply missing cooked dependencies.
+The [worked tutorials](modders/index.md#learn-with-real-mod-patterns) distinguish
+real mod patterns, reconstructed FModel excerpts and placeholders. A valid JSONC
+file cannot supply a missing cooked dependency.
 
 **Tie-ins:** [All loaders](LOADER-WALKTHROUGHS.md), [quests and boards](modders/quests-and-questboards.md), [cache bundles](CACHE-BUNDLES.md) and [diagnostic codes](ERROR-CODES.md).
 
@@ -88,7 +89,7 @@ kind of work.
 | `journal`, `lore` | Add readable and discoverable entries. |
 | `npc`, `spawns`, `vendors` | Add world actors, enemies, and shops. |
 | `equipment` | Add supported special behavior to equipment. |
-| `registry` | Describe supported presentation or action content. It is not a general item list. |
+| `registry` | Declare supported cooked native-data families, presentation/action content or explicit registry patches. Each family has its own contract; this is not an arbitrary registry writer. |
 | `paks` | Store packaged Unreal content such as meshes, icons, sounds, items, and stations. |
 | `logicmods` | Opt in cooked packages that provide a `ModActor` to Blueprint startup. |
 | `ue4ss` | Lua-only UE4SS add-ons, with scripts/configs kept intact; uses unmodified UE4SS. Native/hybrid packages are skipped. |
@@ -121,7 +122,7 @@ MyDragonwildsMod/
 ```
 
 Keep each Lua package intact, including configs, helpers and metadata.
-RuneSchema 0.8.0.0 uses its Lua bootstrap on unmodified UE4SS; it does not
+RuneSchema uses its Lua bootstrap on unmodified UE4SS; it does not
 provide a managed/custom host. Nested native or hybrid DLL packages are
 rejected and must instead be installed directly through stock UE4SS.
 Package names must be unique. Package-local Lua context is not an independent
@@ -144,14 +145,14 @@ complete example, startup messages, troubleshooting, and safety guidance.
 
 ## Use numbered filenames
 
-RuneSchema reads files in a predictable order. Numbered names make the order
-easy to understand:
+Numbered names make file order within a loader easy to understand. They do not
+reorder the runtime's loader phases:
 
 ```text
 assets/10-items.jsonc
-raw/20-item-stats.jsonc
-recipes/30-recipes.jsonc
-journal/40-journal.jsonc
+assets/20-item-overrides.jsonc
+raw/10-item-stats.jsonc
+recipes/10-recipes.jsonc
 ```
 
 Use `.jsonc` when you want comments in the file. Keep comments short and do not
@@ -171,6 +172,11 @@ item has been released, keep all three values stable. Changing them can make an
 existing saved item appear missing.
 
 ## Choose between copying and cooking
+
+For an existing item, start with [a field patch](modders/cooked-item-patches.md).
+For a new compatible variant, follow [the `$Clone` walkthrough](modders/item-clones.md).
+For arrays, read [replacement, `$Append` and matched edits](modders/append-and-targeted-patches.md)
+before copying an export's entire list.
 
 Use a RuneSchema copy when the new item can reuse an existing mesh, icon,
 animation family, and general behavior. This is the quickest route for an item

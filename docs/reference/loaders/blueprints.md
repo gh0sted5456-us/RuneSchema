@@ -2,10 +2,8 @@
 
 ## Step-by-step workflow
 
-Use `RuneSchema/mods/MyMod/blueprints/` for this example. JSONC blocks are
-**mock-ups**, not an automatically installed feature: replace placeholder paths,
-IDs, coordinates and reflected fields with values from your content. New art or
-classes must be cooked/mounted separately. Keep published identities stable.
+Examples with placeholder paths/IDs are templates. Use inspected values and the
+[shared testing checklist](../../modders/testing-and-compatibility.md) before sharing.
 
 1. Resolve the existing class/component or widget; inspect its supported reflected fields.
 2. Create `blueprints/10-camp-widget.jsonc` using the matching default-object or live-widget example below.
@@ -24,14 +22,21 @@ that is already loaded. The loader does not create Blueprint classes; cook a new
 class in a PAK and mount it when your mod needs one.
 
 ```jsonc
-[
-  {
-    "/Game/Path/BP_Target": {
-      "Data": { "Duration": 10.0 }
+{
+  "BP_BaseBuilding_Chest_Small_C": {
+    "BP_Components_WorldItemInventory": {
+      "MaxSlotCount": 56,
+      "bSupportsSortAndFillStacks": true
     }
   }
-]
+}
 ```
+
+This is the Ash Chest pattern from Increased Storage. The outer key selects an
+existing generated class; the next key selects its inventory component. Read
+[Bigger chests](../../modders/bigger-chests.md) for the export-to-patch explanation
+and safe rollback, or [Bigger inventory](../../modders/bigger-inventory.md) for
+matching individual page entries and adjusting their UI.
 
 Check property names and types against the live class. Restart the game after
 changing class defaults.
@@ -106,7 +111,17 @@ Yes, when the button already exists in the cooked widget tree. Use
 `$RuntimeWidget` to apply reflected properties and, if needed, bind a
 compatible multicast event to an existing function.
 
-## Working example
+<span id="working-example"></span>
+
+### FAQ-BLUEPRINTS-004 — Which loader changes chest slots and inventory pages? {#faq-blueprints-004}
+
+Use `blueprints` for the inspected inventory component's defaults. Chest
+`MaxSlotCount`, inventory page `NumSlots` and widget `RowCount` are separate
+fields on their respective owners. Increasing visible boxes alone does not
+increase storage. Follow [Bigger chests](../../modders/bigger-chests.md) and
+[Bigger inventory](../../modders/bigger-inventory.md); empty extra slots before rollback.
+
+## Downloadable example
 
 - [Fixed Menu: character-creation labels](../../examples/FixedMenu/blueprints/character_creation_text.jsonc)
 

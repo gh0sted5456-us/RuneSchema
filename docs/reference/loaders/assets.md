@@ -2,10 +2,8 @@
 
 ## Step-by-step workflow
 
-Use `RuneSchema/mods/MyMod/assets/` for this example. JSONC blocks are
-**mock-ups**, not an automatically installed feature: replace placeholder paths,
-IDs, coordinates and reflected fields with values from your content. New art or
-classes must be cooked/mounted separately. Keep published identities stable.
+Examples with placeholder paths/IDs are templates. Use inspected values and the
+[shared testing checklist](../../modders/testing-and-compatibility.md) before sharing.
 
 1. Choose a mounted item of the same native class and behavior; inspect its exact object path.
 2. Create `assets/10-camp-item.jsonc`. For a clone, assign a new destination, canonical persistence ID and InternalName; for a patch, retain the existing identity.
@@ -31,7 +29,7 @@ RuneSchema runtime asset. A JSON clone is not a newly cooked Unreal package.
 
 ```jsonc
 {
-  "/Game/MyMod/Items/ITEM_CampSupplies.ITEM_CampSupplies": {
+  "/Game/RuneSchema/MyMod/Items/mymod_camp_supplies.mymod_camp_supplies": {
     "$Clone": "/Game/Gameplay/Items/ITEM_Source.ITEM_Source",
     "PersistenceID": "uxA9m4CWTOyRV2K8e5PHgQ",
     "InternalName": "mymod_camp_supplies",
@@ -49,6 +47,15 @@ Walkthrough:
 4. Add `/raw` rows when the item points to row handles such as wearable data.
 5. Add `/recipes`, `/journal`, or `/vendors` references after the item path is
    stable.
+
+The clone's runtime path is derived from the sanitized mod folder and
+`InternalName`: `/Game/RuneSchema/<Mod>/Items/<InternalName>.<InternalName>`.
+Keep the authored destination consistent with that path. Referenced rows and
+other assets remain shared unless you explicitly give the variant separate data.
+
+For complete, numbered examples, follow [patch a cooked item](../../modders/cooked-item-patches.md)
+or [clone an item](../../modders/item-clones.md). Existing-item `$Patch` envelopes
+preserve `PersistenceID` and `InternalName`; a clone needs its own stable identity.
 
 `$DominionSpheres` patches validated named sphere subobjects. `$VisualEffect`
 can attach a supported equip effect. `RecipesToUnlock` and
@@ -89,7 +96,7 @@ shared mesh/material data. Re-equip the item when testing a changed appearance.
 Helpy's transmog card follows the donor's resolved inventory icon unless an
 explicit icon override is supplied; this is not a generated 3D thumbnail.
 
-## Direct `DA_` fields
+## Direct `DA_` fields {#direct-da_-fields}
 
 For an existing DataAsset or generated-class default, put the complete `DA_`
 path first and native field paths below it. RuneSchema infers a class default
@@ -147,7 +154,17 @@ No. For the verified direct `DA_` authoring form, put the complete target path
 first and the native field path below it. The mod directory supplies ownership;
 the legacy registry-patch envelope remains readable for compatibility.
 
-## Working examples
+<span id="working-examples"></span>
+
+### FAQ-ASSETS-003 — Should I patch or clone an existing cooked item? {#faq-assets-003}
+
+Patch to change the existing item while preserving its identity. Clone to
+create a different compatible ItemData with a new stable PersistenceID and
+InternalName. A clone does not create new meshes/Blueprint behavior or privately
+copy every referenced row. [Patch lesson](../../modders/cooked-item-patches.md)
+and [clone lesson](../../modders/item-clones.md).
+
+## Downloadable examples
 
 - [Quest Board acceptance item starter](../../examples/QuestBoardWalkthrough/assets/20-ash-contract.jsonc)
 

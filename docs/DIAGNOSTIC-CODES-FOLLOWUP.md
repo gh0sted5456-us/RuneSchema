@@ -1,8 +1,10 @@
 # Diagnostic code contribution — incorporated
 
-The 221 structured definitions are incorporated into the experimental 0.8.0.1
-Diagnostics workspace and [current reference](ERROR-CODES.md). The current
-catalogue also has 65 legacy entries and 19 bridge reasons; three labels have
+The contributed structured definitions are incorporated into the released
+Diagnostics workspace and [generated current reference](ERROR-CODES.md).
+Additional codes have been authored since that handoff, including building
+enrollment diagnostics. The generated reference is authoritative for current
+codes; the counts below describe the original contribution. Three labels retain
 separate legacy/structured meanings. [Release details](RELEASE-0.8.0.1.md).
 The provenance below records the earlier handoff, not outstanding integration.
 

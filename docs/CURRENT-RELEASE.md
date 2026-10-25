@@ -2,7 +2,9 @@
 
 The latest source on main and experimental is **0.8.0.1b — Quick bug fixes**.
 [Read the short changelog](CHANGELOG-0.8.0.1b.md).
-This commit does not create a new release asset or move the existing 0.8.0.1 tag.
+The `0.8.0.1b` source tag is available. It does not include a new binary release
+asset, and the historical `0.8.0.1` tag remains unchanged. Guides marked **0.8.0.1b
+source** require that source build rather than assuming the 0.8.0.1 ZIP has them.
 
 ## Published download: 0.8.0.1
 

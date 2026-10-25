@@ -2,10 +2,8 @@
 
 ## Step-by-step workflow
 
-Use `RuneSchema/mods/MyMod/buildings/` for this example. JSONC blocks are
-**mock-ups**, not an automatically installed feature: replace placeholder paths,
-IDs, coordinates and reflected fields with values from your content. New art or
-classes must be cooked/mounted separately. Keep published identities stable.
+Examples with placeholder paths/IDs are templates. Use inspected values and the
+[shared testing checklist](../../modders/testing-and-compatibility.md) before sharing.
 
 1. Select a registered BuildingPieceData source or a cooked piece supplied by your mod.
 2. Create `buildings/10-camp-piece.jsonc`; choose either `$Clone` or `Asset`, not both.
@@ -25,7 +23,7 @@ rules, stability, shelter checks, snapping, health, and station behavior.
 Use `/buildings` to register an existing `BuildingPieceData` asset or clone one
 as a separate build-menu entry.
 
-Development builds also accept property-free cooked building enrollment and
+The **0.8.0.1b source/tag** accepts property-free cooked building enrollment and
 menu placement in the mod's registry asset. A loose `Asset` definition may
 override individual settings while retaining omitted cooked placement/unlock
 defaults. See [cooked building enrollment](../../COOKED-PAK-REGISTRY-MANIFEST.md#cooked-buildings-and-station-placement-development-extension).

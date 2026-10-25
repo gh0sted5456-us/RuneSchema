@@ -5,6 +5,10 @@ closed, then restart. The same format works on Steam/Epic, Game Pass and servers
 Plugin-owned settings, mod definitions and authoring exports keep their existing
 JSON/JSONC formats.
 
+The following is a syntax example, not a replacement for the full shipped
+defaults. The current package enables detailed logging and Helpy auto-opening;
+existing settings are preserved during an update.
+
 ```ini
 [RuneSchema]
 advancedLogging = false
@@ -29,6 +33,50 @@ such as `[loaders]`. Deeper objects use dotted sections. Use `true`/`false`,
 ordinary numbers, quoted strings and JSON arrays. Plain words are also accepted
 for string settings. Semicolon and hash introduce comments outside quoted
 strings. Missing keys keep their built-in defaults; unknown keys are preserved.
+
+## Game mappings and writable state {#game-mappings-and-writable-state}
+
+Keep executable content in the game's `ue4ss/Mods/RuneSchema` folder. Settings
+remain at `RuneSchema/settings/settings.ini`; enabled mods remain under
+`RuneSchema/mods`. Writable shared state is separate:
+
+```text
+%LOCALAPPDATA%/RSDragonwilds/RuneSchema/
+  core/
+    HELPY/                   # UI preferences, generated caches and UI assets
+    runeschema.profile/      # Profile, portraits, loadouts and character copies
+    backups/                 # Required character pre-prune backups
+    health/                  # Retained diagnostic history
+  steam/
+    cache/mappings/          # Steam mapping snapshots/index
+    runtime/saved/progress/  # Platform runtime progress sidecars
+  gamepass/                  # Same platform-local separation
+  epic/
+  server/
+```
+
+Each game process has its own runtime connection and Helpy instance; shared
+preferences are not a reason to connect Helpy to a different process. Native
+character/world saves, including Xbox WGS, remain game-owned. Do not move them
+into this tree or delete profiles/backups as a cache reset.
+
+`[RuneSchema] autoUpdateMappings = true` requests a native mapping capture when
+the installed game identity lacks a compatible verified snapshot. Capture is
+delayed rather than added to the immediate startup path. A successful capture
+is reused on the next launch; unchanged launches do not dump another USMAP.
+`RUNESCHEMA_DISABLE_AUTO_MAPPING` disables automatic generation for that process.
+Already verified compatible snapshots can still be reused. The startup log
+distinguishes queued, deferred and successful capture; a queued request is not
+an active mapping. [Mapping details](HELPY-SCHEMA-WORKSPACES.md#game-update-reflection-mappings).
+
+There is no required `dlls/mappings` folder. Old AppData roots and game-local
+`runtime/live` trees are not automatically moved or merged. Existing legacy
+`HELPY`/`runeschema.profile` folders directly inside the current AppData root
+are used in place only when their `core` counterpart is absent. Keep ordinary
+local directories; do not redirect the root through a junction or symlink.
+
+For generated cache locations and source separation, see
+[cache ownership](HELPY-CACHE-OWNERSHIP.md) and [cache bundles](CACHE-BUNDLES.md).
 
 ## Backup-first pruning
 
@@ -128,7 +176,7 @@ Manual slot-name entry, refresh/reload and less-common switches are under **Adva
 
 ## Additional Logging Information
 
-Live Log offers an opt-in **Additional Logging Information** toggle and an
+Diagnostics → Live Log offers an opt-in **Additional Logging Information** toggle and an
 **Options** popover. The master switch and every field default to off:
 
 ```ini
@@ -185,6 +233,9 @@ Helpy exposes it in Settings > RuneSchema and Home > Quick settings. Restart is
 required; merely opening or clearing Live Log never changes the file on disk.
 
 ## Automatic, two-launch migration
+
+This section describes **settings format translation only**. It does not move
+the installation or migrate old runtime folders into AppData.
 
 1. With a legacy `settings.jsonc` present, the first launch loads its values,
    writes and verifies `settings.ini`, and records a private migration receipt.

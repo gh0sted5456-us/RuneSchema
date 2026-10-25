@@ -13,15 +13,23 @@ field, and value type are available.
 Current loader schemas are available for `assets`, `blueprints`,
 `buildings`, `courses`, `dialogue`, `effects`, `enums`, `equipment`, `events`,
 `journal`, `lore`, `nameplates`, `niagara`, `npc`, `players`, `quests`, `raw`,
-`recipes`, `spawns`, `strings`, and `vendors`. They include station placement,
-building fuel controls, recipe identity, equipment effects and every other
-structurally checked authoring field in the current DLL. The Pages build keeps
+`recipes`, `registry`, `spawns`, `strings`, and `vendors`. They describe their
+supported document shapes, including station placement, building fuel controls,
+recipe identity and equipment effects. Reflected game properties are not an
+exhaustive schema field database. The Pages build keeps
 these generated files and adds the three focused schemas above.
 
 ## Validation expectations
 
 - Unknown schema fields are rejected where the strict schema applies.
-- Duplicate JSON keys are rejected.
+- Do not write duplicate keys. Strict readers reject them; do not rely on a legacy reader retaining a particular duplicate.
 - Target resolution must be unambiguous.
 - The loaded object's fields and row layout are checked before a change.
-- Ownership conflicts fail closed instead of replacing another mod's data silently.
+- Strict registry ownership conflicts reject the registration. Ordinary field overrides can intentionally replace an earlier mod's value; use a small compatibility patch and document its order.
+
+A schema check does not resolve a cooked object, confirm a native property or
+prove gameplay/save compatibility. Legacy reflection loaders can report an
+unknown property while applying other supported fields. Per-array staged edits
+are not a transaction across every file in a mod. Follow the
+[operator guide](modders/append-and-targeted-patches.md) and
+[testing checklist](modders/testing-and-compatibility.md).

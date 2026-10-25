@@ -110,11 +110,11 @@ Packaged `cache/` files do not affect the source content fingerprint.
 Right-click a mod placard to open its declared website or installed folder.
 An absent website stays unavailable; Helpy never guesses an author's URL.
 
-Personal mod/item nicknames, favorites, tags and removal locks are stored in
-Helpy's `personalization.json`, not in the mod package or character save. An
-item lock protects every instance of that item type against Helpy removal; it
-does not prevent the game's own discard, consumption or durability behavior.
-Bulk removal review excludes locked, favorite, equipped and unreadable items.
+Personal nicknames, favorites and tags are local user/profile data, not part of
+the mod package. They do not prevent the game's discard, consumption or
+durability behavior. Live Helpy deletion/scrapping and deleted-item Storage
+were retired; do not advertise removal locks as native inventory protection.
+See [Favorite/Junk controls](HELPY-INVENTORY-EXTENSIONS.md).
 
 ## Artwork and caches
 
@@ -124,6 +124,7 @@ disabled, without mounting the mod or certifying its cache. Keep the image below
 20 MiB. Omit this field if the mod has no supplied art. The placard falls back to
 the source's existing banner or a neutral panel. Native colored power-level
 glyphs display its order number, not a gameplay power level.
+Disabled mods use a black glyph and do not consume an enabled load-order number.
 
 Select the mod's actual `mods/MyMod` source in **Cache & banner**, choose source
 art, then export a verified cachepack into the mod's `cache` directory. Recommend

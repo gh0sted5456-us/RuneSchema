@@ -1,4 +1,12 @@
+---
+search:
+  exclude: true
+---
+
 # Centered details and bounded wrapping
+
+Historical implementation/validation note. Current user instructions are in
+[Helpy workspaces](HELPY-SCHEMA-WORKSPACES.md).
 
 The shared details renderer centers each wrapped text line inside the actual available content width, including disabled/status text and preserved paragraph breaks. It reuses the existing Home centered-line design rather than changing ImGui's global text layout. Tooltip boxes remain centered on their hovered control and constrained to the viewport; long content retains scrolling.
 

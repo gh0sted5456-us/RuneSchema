@@ -1,0 +1,20 @@
+{
+  "BP_BaseBuilding_Crate_C": {
+    "BP_Components_WorldItemInventory": {
+      "MaxSlotCount": 40,
+      "bSupportsSortAndFillStacks": true
+    }
+  },
+  "BP_BaseBuilding_Chest_C": {
+    "BP_Components_WorldItemInventory": {
+      "MaxSlotCount": 72,
+      "bSupportsSortAndFillStacks": true
+    }
+  },
+  "BP_BaseBuilding_Chest_Iron_C": {
+    "BP_Components_WorldItemInventory": {
+      "MaxSlotCount": 88,
+      "bSupportsSortAndFillStacks": true
+    }
+  }
+}

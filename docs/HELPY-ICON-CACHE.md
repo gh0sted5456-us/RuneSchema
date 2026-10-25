@@ -65,7 +65,8 @@ headless runtime cannot capture GPU thumbnails; compatible pack import/export
 remains available.
 
 Choose **All registered sources** or one source before building/exporting.
-The source grouping shares Recipes' station asset-root classifier:
+Exact indexed package/container ownership takes priority. Where that evidence
+is unavailable, conservative declared/virtual-root grouping remains a fallback:
 
 - `core`: ordinary `/Game` and `/Engine` assets.
 - `mods/<folder>`: declared managed-mod ownership, `/Game/Mods/<folder>` or
@@ -73,8 +74,9 @@ The source grouping shares Recipes' station asset-root classifier:
 - `plugins/<mount>`: other plugin/GameFeature content roots without a declared
   managed-mod owner.
 
-This is virtual-path/declaration grouping, not a per-asset physical PAK-container
-locator. Shared mounts retain conservative compatibility checks. References to
+The indexed supplier is a candidate, not proof of a successful Unreal mount.
+Ambiguous owners are not resolved by guessing mount order. Shared mounts retain
+conservative compatibility checks. References to
 core icons do not relabel all core content as belonging to the referencing mod.
 Native plugin/GameFeature container files and descriptors participate in source
 comparison when present; packed features also depend on their game containers.
@@ -114,9 +116,10 @@ The filesystem-only comparison worker checks the storefront lane, game binary
 and content metadata, and the contributing managed mod files. Small authored
 files include a content hash. Disabled/unregistered managed mod folders are not
 scanned. Shared mounts combine contributing owners conservatively. Unrelated
-RuneSchema/Helpy loader changes do not invalidate every native icon. File size
-and modification time are used for large binary/container files; this is cache
-coherency, not a cryptographic integrity or mod-registration check.
+RuneSchema/Helpy loader changes do not invalidate every native icon. File size,
+modification time and bounded container metadata participate in lightweight
+comparison; explicit portable pack operations can hash full content. These are
+cache-coherency checks, not mod-registration or gameplay certification.
 
 Icons remain demand-cached as visible content is browsed. The cache-file count
 is not the number of items, recipes, or available game/mod textures. No full
@@ -133,7 +136,7 @@ prove that a mod's content registered successfully.
 ## Optional shared icon packs
 
 Settings > Icon cache has **Import icon pack** and **Export icon pack**. Players
-can also drop one `.rsmk-icons` file onto the RSMK window or detached Item Bay.
+can also drop one `.rsmk-icons` file onto the Helpy window or detached Item Bay.
 Unpack ZIP downloads first. Keep icon persistence enabled; the configured disk
 limit still applies. An import that would exceed that limit asks you to increase
 it or clean old generations first. Clean Icon Cache is disabled while a pack

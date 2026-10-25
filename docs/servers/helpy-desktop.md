@@ -1,6 +1,6 @@
 # Helpy on a dedicated-server desktop
 
-RuneSchema/RSMK 0.8.0.0 support the separate Helpy window on a dedicated server launched
+RuneSchema supports a separate Helpy window on a dedicated server launched
 in an interactive Windows user session. It does not depend on the game's
 viewport, player pawn or rendering mode. It is a local administrator tool—not
 a remote control port or a client authority bypass.
@@ -12,7 +12,7 @@ stop the server and run the supplied apply helper, which checks edited-field
 baselines and saves with a backup. Confirm the active profile's path first.
 Changes are not live permission grants. See the
 [server configuration editor guide](dedicated-setup.md#edit-dedicatedserverini-in-the-servers-helpy).
-**Live Log** is available on both clients and server desktops for filtering,
+**Diagnostics → Live Log** is available on clients and server desktops for filtering,
 searching and locally exporting this installation's RuneSchema diagnostics.
 
 When enabled in the Helpy plugin settings, the server starts its normal taskbar

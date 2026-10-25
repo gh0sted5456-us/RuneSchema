@@ -14,7 +14,7 @@ enabled mod depends on it.
 | --- | --- | --- |
 | RuneSchema Registry Bridge | A cooked PAK uses a `DA_RuneSchemaRegistry_*` declaration to introduce items, recipes, spells, attacks, or effects to the live game lists. | No enabled mod says it requires the shared registry bridge. |
 | RSNetworking | A mod uses RuneSchema's supported multiplayer identity, world-state, dialogue-cue, or registry presentation bridge. | No enabled mod lists RSNetworking as a requirement. |
-| RuneSchema.Helpy | You want the optional in-game RuneSchema helper interface. | You do not use that interface. |
+| RuneSchema.Helpy | You want the companion desktop workspace and supported native UI helpers. | You do not use those tools. |
 | Combat fallback | A weapon mod cannot reach its cooked attack collections through the normal game-owned route and its author specifically asks for the fallback. | In almost every normal setup. It is off by default. |
 
 The first three are plugins. Combat fallback is a RuneSchema setting, not a
@@ -87,14 +87,15 @@ recipe, station, or save cleanup work.
 
 ## Helpy
 
-Helpy is the optional in-game helper interface. Turning it off removes that
+Helpy is the optional companion desktop workspace. Turning it off removes that
 interface without disabling RuneSchema's normal loaders, PAK mounting, registry
 validation, recipe placement, or save cleanup.
 
 ## Combat fallback is separate
 
-Combat fallback is an advanced compatibility helper for melee, ranged, or
-magic registration. It is disabled by default and should stay off unless a mod
+Combat fallback is an advanced compatibility helper for melee and ranged
+component collections. Spell data uses its separate native registries. The
+fallback is disabled by default and should stay off unless a mod
 author asks you to enable a specific lane.
 
 It does not control item registration, recipe registration, save cleanup, the

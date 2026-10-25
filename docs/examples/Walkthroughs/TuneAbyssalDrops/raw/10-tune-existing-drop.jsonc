@@ -1,0 +1,19 @@
+// This edits an existing unique drop. It does not add a missing drop.
+{
+  "$Patch": "/Game/Gameplay/Items/LootDropTables/DT_LootDropTable.DT_LootDropTable:AbyssalDemon",
+  "$Target": {
+    "Resources": {
+      "$Patch": [
+        {
+          "$Match": {
+            "SpawnedItemData": "/Game/Gameplay/Items/Resources/Animal/ITEM_Resources_Abyssal_Ashes.ITEM_Resources_Abyssal_Ashes"
+          },
+          "$Target": {
+            "MinimumDropAmount": 2,
+            "MaximumDropAmount": 3
+          }
+        }
+      ]
+    }
+  }
+}

@@ -2,10 +2,8 @@
 
 ## Step-by-step workflow
 
-Use `RuneSchema/mods/MyMod/raw/` for this example. JSONC blocks are
-**mock-ups**, not an automatically installed feature: replace placeholder paths,
-IDs, coordinates and reflected fields with values from your content. New art or
-classes must be cooked/mounted separately. Keep published identities stable.
+Examples with placeholder paths/IDs are templates. Use inspected values and the
+[shared testing checklist](../../modders/testing-and-compatibility.md) before sharing.
 
 1. Resolve the exact DataTable and inspect the live row struct; prefer a full path when short names are ambiguous.
 2. Create `raw/10-camp-rows.jsonc` with table, row and only the fields being changed.
@@ -64,9 +62,45 @@ against live reflection before committing a row.
 
 ## Simple rules
 
+### Keep an existing row and change only selected data
+
+Use the existing-row envelope when a typo must not create a new row:
+
+```jsonc
+{
+  "$Patch": "/Game/Gameplay/Items/LootDropTables/DT_LootDropTable.DT_LootDropTable:AbyssalDemon",
+  "$Target": {
+    "$Append": {
+      "Resources": [
+        {
+          "SpawnedItemData": "/Game/Gameplay/Items/Resources/Animal/ITEM_Resources_Abyssal_Ashes.ITEM_Resources_Abyssal_Ashes",
+          "MinimumDropAmount": 1,
+          "MaximumDropAmount": 1,
+          "DropChance": 5.625,
+          "bOneInstancePerPlayerOnlyVisibleToThem": false,
+          "bAutoAddToInventory": false,
+          "bOnlyForPlayersThatInflictedDamage": false
+        }
+      ]
+    }
+  }
+}
+```
+
+This appends a drop, without deduplicating it. A plain `Resources: [...]` replaces
+the array. To change an existing drop, use a unique `$Match` inside the array's
+`$Patch`, rather than appending a second copy. The [creature-drop walkthrough](../../modders/creature-drops.md)
+explains every field and the [operator guide](../../modders/append-and-targeted-patches.md)
+distinguishes the outer record selector from an array edit.
+
+`DropChance` above is the original mod's value, not a promise that this field is
+a percentage. Other drop structures use different contracts.
+
+### Targeting rules
+
 - Use a unique DataTable short name or an exact cooked object path as the top-level key and the row name below it.
 - RuneSchema checks the target row's live reflected structure. Supplied fields that exist are written; unknown fields are reported.
-- Use a registry-patch document with `target.objectPath` when you need an exact cooked DataTable path or stricter ownership/precondition handling.
+- Classic raw files already accept exact cooked paths. Use a registry-patch document when you also need its stricter ownership, precondition and transaction contract.
 
 ## FAQ
 
@@ -93,7 +127,22 @@ property.
 No. For an existing row, provide the fields you intend to change. RuneSchema
 writes the matching reflected properties you supplied.
 
-## Working examples
+<span id="working-examples"></span>
+
+### FAQ-RAW-005 — How do I add a creature drop without replacing its existing drops? {#faq-raw-005}
+
+Use the raw row's case-sensitive `$Append: {"Resources": [...]}` form with a
+complete typed drop entry. A plain `Resources: [...]` replaces that array.
+Append does not deduplicate entries. Follow the [creature-drop lesson](../../modders/creature-drops.md).
+
+### FAQ-RAW-006 — How do I change one existing entry in a struct array? {#faq-raw-006}
+
+At the array field, use `$Patch: [{"$Match": {...}, "$Target": {...}}]`.
+The selector must match exactly one entry. `$Index` is zero-based and more
+sensitive to inserts/reordering. This edits an existing entry rather than
+appending one. See [targeted patching](../../modders/append-and-targeted-patches.md).
+
+## Downloadable examples
 
 - [Capes: Attack cape override](../../examples/Capes/raw/DT_ITEM_Cape_Attack_override.json)
 - [Capes: Trimmed Magic skillcape](../../examples/Capes/raw/DT_ITEM_Cape_Trimmed_Skillcape_Magic_override.json)

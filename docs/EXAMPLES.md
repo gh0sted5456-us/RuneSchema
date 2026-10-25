@@ -3,6 +3,21 @@
 Use the smallest example that matches the problem. Examples are references, not
 files installed by the public runtime.
 
+## Worked, line-by-line tutorials
+
+| Example | Guide | Files |
+| --- | --- | --- |
+| Increased Storage: chest capacity and sorting | [Bigger chests](modders/bigger-chests.md) | [Ash chest](examples/Walkthroughs/BiggerChests/blueprints/10-ash-chest.jsonc), [other chests](examples/Walkthroughs/BiggerChests/blueprints/20-other-chests.jsonc) |
+| Bigger Inventory: page selectors and UI rows | [Bigger inventory](modders/bigger-inventory.md) | [Inventory patch](examples/Walkthroughs/BiggerInventory/blueprints/10-inventory-pages.jsonc) |
+| ResourcesAndLoot: add one creature drop | [Creature drops](modders/creature-drops.md) | [Append](examples/Walkthroughs/MoreAbyssalDrops/raw/10-add-drop.jsonc), [tune one entry](examples/Walkthroughs/TuneAbyssalDrops/raw/10-tune-existing-drop.jsonc) |
+| Existing cooked item: change stack size | [Cooked item patch](modders/cooked-item-patches.md) | [PatchWood](examples/Walkthroughs/PatchWood/assets/10-stack-size.jsonc) |
+| Compatible new item with its own identity | [Item clone](modders/item-clones.md) | [CopyWood](examples/Walkthroughs/CopyWood/assets/10-ash-variant.jsonc) |
+
+[Start with FModel](modders/fmodel-to-mod.md) to see how an export is reduced to
+these small files. The [example README](examples/Walkthroughs/README.md) identifies
+the reconstructed research excerpts and which folders are installable examples.
+Replace the clone's demonstration persistence ID before distributing a mod.
+
 ## Override vanilla data
 
 ### Cape stat overrides
@@ -95,6 +110,6 @@ Start there instead of installing an unrelated integration fixture.
 
 ## Diagnostics
 
-Use the [Live Log and troubleshooting guide](TROUBLESHOOTING.md) and
+Use Helpy **Diagnostics → Live Log**, the [troubleshooting guide](TROUBLESHOOTING.md) and
 [diagnostic code reference](ERROR-CODES.md) to investigate the affected subsystem.
 Keep diagnostic collection scoped and review logs before sharing them.

@@ -30,7 +30,8 @@ initialization timing; test an actual consumer before shipping a mod using a lan
 
 ## Declaration
 
-Use ordinary enabled-mod cooked registry discovery (RegistryJson/RSREG shards):
+Use an enabled mod's loose `registry/*.jsonc` sidecar or cooked registry
+discovery (`RegistryJson` / RSREG shards):
 
 ```json
 {
@@ -90,7 +91,7 @@ These families are not added to character quest/item pruning authority.
 - CacheAssets declares artwork, not gameplay identities. It is now represented
   in the generated schema as well as the existing parser.
 
-Evidence: artifacts/native-registration-research-20261023/PLATFORM-COMPARISON.json,
-NATIVE-LOADER-CONFIG-COMPARISON.json and LiveCapture. Before release, use isolated
+The implementation was compared against captured native metadata on both client
+platforms; this is structural evidence, not a completed gameplay fixture. Before release, use isolated
 cooked fixtures on both platforms and a real client/server pair; verify native
 lookups, early consumers, transitions and save/reload for each relevant family.

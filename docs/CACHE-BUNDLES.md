@@ -6,7 +6,7 @@ item metadata, journal text and artwork references, plus cached preview pixels.
 It does **not** install mods or deserialize executable loader definitions.
 
 !!! note "Availability"
-    This is the experimental bundle contract. The existing published base-game
+    This describes the current bundle contract. The existing published base-game
     download is a **partial, legacy icons-only pack**. A complete vanilla
     item/journal bundle has not yet been captured and published. An empty
     version-2 index is intentional; downloads fall back to a compatible legacy

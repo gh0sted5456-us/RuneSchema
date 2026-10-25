@@ -95,7 +95,7 @@ own.
 
 ### Cooked buildings and station placement — development extension
 
-This extension is not part of the published `0.8.0.1` DLLs. It adds
+This extension is in the **0.8.0.1b source/tag**, not the published `0.8.0.1` ZIP. It adds
 `NativeRegistries.Buildings` for exact existing `BuildingPieceData` object paths.
 Stations use this same lane; their actor behavior, recipes, costs, stability,
 meshes and interactions remain cooked. A bare declaration registers identity

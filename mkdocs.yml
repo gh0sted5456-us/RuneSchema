@@ -96,6 +96,14 @@ nav:
       - Download: CURRENT-RELEASE.md
       - Install: INSTALLATION.md
       - Manage mods: users/manage-mods.md
+      - Helpy:
+          - Workspaces and mappings: HELPY-SCHEMA-WORKSPACES.md
+          - Profiles: HELPY-PROFILES.md
+          - Inventory marks: HELPY-INVENTORY-EXTENSIONS.md
+          - Map travel: HELPY-MAP-TRAVEL.md
+          - Icons and cache: HELPY-ICON-CACHE.md
+          - Report a bug: HELPY-BUG-REPORTS.md
+      - Settings and AppData: SETTINGS-INI.md
       - Save safety: SAFE-SAVE-AND-LEDGER.md
       - Platforms and co-op: COMPATIBILITY.md
       - Troubleshooting: TROUBLESHOOTING.md
@@ -104,6 +112,15 @@ nav:
   - Creators:
       - Overview: modders/index.md
       - First mod: AUTHORING-GUIDE.md
+      - Worked tutorials:
+          - FModel export to mod: modders/fmodel-to-mod.md
+          - Bigger chests: modders/bigger-chests.md
+          - Bigger inventory: modders/bigger-inventory.md
+          - Creature drops: modders/creature-drops.md
+          - Patch a cooked item: modders/cooked-item-patches.md
+          - Clone an item: modders/item-clones.md
+          - Append and targeted patches: modders/append-and-targeted-patches.md
+          - Test and package: modders/testing-and-compatibility.md
       - First cooked item: modders/first-cooked-item.md
       - Quests and Quest Boards: modders/quests-and-questboards.md
       - Craftable quest scrolls: QUEST-SCROLLS.md
@@ -114,13 +131,18 @@ nav:
           - Stations and recipes: STATIONS-AND-RECIPES.md
           - Armor: CUSTOM-ARMOR.md
           - Registry declarations: COOKED-PAK-REGISTRY-MANIFEST.md
+          - Native data families: COOKED-NATIVE-DATA-FAMILIES.md
+          - Large registry shards: COOKED-REGISTRY-SHARDS.md
+          - Cooked repair-item boundary: COOKED-REPAIR-KIT.md
       - More capabilities:
           - Authoring tools: ADVANCED-AUTHORING-TOOLS.md
+          - Package your mod: MOD-PACKAGING.md
           - Blueprint and Lua companions: PSEUDO-LOADERS.md
           - Examples: EXAMPLES.md
   - Servers:
       - Overview: servers/index.md
       - Dedicated setup: servers/dedicated-setup.md
+      - Helpy on the server desktop: servers/helpy-desktop.md
       - Client and server parity: servers/mod-parity.md
       - Save maintenance: servers/save-maintenance.md
       - Bridge diagnostics: BRIDGE-DIAGNOSTICS.md
@@ -156,6 +178,12 @@ nav:
       - JSON schemas: SCHEMAS.md
       - Diagnostic codes: ERROR-CODES.md
       - Cache bundle format: CACHE-BUNDLES.md
+      - Cache ownership and paths: HELPY-CACHE-OWNERSHIP.md
+      - Recipe discovery: RECIPE-DISCOVERY.md
+      - Recipe station inspection: HELPY-RECIPE-STATIONS.md
+      - Character copies: CHARACTER-EDITOR-NATIVE.md
+      - Optional bridges: OPTIONAL-BRIDGES.md
+      - Combat fallback switches: COMBAT-FALLBACK-SETTINGS.md
       - About RuneSchema & functions: MOD-HOSTS-AND-GETTING-STARTED.md
       - Ask RuneSchema: ASK-RUNESCHEMA.md
       - Licensing: LICENSING.md

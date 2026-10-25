@@ -1,10 +1,11 @@
 # Native Character Editor workbench
 
-The Character Editor is an optional Helpy workspace. Enable it under **Settings → Workspaces → Character Editor**. Enable RuneSchema's authoring tools before launching the game, then activate the editor session if prompted.
+Open Helpy's **Profile → Character** workspace. Enable RuneSchema's authoring
+tools before launching the game, then activate the editor session if prompted.
 
 ## Workflow
 
-1. Open **Players → Character**. **Follow current character** identifies the live player by GUID and platform, then opens an isolated saved snapshot. It never edits the live character or the original Steam/Epic/Xbox provider file.
+1. Open **Profile → Character**. **Follow current character** identifies the live player by GUID and platform, then opens an isolated saved snapshot. It never edits the live character or the original Steam/Epic/Xbox provider file.
 2. For a new character, wait for the game's first gameplay save. While the Character workspace is visible and no unique match exists, Helpy checks again at most once every ten seconds, stopping once matched. **Refresh saves** remains available. Selecting another save or importing JSON turns following off; switching an open draft requires confirmation.
 3. Open **Character**, the unified workspace. Switch the shared viewport between **Full body**, **Portrait**, and **Item** without leaving the inventory workbench. Under its **Appearance** tools, edit character name, body, face, hair and beard presets, skin, eyes, hair color and eyebrow color. The painter's kit has separate Skin, Eyes, Hair and Eyebrows tabs. Numbered wells select the game's native material palette slots; the rendered character shows the actual color, rather than an invented RGB swatch. Changes are staged in memory. Body changes select a compatible native face/beard family atomically when needed; the review includes those linked edits.
 4. Select the **Loadout** tools to fit wearable Item Bay entries onto matching native equipment slots. This outfit is a visual draft only: it does not change the saved loadout or equip the live player. Unfilled body/leg slots use the native Adventurer base outfit. Full-body framing includes fitted gear bounds so tall headwear is not cropped by the normal portrait framing.

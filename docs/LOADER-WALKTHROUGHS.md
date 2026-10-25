@@ -18,6 +18,12 @@ makes a mod easier to test, update, and remove.
 | Make a large cooked catalogue discoverable | A mod-owned cooked registry asset inside `paks` | Ordinary loaders only for focused patches or missing relationships. |
 | Register existing cooked items without a cooked registry declaration | Loose `registry/*.jsonc` with `NativeRegistries.Items` | Keep the cooked item provider mounted; add recipe/station/discovery tie-ins as needed. |
 
+For line-by-line examples, start with [FModel export to mod](modders/fmodel-to-mod.md),
+[chest capacity](modders/bigger-chests.md), [creature drops](modders/creature-drops.md),
+[item field patches](modders/cooked-item-patches.md) or [item clones](modders/item-clones.md).
+The [operator guide](modders/append-and-targeted-patches.md) explains when an array
+is replaced, appended to or selectively patched.
+
 A loader file cannot cook a missing Unreal asset. A PAK mount cannot, by
 itself, put every packaged object into the live gameplay list. For new content,
 follow [PAK mounting](PAK-CONTENT-GUIDE.md) and the
@@ -51,10 +57,11 @@ follow [PAK mounting](PAK-CONTENT-GUIDE.md) and the
 | `vendors` | Shops and offers | Yes |
 | `paks` | Cooked Unreal files used by the other folders | Always |
 | `logicmods` | Cooked packages whose `ModActor` should start through RuneSchema's Lua helper on clients | Always |
-| `ue4ss` | Optional Lua companion at `ue4ss/scripts/main.lua` | Always |
+| `ue4ss` | Complete Lua-only packages at `ue4ss/<Package>/Scripts/main.lua`; legacy direct `ue4ss/scripts/main.lua` remains supported | Always |
 
 The `ue4ss` folder is not a normal JSON loader. RuneSchema's Lua bootstrap
-starts its `scripts/main.lua` only when that RuneSchema mod is enabled. See the
+starts its Lua packages only when that RuneSchema mod is enabled. Native/hybrid
+DLL packages belong directly in stock UE4SS. See the
 [UE4SS Lua companion guide](UE4SS-LUA-COMPANIONS.md) for the complete layout,
 logging, safety, and multiplayer rules.
 
@@ -134,7 +141,7 @@ proof that a global attack registry was installed.
 
 Use names such as `10-items.jsonc`, `20-patches.jsonc`, and
 `90-compatibility.jsonc`. Put the base definition first and later adjustments
-after it.
+after it within the same loader. Filenames do not reorder separate loader phases.
 
 The order of mod folders comes from `runeschema.txt`. The order of PAK content
 that replaces the same internal file is not a safe compatibility method. Use

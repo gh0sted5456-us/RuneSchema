@@ -29,6 +29,10 @@ hide:
 <p>0.8.0.1 includes a cleaned package and a complete
 <a href="CHANGELOG-0.8.0.1/">line-by-line implemented and removed changelog</a>.
 Historical releases and tags remain available.</p>
+<p><strong>Source update: 0.8.0.1b.</strong> Main, experimental and the
+<a href="https://github.com/gh0sted5456-us/RuneSchema/tree/0.8.0.1b">0.8.0.1b tag</a>
+include the <a href="CHANGELOG-0.8.0.1b/">quick bug fixes</a>. The published
+download above is still 0.8.0.1; source-only additions are identified in the guides.</p>
 
 <h2 class="rs-section-heading">Choose your path</h2>
 <div class="rs-paths">
@@ -53,8 +57,15 @@ Historical releases and tags remain available.</p>
     <input class="rs-finder__input" id="rs-finder-input" type="search" placeholder="What would you like to do?" autocomplete="off" aria-controls="rs-guide-list" aria-describedby="rs-guide-count">
     <button class="rs-finder__clear" type="button" hidden>Clear</button>
   </div>
-  <p class="rs-finder__count" id="rs-guide-count" role="status" aria-live="polite">10 quick guides · use site search for all documentation</p>
+  <p class="rs-finder__count" id="rs-guide-count" role="status" aria-live="polite">17 quick guides · use site search for all documentation</p>
   <ul class="rs-finder__list" id="rs-guide-list">
+    <li data-rs-keywords="fmodel export json raw inspect properties beginner"><a href="modders/fmodel-to-mod/">Turn an FModel export into a mod <span aria-hidden="true">→</span></a></li>
+    <li data-rs-keywords="chest crate storage slots capacity bigger"><a href="modders/bigger-chests/">Increase chest storage <span aria-hidden="true">→</span></a></li>
+    <li data-rs-keywords="inventory pages slots bigger ui"><a href="modders/bigger-inventory/">Expand inventory pages <span aria-hidden="true">→</span></a></li>
+    <li data-rs-keywords="creature enemy loot drop append resources"><a href="modders/creature-drops/">Add a creature drop <span aria-hidden="true">→</span></a></li>
+    <li data-rs-keywords="cooked item patch stack size existing"><a href="modders/cooked-item-patches/">Patch an existing cooked item <span aria-hidden="true">→</span></a></li>
+    <li data-rs-keywords="clone copy variant persistence identity"><a href="modders/item-clones/">Clone an item <span aria-hidden="true">→</span></a></li>
+    <li data-rs-keywords="append patch match index targeted array replace"><a href="modders/append-and-targeted-patches/">Choose append or a targeted patch <span aria-hidden="true">→</span></a></li>
     <li data-rs-keywords="error warning diagnostic code log console troubleshooting"><a href="ERROR-CODES/">Understand a diagnostic code <span aria-hidden="true">→</span></a></li>
     <li data-rs-keywords="cache bundle github icons artwork persistence ids paths journal download"><a href="CACHE-BUNDLES/">Share or download cached content <span aria-hidden="true">→</span></a></li>
     <li data-rs-keywords="download setup steam gamepass xbox epic upgrade"><a href="INSTALLATION/">Install or update <span aria-hidden="true">→</span></a></li>

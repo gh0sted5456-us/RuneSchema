@@ -1,9 +1,10 @@
 
-Scrap and automatic deleted-item Helpy Storage have been retired at the user's
-request. No Delete observer, Scrap input/prompt, refund action, restore action,
-Storage tab or Scrap setting is compiled into this candidate. Native Delete is
-not intercepted. Existing recovery files are preserved; earlier source snapshots
-remain in artifacts. Native chest and personal-inventory inspection remain.
+# Inventory marks and retired deletion tools
+
+Live Scrap and automatic deleted-item Helpy Storage are retired. There is no
+Delete observer, Scrap prompt, refund/restore action, Storage tab or Scrap
+setting. Native Delete is not intercepted. Existing legacy recovery files are
+preserved. Native chest and personal-inventory inspection remain separate.
 
 ## Favorite / Junk
 
@@ -20,7 +21,7 @@ game's normal use/equip action. Ctrl+Shift+F6 opens an eight-second key capture;
 Escape cancels it. Controls are saved in the shared profile's
 `inventory-controls.json`, with bounded parsing and conflict-checked atomic
 writes. The old InventoryFavorites Lua mod should be
-disabled on the next approved installation, retaining its files and saved data.
+disabled before using the built-in controls, retaining its files and saved data.
 
 The marker uses UMG's default font and a transparent top-right overlay rather
 than the game's stack-count font/style. Existing InventoryFavorites GUID lists
@@ -34,7 +35,7 @@ by FistOfTheNoob.
 
 Live visibility/input checks remain required on Steam and Game Pass. Pinned
 sorting and native bulk-deposit protection are not implemented in this
-candidate; a star does not yet guarantee the native game will exclude that
+build; a star does not guarantee the native game will exclude that
 stack from bulk moves.
 
 Helpy and the in-game markers use the same personalization store. Live item-type
@@ -66,7 +67,7 @@ actions. This is owner-to-authority replication, not a public broadcast of every
 player's labels to all clients. Live two-peer Steam/Game Pass acceptance remains
 pending; unit/contract checks alone do not prove network delivery or MMB input.
 
-## Requested next extension — not implemented in this candidate
+## Permission boundaries
 
 - Public, owner-controlled nicknames and cropped portraits.
 - Private tags remain owner-only.
@@ -78,5 +79,6 @@ pending; unit/contract checks alone do not prove network delivery or MMB input.
   implication that native role badges already confer these rights.
 
 The account/connection identity and server-owned permission gate must be verified
-before exposing cross-player mutations. See HELPY-ADMIN-DESIGN.md. This build does
+before exposing cross-player mutations. The [admin design notes](HELPY-ADMIN-DESIGN.md)
+are a proposal, not implemented permissions. This build does
 not broaden the existing client item-grant policy.
