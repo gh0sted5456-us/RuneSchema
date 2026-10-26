@@ -23,6 +23,16 @@ return CacheTool.Run(args);
 
 static class CacheTool
 {
+    static bool EmitProgress;
+    static long LastProgress;
+    static string LastPhase = "";
+    static void Progress(string phase, int done, int total)
+    {
+        var now = Environment.TickCount64;
+        if (!EmitProgress || (phase == LastPhase && done != total && now - LastProgress < 100)) return;
+        LastPhase = phase; LastProgress = now;
+        Console.WriteLine($"RS_PROGRESS|{phase}|{done}|{total}");
+    }
     const long MaxBundle = 256L * 1024 * 1024;
     static readonly HashSet<string> NativeExtensions = new(StringComparer.OrdinalIgnoreCase) { ".pak", ".utoc", ".ucas", ".uplugin" };
     static readonly HashSet<string> OwnerExtensions = new(StringComparer.OrdinalIgnoreCase) { ".pak", ".utoc", ".ucas", ".uplugin", ".json", ".jsonc", ".ini", ".lua", ".dll", ".exe" };
@@ -50,7 +60,7 @@ static class CacheTool
                 Need(executable is not null && !Within(executable, game), "Close this Dragonwilds client/server before building its cache. Another installation can remain open.");
             }
     }
-    static string Ask(string prompt) { Console.Write(prompt + ": "); return Console.ReadLine()?.Trim().Trim('"') ?? ""; }
+    static string Ask(string prompt) { if (EmitProgress) Console.WriteLine(prompt + ":"); else Console.Write(prompt + ": "); return Console.ReadLine()?.Trim().Trim('"') ?? ""; }
     static string Source(string path)
     {
         var text = path.ToLowerInvariant(); Need(text.StartsWith('/') && !text.Contains(".."), "Invalid asset path");
@@ -156,11 +166,12 @@ static class CacheTool
             foreach (var (arg, index) in args.Select((s, i) => (s, i)))
                 if (arg.StartsWith("--", StringComparison.Ordinal))
                 {
-                    Need(new[] { "--game", "--mapping", "--oodle", "--folder", "--mod-root", "--mod-id", "--output", "--base-game", "--include-mods", "--locale" }.Contains(arg), "Unknown option " + arg);
+                    Need(new[] { "--game", "--mapping", "--oodle", "--folder", "--mod-root", "--mod-id", "--output", "--base-game", "--include-mods", "--locale", "--progress" }.Contains(arg), "Unknown option " + arg);
                     Need(!options.ContainsKey(arg), "Repeated option " + arg);
-                    if (arg is "--base-game" or "--include-mods") options[arg] = "true";
+                    if (arg is "--base-game" or "--include-mods" or "--progress") options[arg] = "true";
                     else { Need(index + 1 < args.Length && !args[index + 1].StartsWith("--", StringComparison.Ordinal), "Missing value for " + arg); options[arg] = args[index + 1]; }
                 }
+            EmitProgress = options.ContainsKey("--progress");
             string Input(string key, string prompt) => options.GetValueOrDefault(key) ?? Ask(prompt);
             var game = Full(Input("--game", "Dragonwilds project folder (contains Content/Paks)")); Safe(game); Need(Directory.Exists(Path.Combine(game, "Content", "Paks")), "Game folder must contain Content/Paks");
             Closed(game);
@@ -195,12 +206,14 @@ static class CacheTool
             var digests = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var memoFile = Path.Combine(Path.GetTempPath(), "runeschema-helpy-cache-digests-v1.json"); Safe(memoFile); var memo = new JObject();
             try { if (File.Exists(memoFile) && new FileInfo(memoFile).Length <= 16 * 1024 * 1024) memo = JObject.Parse(File.ReadAllText(memoFile)); } catch { }
+            var hashed = 0;
             foreach (var file in before.Keys)
             {
                 var stamp = before[file]; var previous = memo[file]; var digest = previous?.Value<string>("SHA256") ?? "";
                 if (previous?.Value<long>("Size") != stamp.Size || previous?.Value<long>("Stamp") != stamp.Stamp || !Regex.IsMatch(digest, "^[a-f0-9]{64}$"))
                 { using var input = File.OpenRead(file); digest = Convert.ToHexStringLower(SHA256.HashData(input)); }
                 digests[file] = digest; memo[file] = new JObject { ["Size"] = stamp.Size, ["Stamp"] = stamp.Stamp, ["SHA256"] = digest };
+                Progress("Hashing inputs", ++hashed, before.Count);
             }
             var memoBytes = Encoding.UTF8.GetBytes(Json(memo)); if (memoBytes.Length <= 16 * 1024 * 1024) Atomic(memoFile, memoBytes);
             var nativeKeys = nativeFiles.Select(p => KeyValuePair.Create(Path.GetExtension(p).ToLowerInvariant(), digests[p])).ToArray();
@@ -267,6 +280,7 @@ static class CacheTool
                 var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var file in assets.Where(Selected)) try { var path = Asset(file.Path); owners[path[..path.LastIndexOf('.')]] = mod is null ? Source(path) is "game" or "engine" ? "core" : "plugins/" + Source(path) : "mods/" + mod.Value.Id; } catch { }
                 Console.WriteLine($"{mod?.Id ?? "Base game"}: {candidates.Count} item/journal candidates");
+                var inspected = 0; Progress("Reading items", 0, candidates.Count);
                 foreach (var package in candidates.Order(StringComparer.Ordinal)) try
                 {
                     var count = records.Count;
@@ -290,12 +304,14 @@ static class CacheTool
                     }
                     if (records.Count == count) report.Add(new JObject { ["Stage"] = "Metadata", ["Asset"] = package, ["Error"] = "No item/journal export with verified native class ancestry" });
                 } catch (Exception e) { report.Add(new JObject { ["Stage"] = "Metadata", ["Asset"] = package, ["Error"] = e.Message }); }
+                finally { Progress("Reading items", ++inspected, candidates.Count); }
                 // Include selected cooked UI textures even if this partial catalogue did not reference them.
                 foreach (var file in assets.Where(Selected)) if (file.Name.StartsWith("T_", StringComparison.OrdinalIgnoreCase) && (file.Path.Contains("/UI/", StringComparison.OrdinalIgnoreCase) || file.Path.Contains("/Icons/", StringComparison.OrdinalIgnoreCase) || file.Name.StartsWith("T_Icon_", StringComparison.OrdinalIgnoreCase))) try { wantedIcons.Add(Asset(file.Path)); } catch { }
                 // Native item/journal providers only; unrelated engine/plugin UI is not an item cache.
                 if (mod is null) { var groups = records.Select(r => r.Value<string>("Source")!).ToHashSet(StringComparer.Ordinal); wantedIcons.RemoveWhere(path => !groups.Contains(Source(path))); }
                 var icons = new JArray(); using var payload = new MemoryStream();
-                foreach (var icon in wantedIcons)
+                var captured = 0; Progress("Caching pictures", 0, wantedIcons.Count);
+                foreach (var icon in wantedIcons.Order(StringComparer.Ordinal))
                 {
                     try
                     {
@@ -307,8 +323,9 @@ static class CacheTool
                         var origin = owners.GetValueOrDefault(package) ?? (Source(icon) is "game" or "engine" ? "core" : "plugins/" + Source(icon));
                         icons.Add(new JObject { ["Icon"] = icon, ["Source"] = Source(icon), ["SHA256"] = Hash(pixels), ["Bytes"] = pixels.Length, ["Origins"] = new JArray(origin) }); payload.Write(pixels);
                     } catch (Exception e) { report.Add(new JObject { ["Stage"] = "Icon", ["Asset"] = icon, ["Error"] = e.Message }); }
+                    finally { Progress("Caching pictures", ++captured, wantedIcons.Count); }
                 }
-                var banner = mod is null ? null : new[] { Path.Combine(mod.Value.Root, "mod.png"), Path.Combine(mod.Value.Root, "banner.png"), Path.Combine(folder, "mod.png"), Path.Combine(folder, "banner.png") }.FirstOrDefault(File.Exists);
+                var banner = mod is null ? null : new[] { Path.Combine(mod.Value.Root, "background.png"), Path.Combine(mod.Value.Root, "mod.png"), Path.Combine(mod.Value.Root, "banner.png"), Path.Combine(folder, "background.png"), Path.Combine(folder, "mod.png"), Path.Combine(folder, "banner.png") }.FirstOrDefault(File.Exists);
                 if (banner is not null)
                 {
                     Safe(banner); Need(new FileInfo(banner).Length <= 16 * 1024 * 1024, "Banner exceeds 16 MiB");

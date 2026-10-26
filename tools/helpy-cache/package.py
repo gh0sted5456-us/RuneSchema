@@ -37,9 +37,24 @@ def render():
     return result + FOOTER
 
 
+def render_powershell():
+    source = []
+    for name in ("HelpyCache.csproj", "Program.cs", "packages.lock.json"):
+        text = (ROOT / name).read_text(encoding="utf-8")
+        assert "'@" not in text.splitlines()
+        source.append(f"$builderSource=@'\n{text.rstrip()}\n'@\n"
+                      f"[IO.File]::WriteAllText((Join-Path $stage '{name}'), $builderSource, [Text.UTF8Encoding]::new($false))")
+    return (ROOT / "build-cache.template.ps1").read_text(encoding="utf-8").replace("@@BUILDER_SOURCES@@", "\n".join(source))
+
+
+DRAG_DROP = '@echo off\r\npowershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0build-helpy-cache.ps1" -ZipPath "%~1"\r\nset "RSCacheExit=%ERRORLEVEL%"\r\necho.\r\npause\r\nexit /b %RSCacheExit%\r\n'
+
+
 def authoring_archive(script):
     notices = (ROOT / "README.md").read_text(encoding="utf-8").split("## Dependencies and rights", 1)[1]
     files = {"build-helpy-cache.sh": script,
+             "build-helpy-cache.ps1": render_powershell(),
+             "Build-Helpy-Cache.bat": DRAG_DROP,
              "README.md": (ROOT / "AUTHORING-TOOLS.md").read_text(encoding="utf-8"),
              "LICENSE": (ROOT.parents[1] / "LICENSE").read_text(encoding="utf-8"),
              "DEPENDENCIES.md": "# Dependencies and rights\n" + notices}
@@ -50,7 +65,7 @@ def authoring_archive(script):
             entry = zipfile.ZipInfo(name, date_time=(2026, 1, 1, 0, 0, 0))
             entry.create_system = 3
             entry.external_attr = (0o100755 if name.endswith(".sh") else 0o100644) << 16
-            archive.writestr(entry, content.encode("utf-8"))
+            archive.writestr(entry, content.encode("utf-8-sig" if name.endswith(".ps1") else "utf-8"))
     return output.getvalue()
 
 
@@ -61,7 +76,8 @@ def outputs():
     folder = TARGET.parent / "authoring-tools"
     manifest = {"Format": 1, "Kind": "RuneSchemaAuthoringTools", "File": digest + ".zip",
                 "Bytes": len(archive), "SHA256": digest}
-    return {TARGET: script.encode("utf-8"), folder / manifest["File"]: archive,
+    return {TARGET: script.encode("utf-8"), TARGET.with_suffix(".ps1"): render_powershell().encode("utf-8-sig"),
+            TARGET.parent / "Build-Helpy-Cache.bat": DRAG_DROP.encode("utf-8"), folder / manifest["File"]: archive,
             folder / "index.json": (json.dumps(manifest, indent=2) + "\n").encode("utf-8")}
 
 if __name__ == "__main__":
@@ -70,7 +86,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.check:
         for path, data in outputs().items():
-            actual = path.read_bytes() if path.suffix == ".zip" else path.read_text(encoding="utf-8").encode("utf-8")
+            actual = path.read_bytes() if path.suffix in {".zip", ".bat"} else path.read_text(encoding="utf-8").encode("utf-8")
             assert actual == data, "Regenerate the author tools: " + str(path)
         print("Drop-in script, authoring ZIP and download index match the reviewed sources.")
     else:

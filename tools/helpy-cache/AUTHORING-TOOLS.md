@@ -1,6 +1,44 @@
 # RuneSchema authoring tools
 
-This ZIP contains the optional `build-helpy-cache.sh` cache builder. It creates
+## Windows: drop a mod ZIP to build its cache
+
+1. Make a ZIP containing your cooked `.pak`, `.utoc` and `.ucas` files and one
+   `background.png`. Legacy `.pak`-only mods are supported too. Nested ZIP folders
+   are accepted; keep package filenames unique. Name the ZIP after the final
+   RuneSchema mod folder, or pass `-ModId` explicitly.
+2. Extract the authoring-tools download. Drag your mod ZIP onto
+   **Build-Helpy-Cache.bat**. Windows opens a PowerShell console with progress for
+   ZIP extraction, input hashing, item discovery, picture capture and publishing.
+3. Provide the inactive Dragonwilds project folder, a matching `.usmap`, and your
+   local Oodle DLL when prompted. This Windows route requires the **.NET 10 SDK**;
+   Git Bash is only needed for the separate Bash route below.
+4. The completed **cache/** folder appears beside your mod ZIP. It contains
+   `offline-helpy.rsmk-cache`, `offline-helpy-report.json`, and `mod.png` derived
+   from your background. Add this folder to your RuneSchema mod ZIP alongside
+   `paks/`. Your original ZIP and PAKs are unchanged.
+
+An existing output cache is preserved as `cache.previous-<unique-id>` before the
+new folder is published. A failed build leaves the current output in place.
+Review the report: this is a partial presentation cache, not proof that every
+cooked asset was registered or that gameplay works. Path traversal, duplicate
+paths, links, ambiguous package names and incomplete trios are rejected before
+extraction. Only PAK files and the chosen background are staged; ZIP scripts and
+executables are never run.
+
+For repeatable command-line use:
+
+```powershell
+.\build-helpy-cache.ps1 -ZipPath "D:\Mods\MyMod.zip" `
+  -Game "D:\Games\RSDragonwilds" -Mapping "D:\Mappings\Game.usmap" `
+  -Oodle "D:\Tools\oo2core_9_win64.dll" -ModId "MyMod"
+```
+
+Use `-OutputDirectory` to choose a different cache destination. Keep the target
+game/server installation inactive for the whole read. A different private
+installation can keep running; the existing process checks apply to the selected
+source installation.
+
+This ZIP contains the Windows drag-and-drop builder and the optional `build-helpy-cache.sh` builder. It creates
 Helpy's `cache/` folder for a cooked mod, or a separate native-game cache.
 Helpy downloads this archive only when requested. Extract it yourself; Helpy
 does not run the script or install its dependencies.
