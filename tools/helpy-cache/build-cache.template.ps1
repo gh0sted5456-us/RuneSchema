@@ -26,7 +26,7 @@ function Get-CacheArchivePlan($Archive) {
         if($entry.Length -lt 0 -or $entry.Length -gt 8GB -or $total -gt (16GB-$entry.Length)){throw 'ZIP uncompressed size exceeds the 16 GiB limit.'};$total+=$entry.Length
         if($name.EndsWith('/')){continue}
         $leaf=$parts[-1];$extension=[IO.Path]::GetExtension($leaf).ToLowerInvariant()
-        if($extension -in @('.pak','.utoc','.ucas') -or $leaf.ToLowerInvariant() -in @('background.png','mod.png','banner.png')){
+        if($extension -in @('.pak','.utoc','.ucas','.usmap') -or $leaf.ToLowerInvariant() -in @('background.png','mod.png','banner.png')){
             $selected.Add([pscustomobject]@{Entry=$entry;Name=$name;Leaf=$leaf;Extension=$extension})
         }
     }
@@ -43,7 +43,9 @@ function Get-CacheArchivePlan($Archive) {
         if($bannerMatches.Count){$banner=$bannerMatches[0];if($banner.Entry.Length -gt 16MB){throw 'Background image exceeds 16 MiB.'};break}
     }
     $files=@($selected | Where-Object Extension -in @('.pak','.utoc','.ucas'));if($banner){$files+=@($banner)}
-    return [pscustomobject]@{Files=$files;Banner=$banner;Bytes=($files | ForEach-Object {$_.Entry.Length} | Measure-Object -Sum).Sum}
+    $maps=@($selected | Where-Object Extension -eq '.usmap');if($maps.Count -gt 1){throw 'Include at most one optional .usmap in the ZIP.'}
+    $providedMap=$null;if($maps.Count){$providedMap=$maps[0];if($providedMap.Entry.Length -gt 16MB){throw 'Mapping exceeds 16 MiB.'};$files+=@($providedMap)}
+    return [pscustomobject]@{Files=$files;Banner=$banner;Mapping=$providedMap;Bytes=($files | ForEach-Object {$_.Entry.Length} | Measure-Object -Sum).Sum}
 }
 function Show-CacheProgress([string]$Stage,[int]$Percent) {
     Write-Progress -Id 1 -Activity 'RuneSchema mod cache' -Status $Stage -PercentComplete ([Math]::Min(100,[Math]::Max(0,$Percent)))
@@ -75,7 +77,7 @@ function Invoke-CacheZip {
         try {
             $plan=Get-CacheArchivePlan $archive;[long]$done=0
             foreach($file in $plan.Files){
-                $destination=if($plan.Banner -and $file.Name -eq $plan.Banner.Name){Join-Path $mod 'background.png'}else{Join-Path $paks $file.Leaf}
+                $destination=if($plan.Banner -and $file.Name -eq $plan.Banner.Name){Join-Path $mod 'background.png'}elseif($file.Extension -eq '.usmap'){Join-Path $stage 'provided.usmap'}else{Join-Path $paks $file.Leaf}
                 $null=Assert-CachePath $destination $stage
                 $entryStream=$file.Entry.Open();$outputStream=[IO.File]::Open($destination,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
                 try {[long]$writtenForEntry=0;$buffer=New-Object byte[] 1048576;while(($count=$entryStream.Read($buffer,0,$buffer.Length)) -gt 0){$writtenForEntry+=$count;if($writtenForEntry -gt $file.Entry.Length){throw 'ZIP entry exceeds its declared size.'};$outputStream.Write($buffer,0,$count);$done+=$count;Show-CacheProgress ('Unpacking '+$file.Leaf) (Get-CacheExtractionPercent $done $plan.Bytes)};if($writtenForEntry -ne $file.Entry.Length){throw 'ZIP entry is truncated.'}}finally{$entryStream.Dispose();$outputStream.Dispose()}
@@ -88,15 +90,12 @@ function Invoke-CacheZip {
         & dotnet restore $project --locked-mode --verbosity quiet;if($LASTEXITCODE){throw 'Dependency restore failed; current cache retained.'}
         Show-CacheProgress 'Compiling the cache builder' 30
         & dotnet build $project --no-restore --configuration Release --verbosity quiet;if($LASTEXITCODE){throw 'Builder compilation failed; current cache retained.'}
-        $built=Join-Path $stage 'result';$arguments=@('--folder',$mod,'--mod-root',$mod,'--mod-id',$ModId,'--output',$built,'--progress')
+        $built=Join-Path $stage 'result';$arguments=@('--folder',$mod,'--mod-root',$mod,'--mod-id',$ModId,'--output',$built,'--input-root',[IO.Path]::GetDirectoryName($zipFile),'--progress')
         $previousBundle=Join-Path $output 'offline-helpy.rsmk-cache'
         if(Test-Path -LiteralPath $previousBundle -PathType Leaf){New-Item -ItemType Directory -Path $built | Out-Null;Copy-Item -LiteralPath $previousBundle -Destination $built}
-        if(!$Game){$script:Game=Read-Host 'Dragonwilds project folder containing Content/Paks'}
-        if(!$Mapping){$script:Mapping=Read-Host 'Matching game-version .usmap path'}
-        if(!$Oodle){$script:Oodle=Read-Host 'Your local oo2core_9_win64.dll path'}
-        $script:Game=$Game.Trim('"');$script:Mapping=$Mapping.Trim('"');$script:Oodle=$Oodle.Trim('"')
-        foreach($entry in @(@('--game',$Game),@('--mapping',$Mapping),@('--oodle',$Oodle))){if($entry[1]){$arguments+=@($entry[0],$entry[1])}}
-        Show-CacheProgress 'Reading cooked PAK contents; answer any game/mapping/Oodle prompts below' 35
+        $providedMapping=$Mapping;if(!$providedMapping -and $plan.Mapping){$providedMapping=Join-Path $stage 'provided.usmap'}
+        foreach($entry in @(@('--game',$Game),@('--mapping',$providedMapping),@('--oodle',$Oodle))){if($entry[1]){$arguments+=@($entry[0],$entry[1].Trim('"'))}}
+        Show-CacheProgress 'Finding game files and preparing offline mappings automatically' 35
         & dotnet (Join-Path $stage 'bin/Release/net10.0/HelpyCache.dll') @arguments | ForEach-Object {
             if($_ -match '^RS_PROGRESS\|([^|]+)\|(\d+)\|(\d+)$'){
                 $phase=$Matches[1];$fraction=[double]$Matches[2]/[Math]::Max(1.0,[double]$Matches[3])
