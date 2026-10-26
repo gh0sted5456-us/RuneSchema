@@ -60,7 +60,6 @@ static class CacheTool
                 Need(executable is not null && !Within(executable, game), "Close this Dragonwilds client/server before building its cache. Another installation can remain open.");
             }
     }
-    static string Ask(string prompt) { if (EmitProgress) Console.WriteLine(prompt + ":"); else Console.Write(prompt + ": "); return Console.ReadLine()?.Trim().Trim('"') ?? ""; }
     static string Source(string path)
     {
         var text = path.ToLowerInvariant(); Need(text.StartsWith('/') && !text.Contains(".."), "Invalid asset path");
@@ -160,23 +159,25 @@ static class CacheTool
         try
         {
             if (args.Contains("--self-test")) { SelfTest(); return 0; }
-            if (args.Contains("--help")) { Console.WriteLine("Helpy offline cache builder (Windows, .NET 10)\n--game GAME/RSDragonwilds --mapping matching.usmap --oodle oo2core_9_win64.dll\n[--folder PAK-FOLDER] [--mod-root MOD-ROOT] [--mod-id MOD-ID] [--output DIRECTORY]\n[--base-game [--include-mods]] [--locale en-US]\nWithout arguments, prompts for game/mapping/Oodle. Mod mode is the default.\nNo game, save, PAK or installed Helpy cache is modified. Output is presentation only."); return 0; }
+            if (args.Contains("--help")) { Console.WriteLine("Helpy offline cache builder (Windows, .NET 10)\n[--game GAME/RSDragonwilds] [--mapping matching.usmap] [--oodle local-decoder.dll]\n[--folder PAK-FOLDER] [--mod-root MOD-ROOT] [--mod-id MOD-ID] [--output DIRECTORY]\n[--base-game [--include-mods]] [--locale en-US] [--input-root ORIGINAL-FOLDER]\nAutomatically finds an inactive installation, reads a supplied/platform .usmap or downloads RSDW Archive's snapshot, and prepares the pinned decoder. Mod mode is the default.\nNo game, runtime mapping, save, PAK or installed Helpy cache is modified. Output is presentation only."); return 0; }
             Need(OperatingSystem.IsWindows(), "This release supports Windows/Git Bash only (native texture decoder and game process checks).");
             var options = new Dictionary<string, string>();
             foreach (var (arg, index) in args.Select((s, i) => (s, i)))
                 if (arg.StartsWith("--", StringComparison.Ordinal))
                 {
-                    Need(new[] { "--game", "--mapping", "--oodle", "--folder", "--mod-root", "--mod-id", "--output", "--base-game", "--include-mods", "--locale", "--progress" }.Contains(arg), "Unknown option " + arg);
+                    Need(new[] { "--game", "--mapping", "--oodle", "--folder", "--mod-root", "--mod-id", "--output", "--base-game", "--include-mods", "--locale", "--progress", "--input-root", "--check-inputs" }.Contains(arg), "Unknown option " + arg);
                     Need(!options.ContainsKey(arg), "Repeated option " + arg);
-                    if (arg is "--base-game" or "--include-mods" or "--progress") options[arg] = "true";
+                    if (arg is "--base-game" or "--include-mods" or "--progress" or "--check-inputs") options[arg] = "true";
                     else { Need(index + 1 < args.Length && !args[index + 1].StartsWith("--", StringComparison.Ordinal), "Missing value for " + arg); options[arg] = args[index + 1]; }
                 }
             EmitProgress = options.ContainsKey("--progress");
-            string Input(string key, string prompt) => options.GetValueOrDefault(key) ?? Ask(prompt);
-            var game = Full(Input("--game", "Dragonwilds project folder (contains Content/Paks)")); Safe(game); Need(Directory.Exists(Path.Combine(game, "Content", "Paks")), "Game folder must contain Content/Paks");
-            Closed(game);
-            var mapping = Full(Input("--mapping", "Matching game-version .usmap path")); var oodle = Full(Input("--oodle", "Your local oo2core_9_win64.dll path"));
-            Safe(mapping); Safe(oodle); Need(File.Exists(mapping) && Path.GetExtension(mapping).Equals(".usmap", StringComparison.OrdinalIgnoreCase), "A matching .usmap is required"); Need(File.Exists(oodle), "Oodle library not found");
+            var inputRoot = Full(options.GetValueOrDefault("--input-root", Directory.GetCurrentDirectory())); Safe(inputRoot);
+            var game = AuthoringInputs.Game(options.GetValueOrDefault("--game"), inputRoot, Closed); Safe(game);
+            var oodle = AuthoringInputs.Decoder(options.GetValueOrDefault("--oodle"), Safe); OodleHelper.Initialize(oodle);
+            Need(OodleHelper.Instance is not null, "Oodle decoder could not be initialized.");
+            var mapping = AuthoringInputs.Mapping(options.GetValueOrDefault("--mapping"), inputRoot, game, Safe);
+            Console.WriteLine("Offline mapping: " + mapping);
+            if (options.ContainsKey("--check-inputs")) { Console.WriteLine("Authoring inputs ready; no PAK scan or cache write performed."); return 0; }
             var locale = options.GetValueOrDefault("--locale", "en-US"); Need(locale == "en-US", "Offline source-text capture currently supports en-US only; it must not be labelled as another translation.");
             var folder = Full(options.GetValueOrDefault("--folder", Directory.GetCurrentDirectory()));
             var baseMode = options.ContainsKey("--base-game"); Need(baseMode || !options.ContainsKey("--include-mods"), "--include-mods requires --base-game");
@@ -368,7 +369,7 @@ static class CacheTool
                 Directory.CreateDirectory(destination); Safe(destination);
                 if (banner is not null) Atomic(Path.Combine(destination, "mod.png"), File.ReadAllBytes(banner));
                 var receipt = new JObject { ["Tool"] = "RuneSchema offline Helpy cache", ["Format"] = 1, ["Owner"] = mod is null ? "native" : "mods/" + mod.Value.Id, ["SHA256"] = digest, ["Bytes"] = bytes.Length,
-                    ["CacheVersion"] = revision, ["FingerprintVersion"] = 2, ["Records"] = records.Count, ["Icons"] = icons.Count, ["RecordCoverage"] = "Partial", ["Issues"] = report };
+                    ["CacheVersion"] = revision, ["FingerprintVersion"] = 2, ["Records"] = records.Count, ["Icons"] = icons.Count, ["RecordCoverage"] = "Partial", ["Mapping"] = Path.GetFileName(mapping), ["MappingSHA256"] = Hash(File.ReadAllBytes(mapping)), ["Issues"] = report };
                 Atomic(Path.Combine(destination, "offline-helpy-report.json"), Encoding.UTF8.GetBytes(receipt.ToString()));
                 Atomic(Path.Combine(destination, "offline-helpy.rsmk-cache"), bytes);
                 Console.WriteLine($"Wrote {destination}: {records.Count} records, {icons.Count} icons, {report.Count} reported skips. Partial presentation cache; no gameplay or save changes.");
@@ -384,6 +385,7 @@ static class CacheTool
     }
     static void SelfTest()
     {
+        AuthoringInputTests.Run();
         Need(Source("/Game/Gameplay/Mods/Dye/ITEM.Item") == "game/gameplay/mods/dye", "Nested mod namespace");
         Need(Asset("RSDragonwilds/Plugins/Test/Content/UI/T_Icon.uasset") == "/Test/UI/T_Icon.T_Icon", "Plugin virtual path");
         Need(Asset("RSDragonwilds/Content/Items/ITEM_X.uasset") == "/Game/Items/ITEM_X.ITEM_X", "Game virtual path");

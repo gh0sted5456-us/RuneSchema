@@ -27,6 +27,12 @@ class AuthoringPackage(unittest.TestCase):
                 self.assertIn(required, readme)
             self.assertIn("MIT License", z.read("LICENSE").decode())
             self.assertIn("CUE4Parse", z.read("DEPENDENCIES.md").decode())
+            for launcher in [z.read("build-helpy-cache.sh").decode(), z.read("build-helpy-cache.ps1").decode("utf-8-sig")]:
+                self.assertIn("static class AuthoringInputs", launcher)
+                self.assertIn("AuthoringInputTests.Run()", launcher)
+                self.assertIn("https://api.github.com/repos/RSDWArchive/RSDWArchive/contents/", launcher)
+            self.assertNotIn("Read-Host 'Matching game-version", z.read("build-helpy-cache.ps1").decode("utf-8-sig"))
+            self.assertIn("no game-path, mapping or decoder prompts", readme)
 
 
 if __name__ == "__main__":

@@ -2,16 +2,17 @@
 
 ## Windows: drop a mod ZIP to build its cache
 
-1. Make a ZIP containing your cooked `.pak`, `.utoc` and `.ucas` files and one
+1. Make a ZIP containing your cooked `.pak`, `.utoc` and `.ucas` files and an optional
    `background.png`. Legacy `.pak`-only mods are supported too. Nested ZIP folders
    are accepted; keep package filenames unique. Name the ZIP after the final
    RuneSchema mod folder, or pass `-ModId` explicitly.
 2. Extract the authoring-tools download. Drag your mod ZIP onto
    **Build-Helpy-Cache.bat**. Windows opens a PowerShell console with progress for
    ZIP extraction, input hashing, item discovery, picture capture and publishing.
-3. Provide the inactive Dragonwilds project folder, a matching `.usmap`, and your
-   local Oodle DLL when prompted. This Windows route requires the **.NET 10 SDK**;
-   Git Bash is only needed for the separate Bash route below.
+3. The builder finds an inactive Steam, Xbox/Game Pass or Epic installation,
+   prepares its decoder, and selects the offline mapping automatically. There are
+   no game-path, mapping or decoder prompts. Install the **.NET 10 SDK** first;
+   internet is needed for first-use dependencies. Git Bash is only needed for Bash.
 4. The completed **cache/** folder appears beside your mod ZIP. It contains
    `offline-helpy.rsmk-cache`, `offline-helpy-report.json`, and `mod.png` derived
    from your background. Add this folder to your RuneSchema mod ZIP alongside
@@ -22,10 +23,16 @@ new folder is published. A failed build leaves the current output in place.
 Review the report: this is a partial presentation cache, not proof that every
 cooked asset was registered or that gameplay works. Path traversal, duplicate
 paths, links, ambiguous package names and incomplete trios are rejected before
-extraction. Only PAK files and the chosen background are staged; ZIP scripts and
+extraction. Only PAK files, the chosen background and an optional `.usmap` are staged; ZIP scripts and
 executables are never run.
 
-For repeatable command-line use:
+The normal command is simply:
+
+```powershell
+.\build-helpy-cache.ps1 -ZipPath "D:\Mods\MyMod.zip"
+```
+
+For custom installations, the optional expert overrides remain available:
 
 ```powershell
 .\build-helpy-cache.ps1 -ZipPath "D:\Mods\MyMod.zip" `
@@ -37,6 +44,35 @@ Use `-OutputDirectory` to choose a different cache destination. Keep the target
 game/server installation inactive for the whole read. A different private
 installation can keep running; the existing process checks apply to the selected
 source installation.
+
+## Automatic inputs and optional mappings
+
+The Windows BAT needs only the mod ZIP. Nested folders are accepted; a
+`background.png` is optional. The Bash route uses the same automatic input resolver.
+
+- Game selection first checks the ZIP/script folder's parents, then Steam
+  libraries, XboxGames folders and Epic manifests. Active installations are
+  skipped. The chosen path is printed. `-Game` / `--game` overrides this choice.
+- One optional **`.usmap`** can be included anywhere in the ZIP, or placed beside
+  the ZIP/script. An explicit `-Mapping` / `--mapping` takes priority. This is a
+  schema file, distinct from an Unreal **`.umap`** level. A malformed or ambiguous
+  supplied mapping fails clearly and retains the previous output.
+- Otherwise, the builder reads the existing platform mapping without changing it.
+  If unavailable, it downloads the newest published snapshot from
+  [RSDW Archive](https://github.com/RSDWArchive/RSDWArchive), checks its Git blob
+  fingerprint, size and schemas, and retains a verified copy for offline reuse.
+  An archive snapshot can lag the installed game: review skipped assets in the
+  report, or supply a matching mapping. A fingerprint check verifies the download,
+  not compatibility with every game update.
+- CUE4Parse's pinned decoder bootstrap runs only if its authoring copy is missing.
+  `-Oodle` / `--oodle` still accepts a local decoder. DLLs in mod ZIPs are never run.
+
+Downloaded inputs live only in
+`%LOCALAPPDATA%/RSDragonwilds/RuneSchema/core/cache/authoring-tools/`.
+The script never installs a supplied/downloaded mapping into RuneSchema, changes
+UE4SS settings, or includes it in the output cache. The report identifies the
+selected mapping and its SHA-256. Players import the presentation cache without
+needing mappings, the SDK or these tools.
 
 Use the optional **offline cache builder** after cooking and arranging your mod.
 It reads the installed game's native containers and your selected PAKs while
@@ -62,11 +98,9 @@ The tools are published independently of the DLL release. Existing builds can
 still use the [single-file script](https://raw.githubusercontent.com/gh0sted5456-us/RuneSchema/main/resources/tools/build-helpy-cache.sh)
 and this walkthrough; the original 0.8.0.2 ZIP does not have the new button.
 
-**Bash route requires:** Windows, Git Bash, .NET 10 SDK, a `.usmap` matching the installed
-game build, and your own local `oo2core_9_win64.dll`. First use restores locked
-NuGet dependencies. The decoder/mapping files are not bundled or downloaded.
-Use the mapping for the platform and game build you are reading; a mapping
-from another storefront/update is not automatically interchangeable.
+**Bash route requires:** Windows, Git Bash and the .NET 10 SDK. The same
+automatic game, mapping and decoder setup applies. First use restores locked
+NuGet dependencies and may download the offline decoder and archive mapping.
 
 ## 1. Arrange the final mod layout
 
@@ -87,7 +121,8 @@ the cache. It embeds its reviewed source and dependency lock, builds in a
 temporary folder, and removes that temporary build on exit.
 
 The builder walks upward from `paks/` to find `MyMod`. This matters: a portable
-fingerprint includes the owning folder name and the PAKs' relative layout.
+fingerprint uses portable source content and its logical mod ID; renaming the
+installation folder does not invalidate the same source content.
 Stage the layout above before running it; a bare trio in an arbitrary export
 folder cannot establish the future RuneSchema installation layout. If needed,
 use `--mod-root` and `--mod-id` to specify the final folder identity explicitly.
@@ -98,7 +133,7 @@ the Bash script itself are excluded from the content fingerprint.
 
 Close the Dragonwilds installation being scanned, including its dedicated
 server if running. A separate installation may stay open. The tool does not
-close or terminate a game. Run the script without arguments for prompts:
+close or terminate a game. Run the script without arguments for automatic setup:
 
 ```bash
 bash build-helpy-cache.sh

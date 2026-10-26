@@ -24,12 +24,12 @@ trap cleanup EXIT
 FOOTER = '''project="$(cygpath -w "$stage/HelpyCache.csproj")"
 dotnet restore "$project" --locked-mode --verbosity quiet
 dotnet build "$project" --no-restore --configuration Release --verbosity quiet
-dotnet "$(cygpath -w "$stage/bin/Release/net10.0/HelpyCache.dll")" --folder "$(cygpath -w "$script_folder")" "$@"
+dotnet "$(cygpath -w "$stage/bin/Release/net10.0/HelpyCache.dll")" --folder "$(cygpath -w "$script_folder")" --input-root "$(cygpath -w "$script_folder")" "$@"
 '''
 
 def render():
     result = HEADER
-    for name in ("HelpyCache.csproj", "Program.cs", "packages.lock.json"):
+    for name in ("HelpyCache.csproj", "Program.cs", "AuthoringInputs.cs", "AuthoringInputs.Tests.cs", "packages.lock.json"):
         delimiter = "RUNESCHEMA_" + name.replace(".", "_").upper()
         source = (ROOT / name).read_text(encoding="utf-8")
         assert delimiter not in source.splitlines()
@@ -39,7 +39,7 @@ def render():
 
 def render_powershell():
     source = []
-    for name in ("HelpyCache.csproj", "Program.cs", "packages.lock.json"):
+    for name in ("HelpyCache.csproj", "Program.cs", "AuthoringInputs.cs", "AuthoringInputs.Tests.cs", "packages.lock.json"):
         text = (ROOT / name).read_text(encoding="utf-8")
         assert "'@" not in text.splitlines()
         source.append(f"$builderSource=@'\n{text.rstrip()}\n'@\n"

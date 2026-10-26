@@ -54,7 +54,10 @@ package metadata and `packages.lock.json`. The tool reads desktop block/raw
 texture formats through AssetRipper; it does not use CUE4Parse-Conversion or
 ImageSharp's encoding pipeline.
 
-Supply your own matching `.usmap` and licensed local Oodle DLL. Neither is
-redistributed by this script. Do not include game PAKs, mappings, decoder DLLs,
+The builder automatically selects offline mappings and prepares CUE4Parse's
+pinned decoder, or accepts explicit local overrides. Downloaded inputs stay in
+the authoring-tools AppData cache and never replace runtime mappings.
+RSDW Archive game schemas remain Jagex's property; the Oodle decoder retains its
+upstream license. Neither is bundled in the authoring ZIP. Do not include game PAKs, mappings, decoder DLLs,
 player saves or private diagnostic files when distributing the cache tool.
 Generated artwork/text retains its original rights; a cache is not a rights grant.
