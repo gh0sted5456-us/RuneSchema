@@ -4,6 +4,10 @@ Optional author tooling; never run by RuneSchema or Helpy at startup.
 
 The downloadable single-file launcher is
 [`resources/tools/build-helpy-cache.sh`](../../resources/tools/build-helpy-cache.sh).
+The next Helpy maintenance build also downloads an authoring ZIP from Tools.
+It contains the same launcher, standalone `README.md`, license and dependency
+notices. `resources/tools/authoring-tools/index.json` identifies the current
+content-addressed archive; Helpy downloads it only on request and never runs it.
 Use Git Bash on Windows with the .NET 10 SDK. First use restores the pinned
 NuGet dependencies; later runs reuse NuGet's normal package cache. The launcher
 builds in a temporary folder, outside the mod, and removes that build folder
@@ -19,10 +23,11 @@ dotnet build tools/helpy-cache/HelpyCache.csproj -c Release --no-restore
 dotnet tools/helpy-cache/bin/Release/net10.0/HelpyCache.dll --self-test
 python tools/helpy-cache/package.py
 python tools/helpy-cache/package.py --check
+python tools/helpy-cache/test_package.py
 ```
 
-Regenerate the single-file script after changing the C# source, project, or
-dependency lock. Keep build output out of the mod: JSON files in a mod's root
+Regenerate the script, ZIP and index after changing the C# source, project,
+dependency lock or standalone instructions. Keep build output out of the mod: JSON files in a mod's root
 can be inputs to its portable fingerprint.
 
 The explicit `helpy-base-cache-probe` CMake target verifies a bundle, or performs

@@ -1,6 +1,10 @@
 """Build/check the single-file Git Bash launcher from the reviewed tool sources."""
 from pathlib import Path
 import argparse
+import hashlib
+import io
+import json
+import zipfile
 
 ROOT = Path(__file__).resolve().parent
 TARGET = ROOT.parents[1] / "resources/tools/build-helpy-cache.sh"
@@ -32,15 +36,45 @@ def render():
         result += f'cat > "$stage/{name}" <<\'{delimiter}\'\n{source.rstrip()}\n{delimiter}\n'
     return result + FOOTER
 
+
+def authoring_archive(script):
+    notices = (ROOT / "README.md").read_text(encoding="utf-8").split("## Dependencies and rights", 1)[1]
+    files = {"build-helpy-cache.sh": script,
+             "README.md": (ROOT / "AUTHORING-TOOLS.md").read_text(encoding="utf-8"),
+             "LICENSE": (ROOT.parents[1] / "LICENSE").read_text(encoding="utf-8"),
+             "DEPENDENCIES.md": "# Dependencies and rights\n" + notices}
+    output = io.BytesIO()
+    # Stored entries keep the small archive deterministic across zlib versions.
+    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_STORED) as archive:
+        for name, content in files.items():
+            entry = zipfile.ZipInfo(name, date_time=(2026, 1, 1, 0, 0, 0))
+            entry.create_system = 3
+            entry.external_attr = (0o100755 if name.endswith(".sh") else 0o100644) << 16
+            archive.writestr(entry, content.encode("utf-8"))
+    return output.getvalue()
+
+
+def outputs():
+    script = render()
+    archive = authoring_archive(script)
+    digest = hashlib.sha256(archive).hexdigest()
+    folder = TARGET.parent / "authoring-tools"
+    manifest = {"Format": 1, "Kind": "RuneSchemaAuthoringTools", "File": digest + ".zip",
+                "Bytes": len(archive), "SHA256": digest}
+    return {TARGET: script.encode("utf-8"), folder / manifest["File"]: archive,
+            folder / "index.json": (json.dumps(manifest, indent=2) + "\n").encode("utf-8")}
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
-    text = render()
     if args.check:
-        assert TARGET.read_text(encoding="utf-8") == text, "Regenerate the drop-in script"
-        print("Drop-in script matches the reviewed sources and dependency lock.")
+        for path, data in outputs().items():
+            actual = path.read_bytes() if path.suffix == ".zip" else path.read_text(encoding="utf-8").encode("utf-8")
+            assert actual == data, "Regenerate the author tools: " + str(path)
+        print("Drop-in script, authoring ZIP and download index match the reviewed sources.")
     else:
-        TARGET.parent.mkdir(parents=True, exist_ok=True)
-        TARGET.write_text(text, encoding="utf-8", newline="\n")
-        print(TARGET)
+        for path, data in outputs().items():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+            print(path)

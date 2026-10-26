@@ -6,6 +6,24 @@ that installation is closed, then creates the mod's `cache/` folder. RuneSchema
 does not run this script at startup, and the script does not load a world,
 execute Blueprint gameplay, edit PAKs, register items or modify saves.
 
+## Download the authoring tools ZIP
+
+The next Helpy maintenance build adds **Tools > Utilities > Download authoring
+tools ZIP**. This manual download saves `RuneSchema-Authoring-Tools.zip` in
+Helpy's authoring-tools export folder. **Open authoring-tools folder** opens
+the actual location. Extract the ZIP and start with its `README.md`.
+
+The archive contains the reviewed single-file Bash builder, a standalone
+walkthrough, the MIT license and dependency notices. Helpy verifies the
+download's size and SHA-256 before replacing an older ZIP. It does not extract
+or execute the script, install dependencies or start a scan. A cancelled or
+failed download keeps the previous archive. There is no startup download or
+background update polling for these tools.
+
+The tools are published independently of the DLL release. Existing builds can
+still use the [single-file script](https://raw.githubusercontent.com/gh0sted5456-us/RuneSchema/main/resources/tools/build-helpy-cache.sh)
+and this walkthrough; the original 0.8.0.2 ZIP does not have the new button.
+
 **Requires:** Windows, Git Bash, .NET 10 SDK, a `.usmap` matching the installed
 game build, and your own local `oo2core_9_win64.dll`. First use restores locked
 NuGet dependencies. The decoder/mapping files are not bundled or downloaded.

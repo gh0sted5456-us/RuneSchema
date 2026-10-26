@@ -2,9 +2,9 @@ name: Validate optional offline Helpy cache tool
 on:
   push:
     branches: [main, experimental]
-    paths: ['tools/helpy-cache/**', 'resources/tools/build-helpy-cache.sh', '.github/workflows/cache-tool.yml']
+    paths: ['tools/helpy-cache/**', 'resources/tools/**', '.github/workflows/cache-tool.yml']
   pull_request:
-    paths: ['tools/helpy-cache/**', 'resources/tools/build-helpy-cache.sh', '.github/workflows/cache-tool.yml']
+    paths: ['tools/helpy-cache/**', 'resources/tools/**', '.github/workflows/cache-tool.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -26,6 +26,7 @@ jobs:
           dotnet build tools/helpy-cache/HelpyCache.csproj -c Release --no-restore
           dotnet tools/helpy-cache/bin/Release/net10.0/HelpyCache.dll --self-test
           python tools/helpy-cache/package.py --check
+          python tools/helpy-cache/test_package.py
       - name: Exercise the distributed single-file launcher
         shell: bash
         run: bash resources/tools/build-helpy-cache.sh --self-test
