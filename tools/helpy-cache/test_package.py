@@ -18,8 +18,10 @@ class AuthoringPackage(unittest.TestCase):
         self.assertEqual(index["File"], index["SHA256"] + ".zip")
         with zipfile.ZipFile(io.BytesIO(archive)) as z:
             self.assertIsNone(z.testzip())
-            self.assertEqual(set(z.namelist()), {"README.md", "build-helpy-cache.sh", "LICENSE", "DEPENDENCIES.md"})
+            self.assertEqual(set(z.namelist()), {"README.md", "build-helpy-cache.sh", "build-helpy-cache.ps1", "Build-Helpy-Cache.bat", "LICENSE", "DEPENDENCIES.md"})
             self.assertEqual(z.read("build-helpy-cache.sh").decode(), package.render())
+            self.assertEqual(z.read("build-helpy-cache.ps1").decode("utf-8-sig"), package.render_powershell())
+            self.assertEqual(z.read("Build-Helpy-Cache.bat").decode(), package.DRAG_DROP)
             readme = z.read("README.md").decode()
             for required in ["Git Bash", ".NET 10", "Content/Paks", "--mapping", "--oodle", "--mod-root", "--base-game", "--include-mods", "offline-helpy.rsmk-cache"]:
                 self.assertIn(required, readme)

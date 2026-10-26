@@ -1,5 +1,43 @@
 # Build a Helpy cache from cooked PAKs
 
+## Windows: drop a mod ZIP to build its cache
+
+1. Make a ZIP containing your cooked `.pak`, `.utoc` and `.ucas` files and one
+   `background.png`. Legacy `.pak`-only mods are supported too. Nested ZIP folders
+   are accepted; keep package filenames unique. Name the ZIP after the final
+   RuneSchema mod folder, or pass `-ModId` explicitly.
+2. Extract the authoring-tools download. Drag your mod ZIP onto
+   **Build-Helpy-Cache.bat**. Windows opens a PowerShell console with progress for
+   ZIP extraction, input hashing, item discovery, picture capture and publishing.
+3. Provide the inactive Dragonwilds project folder, a matching `.usmap`, and your
+   local Oodle DLL when prompted. This Windows route requires the **.NET 10 SDK**;
+   Git Bash is only needed for the separate Bash route below.
+4. The completed **cache/** folder appears beside your mod ZIP. It contains
+   `offline-helpy.rsmk-cache`, `offline-helpy-report.json`, and `mod.png` derived
+   from your background. Add this folder to your RuneSchema mod ZIP alongside
+   `paks/`. Your original ZIP and PAKs are unchanged.
+
+An existing output cache is preserved as `cache.previous-<unique-id>` before the
+new folder is published. A failed build leaves the current output in place.
+Review the report: this is a partial presentation cache, not proof that every
+cooked asset was registered or that gameplay works. Path traversal, duplicate
+paths, links, ambiguous package names and incomplete trios are rejected before
+extraction. Only PAK files and the chosen background are staged; ZIP scripts and
+executables are never run.
+
+For repeatable command-line use:
+
+```powershell
+.\build-helpy-cache.ps1 -ZipPath "D:\Mods\MyMod.zip" `
+  -Game "D:\Games\RSDragonwilds" -Mapping "D:\Mappings\Game.usmap" `
+  -Oodle "D:\Tools\oo2core_9_win64.dll" -ModId "MyMod"
+```
+
+Use `-OutputDirectory` to choose a different cache destination. Keep the target
+game/server installation inactive for the whole read. A different private
+installation can keep running; the existing process checks apply to the selected
+source installation.
+
 Use the optional **offline cache builder** after cooking and arranging your mod.
 It reads the installed game's native containers and your selected PAKs while
 that installation is closed, then creates the mod's `cache/` folder. RuneSchema
@@ -13,7 +51,7 @@ tools ZIP**. This manual download saves `RuneSchema-Authoring-Tools.zip` in
 Helpy's authoring-tools export folder. **Open authoring-tools folder** opens
 the actual location. Extract the ZIP and start with its `README.md`.
 
-The archive contains the reviewed single-file Bash builder, a standalone
+The archive contains the Windows drag-and-drop launcher, PowerShell and Bash builders, a standalone
 walkthrough, the MIT license and dependency notices. Helpy verifies the
 download's size and SHA-256 before replacing an older ZIP. It does not extract
 or execute the script, install dependencies or start a scan. A cancelled or
@@ -24,7 +62,7 @@ The tools are published independently of the DLL release. Existing builds can
 still use the [single-file script](https://raw.githubusercontent.com/gh0sted5456-us/RuneSchema/main/resources/tools/build-helpy-cache.sh)
 and this walkthrough; the original 0.8.0.2 ZIP does not have the new button.
 
-**Requires:** Windows, Git Bash, .NET 10 SDK, a `.usmap` matching the installed
+**Bash route requires:** Windows, Git Bash, .NET 10 SDK, a `.usmap` matching the installed
 game build, and your own local `oo2core_9_win64.dll`. First use restores locked
 NuGet dependencies. The decoder/mapping files are not bundled or downloaded.
 Use the mapping for the platform and game build you are reading; a mapping
