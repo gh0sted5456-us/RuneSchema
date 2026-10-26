@@ -1,14 +1,17 @@
 # Per-mod cache ownership
 
-Source IDs are canonical lowercase folder IDs, for example `mods/rsdwspears`,
-not display nicknames. A shared Unreal mount is not proof that one mod owns
+Published source-owner IDs are canonical lowercase labels, for example
+`mods/rsdwspears`. A destination folder rename does not change cached content
+identity. Version-2 fingerprints hash content, excluding installation paths and
+mod folder names; older bundles are still accepted as presentation references. A shared Unreal mount is not proof that one mod owns
 all its assets.
 
 ## Container-first discovery
 
 Shared state lives under `%LOCALAPPDATA%/RSDragonwilds/RuneSchema/core`;
 `steam`, `gamepass`, `epic` and `server` hold their runtime-specific state and
-mapping caches. Startup creates missing managed directories on demand without
+mapping caches. Imported Helpy content and thumbnail caches now live in
+`<platform>/cache`, not `core/HELPY/runtime/saved/cache`. Startup creates missing managed directories on demand without
 copying, moving or deleting legacy runtime/cache data. Old install-local
 `runtime/live` directories and older AppData roots are not imported or scanned.
 Existing flat `HELPY`, `runeschema.profile` and `health` folders inside the current
@@ -23,9 +26,8 @@ Do not delete profiles, loadouts, progress, backups or legacy recovery files as 
 In the cache window, choose a mod source and **Share selected mod cache in
 core** to publish its current verified bundle to
 `core/cache/mods/<owner>/shared.rsmk-cache`. Other runtimes discover this alongside
-packaged mod caches on their next content-source scan/launch. Matching portable
-content hashes and current exact ownership are still required; mismatches are
-skipped. This is a snapshot, not automatic recapture, and sharing does not mount
+packaged mod caches on their next content-source scan/launch. They enter that platform's inert presentation library; current ownership is
+checked separately for verified exports and gameplay actions. This is a snapshot, not automatic recapture, and sharing does not mount
 content or make cached items available. Each mod remains independently scoped.
 
 The source worker reads bounded directory indexes of supported PAKs, including
@@ -86,8 +88,8 @@ The host sends exact ownership to Helpy through bounded read-only pages, not
 the entire asset map in each catalog heartbeat. Each page is tied to the source
 fingerprint and content revision. Conflicting owners remain conflicting;
 changed or unavailable proofs fail the operation without changing the last-good
-cache. These proofs apply to manual source exports/imports and packaged
-`mods/<mod>/cache/*.rsmk-cache` imports. They do not grant gameplay authority,
+cache. These proofs apply to verified exports and native attribution. Display-only
+imports and packaged `mods/<mod>/cache/*.rsmk-cache` imports do not wait for them. They do not grant gameplay authority,
 load missing mods, or fix broken cooked assets.
 
 This contract requires the matching core and Helpy build in the

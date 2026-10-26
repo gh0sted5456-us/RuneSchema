@@ -100,7 +100,7 @@ static class CacheTool
     static string Fingerprint(string prefix, IEnumerable<KeyValuePair<string, string>> files)
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256); hash.AppendData(Encoding.UTF8.GetBytes(prefix));
-        foreach (var entry in files.OrderBy(p => p.Key, StringComparer.Ordinal)) hash.AppendData(Encoding.UTF8.GetBytes(entry.Key + "|" + entry.Value + "\n"));
+        foreach (var entry in files.OrderBy(p => p.Key, StringComparer.Ordinal).ThenBy(p => p.Value, StringComparer.Ordinal)) hash.AppendData(Encoding.UTF8.GetBytes(entry.Key + "|" + entry.Value + "\n"));
         return Convert.ToHexStringLower(hash.GetHashAndReset());
     }
     static byte[] Pixels(SKBitmap original, bool banner = false)
@@ -203,8 +203,8 @@ static class CacheTool
                 digests[file] = digest; memo[file] = new JObject { ["Size"] = stamp.Size, ["Stamp"] = stamp.Stamp, ["SHA256"] = digest };
             }
             var memoBytes = Encoding.UTF8.GetBytes(Json(memo)); if (memoBytes.Length <= 16 * 1024 * 1024) Atomic(memoFile, memoBytes);
-            var baseKey = Fingerprint("rsmk-icon-content-v1\n", nativeFiles.Select(p => KeyValuePair.Create(Path.GetRelativePath(game, p).Replace('\\', '/').ToLowerInvariant(), digests[p])));
-            var ownKeys = mods.ToDictionary(m => m.Id, m => ownerFiles[m.Id].Select(p => KeyValuePair.Create(m.Id + "/" + Path.GetRelativePath(m.Root, p).Replace('\\', '/').ToLowerInvariant(), digests[p])).OrderBy(p => p.Key, StringComparer.Ordinal).ToArray());
+            var nativeKeys = nativeFiles.Select(p => KeyValuePair.Create(Path.GetExtension(p).ToLowerInvariant(), digests[p])).ToArray();
+            var ownKeys = mods.ToDictionary(m => m.Id, m => ownerFiles[m.Id].Select(p => KeyValuePair.Create(Path.GetExtension(p).ToLowerInvariant(), digests[p])).OrderBy(p => p.Key, StringComparer.Ordinal).ToArray());
             OodleHelper.Initialize(oodle);
             CUE4Parse.Globals.FatalObjectSerializationErrors = true;
             Log.Logger = new LoggerConfiguration().MinimumLevel.Fatal().WriteTo.Console().CreateLogger();
@@ -329,17 +329,29 @@ static class CacheTool
                 Need(sources.Length <= 512 && icons.Count <= 32768 && records.Count <= 65536, "Cache entry count exceeds import limits");
                 var fingerprints = new JObject();
                 var ownedGroups = owners.Keys.Select(p => Source(p + ".asset")).ToHashSet(StringComparer.Ordinal);
-                foreach (var source in sources) fingerprints[source] = Fingerprint(baseKey + "|" + source + "\n", mod is not null && ownedGroups.Contains(source) ? ownKeys[mod.Value.Id] : []);
-                var manifest = new JObject { ["Version"] = 2, ["Kind"] = "RuneSchemaCacheBundle", ["Locale"] = locale, ["Sources"] = fingerprints, ["Records"] = records, ["Icons"] = icons,
+                foreach (var source in sources) fingerprints[source] = Fingerprint("rsmk-content-v2|" + source + "\n", mod is not null && ownedGroups.Contains(source) ? ownKeys[mod.Value.Id] : nativeKeys);
+                var manifest = new JObject { ["Version"] = 2, ["FingerprintVersion"] = 2, ["Kind"] = "RuneSchemaCacheBundle", ["Locale"] = locale, ["Sources"] = fingerprints, ["Records"] = records, ["Icons"] = icons,
                     ["RecordCoverage"] = "Partial", ["Coverage"] = new JObject { ["Complete"] = false, ["Expected"] = wantedIcons.Count, ["Exported"] = icons.Count } };
                 if (mod is not null) manifest["ContentOwner"] = "mods/" + mod.Value.Id;
+                // Stable across identical exports, monotonic when cache content changes.
+                var previousBundle = Path.Combine(destination, "offline-helpy.rsmk-cache");
+                long revision = 1;
+                if (File.Exists(previousBundle)) try {
+                    using var reader = new BinaryReader(File.OpenRead(previousBundle), Encoding.UTF8);
+                    Need(Encoding.ASCII.GetString(reader.ReadBytes(8)) == "RSCACHE1", "Unsupported previous cache");
+                    var length = reader.ReadInt32(); Need(length > 0 && length <= 80 * 1024 * 1024, "Invalid previous cache size");
+                    var previous = JObject.Parse(Encoding.UTF8.GetString(reader.ReadBytes(length)));
+                    revision = Math.Max(1, previous.Value<long?>("CacheVersion") ?? 1); previous.Remove("CacheVersion");
+                    if (!JToken.DeepEquals(previous, manifest)) revision = checked(revision + 1);
+                } catch (Exception e) { throw new InvalidDataException("Previous cache revision cannot be read; retain it and choose a fresh output folder. " + e.Message); }
+                manifest["CacheVersion"] = revision;
                 var metadata = Encoding.UTF8.GetBytes(Json(manifest)); Need(metadata.Length <= 80 * 1024 * 1024 && metadata.Length + payload.Length + 12 <= MaxBundle, "Bundle exceeds download/import limits");
                 using var bundle = new MemoryStream(); using (var writer = new BinaryWriter(bundle, Encoding.UTF8, true)) { writer.Write(Encoding.ASCII.GetBytes("RSCACHE1")); writer.Write(metadata.Length); writer.Write(metadata); payload.Position = 0; payload.CopyTo(bundle); }
                 var bytes = bundle.ToArray(); var digest = Hash(bytes); CheckInputs();
                 Directory.CreateDirectory(destination); Safe(destination);
                 if (banner is not null) Atomic(Path.Combine(destination, "mod.png"), File.ReadAllBytes(banner));
                 var receipt = new JObject { ["Tool"] = "RuneSchema offline Helpy cache", ["Format"] = 1, ["Owner"] = mod is null ? "native" : "mods/" + mod.Value.Id, ["SHA256"] = digest, ["Bytes"] = bytes.Length,
-                    ["Records"] = records.Count, ["Icons"] = icons.Count, ["RecordCoverage"] = "Partial", ["Issues"] = report };
+                    ["CacheVersion"] = revision, ["FingerprintVersion"] = 2, ["Records"] = records.Count, ["Icons"] = icons.Count, ["RecordCoverage"] = "Partial", ["Issues"] = report };
                 Atomic(Path.Combine(destination, "offline-helpy-report.json"), Encoding.UTF8.GetBytes(receipt.ToString()));
                 Atomic(Path.Combine(destination, "offline-helpy.rsmk-cache"), bytes);
                 Console.WriteLine($"Wrote {destination}: {records.Count} records, {icons.Count} icons, {report.Count} reported skips. Partial presentation cache; no gameplay or save changes.");
@@ -359,6 +371,7 @@ static class CacheTool
         Need(Asset("RSDragonwilds/Plugins/Test/Content/UI/T_Icon.uasset") == "/Test/UI/T_Icon.T_Icon", "Plugin virtual path");
         Need(Asset("RSDragonwilds/Content/Items/ITEM_X.uasset") == "/Game/Items/ITEM_X.ITEM_X", "Game virtual path");
         Need(Fingerprint("seed\n", new[] { KeyValuePair.Create("b", "2"), KeyValuePair.Create("a", "1") }) == Hash(Encoding.UTF8.GetBytes("seed\na|1\nb|2\n")), "Portable ordering and separators");
+        Need(Fingerprint("rsmk-content-v2|example\n", new[] { KeyValuePair.Create(".pak", "b"), KeyValuePair.Create(".pak", "a") }) == Hash(Encoding.UTF8.GetBytes("rsmk-content-v2|example\n.pak|a\n.pak|b\n")), "Duplicate extensions sort by content digest, never folder names");
         Need(Text(JObject.Parse("{\"SourceString\":\"A readable name\"}")) == "A readable name" && Text(new JObject()) == "", "Text extraction must not invent values");
         using var pixel = new SKBitmap(new SKImageInfo(1, 1, SKColorType.Bgra8888, SKAlphaType.Unpremul)); pixel.SetPixel(0, 0, new SKColor(10, 20, 30, 255)); var bytes = Pixels(pixel);
         Need(bytes.Length == 20 && bytes[16] == 10 && bytes[17] == 20 && bytes[18] == 30 && bytes[19] == 255, "BGRA must become RGBA");

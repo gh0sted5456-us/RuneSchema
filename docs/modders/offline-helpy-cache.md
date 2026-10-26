@@ -129,14 +129,20 @@ Do not distribute your mapping, decoder DLL, game PAKs or extracted game files
 as part of the cache tooling.
 
 This tool's owner-scoped bundles require the updated Helpy cache importer.
-An older importer can skip them as incompatible; it must not bypass ownership
-or relabel their content. Owner scoping lets a mod's own bundle remain useful
+An older importer can skip them as incompatible. The new importer accepts
+validated presentation independently of live registry readiness; it never
+registers the supplied IDs or grants gameplay authority. Owner scoping lets a mod's own bundle remain useful
 when another mod shares its plugin namespace. It does not permit a mod to
 claim a borrowed vanilla item or an ambiguous overwritten asset.
 
 Enable **Keep icons between launches**, install/enable the mod, and open
-Helpy's **Icon cache** window. Automatic mod-cache import checks the active
-owner and content fingerprints and copies usable presentation into AppData.
+Helpy's **Icon cache** window. Automatic mod-cache import copies validated
+presentation into `%LOCALAPPDATA%/RSDragonwilds/RuneSchema/<platform>/cache`.
+It does not wait for a character/world or live source verification.
+Fingerprints exclude the destination folder name. Each generated bundle has a
+`CacheVersion`: unchanged exports retain it and changed exports increment it.
+Keep the previous output bundle when generating an update so its revision can
+advance. A new version replaces that source's old entries, including deletions.
 Try searching for one known item. Its cached name/picture is a reference;
 delivery, use, equipment and world actions still resolve current game data.
 
