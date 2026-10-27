@@ -7,7 +7,7 @@
 
 // Explicit integration probe; never part of the offline/default CTest suite.
 int main(int argc,char** argv){try{
-    if(argc!=5)throw std::runtime_error("Usage: helpy-base-cache-probe RuneSchema-root isolated-output bundle-or-download game-version");
+    if(argc!=5&&argc!=6)throw std::runtime_error("Usage: helpy-base-cache-probe RuneSchema-root isolated-output bundle-or-download game-version [runtime]");
     using namespace PS;namespace fs=std::filesystem;
     const auto root=fs::absolute(argv[1]),output=fs::absolute(argv[2]);
     fs::create_directories(output/"local-appdata");
@@ -21,9 +21,10 @@ int main(int argc,char** argv){try{
         for(const auto& owner:owners)if(owner.starts_with("mods/")){plan.Owners[group].insert(owner.substr(5));plan.DeclaredOwners[group].insert(owner.substr(5));}}
     for(const auto& provider:discovered.NativePlugins)plan.Registered.insert(provider);
     const auto snapshot=HelpySourceCache::Inspect(root,plan);
+    const std::string runtime=argc==6?argv[5]:"Steam";
     const bool download=file=="download";
     if(download){
-        if(!HelpyDownloads::StartBaseCache(snapshot.SourceKeys,snapshot.NativePlugins,"Steam",argv[4]))throw std::runtime_error("Download did not start");
+        if(!HelpyDownloads::StartBaseCache(snapshot.SourceKeys,snapshot.NativePlugins,runtime,argv[4]))throw std::runtime_error("Download did not start");
         const auto deadline=std::chrono::steady_clock::now()+std::chrono::minutes(3);
         do{HelpyDownloads::Poll();std::this_thread::sleep_for(std::chrono::milliseconds(20));
             if(std::chrono::steady_clock::now()>deadline)throw std::runtime_error("Download timed out");
@@ -34,12 +35,19 @@ int main(int argc,char** argv){try{
     const auto cache=output/"cache"/"item-icons";
     const auto bundleDigest=HelpyIconPack::Hash(HelpyIconPack::Read(file,HelpyIconPack::MaxPack));
     HelpyIconPack::Progress progress;
-    const auto policy=download?HelpyIconPack::ImportPolicy::NativeArtworkFallback:HelpyIconPack::ImportPolicy::VerifiedContent;
+    // Match the cache-window import policy, including headless server references.
+    const auto policy=HelpyIconPack::ImportPolicy::Presentation;
     const auto first=HelpyIconPack::Import(file,root,cache,snapshot,256ull*1024*1024,progress,policy);
-    if(!(first.Imported||first.Unchanged||first.RecordsImported))throw std::runtime_error("No compatible content imported: "+first.Message);
+    if(!(first.Imported||first.Unchanged||first.RecordsImported||first.MapImported))throw std::runtime_error("No compatible content imported: "+first.Message);
+    if(runtime=="Dedicated server"&&!first.MapImported)throw std::runtime_error("Server download did not supply a world map");
     const auto records=CacheBundleStore::Read(cache,root,snapshot,CacheBundleStore::Locale());
     const auto second=HelpyIconPack::Import(file,root,cache,snapshot,256ull*1024*1024,progress,policy);
     if(second.Imported||second.RecordsImported)throw std::runtime_error("Repeated import was not idempotent");
+    const auto map=MapPresentationCache::Reference(cache);
+    if(first.MapImported){
+        const auto reopened=MapPresentationCache::Reference(cache);
+        if(map.empty()||reopened!=map||MapPresentationCache::Bytes(cache,reopened).empty())throw std::runtime_error("Imported map did not reopen correctly");
+    }
     size_t immediateRows=0,reopenedRows=0;
     const auto browse=[&](const HelpySourceCache::Snapshot& sources){
         CacheBundleItems::Store reader;const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
@@ -56,7 +64,8 @@ int main(int argc,char** argv){try{
         for(const auto& row:rows)if(row.value("CacheSourceVerified",false)||row.value("ObservedCurrent",false))throw std::runtime_error("Saved references falsely claimed live verification");
         if(!immediateRows||immediateRows!=reopenedRows)throw std::runtime_error("Reopened cache lost its imported item page");
     }
-    const nlohmann::json receipt={{"BundleSHA256",bundleDigest},{"ImportedIcons",first.Imported},{"UnchangedIcons",first.Unchanged},{"ImportedRecords",first.RecordsImported},
+    const nlohmann::json receipt={{"Runtime",runtime},{"BundleSHA256",bundleDigest},{"ImportedIcons",first.Imported},{"UnchangedIcons",first.Unchanged},{"ImportedRecords",first.RecordsImported},
+        {"WorldMapImported",first.MapImported},{"WorldMapReopened",!map.empty()},{"WorldMapSHA256",map.value("SHA256",std::string{})},
         {"ReadableRecords",records.size()},{"Skipped",first.Skipped},{"RepeatUnchangedIcons",second.Unchanged},{"RepeatNewRecords",second.RecordsImported},
         {"Message",first.Message},{"ImmediateItemRows",immediateRows},{"ReopenedItemRows",reopenedRows},{"NativeObjectReadsForBrowse",0},
         {"ManagedStagingRemoved",HelpyDownloads::ReleaseImportedPack(file)}};

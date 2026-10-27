@@ -308,6 +308,30 @@ from this cache feed.
 
 ## Map artwork in base-game bundles
 
+The GitHub base caches now include a 2048 × 2048 native map and its coordinate
+alignment. Both indexed game versions have a map-bearing download for clients
+and dedicated servers. Use the refreshed **0.8.0.2 build from October 27, 2026**
+or newer; earlier readers cannot import the map payload.
+
+To add the map to a server:
+
+1. Open the server's Helpy and choose **Icon cache → Download base-game cache**.
+   The download includes item references, pictures and the map. Wait for import
+   to finish; the map is stored in that platform's AppData cache.
+2. Open **World → Map**. The background can load from the downloaded cache;
+   the server does not need to render or capture the native map first.
+3. Later Helpy sessions reuse the local map. Downloading again is only needed
+   when you want a refreshed cache or have removed the local copy.
+
+If you only need the map, download the
+[map-only cache](https://raw.githubusercontent.com/gh0sted5456-us/RuneSchema/main/resources/cache-bundles/7c58b7fbf46709e71f490759a620273eb1aaca2406fa66282016519697c8856b.rsmk-cache)
+(16 MiB), then use **Icon cache → Import** on the server. It contains no item
+records, so your existing item cache stays in place. The
+[map download manifest](https://raw.githubusercontent.com/gh0sted5456-us/RuneSchema/main/resources/cache-bundles/world-map.json)
+provides the filename, byte count and SHA-256 for checking the download.
+
+### Capture your own map
+
 Base-game `.rsmk-cache` exports include the cached world-map image and its exact
 map alignment when available. Open **World → Map** in a client world once to
 capture the native map. Capture writes to the platform's AppData cache on a file

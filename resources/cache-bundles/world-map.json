@@ -1,0 +1,34 @@
+{
+  "Format": 1,
+  "Kind": "RuneSchemaWorldMapCache",
+  "File": "7c58b7fbf46709e71f490759a620273eb1aaca2406fa66282016519697c8856b.rsmk-cache",
+  "SHA256": "7c58b7fbf46709e71f490759a620273eb1aaca2406fa66282016519697c8856b",
+  "Bytes": 16777804,
+  "WorldMap": {
+    "Asset": "/Game/Art/UI/Map/T_WorldMap_Landmass.T_WorldMap_Landmass",
+    "Bytes": 16777232,
+    "Projection": {
+      "Center": [
+        198000.0,
+        91450.0
+      ],
+      "HalfHeight": 210000.00000000003,
+      "HalfWidth": 210000.0,
+      "MaxZ": 90000.0,
+      "MinZ": -90000.0,
+      "Right": [
+        1.0,
+        0.0
+      ],
+      "Up": [
+        1.1102230246251565e-16,
+        -1.0
+      ]
+    },
+    "SHA256": "a65ae656f36d9dd143cf8c3775cb279ec27337f153e782ecdfc24744685654d7",
+    "Version": 1
+  },
+  "Width": 2048,
+  "Height": 2048,
+  "MinimumHelpyBuild": "0.8.0.2 (2026-10-27 refresh)"
+}

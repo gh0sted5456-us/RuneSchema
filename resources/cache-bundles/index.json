@@ -3,6 +3,86 @@
   "Kind": "RuneSchemaCacheBundles",
   "Packs": [
     {
+      "Runtime": "Dedicated server",
+      "GameVersion": "++dominion+hotfix-CL-254097",
+      "Locale": "en-US",
+      "Sources": {
+        "agility": "a71148ee36ac0f567426121a58631cb1e7cd9f811c8297a2d7b93af94dcca74a",
+        "dowdunreach": "a3ac1fc374dae9fae8a8e51cb72b2a17756cea8f2634a066ac910cdc1998434c",
+        "fishing": "82ba2d0b67b8802c2d6d4ea12f78f86836f09f1ea49f658f2c26dfdb1b0f6b21",
+        "futuremajorversion": "68983eb3cc0aa663c654e16b9e0601e1e4c8e39b99b1141499eeafd29aa671a8",
+        "game": "23feb8e6c8bba98269f52ada2d239dfaa9184cd8e3512adea54329541527ed5f",
+        "scornedwilderness": "2bc7a48e402c03415611b9f310081c1027336be9588b8c0cf1a03deccd0813d8",
+        "umbralsands": "b4cc6f1aa3b6767bc9a7ebbb4cbb08d0b7c36920f310a2f4fef4da89bba58348"
+      },
+      "SHA256": "630bfce7e8d6c1a4c4485a98747ee8ba8c2070f5f9355984d8bf1d6b53e72581",
+      "Bytes": 78344143,
+      "RecordCount": 2903,
+      "IconCount": 4246,
+      "RecordCoverage": "Partial",
+      "WorldMapSHA256": "a65ae656f36d9dd143cf8c3775cb279ec27337f153e782ecdfc24744685654d7"
+    },
+    {
+      "Runtime": "Steam",
+      "GameVersion": "++dominion+hotfix-CL-254097",
+      "Locale": "en-US",
+      "Sources": {
+        "agility": "a71148ee36ac0f567426121a58631cb1e7cd9f811c8297a2d7b93af94dcca74a",
+        "dowdunreach": "a3ac1fc374dae9fae8a8e51cb72b2a17756cea8f2634a066ac910cdc1998434c",
+        "fishing": "82ba2d0b67b8802c2d6d4ea12f78f86836f09f1ea49f658f2c26dfdb1b0f6b21",
+        "futuremajorversion": "68983eb3cc0aa663c654e16b9e0601e1e4c8e39b99b1141499eeafd29aa671a8",
+        "game": "23feb8e6c8bba98269f52ada2d239dfaa9184cd8e3512adea54329541527ed5f",
+        "scornedwilderness": "2bc7a48e402c03415611b9f310081c1027336be9588b8c0cf1a03deccd0813d8",
+        "umbralsands": "b4cc6f1aa3b6767bc9a7ebbb4cbb08d0b7c36920f310a2f4fef4da89bba58348"
+      },
+      "SHA256": "630bfce7e8d6c1a4c4485a98747ee8ba8c2070f5f9355984d8bf1d6b53e72581",
+      "Bytes": 78344143,
+      "RecordCount": 2903,
+      "IconCount": 4246,
+      "RecordCoverage": "Partial",
+      "WorldMapSHA256": "a65ae656f36d9dd143cf8c3775cb279ec27337f153e782ecdfc24744685654d7"
+    },
+    {
+      "Runtime": "Dedicated server",
+      "GameVersion": "++dominion+live-CL-251392",
+      "Locale": "en-US",
+      "Sources": {
+        "agility": "0b0acdc0118c7e0998e874052623fe6ba30ef71732a1eb850848ecd79f208bbd",
+        "dowdunreach": "1cd3cc3ee41f59fc4f6926a4c244b7bbaa725fba0c84099bab62c32a137c36ee",
+        "fishing": "83ce6ab3245ab2e647bec85bd7a107a5cdb4975ce68d0ff88e3d99bbce11a42f",
+        "futuremajorversion": "6e4757403bc01c6dcd7b5f160f4a3206e7724d0c55728aedb017b1329b28b71c",
+        "game": "422bcca78c2186582b89d6e70ab28c9a918688848967f8dbd564ea07014d082f",
+        "scornedwilderness": "833924901902088c45851c7b518298aa4aad063e3ab90907f65a7961d3e1114a",
+        "umbralsands": "6e545726e874eeba4c3b121d3ffe3218438ec163788d19eaa43251bd9f9cb2c9"
+      },
+      "SHA256": "380c690735098ef256b727408a58072520701a686d2c506072c53f9f1d8d6601",
+      "Bytes": 91303010,
+      "RecordCount": 2903,
+      "IconCount": 4271,
+      "RecordCoverage": "Partial",
+      "WorldMapSHA256": "a65ae656f36d9dd143cf8c3775cb279ec27337f153e782ecdfc24744685654d7"
+    },
+    {
+      "Runtime": "Steam",
+      "GameVersion": "++dominion+live-CL-251392",
+      "Locale": "en-US",
+      "Sources": {
+        "agility": "0b0acdc0118c7e0998e874052623fe6ba30ef71732a1eb850848ecd79f208bbd",
+        "dowdunreach": "1cd3cc3ee41f59fc4f6926a4c244b7bbaa725fba0c84099bab62c32a137c36ee",
+        "fishing": "83ce6ab3245ab2e647bec85bd7a107a5cdb4975ce68d0ff88e3d99bbce11a42f",
+        "futuremajorversion": "6e4757403bc01c6dcd7b5f160f4a3206e7724d0c55728aedb017b1329b28b71c",
+        "game": "422bcca78c2186582b89d6e70ab28c9a918688848967f8dbd564ea07014d082f",
+        "scornedwilderness": "833924901902088c45851c7b518298aa4aad063e3ab90907f65a7961d3e1114a",
+        "umbralsands": "6e545726e874eeba4c3b121d3ffe3218438ec163788d19eaa43251bd9f9cb2c9"
+      },
+      "SHA256": "380c690735098ef256b727408a58072520701a686d2c506072c53f9f1d8d6601",
+      "Bytes": 91303010,
+      "RecordCount": 2903,
+      "IconCount": 4271,
+      "RecordCoverage": "Partial",
+      "WorldMapSHA256": "a65ae656f36d9dd143cf8c3775cb279ec27337f153e782ecdfc24744685654d7"
+    },
+    {
       "Runtime": "Steam",
       "GameVersion": "++dominion+hotfix-CL-254097",
       "Locale": "en-US",
