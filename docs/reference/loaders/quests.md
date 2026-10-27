@@ -2,15 +2,16 @@
 
 ## Step-by-step workflow
 
-Examples with placeholder paths/IDs are templates. Use inspected values and the
-[shared testing checklist](../../modders/testing-and-compatibility.md) before sharing.
+Start with the example closest to your idea. Replace its sample paths and IDs
+with values from your game, then use the
+[testing checklist](../../modders/testing-and-compatibility.md) to try it out before sharing.
 
 1. Choose one stable quest ID and unique canonical PersistenceID; decide objective and completion behavior.
 2. Create `quests/10-camp-contract.jsonc` with either Objective or Stages; replace the mock-up asset references and sample identity.
 3. Connect acceptance through dialogue or a bound scroll. ReturnToNPC quests also need a turn-in route.
 4. Restart; verify acceptance, progress, rewards once, per-character state and reload. Add repeat/cost rules only after the basic flow is sound.
 
-**Tie-ins:** [End-to-end Quest Board walkthrough](../../modders/quests-and-questboards.md), [dialogue](dialogue.md), [events](events.md) and [scrolls](../../QUEST-SCROLLS.md).
+**Related guides:** [End-to-end Quest Board walkthrough](../../modders/quests-and-questboards.md), [dialogue](dialogue.md), [events](events.md) and [scrolls](../../QUEST-SCROLLS.md).
 
 
 **Folder:** `RuneSchema/mods/<ModName>/quests/`

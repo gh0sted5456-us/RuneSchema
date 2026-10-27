@@ -109,7 +109,7 @@ control the exact list and understand how earlier mods can reorder it.
 
 Choose **add** or **tune** deliberately. If you test both example mods, place
 `TuneAbyssalDrops` after `MoreAbyssalDrops` and ensure there is exactly one
-matching entry. Do not treat the pair as an automatically compatible loot preset.
+matching entry. Test the two together before sharing them as a combined loot preset.
 
 ## 6. Verify a real drop, not just a loader summary
 

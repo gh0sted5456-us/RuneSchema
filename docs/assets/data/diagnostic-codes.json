@@ -972,7 +972,7 @@
       "category": "Buildings",
       "anchor": "rs-bld-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-001",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-BLD-002",
@@ -996,7 +996,7 @@
       "category": "Buildings",
       "anchor": "rs-bld-003",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-003",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-BLD-004",
@@ -1032,7 +1032,7 @@
       "category": "Buildings",
       "anchor": "rs-bld-006",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-006",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-BLD-007",
@@ -1068,7 +1068,7 @@
       "category": "Buildings",
       "anchor": "rs-bld-009",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-009",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-BLD-010",
@@ -1080,7 +1080,7 @@
       "category": "Buildings",
       "anchor": "rs-bld-010",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-010",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-BLD-011",
@@ -1092,7 +1092,7 @@
       "category": "Buildings",
       "anchor": "rs-bld-011",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-011",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-BLD-012",
@@ -1104,7 +1104,7 @@
       "category": "Buildings",
       "anchor": "rs-bld-012",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-012",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-BLD-013",
@@ -1116,7 +1116,7 @@
       "category": "Buildings",
       "anchor": "rs-bld-013",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-013",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-BLD-014",
@@ -1140,7 +1140,7 @@
       "category": "Buildings",
       "anchor": "rs-bld-015",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-015",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-BLD-016",
@@ -1152,7 +1152,7 @@
       "category": "Buildings",
       "anchor": "rs-bld-016",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-016",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-BLD-017",
@@ -1164,7 +1164,7 @@
       "category": "Buildings",
       "anchor": "rs-bld-017",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-017",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-BLD-018",
@@ -1176,7 +1176,7 @@
       "category": "Buildings",
       "anchor": "rs-bld-018",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-018",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-BLD-019",
@@ -1188,7 +1188,7 @@
       "category": "Buildings",
       "anchor": "rs-bld-019",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-019",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-BLD-020",
@@ -1200,7 +1200,7 @@
       "category": "Buildings",
       "anchor": "rs-bld-020",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-020",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-BLD-021",
@@ -1212,7 +1212,7 @@
       "category": "Buildings",
       "anchor": "rs-bld-021",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-021",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-BLD-022",
@@ -1224,7 +1224,7 @@
       "category": "Buildings",
       "anchor": "rs-bld-022",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bld-022",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-BLD-023",
@@ -1284,7 +1284,7 @@
       "category": "Blueprints",
       "anchor": "rs-bp-004",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bp-004",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-BP-005",
@@ -1296,7 +1296,7 @@
       "category": "Blueprints",
       "anchor": "rs-bp-005",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bp-005",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-BP-006",
@@ -1308,7 +1308,7 @@
       "category": "Blueprints",
       "anchor": "rs-bp-006",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bp-006",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-BP-007",
@@ -1320,7 +1320,7 @@
       "category": "Blueprints",
       "anchor": "rs-bp-007",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bp-007",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-BP-008",
@@ -1332,7 +1332,7 @@
       "category": "Blueprints",
       "anchor": "rs-bp-008",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bp-008",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-BP-009",
@@ -1344,7 +1344,7 @@
       "category": "Blueprints",
       "anchor": "rs-bp-009",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bp-009",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-BP-010",
@@ -1356,7 +1356,7 @@
       "category": "Blueprints",
       "anchor": "rs-bp-010",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bp-010",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-BP-011",
@@ -1368,7 +1368,7 @@
       "category": "Blueprints",
       "anchor": "rs-bp-011",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bp-011",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-001",
@@ -1380,7 +1380,7 @@
       "category": "Runtime",
       "anchor": "rs-core-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-001",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-002",
@@ -1392,7 +1392,7 @@
       "category": "Runtime",
       "anchor": "rs-core-002",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-002",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-003",
@@ -1404,7 +1404,7 @@
       "category": "Runtime",
       "anchor": "rs-core-003",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-003",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-004",
@@ -1416,7 +1416,7 @@
       "category": "Runtime",
       "anchor": "rs-core-004",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-004",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-005",
@@ -1428,7 +1428,7 @@
       "category": "Runtime",
       "anchor": "rs-core-005",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-005",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-006",
@@ -1440,7 +1440,7 @@
       "category": "Runtime",
       "anchor": "rs-core-006",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-006",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-007",
@@ -1452,7 +1452,7 @@
       "category": "Runtime",
       "anchor": "rs-core-007",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-007",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-008",
@@ -1464,7 +1464,7 @@
       "category": "Runtime",
       "anchor": "rs-core-008",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-008",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-009",
@@ -1476,7 +1476,7 @@
       "category": "Runtime",
       "anchor": "rs-core-009",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-009",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-010",
@@ -1488,7 +1488,7 @@
       "category": "Runtime",
       "anchor": "rs-core-010",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-010",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-011",
@@ -1500,7 +1500,7 @@
       "category": "Runtime",
       "anchor": "rs-core-011",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-011",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-012",
@@ -1512,7 +1512,7 @@
       "category": "Runtime",
       "anchor": "rs-core-012",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-012",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-013",
@@ -1524,7 +1524,7 @@
       "category": "Runtime",
       "anchor": "rs-core-013",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-013",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-014",
@@ -1536,7 +1536,7 @@
       "category": "Runtime",
       "anchor": "rs-core-014",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-014",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-015",
@@ -1548,7 +1548,7 @@
       "category": "Runtime",
       "anchor": "rs-core-015",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-015",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-016",
@@ -1560,7 +1560,7 @@
       "category": "Runtime",
       "anchor": "rs-core-016",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-016",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-017",
@@ -1572,7 +1572,7 @@
       "category": "Runtime",
       "anchor": "rs-core-017",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-017",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-018",
@@ -1584,7 +1584,7 @@
       "category": "Runtime",
       "anchor": "rs-core-018",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-018",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-019",
@@ -1596,7 +1596,7 @@
       "category": "Runtime",
       "anchor": "rs-core-019",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-019",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-020",
@@ -1608,7 +1608,7 @@
       "category": "Runtime",
       "anchor": "rs-core-020",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-020",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-021",
@@ -1620,7 +1620,7 @@
       "category": "Runtime",
       "anchor": "rs-core-021",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-021",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-022",
@@ -1632,7 +1632,7 @@
       "category": "Runtime",
       "anchor": "rs-core-022",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-022",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-023",
@@ -1644,7 +1644,7 @@
       "category": "Runtime",
       "anchor": "rs-core-023",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-023",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-024",
@@ -1656,7 +1656,7 @@
       "category": "Runtime",
       "anchor": "rs-core-024",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-024",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-025",
@@ -1668,7 +1668,7 @@
       "category": "Runtime",
       "anchor": "rs-core-025",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-025",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-026",
@@ -1680,7 +1680,7 @@
       "category": "Runtime",
       "anchor": "rs-core-026",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-026",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-027",
@@ -1692,7 +1692,7 @@
       "category": "Runtime",
       "anchor": "rs-core-027",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-027",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-028",
@@ -1704,7 +1704,7 @@
       "category": "Runtime",
       "anchor": "rs-core-028",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-028",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-029",
@@ -1716,7 +1716,7 @@
       "category": "Runtime",
       "anchor": "rs-core-029",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-029",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-030",
@@ -1728,7 +1728,7 @@
       "category": "Runtime",
       "anchor": "rs-core-030",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-030",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-031",
@@ -1740,7 +1740,7 @@
       "category": "Runtime",
       "anchor": "rs-core-031",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-031",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-032",
@@ -1752,7 +1752,7 @@
       "category": "Runtime",
       "anchor": "rs-core-032",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-032",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-033",
@@ -1764,7 +1764,7 @@
       "category": "Runtime",
       "anchor": "rs-core-033",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-033",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-034",
@@ -1776,7 +1776,7 @@
       "category": "Runtime",
       "anchor": "rs-core-034",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-034",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-035",
@@ -1788,7 +1788,7 @@
       "category": "Runtime",
       "anchor": "rs-core-035",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-035",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-036",
@@ -1800,7 +1800,7 @@
       "category": "Runtime",
       "anchor": "rs-core-036",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-036",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-037",
@@ -1812,7 +1812,7 @@
       "category": "Runtime",
       "anchor": "rs-core-037",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-037",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-038",
@@ -1824,7 +1824,7 @@
       "category": "Runtime",
       "anchor": "rs-core-038",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-038",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-039",
@@ -1836,7 +1836,7 @@
       "category": "Runtime",
       "anchor": "rs-core-039",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-039",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-040",
@@ -1848,7 +1848,7 @@
       "category": "Runtime",
       "anchor": "rs-core-040",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-040",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-041",
@@ -1860,7 +1860,7 @@
       "category": "Runtime",
       "anchor": "rs-core-041",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-041",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-042",
@@ -1872,7 +1872,7 @@
       "category": "Runtime",
       "anchor": "rs-core-042",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-042",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-043",
@@ -1884,7 +1884,7 @@
       "category": "Runtime",
       "anchor": "rs-core-043",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-043",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-044",
@@ -1896,7 +1896,7 @@
       "category": "Runtime",
       "anchor": "rs-core-044",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-044",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-045",
@@ -1908,7 +1908,7 @@
       "category": "Runtime",
       "anchor": "rs-core-045",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-045",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-046",
@@ -1920,7 +1920,7 @@
       "category": "Runtime",
       "anchor": "rs-core-046",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-046",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-047",
@@ -1932,7 +1932,7 @@
       "category": "Runtime",
       "anchor": "rs-core-047",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-047",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-048",
@@ -1944,7 +1944,7 @@
       "category": "Runtime",
       "anchor": "rs-core-048",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-048",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-049",
@@ -1956,7 +1956,7 @@
       "category": "Runtime",
       "anchor": "rs-core-049",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-049",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-050",
@@ -1968,7 +1968,7 @@
       "category": "Runtime",
       "anchor": "rs-core-050",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-050",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-051",
@@ -1980,7 +1980,7 @@
       "category": "Runtime",
       "anchor": "rs-core-051",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-051",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-052",
@@ -1992,7 +1992,7 @@
       "category": "Runtime",
       "anchor": "rs-core-052",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-052",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-053",
@@ -2004,7 +2004,7 @@
       "category": "Runtime",
       "anchor": "rs-core-053",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-053",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-054",
@@ -2016,7 +2016,7 @@
       "category": "Runtime",
       "anchor": "rs-core-054",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-054",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CORE-055",
@@ -2028,7 +2028,7 @@
       "category": "Runtime",
       "anchor": "rs-core-055",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-core-055",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CRS-001",
@@ -2040,7 +2040,7 @@
       "category": "Courses",
       "anchor": "rs-crs-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-001",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CRS-002",
@@ -2052,7 +2052,7 @@
       "category": "Courses",
       "anchor": "rs-crs-002",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-002",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CRS-003",
@@ -2076,7 +2076,7 @@
       "category": "Courses",
       "anchor": "rs-crs-004",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-004",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CRS-005",
@@ -2088,7 +2088,7 @@
       "category": "Courses",
       "anchor": "rs-crs-005",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-005",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CRS-006",
@@ -2100,7 +2100,7 @@
       "category": "Courses",
       "anchor": "rs-crs-006",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-006",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CRS-007",
@@ -2112,7 +2112,7 @@
       "category": "Courses",
       "anchor": "rs-crs-007",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-007",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CRS-008",
@@ -2124,7 +2124,7 @@
       "category": "Courses",
       "anchor": "rs-crs-008",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-008",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CRS-009",
@@ -2136,7 +2136,7 @@
       "category": "Courses",
       "anchor": "rs-crs-009",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-009",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CRS-010",
@@ -2148,7 +2148,7 @@
       "category": "Courses",
       "anchor": "rs-crs-010",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-010",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CRS-011",
@@ -2160,7 +2160,7 @@
       "category": "Courses",
       "anchor": "rs-crs-011",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-011",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CRS-012",
@@ -2172,7 +2172,7 @@
       "category": "Courses",
       "anchor": "rs-crs-012",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-012",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-CRS-013",
@@ -2184,7 +2184,7 @@
       "category": "Courses",
       "anchor": "rs-crs-013",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-crs-013",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-ENUM-001",
@@ -2196,7 +2196,7 @@
       "category": "Enums",
       "anchor": "rs-enum-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-enum-001",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-ENUM-002",
@@ -2220,7 +2220,7 @@
       "category": "Equipment",
       "anchor": "rs-eqp-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-eqp-001",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-EQP-002",
@@ -2232,7 +2232,7 @@
       "category": "Equipment",
       "anchor": "rs-eqp-002",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-eqp-002",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-EQP-003",
@@ -2244,7 +2244,7 @@
       "category": "Equipment",
       "anchor": "rs-eqp-003",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-eqp-003",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-EQP-004",
@@ -2256,7 +2256,7 @@
       "category": "Equipment",
       "anchor": "rs-eqp-004",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-eqp-004",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-EQP-005",
@@ -2268,7 +2268,7 @@
       "category": "Equipment",
       "anchor": "rs-eqp-005",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-eqp-005",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-EQP-006",
@@ -2292,7 +2292,7 @@
       "category": "Gameplay effects",
       "anchor": "rs-ge-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-ge-001",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-GE-002",
@@ -2304,7 +2304,7 @@
       "category": "Gameplay effects",
       "anchor": "rs-ge-002",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-ge-002",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-GE-003",
@@ -2316,7 +2316,7 @@
       "category": "Gameplay effects",
       "anchor": "rs-ge-003",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-ge-003",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-GE-004",
@@ -2364,7 +2364,7 @@
       "category": "Imports",
       "anchor": "rs-imp-003",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-003",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-IMP-004",
@@ -2376,7 +2376,7 @@
       "category": "Imports",
       "anchor": "rs-imp-004",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-004",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-IMP-005",
@@ -2388,7 +2388,7 @@
       "category": "Imports",
       "anchor": "rs-imp-005",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-005",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-IMP-006",
@@ -2400,7 +2400,7 @@
       "category": "Imports",
       "anchor": "rs-imp-006",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-006",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-IMP-007",
@@ -2412,7 +2412,7 @@
       "category": "Imports",
       "anchor": "rs-imp-007",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-007",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-IMP-008",
@@ -2436,7 +2436,7 @@
       "category": "Imports",
       "anchor": "rs-imp-009",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-009",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-IMP-010",
@@ -2448,7 +2448,7 @@
       "category": "Imports",
       "anchor": "rs-imp-010",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-010",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-IMP-011",
@@ -2472,7 +2472,7 @@
       "category": "Imports",
       "anchor": "rs-imp-012",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-012",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-JRN-001",
@@ -2484,7 +2484,7 @@
       "category": "Journal",
       "anchor": "structured-rs-jrn-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#structured-rs-jrn-001",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-JRN-002",
@@ -2508,7 +2508,7 @@
       "category": "Journal",
       "anchor": "rs-jrn-003",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-003",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-JRN-004",
@@ -2520,7 +2520,7 @@
       "category": "Journal",
       "anchor": "rs-jrn-004",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-004",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-JRN-005",
@@ -2532,7 +2532,7 @@
       "category": "Journal",
       "anchor": "rs-jrn-005",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-005",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-JRN-006",
@@ -2544,7 +2544,7 @@
       "category": "Journal",
       "anchor": "rs-jrn-006",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-006",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-JRN-007",
@@ -2556,7 +2556,7 @@
       "category": "Journal",
       "anchor": "rs-jrn-007",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-007",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-JRN-008",
@@ -2568,7 +2568,7 @@
       "category": "Journal",
       "anchor": "rs-jrn-008",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-008",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-JRN-009",
@@ -2580,7 +2580,7 @@
       "category": "Journal",
       "anchor": "rs-jrn-009",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-009",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-JRN-010",
@@ -2592,7 +2592,7 @@
       "category": "Journal",
       "anchor": "rs-jrn-010",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-010",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-JRN-011",
@@ -2604,7 +2604,7 @@
       "category": "Journal",
       "anchor": "rs-jrn-011",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-011",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-JRN-012",
@@ -2616,7 +2616,7 @@
       "category": "Journal",
       "anchor": "rs-jrn-012",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-012",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-JRN-013",
@@ -2628,7 +2628,7 @@
       "category": "Journal",
       "anchor": "rs-jrn-013",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-013",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-JRN-014",
@@ -2640,7 +2640,7 @@
       "category": "Journal",
       "anchor": "rs-jrn-014",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-jrn-014",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-JSON-001",
@@ -2664,7 +2664,7 @@
       "category": "Configuration and definitions",
       "anchor": "rs-json-002",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-json-002",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-JSON-003",
@@ -2676,7 +2676,7 @@
       "category": "Configuration and definitions",
       "anchor": "rs-json-003",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-json-003",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-JSON-004",
@@ -2724,7 +2724,7 @@
       "category": "Loaders",
       "anchor": "rs-load-002",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-load-002",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-LOAD-003",
@@ -2736,7 +2736,7 @@
       "category": "Loaders",
       "anchor": "rs-load-003",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-load-003",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-LOAD-004",
@@ -2748,7 +2748,7 @@
       "category": "Loaders",
       "anchor": "rs-load-004",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-load-004",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NIA-001",
@@ -2772,7 +2772,7 @@
       "category": "Niagara",
       "anchor": "rs-nia-002",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-nia-002",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NIA-003",
@@ -2784,7 +2784,7 @@
       "category": "Niagara",
       "anchor": "rs-nia-003",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-nia-003",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NIA-004",
@@ -2796,7 +2796,7 @@
       "category": "Niagara",
       "anchor": "rs-nia-004",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-nia-004",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NPC-001",
@@ -2808,7 +2808,7 @@
       "category": "NPCs",
       "anchor": "rs-npc-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-001",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NPC-002",
@@ -2820,7 +2820,7 @@
       "category": "NPCs",
       "anchor": "rs-npc-002",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-002",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NPC-003",
@@ -2832,7 +2832,7 @@
       "category": "NPCs",
       "anchor": "rs-npc-003",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-003",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NPC-004",
@@ -2844,7 +2844,7 @@
       "category": "NPCs",
       "anchor": "rs-npc-004",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-004",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NPC-005",
@@ -2856,7 +2856,7 @@
       "category": "NPCs",
       "anchor": "rs-npc-005",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-005",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NPC-006",
@@ -2868,7 +2868,7 @@
       "category": "NPCs",
       "anchor": "rs-npc-006",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-006",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NPC-007",
@@ -2880,7 +2880,7 @@
       "category": "NPCs",
       "anchor": "rs-npc-007",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-007",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NPC-008",
@@ -2892,7 +2892,7 @@
       "category": "NPCs",
       "anchor": "rs-npc-008",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-008",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NPC-009",
@@ -2904,7 +2904,7 @@
       "category": "NPCs",
       "anchor": "rs-npc-009",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-009",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NPC-010",
@@ -2916,7 +2916,7 @@
       "category": "NPCs",
       "anchor": "rs-npc-010",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-010",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NPC-011",
@@ -2928,7 +2928,7 @@
       "category": "NPCs",
       "anchor": "rs-npc-011",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-011",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NPC-012",
@@ -2940,7 +2940,7 @@
       "category": "NPCs",
       "anchor": "rs-npc-012",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-012",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NPC-013",
@@ -2952,7 +2952,7 @@
       "category": "NPCs",
       "anchor": "rs-npc-013",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-013",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NPC-014",
@@ -2964,7 +2964,7 @@
       "category": "NPCs",
       "anchor": "rs-npc-014",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-014",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NPC-015",
@@ -2976,7 +2976,7 @@
       "category": "NPCs",
       "anchor": "rs-npc-015",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-015",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NPC-016",
@@ -2988,7 +2988,7 @@
       "category": "NPCs",
       "anchor": "rs-npc-016",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-016",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NPC-017",
@@ -3000,7 +3000,7 @@
       "category": "NPCs",
       "anchor": "rs-npc-017",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-017",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NPC-018",
@@ -3012,7 +3012,7 @@
       "category": "NPCs",
       "anchor": "rs-npc-018",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-018",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NPC-019",
@@ -3024,7 +3024,7 @@
       "category": "NPCs",
       "anchor": "rs-npc-019",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-019",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NPC-020",
@@ -3036,7 +3036,7 @@
       "category": "NPCs",
       "anchor": "rs-npc-020",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-020",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NPC-021",
@@ -3048,7 +3048,7 @@
       "category": "NPCs",
       "anchor": "rs-npc-021",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-021",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NPC-022",
@@ -3060,7 +3060,7 @@
       "category": "NPCs",
       "anchor": "rs-npc-022",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-022",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NPC-023",
@@ -3072,7 +3072,7 @@
       "category": "NPCs",
       "anchor": "rs-npc-023",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-023",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NPC-024",
@@ -3084,7 +3084,7 @@
       "category": "NPCs",
       "anchor": "rs-npc-024",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-024",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NPC-025",
@@ -3096,7 +3096,7 @@
       "category": "NPCs",
       "anchor": "rs-npc-025",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-025",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NPC-026",
@@ -3108,7 +3108,7 @@
       "category": "NPCs",
       "anchor": "rs-npc-026",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-026",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NPC-027",
@@ -3120,7 +3120,7 @@
       "category": "NPCs",
       "anchor": "rs-npc-027",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-027",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NPC-028",
@@ -3132,7 +3132,7 @@
       "category": "NPCs",
       "anchor": "rs-npc-028",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-028",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-NPC-029",
@@ -3144,7 +3144,7 @@
       "category": "NPCs",
       "anchor": "rs-npc-029",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-npc-029",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-RAW-001",
@@ -3216,7 +3216,7 @@
       "category": "Registry",
       "anchor": "rs-rgst-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-001",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-RGST-002",
@@ -3228,7 +3228,7 @@
       "category": "Registry",
       "anchor": "rs-rgst-002",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-002",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-RGST-003",
@@ -3240,7 +3240,7 @@
       "category": "Registry",
       "anchor": "rs-rgst-003",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-003",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-RGST-004",
@@ -3252,7 +3252,7 @@
       "category": "Registry",
       "anchor": "rs-rgst-004",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-004",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-RGST-005",
@@ -3264,7 +3264,7 @@
       "category": "Registry",
       "anchor": "rs-rgst-005",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-005",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-RGST-006",
@@ -3276,7 +3276,7 @@
       "category": "Registry",
       "anchor": "rs-rgst-006",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-006",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-RGST-007",
@@ -3288,7 +3288,7 @@
       "category": "Registry",
       "anchor": "rs-rgst-007",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-007",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-RGST-008",
@@ -3300,7 +3300,7 @@
       "category": "Registry",
       "anchor": "rs-rgst-008",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-008",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-RGST-009",
@@ -3312,7 +3312,7 @@
       "category": "Registry",
       "anchor": "rs-rgst-009",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-009",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-RGST-010",
@@ -3324,7 +3324,7 @@
       "category": "Registry",
       "anchor": "rs-rgst-010",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-010",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-RGST-011",
@@ -3336,7 +3336,7 @@
       "category": "Registry",
       "anchor": "rs-rgst-011",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-011",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-RGST-012",
@@ -3348,7 +3348,7 @@
       "category": "Registry",
       "anchor": "rs-rgst-012",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-012",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-RGST-013",
@@ -3360,7 +3360,7 @@
       "category": "Registry",
       "anchor": "rs-rgst-013",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-013",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-RGST-014",
@@ -3372,7 +3372,7 @@
       "category": "Registry",
       "anchor": "rs-rgst-014",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-014",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-RGST-015",
@@ -3384,7 +3384,7 @@
       "category": "Registry",
       "anchor": "rs-rgst-015",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-015",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-SPAWN-001",
@@ -3456,7 +3456,7 @@
       "category": "Spawns",
       "anchor": "rs-spawn-006",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-006",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-SPAWN-007",
@@ -3468,7 +3468,7 @@
       "category": "Spawns",
       "anchor": "rs-spawn-007",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-007",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-SPAWN-008",
@@ -3480,7 +3480,7 @@
       "category": "Spawns",
       "anchor": "rs-spawn-008",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-008",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-SPAWN-009",
@@ -3492,7 +3492,7 @@
       "category": "Spawns",
       "anchor": "rs-spawn-009",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-009",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-SPAWN-010",
@@ -3504,7 +3504,7 @@
       "category": "Spawns",
       "anchor": "rs-spawn-010",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-010",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-SPAWN-011",
@@ -3516,7 +3516,7 @@
       "category": "Spawns",
       "anchor": "rs-spawn-011",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-011",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-SPAWN-012",
@@ -3528,7 +3528,7 @@
       "category": "Spawns",
       "anchor": "rs-spawn-012",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-012",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-SPAWN-013",
@@ -3540,7 +3540,7 @@
       "category": "Spawns",
       "anchor": "rs-spawn-013",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-spawn-013",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-STR-001",
@@ -3552,7 +3552,7 @@
       "category": "Strings",
       "anchor": "rs-str-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-str-001",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-STR-002",
@@ -3564,7 +3564,7 @@
       "category": "Strings",
       "anchor": "rs-str-002",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-str-002",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
       "code": "RS-STR-003",
@@ -3588,7 +3588,7 @@
       "category": "Vendors",
       "anchor": "rs-vnd-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-vnd-001",
-      "troubleshooting": "Read the original message, affected mod/file and target or property. Check the first related failure and the reported phase/outcome before changing definitions. An unavailable reading is not proof of a bad path or incompatible mod."
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     }
   ],
   "bridgeReasons": [

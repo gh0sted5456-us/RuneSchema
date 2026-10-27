@@ -2,15 +2,16 @@
 
 ## Step-by-step workflow
 
-Examples with placeholder paths/IDs are templates. Use inspected values and the
-[shared testing checklist](../../modders/testing-and-compatibility.md) before sharing.
+Start with the example closest to your idea. Replace its sample paths and IDs
+with values from your game, then use the
+[testing checklist](../../modders/testing-and-compatibility.md) to try it out before sharing.
 
 1. Plan starter, finish, checkpoints/orbs and the playable area in Unreal centimeters.
 2. Create `courses/10-camp-route.jsonc` from the mock-up below; replace the ID and coordinates.
 3. Populate the actual route and enclosing zone. Use `$Patch`/`$Target` only when deliberately changing an existing authored course.
 4. Restart and run the route from start through completion; inspect missing assets and out-of-zone checkpoints.
 
-**Tie-ins:** [Spawns](spawns.md) places separate world content; [players](players.md) controls player presentation, not course geometry.
+**Related guides:** [Spawns](spawns.md) places separate world content; [players](players.md) controls player presentation, not course geometry.
 
 
 **Folder:** `RuneSchema/mods/<ModName>/courses/`

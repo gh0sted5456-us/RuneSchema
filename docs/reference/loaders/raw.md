@@ -2,15 +2,16 @@
 
 ## Step-by-step workflow
 
-Examples with placeholder paths/IDs are templates. Use inspected values and the
-[shared testing checklist](../../modders/testing-and-compatibility.md) before sharing.
+Start with the example closest to your idea. Replace its sample paths and IDs
+with values from your game, then use the
+[testing checklist](../../modders/testing-and-compatibility.md) to try it out before sharing.
 
 1. Resolve the exact DataTable and inspect the live row struct; prefer a full path when short names are ambiguous.
 2. Create `raw/10-camp-rows.jsonc` with table, row and only the fields being changed.
 3. Replace all mock-up field names/types. Distinguish patching an existing row from constructing a new row with required data.
 4. Restart and inspect rejected properties/read-back, then exercise the asset or station that consumes the row.
 
-**Tie-ins:** [Assets](assets.md) references row handles; [buildings](buildings.md) and [recipes](recipes.md) connect station data.
+**Related guides:** [Assets](assets.md) references row handles; [buildings](buildings.md) and [recipes](recipes.md) connect station data.
 
 
 **Folder:** `RuneSchema/mods/<ModName>/raw/`

@@ -1,9 +1,9 @@
 # Test, package and update a data mod
 
-A valid JSON file is only the first check. Separate parsing, target resolution,
-reflection, gameplay consumption and persistence when deciding whether a mod
-works. Use this checklist for the [worked tutorials](fmodel-to-mod.md), not only
-for a large cooked mod.
+Try your change in a few small steps: check the file, find its target, test the
+feature, then save and reload. This checklist works for the
+[worked tutorials](fmodel-to-mod.md) as well as larger cooked mods, and helps you
+spot which part needs attention.
 
 ## Keep a small test matrix
 
@@ -38,9 +38,9 @@ from a known mod list. In **Helpy → Diagnostics**, select the current session
 and inspect issues plus the **Live Log** source that owns the message. Search
 the mod folder, table/object path, property and exact diagnostic code.
 
-Check the first failure before a cascade. "Mounted" means package mounting,
-not item registration or successful gameplay. A successful write is not proof
-that an already-created object has refreshed its cached state. Save relevant
+Start with the first related message. "Mounted" tells you the package is
+available; next check item registration and try the feature in-game. For changes
+to existing objects, check that their cached values have refreshed too. Save relevant
 log excerpts with versions/build/platform; redact personal names and paths
 before putting them in a public issue.
 

@@ -2,15 +2,16 @@
 
 ## Step-by-step workflow
 
-Examples with placeholder paths/IDs are templates. Use inspected values and the
-[shared testing checklist](../../modders/testing-and-compatibility.md) before sharing.
+Start with the example closest to your idea. Replace its sample paths and IDs
+with values from your game, then use the
+[testing checklist](../../modders/testing-and-compatibility.md) to try it out before sharing.
 
 1. Resolve registered sale items and the currency ItemData; select stable store/category IDs.
 2. Create `vendors/10-camp-supplies.jsonc` and replace mock-up paths, prices, stock and order.
 3. Bind the store from a compatible NPC VendorID or supported dialogue vendor action; a store definition places no merchant.
 4. Restart and verify category ordering, costs/quantities, authority, stock behavior and reconnect/reload.
 
-**Tie-ins:** [NPCs](npc.md), [dialogue](dialogue.md), [assets](assets.md) and [recipe contributions](recipes.md).
+**Related guides:** [NPCs](npc.md), [dialogue](dialogue.md), [assets](assets.md) and [recipe contributions](recipes.md).
 
 
 **Folder:** `RuneSchema/mods/<ModName>/vendors/`

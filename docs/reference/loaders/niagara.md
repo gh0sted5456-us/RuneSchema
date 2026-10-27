@@ -2,15 +2,16 @@
 
 ## Step-by-step workflow
 
-Examples with placeholder paths/IDs are templates. Use inspected values and the
-[shared testing checklist](../../modders/testing-and-compatibility.md) before sharing.
+Start with the example closest to your idea. Replace its sample paths and IDs
+with values from your game, then use the
+[testing checklist](../../modders/testing-and-compatibility.md) to try it out before sharing.
 
 1. Cook/mount the system and inspect the exact User.* parameters it exposes.
 2. Create `niagara/10-camp-aura.jsonc`; replace the mock-up system path and attachment socket.
 3. Set supported Boolean/number/vector/color parameters with the correct types; tune offsets on the real skeleton.
 4. Reference the definition through a supported visual-effect consumer and verify attachment/removal on each client.
 
-**Tie-ins:** [Equipment](equipment.md), [NPCs](npc.md) and [players](players.md) supply supported consumers; this loader does not create a system.
+**Related guides:** [Equipment](equipment.md), [NPCs](npc.md) and [players](players.md) supply supported consumers; this loader does not create a system.
 
 
 **Folder:** `RuneSchema/mods/<ModName>/niagara/`

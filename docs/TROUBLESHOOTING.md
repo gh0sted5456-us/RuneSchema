@@ -1,8 +1,9 @@
 # Troubleshoot RuneSchema and PAK mods
 
-Work from the first failed step instead of changing several files at once. A
-PAK can mount while an item inside it still fails to load, and an item can load
-while its recipe still points to the wrong station.
+Start with the symptom you are seeing, then follow the first related message in
+Diagnostics or the log. Checking one step at a time makes it easier to find the
+fix: for example, a mounted PAK may need an item dependency, or a loaded recipe
+may need its station reference adjusted.
 
 ## Start here
 

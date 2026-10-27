@@ -1,7 +1,7 @@
 # Replacement, $Append and targeted patching
 
-RuneSchema has several authoring contexts. A directive is not universal merely
-because another loader recognizes its name. This page distinguishes the forms
+Choose the patch form that matches the loader you are using. RuneSchema supports
+several authoring contexts, and each one has its own supported directives. This page distinguishes the forms
 used by the [loot](creature-drops.md), [item](cooked-item-patches.md),
 [clone](item-clones.md) and [inventory](bigger-inventory.md) tutorials.
 

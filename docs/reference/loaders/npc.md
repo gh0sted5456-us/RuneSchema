@@ -2,15 +2,16 @@
 
 ## Step-by-step workflow
 
-Examples with placeholder paths/IDs are templates. Use inspected values and the
-[shared testing checklist](../../modders/testing-and-compatibility.md) before sharing.
+Start with the example closest to your idea. Replace its sample paths and IDs
+with values from your game, then use the
+[testing checklist](../../modders/testing-and-compatibility.md) to try it out before sharing.
 
 1. Choose the compatible native actor role/visual source and a stable NPC ID.
 2. Create `npc/10-camp-keeper.jsonc`; replace the mock-up class/mesh and location with inspected values.
 3. Bind only the needed DialogueID, VendorID, QuestID or JournalEntries. Use supported grounding rules for the intended floor.
 4. Restart and verify authority-owned placement, interaction, client presentation and reload without duplicates.
 
-**Tie-ins:** [Dialogue](dialogue.md), [vendors](vendors.md), [quests](quests.md), [journal](journal.md) and [lore](lore.md).
+**Related guides:** [Dialogue](dialogue.md), [vendors](vendors.md), [quests](quests.md), [journal](journal.md) and [lore](lore.md).
 
 
 **Folder:** `RuneSchema/mods/<ModName>/npc/`

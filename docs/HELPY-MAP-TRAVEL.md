@@ -84,9 +84,9 @@ and stationary height samples expire after two seconds before refreshing.
 
 The implementation uses live reflected parameter layouts and semantic enum names,
 not executable offsets or storefront-specific byte patterns. Missing or changed
-native functions stop this feature safely. The current native API was checked
-against local generated headers and the current mapping; builds and deterministic
-tests do **not** establish in-game success.
+native functions stop this feature safely. The current native API has been checked against generated headers and the
+current mapping. Use a disposable in-game test to check travel on your build
+as well; automated tests cover the implementation rather than every live journey.
 
 Before release, test Steam and Game Pass in a disposable world: loaded nearby point,
 distant never-visited point, high/low terrain, roof/bridge, cliff/water rejection,

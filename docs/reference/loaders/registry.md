@@ -2,15 +2,16 @@
 
 ## Step-by-step workflow
 
-Examples with placeholder paths/IDs are templates. Use inspected values and the
-[shared testing checklist](../../modders/testing-and-compatibility.md) before sharing.
+Start with the example closest to your idea. Replace its sample paths and IDs
+with values from your game, then use the
+[testing checklist](../../modders/testing-and-compatibility.md) to try it out before sharing.
 
 1. Determine whether you need a presentation/authority declaration or native-reference enrollment.
 2. Create `registry/10-camp-registry.jsonc` using the matching example below and unique owned IDs.
 3. Replace all cooked paths. Mark schema-created references explicitly and construct them through their owning loader first; avoid redundant registration.
 4. Restart and inspect class/identity/authority validation and client assets. A declaration cannot supply a missing object or grant permission.
 
-**Tie-ins:** [Cooked declarations](../../COOKED-PAK-REGISTRY-MANIFEST.md), [assets](assets.md), [recipes](recipes.md), [journal](journal.md) and [quests](quests.md).
+**Related guides:** [Cooked declarations](../../COOKED-PAK-REGISTRY-MANIFEST.md), [assets](assets.md), [recipes](recipes.md), [journal](journal.md) and [quests](quests.md).
 
 
 **Folder:** `RuneSchema/mods/<ModName>/registry/`

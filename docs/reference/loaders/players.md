@@ -2,15 +2,16 @@
 
 ## Step-by-step workflow
 
-Examples with placeholder paths/IDs are templates. Use inspected values and the
-[shared testing checklist](../../modders/testing-and-compatibility.md) before sharing.
+Start with the example closest to your idea. Replace its sample paths and IDs
+with values from your game, then use the
+[testing checklist](../../modders/testing-and-compatibility.md) to try it out before sharing.
 
 1. Choose a name, GUID or wildcard selector; use a GUID where duplicate names matter.
 2. Create `players/10-camp-profile.jsonc` from the mock-up and replace the selector/definition references.
 3. Add only supported attributes/presentation. Choose one carry-capacity mode and inspect competing matching rules.
 4. Restart and verify the selected players only, host/client presentation and recreated pawns after death/reconnect.
 
-**Tie-ins:** [Nameplates](nameplates.md), [effects](effects.md), [Niagara](niagara.md) and [equipment](equipment.md).
+**Related guides:** [Nameplates](nameplates.md), [effects](effects.md), [Niagara](niagara.md) and [equipment](equipment.md).
 
 
 **Folder:** `RuneSchema/mods/<ModName>/players/`

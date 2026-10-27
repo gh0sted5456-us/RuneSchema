@@ -39,7 +39,7 @@ MyMod: 1
 removing, enabling or disabling packages; this is
 not hot reloading. Changing worlds does not start a package twice.
 
-## Lifecycle boundary
+## When companion scripts run {#lifecycle-boundary}
 
 RuneSchema does not replace or patch the UE4SS runtime. Stock UE4SS performs its
 native mod discovery before RuneSchema can announce nested packages. Native

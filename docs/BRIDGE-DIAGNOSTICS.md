@@ -1,6 +1,8 @@
 # RuneSchema bridge diagnostics
 
-RuneSchema records bounded, observational lifecycle data for every generic bridge channel. Diagnostics never authorize, reject, retry, or otherwise change gameplay. They contain no account identity, display name, network address, inventory payload, asset path, or server exception text.
+Bridge diagnostics help you see where a request reached and what to check next.
+They record a limited amount of connection activity without changing permissions,
+retrying requests or altering gameplay. They contain no account identity, display name, network address, inventory payload, asset path, or server exception text.
 
 Detailed events are disabled by default. Set `verbose = true` under `[bridgeDiagnostics]` in `settings/settings.ini` for a support run (legacy JSONC remains supported). Counters and warning/error events remain active, and RuneSchema writes one compact health summary when a world closes. The read-only in-process snapshot is exposed through `RegistryBridge::DiagnosticSnapshot()` for UE4SS support tooling and automated contracts.
 

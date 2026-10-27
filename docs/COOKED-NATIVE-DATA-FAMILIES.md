@@ -1,10 +1,11 @@
 # Cooked native data registration
 
-Status: experimental, opt-in identity enrollment. Compiled/unit/schema checks do
-not certify each family's gameplay, network or save lifecycle. No new-family
-fixtures have been installed or live-validated yet.
+These experimental, opt-in registration routes help connect additional cooked
+data families. Automated checks cover their definitions; live gameplay, networking
+and save/reload tests for these new families are still pending. Try them in a
+disposable test setup before including them in a release.
 
-## Boundary
+## How the cooked assets connect {#boundary}
 
 The PAK owns assets, references and behavior. RuneSchema enrolls explicitly
 declared, already-cooked native objects at its existing startup boundary. It
@@ -25,8 +26,8 @@ loop, native enum extension or per-world registry rebuild is introduced.
 
 Classes are in /Script/Dominion. Both current platform captures show these
 subsystems inheriting the same five registry containers without additional
-reflected subsystem fields. That observation is not proof of every consumer's
-initialization timing; test an actual consumer before shipping a mod using a lane.
+reflected subsystem fields. Next, test the feature that uses each registry in-game to check its initialization
+timing before shipping a mod with that lane.
 
 ## Declaration
 
@@ -51,7 +52,7 @@ case. Limits: 4096 references per lane, 16384 total references per document,
 plus the existing cooked document/shard byte limits. Use the existing shard
 mechanism rather than increasing limits for a large mod.
 
-## Registration guarantees and limits
+## What registration handles {#registration-guarantees-and-limits}
 
 Only declared objects are resolved. The runtime checks exact loaded paths and
 serialized-object provenance; soft-deleted/migrating assets are rejected so the

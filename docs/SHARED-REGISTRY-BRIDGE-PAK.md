@@ -1,5 +1,9 @@
 # Shared registry bridge PAK
 
+Use the shared bridge when your cooked mod needs RuneSchema’s registry or
+networking helpers. This page explains what the bridge supplies and what to
+include in your own mod.
+
 RuneSchema's shared registry bridge PAK provides one stable cooked-content base:
 
 ```text
@@ -10,7 +14,7 @@ It is a template for registry declarations, not a global table that every mod
 edits. Each mod creates and cooks its own data-asset instance. This lets many
 content PAKs register together without replacing one another.
 
-## Bridge boundary
+## What the bridge handles {#bridge-boundary}
 
 ### Client/server compatibility telemetry
 

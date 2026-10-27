@@ -28,8 +28,7 @@ changes. Do not begin by editing every export in a folder.
 
 ## 2. Inspect the current installed game
 
-1. Open the archives for the Dragonwilds build you are actually testing. A
-   Steam export from an older update is not proof of Game Pass's current layout.
+1. Open the archives for the Dragonwilds build you are actually testing. Check the current Game Pass layout separately when working from an older Steam export.
 2. Configure FModel's engine/versioning and matching mapping as required for
    that build. RuneSchema's mapping status is described in
    [mappings and writable paths](../SETTINGS-INI.md#game-mappings-and-writable-state).

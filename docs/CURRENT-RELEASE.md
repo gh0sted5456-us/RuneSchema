@@ -77,11 +77,11 @@ installed mod requires them. [Choose optional bridges](OPTIONAL-BRIDGES.md).
 | Add crafting or processing | [Stations and recipes](STATIONS-AND-RECIPES.md) |
 | Add custom armor and appearance | [Custom armor](CUSTOM-ARMOR.md) |
 
-## Save and multiplayer boundaries
+## Using mods with saves and multiplayer {#save-and-multiplayer-boundaries}
 
-PAK mounting, object resolution, live registration, and gameplay connection
-are different steps. A mounted file is not proof that its item or attack is
-usable. Check each layer in the startup log and in the game. The server remains
+Follow a new item from PAK mounting through object lookup and registration to
+its in-game behavior. The startup log helps you check each step and find where
+to make an adjustment. The server remains
 authoritative for multiplayer gameplay; participating clients need the cooked
 content they must use or display. [Platform and multiplayer guide](COMPATIBILITY.md).
 
@@ -90,7 +90,7 @@ loaded. It does not infer that a saved ID is orphaned merely because it came
 from a mod. Back up important characters before changing a gameplay mod list.
 [Save safety and removal](SAFE-SAVE-AND-LEDGER.md).
 
-## What RuneSchema does not do
+## What your mod supplies {#what-runeschema-does-not-do}
 
 RuneSchema cannot fix a PAK with missing cooked assets, wrong paths, or broken
 Blueprints. It cannot invent an armor material, the missing half of an attack

@@ -1,5 +1,9 @@
 # Create custom cooked armor
 
+Build a wearable set with your own meshes and materials, then use RuneSchema to
+make it available in-game. The steps below help you keep the item, appearance
+references and crafting together.
+
 ## Step-by-step workflow
 
 1. Prepare a compatible wearable ItemData and the male/female mesh-data records for each intended slot.
@@ -7,10 +11,11 @@
 3. Mount/register the item and wearable references, then add crafting/discovery through their owning loaders.
 4. Restart and check both body variants, equip/unequip, death/respawn, remote presentation and saved inventory.
 
-JSONC snippets are authoring mock-ups. Replace example paths, IDs and values with
-inspected content; a valid snippet cannot supply missing cooked dependencies.
+Use these JSONC examples as a starting point, with your own paths, IDs and
+values. Include the cooked assets they reference so the game can find everything
+your mod needs.
 
-**Tie-ins:** [Assets](reference/loaders/assets.md), [equipment](reference/loaders/equipment.md), [raw rows](reference/loaders/raw.md) and [cooked registries](COOKED-PAK-REGISTRY-MANIFEST.md).
+**Related guides:** [Assets](reference/loaders/assets.md), [equipment](reference/loaders/equipment.md), [raw rows](reference/loaders/raw.md) and [cooked registries](COOKED-PAK-REGISTRY-MANIFEST.md).
 
 
 RuneSchema can help a cooked armor item join Dragonwilds' native

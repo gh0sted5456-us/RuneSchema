@@ -2,15 +2,16 @@
 
 ## Step-by-step workflow
 
-Examples with placeholder paths/IDs are templates. Use inspected values and the
-[shared testing checklist](../../modders/testing-and-compatibility.md) before sharing.
+Start with the example closest to your idea. Replace its sample paths and IDs
+with values from your game, then use the
+[testing checklist](../../modders/testing-and-compatibility.md) to try it out before sharing.
 
 1. Select an actual compatible AI/resource actor class, not an attack asset or arbitrary Blueprint.
 2. Create `spawns/10-camp-actors.jsonc`; replace the mock-up class and coordinates.
 3. Choose permanent placement, EventOnly template or a supported conditional temporary resource; apply one grounding offset form.
 4. Restart and verify collision, authority, lifecycle and save rules. Confirm missing streamed ground waits rather than placing at a guessed height.
 
-**Tie-ins:** [Events](events.md) consumes EventOnly templates; [quests](quests.md) supplies conditions; [NPCs](npc.md) handles interactable character definitions.
+**Related guides:** [Events](events.md) consumes EventOnly templates; [quests](quests.md) supplies conditions; [NPCs](npc.md) handles interactable character definitions.
 
 
 **Folder:** `RuneSchema/mods/<ModName>/spawns/`

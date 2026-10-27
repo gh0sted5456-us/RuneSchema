@@ -1,5 +1,9 @@
 # Recipe discovery without separate raw patches
 
+Let players discover your recipes through pickups, interactions or skill
+progress. Choose the conditions you want, then connect them to a registered
+recipe.
+
 ## Step-by-step workflow
 
 1. Resolve the registered recipe and exact item/actor/skill prerequisites.
@@ -10,7 +14,7 @@
 4. Restart and check unmet/met conditions, an already learned character,
    reconnect and save/reload without resetting unrelated learned recipes.
 
-**Tie-ins:** [Recipes](reference/loaders/recipes.md),
+**Related guides:** [Recipes](reference/loaders/recipes.md),
 [assets](reference/loaders/assets.md), [journal](reference/loaders/journal.md)
 and [stations](STATIONS-AND-RECIPES.md).
 

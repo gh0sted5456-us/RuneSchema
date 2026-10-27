@@ -1,9 +1,10 @@
 # Shared content cache bundles
 
-Helpy can import/export a `.rsmk-cache` presentation bundle: exact Unreal
-asset paths, known persistence IDs, readable names, source-owner routing,
-item metadata, journal text and artwork references, plus cached preview pixels.
-It does **not** install mods or deserialize executable loader definitions.
+Share a `.rsmk-cache` bundle to give Helpy a head start on item names, pictures
+and other browsing details. A bundle includes exact Unreal asset paths, known
+persistence IDs, source ownership, item metadata, journal text and cached artwork.
+Install the mods separately; a cache contains browsing data rather than executable
+mod definitions.
 
 !!! note "Availability"
     GitHub hosts version-2 native item/journal bundles as well as legacy
@@ -118,10 +119,10 @@ its files can remain on disk for later re-enabling. Packaged cache imports keep
 the containing folder as an owner alias, so renaming an installed mod does not
 change the publisher's content identity.
 
-The first file read is asynchronous, not literally zero-time. A cached item is
-a **presentation reference**: its ID/path does not prove it exists, is unlocked,
-or can be delivered in the current game. Delivery, equipment and world actions
-still resolve live data. Cached input never enrolls or registers a mod.
+Allow a moment for the first file read, which runs in the background. A cached
+item is a **presentation reference** for browsing; when you give, equip or use it,
+Helpy checks the running game for availability and permissions. Install and enable
+the supplying mod to register its content.
 
 Download selection prefers the current game build and runtime, but a different
 game version does not block display of a previously published cache. A cache

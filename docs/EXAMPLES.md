@@ -1,7 +1,8 @@
 # Example library
 
-Use the smallest example that matches the problem. Examples are references, not
-files installed by the public runtime.
+Pick the example closest to what you want to make, then adapt its paths and
+values for your mod. The examples are separate learning files, so add the ones
+you want rather than expecting them in the runtime installation.
 
 ## Worked, line-by-line tutorials
 

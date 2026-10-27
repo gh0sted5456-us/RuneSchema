@@ -2,15 +2,16 @@
 
 ## Step-by-step workflow
 
-Examples with placeholder paths/IDs are templates. Use inspected values and the
-[shared testing checklist](../../modders/testing-and-compatibility.md) before sharing.
+Start with the example closest to your idea. Replace its sample paths and IDs
+with values from your game, then use the
+[testing checklist](../../modders/testing-and-compatibility.md) to try it out before sharing.
 
 1. Choose a mounted item of the same native class and behavior; inspect its exact object path.
 2. Create `assets/10-camp-item.jsonc`. For a clone, assign a new destination, canonical persistence ID and InternalName; for a patch, retain the existing identity.
 3. Use the mock-up below and replace every placeholder. Change only reflected fields present on that class.
 4. Restart, inspect registration, then reference the resulting path from recipes, shops or journal discovery. Verify save/reload before distribution.
 
-**Tie-ins:** [Recipes](recipes.md), [raw rows](raw.md), [vendors](vendors.md), [journal](journal.md) and [quest acceptance items](../../modders/quests-and-questboards.md).
+**Related guides:** [Recipes](recipes.md), [raw rows](raw.md), [vendors](vendors.md), [journal](journal.md) and [quest acceptance items](../../modders/quests-and-questboards.md).
 
 
 Craftable consumables may declare [`$QuestScroll`](../../QUEST-SCROLLS.md) to

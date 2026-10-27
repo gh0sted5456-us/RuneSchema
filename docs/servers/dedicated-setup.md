@@ -1,8 +1,9 @@
 # Install RuneSchema on a dedicated server
 
-Stop the dedicated server completely before changing its UE4SS installation,
-RuneSchema DLL, PAKs, or mod list. Preserve the existing installation and
-`RSDragonwilds/Saved/SaveGames` first.
+Start by backing up the existing installation and `RSDragonwilds/Saved/SaveGames`.
+Then stop the dedicated server completely before updating UE4SS, the RuneSchema
+DLL, PAKs or the mod list. Once the files are in place, this guide walks through
+your first connection.
 
 ## 1. Find the server's UE4SS folder
 

@@ -2,15 +2,16 @@
 
 ## Step-by-step workflow
 
-Examples with placeholder paths/IDs are templates. Use inspected values and the
-[shared testing checklist](../../modders/testing-and-compatibility.md) before sharing.
+Start with the example closest to your idea. Replace its sample paths and IDs
+with values from your game, then use the
+[testing checklist](../../modders/testing-and-compatibility.md) to try it out before sharing.
 
 1. Prepare a mounted icon and decide which players should see the badge.
 2. Create `nameplates/10-camp-badge.jsonc` using the reusable definition example.
 3. Replace ID, icon and distance; add only confirmed event/function filters if dynamic states are needed.
 4. Reference the definition from players, restart and verify self/remote visibility, distance, death and respawn.
 
-**Tie-ins:** [Players](players.md) selects recipients; [PAK content](../../PAK-CONTENT-GUIDE.md) supplies new artwork.
+**Related guides:** [Players](players.md) selects recipients; [PAK content](../../PAK-CONTENT-GUIDE.md) supplies new artwork.
 
 
 **Folder:** `RuneSchema/mods/<ModName>/nameplates/`

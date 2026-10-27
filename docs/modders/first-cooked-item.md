@@ -65,7 +65,7 @@ row, and category or recipe array. Work through the
 If your PAK already has a complete native recipe and unlock path, check that
 path in-game before adding a duplicate RuneSchema recipe.
 
-## 5. Verify one boundary at a time
+## 5. Check each step in-game {#5-verify-one-boundary-at-a-time}
 
 1. Start with only this mod and its required dependencies enabled.
 2. In `UE4SS.log`, find the mod name, PAK mount, item path resolution, and
@@ -76,5 +76,5 @@ path in-game before adding a duplicate RuneSchema recipe.
 5. If it is wearable armor, verify each authored material and body mesh.
    [Armor guide](../CUSTOM-ARMOR.md).
 
-Test a backed-up existing save before release. A mounted PAK is not proof that
-every item in it joined a live registry.
+Before release, try a backed-up existing save and check the registration of each
+item your PAK supplies.

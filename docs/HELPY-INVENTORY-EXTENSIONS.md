@@ -1,10 +1,11 @@
 
 # Inventory marks and retired deletion tools
 
-Live Scrap and automatic deleted-item Helpy Storage are retired. There is no
-Delete observer, Scrap prompt, refund/restore action, Storage tab or Scrap
-setting. Native Delete is not intercepted. Existing legacy recovery files are
-preserved. Native chest and personal-inventory inspection remain separate.
+Use inventory marks to keep track of favorite and junk items, and inspect bags
+and chests through their own views. The earlier Scrap and deleted-item Storage
+experiments have been retired: Helpy leaves native Delete alone and offers no
+Scrap prompt, refund/restore action, Storage tab or Scrap setting. Existing legacy
+recovery files are kept.
 
 ## Favorite / Junk
 

@@ -2,15 +2,16 @@
 
 ## Step-by-step workflow
 
-Examples with placeholder paths/IDs are templates. Use inspected values and the
-[shared testing checklist](../../modders/testing-and-compatibility.md) before sharing.
+Start with the example closest to your idea. Replace its sample paths and IDs
+with values from your game, then use the
+[testing checklist](../../modders/testing-and-compatibility.md) to try it out before sharing.
 
 1. Choose a compatible interactable NPC or dialogue prop and a stable conversation ID.
 2. Create `dialogue/10-camp-conversation.jsonc` with an Entry naming an existing node.
 3. Add up to four choices per node; connect Next/End, then add requirements before supported actions.
 4. Bind the ID through the actor's DialogueID. Restart and check every reachable branch, unmet requirement and player-specific result.
 
-**Tie-ins:** [NPCs](npc.md), [vendors](vendors.md), [quests and boards](../../modders/quests-and-questboards.md) and [lore](lore.md).
+**Related guides:** [NPCs](npc.md), [vendors](vendors.md), [quests and boards](../../modders/quests-and-questboards.md) and [lore](lore.md).
 
 
 **Folder:** `RuneSchema/mods/<ModName>/dialogue/`

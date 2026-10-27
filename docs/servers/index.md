@@ -5,7 +5,7 @@ hide:
 
 # For server owners
 
-<p class="rs-hub-lead">The dedicated server owns gameplay outcomes. Clients still need the matching cooked content and presentation files for mods they use or see; RuneSchema does not download missing PAKs for them.</p>
+<p class="rs-hub-lead">Set up RuneSchema for your community and keep the server and players’ mod lists in step. The server handles gameplay changes; share the matching PAKs and presentation files with players before they join, since RuneSchema does not download them automatically.</p>
 
 <div class="rs-hub-links">
   <a href="dedicated-setup/">Set up the server<small>Install RuneSchema and enabled gameplay mods.</small></a>

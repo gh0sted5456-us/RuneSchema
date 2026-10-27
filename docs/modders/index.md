@@ -5,7 +5,7 @@ hide:
 
 # For modders
 
-<p class="rs-hub-lead">Use loader files to connect supported game data, or bring your own cooked assets in a PAK. RuneSchema is a runtime bridge, not a button that cooks Unreal assets for you.</p>
+<p class="rs-hub-lead">Make a small data change, adapt an existing PAK, or bring in cooked assets of your own. Pick a walkthrough below and build your mod one step at a time; Unreal’s tools handle cooking, and RuneSchema connects the result to the game.</p>
 
 <div class="rs-hub-links">
   <a href="../AUTHORING-GUIDE/">Make your first mod<small>Start with a small loader file.</small></a>
@@ -37,7 +37,7 @@ match the code shown in the guides.
 
 ## Connect new cooked content
 
-For a cooked feature, check each stage separately: the PAK contains its dependencies, RuneSchema mounts it, the object path resolves, any required native registry accepts it, and the feature works in-game. A successful mount does not establish the later stages.
+For cooked content, work through the connection in order: include its dependencies, mount the PAK, check the object path, register the asset where needed, and try the feature in-game. Each step gives you a useful place to look if something needs adjusting.
 
 Start with the guide closest to what you are making:
 

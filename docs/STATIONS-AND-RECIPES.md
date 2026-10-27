@@ -1,5 +1,8 @@
 # Create stations and recipes
 
+Give players a way to craft or process your items. Start with a station similar
+to the one you want, then connect its building data, recipes and menu placement.
+
 ## Step-by-step workflow
 
 1. Choose crafting versus timed processing and inspect a compatible native station.
@@ -7,10 +10,11 @@
 3. Connect BuildingPieceData through buildings, then place recipes in the station's actual Category or Recipes array.
 4. Choose discovery/unlock behavior, restart and verify exact inputs/outputs, fuel lanes, interaction and persistence.
 
-JSONC snippets are authoring mock-ups. Replace example paths, IDs and values with
-inspected content; a valid snippet cannot supply missing cooked dependencies.
+Use these JSONC examples as a starting point, with your own paths, IDs and
+values. Include the cooked assets they reference so the game can find everything
+your mod needs.
 
-**Tie-ins:** [Buildings](reference/loaders/buildings.md), [raw rows](reference/loaders/raw.md), [recipes](reference/loaders/recipes.md) and [Quest Boards](modders/quests-and-questboards.md).
+**Related guides:** [Buildings](reference/loaders/buildings.md), [raw rows](reference/loaders/raw.md), [recipes](reference/loaders/recipes.md) and [Quest Boards](modders/quests-and-questboards.md).
 
 
 A station is more than a world model. A complete station needs a buildable or

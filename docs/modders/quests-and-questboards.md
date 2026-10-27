@@ -1,7 +1,8 @@
 # Build a quest and put it on a Quest Board
 
-Start with one small quest, then connect an acceptance route. `/quests` defines
-the quest; it does not create a board actor, a crafting recipe or a consumable.
+Build one small quest, then give players a way to accept it. Put the quest
+definition in `/quests`, and add the board actor, recipe or consumable you want
+to use alongside it.
 This walkthrough uses the current RuneSchema contracts, including the optional
 Quest Board provider maintained separately from the framework.
 
@@ -132,7 +133,7 @@ follow the exact non-pure, scripted `UseItem` override contract in
 generic lore book is not an equivalent substitute. Do not add a second quest
 grant/reward effect to its cooked use callback.
 
-## 4. Add a contract recipe to the crafting board
+## 4. Add a quest recipe to the crafting board {#4-add-a-contract-recipe-to-the-crafting-board}
 
 `recipes/30-ash-contract.jsonc`:
 

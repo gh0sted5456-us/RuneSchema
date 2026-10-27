@@ -2,15 +2,16 @@
 
 ## Step-by-step workflow
 
-Examples with placeholder paths/IDs are templates. Use inspected values and the
-[shared testing checklist](../../modders/testing-and-compatibility.md) before sharing.
+Start with the example closest to your idea. Replace its sample paths and IDs
+with values from your game, then use the
+[testing checklist](../../modders/testing-and-compatibility.md) to try it out before sharing.
 
 1. Choose the native journal Type and its World, Recipes or Knowledge placement; separate registration from player discovery.
 2. Create `journal/10-camp-notes.jsonc` using a stable mod-specific key, or reference one exact cooked entry.
 3. Replace text, art and AddTo values in the mock-up. Choose Unlock or a supported discovery condition/trigger deliberately.
 4. Restart and confirm placement, unlock, read state and reload independently. A cached preview is not the player's unlock receipt.
 
-**Tie-ins:** [Lore](lore.md), [NPC JournalEntries](npc.md), [recipes](recipes.md) and [cache bundles](../../CACHE-BUNDLES.md).
+**Related guides:** [Lore](lore.md), [NPC JournalEntries](npc.md), [recipes](recipes.md) and [cache bundles](../../CACHE-BUNDLES.md).
 
 
 **Folder:** `RuneSchema/mods/<ModName>/journal/` (`/lore/` accepts Lore entries only).

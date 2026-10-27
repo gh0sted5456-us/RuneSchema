@@ -2,15 +2,16 @@
 
 ## Step-by-step workflow
 
-Examples with placeholder paths/IDs are templates. Use inspected values and the
-[shared testing checklist](../../modders/testing-and-compatibility.md) before sharing.
+Start with the example closest to your idea. Replace its sample paths and IDs
+with values from your game, then use the
+[testing checklist](../../modders/testing-and-compatibility.md) to try it out before sharing.
 
 1. Select a registered BuildingPieceData source or a cooked piece supplied by your mod.
 2. Create `buildings/10-camp-piece.jsonc`; choose either `$Clone` or `Asset`, not both.
 3. Replace the mock-up's source/actor paths and full cost list, then set build-menu placement and only supported overrides.
 4. Restart; confirm menu entry, collision, placement, station interaction, save/reload and deconstruction. A menu icon is not proof of a usable actor.
 
-**Tie-ins:** [Recipes](recipes.md) attaches station output; [raw](raw.md) supplies table rows; [stations](../../STATIONS-AND-RECIPES.md) explains actor row handles.
+**Related guides:** [Recipes](recipes.md) attaches station output; [raw](raw.md) supplies table rows; [stations](../../STATIONS-AND-RECIPES.md) explains actor row handles.
 
 
 **Folder:** `RuneSchema/mods/<ModName>/buildings/`

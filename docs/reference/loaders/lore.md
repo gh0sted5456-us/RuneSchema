@@ -2,15 +2,16 @@
 
 ## Step-by-step workflow
 
-Examples with placeholder paths/IDs are templates. Use inspected values and the
-[shared testing checklist](../../modders/testing-and-compatibility.md) before sharing.
+Start with the example closest to your idea. Replace its sample paths and IDs
+with values from your game, then use the
+[testing checklist](../../modders/testing-and-compatibility.md) to try it out before sharing.
 
 1. Write the pages and choose a stable mod-owned lore key, or resolve an existing cooked lore asset.
 2. Create `lore/10-camp-book.jsonc`; keep Type as Lore and replace the mock-up page text.
 3. Choose normal discovery or a supported dialogue/NPC lore binding. Use a compatible book prop if you want read-state presentation.
 4. Restart and verify discovery, actual viewing, open/non-glowing read presentation and saved progress separately.
 
-**Tie-ins:** [Journal](journal.md) explains native placement/discovery; [NPCs](npc.md) and [dialogue](dialogue.md) provide supported interactions.
+**Related guides:** [Journal](journal.md) explains native placement/discovery; [NPCs](npc.md) and [dialogue](dialogue.md) provide supported interactions.
 
 
 **Folder:** `RuneSchema/mods/<ModName>/lore/`

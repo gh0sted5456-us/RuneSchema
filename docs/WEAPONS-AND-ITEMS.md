@@ -1,5 +1,9 @@
 # Create weapons and items
 
+Make an item variant from existing game content, or introduce a fully cooked
+item of your own. Start with the route that matches your idea, then connect its
+equipment, crafting and discovery.
+
 ## Step-by-step workflow
 
 1. Choose a compatible existing item clone or a cooked ItemData route; new art needs a mounted content provider.
@@ -7,10 +11,11 @@
 3. Use the JSONC mock-ups below to register/patch the item, then add its recipe, vendor or discovery tie-in.
 4. Restart and verify delivery, equip/use, replication and save/reload independently; a visible card is only presentation.
 
-JSONC snippets are authoring mock-ups. Replace example paths, IDs and values with
-inspected content; a valid snippet cannot supply missing cooked dependencies.
+Use these JSONC examples as a starting point, with your own paths, IDs and
+values. Include the cooked assets they reference so the game can find everything
+your mod needs.
 
-**Tie-ins:** [Assets](reference/loaders/assets.md), [equipment](reference/loaders/equipment.md), [recipes](reference/loaders/recipes.md) and [PAK content](PAK-CONTENT-GUIDE.md).
+**Related guides:** [Assets](reference/loaders/assets.md), [equipment](reference/loaders/equipment.md), [recipes](reference/loaders/recipes.md) and [PAK content](PAK-CONTENT-GUIDE.md).
 
 
 There are two practical ways to create an item with RuneSchema. Copy an existing

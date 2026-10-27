@@ -1,5 +1,8 @@
 # Advanced Authoring & Tools
 
+Helpy can help you find game records and turn them into an editable starter for
+your mod. Browse and preview first, then export the changes you want to keep.
+
 ## Step-by-step workflow
 
 1. Open Helpy and choose the workspace for the feature you are authoring; searching/previewing does not install changes.
@@ -7,10 +10,11 @@
 3. Replace names, identities and paths; check dependencies and export to the relevant loader folder rather than copying a whole unrelated mod.
 4. Review the exported JSONC, enable the mod, restart and verify native behavior separately from the preview.
 
-JSONC snippets are authoring mock-ups. Replace example paths, IDs and values with
-inspected content; a valid snippet cannot supply missing cooked dependencies.
+Use these JSONC examples as a starting point, with your own paths, IDs and
+values. Include the cooked assets they reference so the game can find everything
+your mod needs.
 
-**Tie-ins:** [Loader walkthroughs](LOADER-WALKTHROUGHS.md), [item authoring](WEAPONS-AND-ITEMS.md), [quests and boards](modders/quests-and-questboards.md) and [cache ownership](CACHE-BUNDLES.md).
+**Related guides:** [Loader walkthroughs](LOADER-WALKTHROUGHS.md), [item authoring](WEAPONS-AND-ITEMS.md), [quests and boards](modders/quests-and-questboards.md) and [cache ownership](CACHE-BUNDLES.md).
 
 
 RuneSchema provides authoring through Helpy's separate desktop
@@ -139,9 +143,10 @@ the Items page also points to **Players → Clone** for item authoring.
 | Results | Review completed tool output. |
 | Save Cleanup | Perform a separate offline save operation only when you intend to. |
 
-Authoring tools cannot make an incorrectly cooked PAK valid, and a preview is
-not proof that a mod works in a world. Follow the [first-mod guide](AUTHORING-GUIDE.md)
-and test first entry, return to menu, re-entry, and a full restart.
+Use the preview to prepare your changes, then follow the
+[first-mod guide](AUTHORING-GUIDE.md) to try them in a world. Include first entry,
+a return to the menu, re-entry and a full restart. If an asset is missing from
+the cook, add it to the PAK before testing again.
 
 For the manual workflow, use [FModel export to mod](modders/fmodel-to-mod.md),
 [chest capacity](modders/bigger-chests.md), [creature drops](modders/creature-drops.md)

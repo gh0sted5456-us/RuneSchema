@@ -1,18 +1,20 @@
-# Cooked repair items — boundary and native evidence
+# Create a cooked repair item {#cooked-repair-items-boundary-and-native-evidence}
 
-Status: cooked-only implementation requested on 2026-10-23; functional gameplay
-verification pending. No repair test files were installed.
+This guide describes building a repair item whose behavior lives in its cooked
+Blueprint. Gameplay verification is still pending, and no repair test files have
+been installed, so use it as an authoring reference rather than a ready-made item.
 
-## Boundary
+## Keep the behavior in your cooked item {#boundary}
 
 The mod PAK owns complete CanUseItem/UseItem behavior, eligibility, prices, stack
 limits, icons, purchases, costs, station routing and consumption. RuneSchema
 provides normal loading/registration only. There is no repair-specific runtime
 action, filter callback contract, interceptor or service.
 
-The earlier RepairPersonalEquipment/FilterFunction prototype was removed. Do not
-author declarations for it. Colors fixtures v1/v2 have false-only event bodies:
-they are inert ABI fixtures, not functional or release-ready items.
+Use the cooked item route below. The earlier RepairPersonalEquipment/FilterFunction
+prototype has been removed. Colors fixtures v1/v2 return false from their events;
+they demonstrate interface shape and still need working behavior before gameplay
+use or release.
 
 ## Native Blueprint surface observed
 

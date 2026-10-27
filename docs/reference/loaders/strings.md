@@ -2,15 +2,16 @@
 
 ## Step-by-step workflow
 
-Examples with placeholder paths/IDs are templates. Use inspected values and the
-[shared testing checklist](../../modders/testing-and-compatibility.md) before sharing.
+Start with the example closest to your idea. Replace its sample paths and IDs
+with values from your game, then use the
+[testing checklist](../../modders/testing-and-compatibility.md) to try it out before sharing.
 
 1. Identify the exact displayed source text and its supported named/global scope.
 2. Create `strings/10-camp-text.jsonc` using the replacement-map mock-up.
 3. Replace the scope and source/replacement strings exactly; consider other mods and locale-specific source text.
 4. Restart and revisit the affected screen; verify intended matches and no unrelated text replacement. This does not rename string-table keys.
 
-**Tie-ins:** [Blueprints](blueprints.md) handles reflected widget changes; [journal](journal.md) and [quests](quests.md) author their own content text.
+**Related guides:** [Blueprints](blueprints.md) handles reflected widget changes; [journal](journal.md) and [quests](quests.md) author their own content text.
 
 
 **Folder:** `RuneSchema/mods/<ModName>/strings/`

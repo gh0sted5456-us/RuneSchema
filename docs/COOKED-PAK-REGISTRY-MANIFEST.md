@@ -1,5 +1,9 @@
 # Declare cooked content for live registries
 
+A registry declaration tells RuneSchema which cooked assets to connect to the
+game. Use a small JSONC file for an existing PAK, or include the declaration in
+your cooked content.
+
 ## Step-by-step workflow
 
 1. Identify cooked content that lacks another reliable enrollment route; avoid duplicating ordinary loader registration.
@@ -7,10 +11,11 @@
 3. Keep identity/construction in the asset or owning loader; declarations do not create missing classes or permission.
 4. Mount the content provider and restart; verify every required lane and its gameplay consumer before relying on cleanup certification. Cook a declaration asset only when choosing the cooked route.
 
-JSONC snippets are authoring mock-ups. Replace example paths, IDs and values with
-inspected content; a valid snippet cannot supply missing cooked dependencies.
+Use these JSONC examples as a starting point, with your own paths, IDs and
+values. Include the cooked assets they reference so the game can find everything
+your mod needs.
 
-**Tie-ins:** [Registry loader](reference/loaders/registry.md), [PAK content](PAK-CONTENT-GUIDE.md), [recipes](reference/loaders/recipes.md) and [journal](reference/loaders/journal.md).
+**Related guides:** [Registry loader](reference/loaders/registry.md), [PAK content](PAK-CONTENT-GUIDE.md), [recipes](reference/loaders/recipes.md) and [journal](reference/loaders/journal.md).
 
 
 A PAK mount makes cooked packages available to Unreal. It does **not** by

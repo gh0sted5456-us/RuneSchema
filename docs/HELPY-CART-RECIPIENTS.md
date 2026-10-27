@@ -55,7 +55,7 @@ the existing authoritative target validation, not silently replaced by another
 recipient. The batch retains its original target snapshot even if selection
 changes elsewhere in the UI.
 
-## Current authority boundary
+## Giving items in multiplayer {#current-authority-boundary}
 
 Multi-recipient delivery requires authoritative host/server player paths. The
 existing remote client Helpy bridge is self-targeted and returns server queue

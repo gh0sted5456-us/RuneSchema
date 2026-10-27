@@ -2,15 +2,16 @@
 
 ## Step-by-step workflow
 
-Examples with placeholder paths/IDs are templates. Use inspected values and the
-[shared testing checklist](../../modders/testing-and-compatibility.md) before sharing.
+Start with the example closest to your idea. Replace its sample paths and IDs
+with values from your game, then use the
+[testing checklist](../../modders/testing-and-compatibility.md) to try it out before sharing.
 
 1. Cook and mount a GameplayEffect class with the native behavior your feature requires.
 2. Create `effects/10-camp-effects.jsonc`; replace the mock-up's class path with that mounted generated class.
 3. Give the class a stable reusable effect alias; reference it only from a consumer that supports effect IDs.
 4. Restart and verify application/removal through the consumer. An alias does not create a class or edit its defaults.
 
-**Tie-ins:** [Equipment](equipment.md) can consume granted effects; [players](players.md) provides supported player effect rules.
+**Related guides:** [Equipment](equipment.md) can consume granted effects; [players](players.md) provides supported player effect rules.
 
 
 **Folder:** `RuneSchema/mods/<ModName>/effects/`

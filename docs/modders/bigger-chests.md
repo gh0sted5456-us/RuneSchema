@@ -1,8 +1,9 @@
 # Bigger chests, line by line
 
-This is a focused Blueprint/component-default edit based on the author's
-**Increased Storage - 3** mod. It does not create a new chest type, a building
-clone, or an inventory item. Existing chest classes retain their game identity.
+Give existing chests more room with a small Blueprint/component-default edit,
+based on the author’s **Increased Storage - 3** mod. The patch keeps the original
+chest classes and their game identities; use a separate building or item definition
+when you want a new type instead.
 
 Start with [FModel to mod](fmodel-to-mod.md) if export wrappers are unfamiliar.
 
@@ -91,10 +92,10 @@ the container accepts. Do not publish an arbitrary token stream as a universal
 
 ## Updates and safe removal
 
-**Empty extra slots before reducing capacity or removing this mod.** Do not
-assume hidden overflow slots will be recovered automatically. Preserve a world
-backup before testing any capacity reduction. Increasing a number is not proof
-that the UI, serialization and network paths all support that number.
+**Move items out of the extra slots before reducing capacity or removing this mod.**
+Keep a world backup as well: hidden overflow slots may not be recoverable
+automatically. When choosing a larger capacity, test the last slots, save/reload
+and multiplayer transfers so the UI and game storage agree.
 
 If another mod changes the same field, use a clearly named compatibility mod
 after both providers and document the chosen capacity. A full copied export

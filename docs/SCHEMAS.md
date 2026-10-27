@@ -1,8 +1,8 @@
 # JSON schemas
 
-RuneSchema ships machine-readable schemas for editor completion and structural
-checks. The loaded game remains the final authority on whether an object, row,
-field, and value type are available.
+Use RuneSchema’s schemas for editor suggestions and quick checks while you
+write your mod. Then check the target in your game: its current objects, rows and
+field types determine which changes it can use.
 
 | Schema | Purpose |
 |---|---|
@@ -19,10 +19,10 @@ recipe identity and equipment effects. Reflected game properties are not an
 exhaustive schema field database. The Pages build keeps
 these generated files and adds the three focused schemas above.
 
-## Validation expectations
+## Check your definitions {#validation-expectations}
 
 - Unknown schema fields are rejected where the strict schema applies.
-- Do not write duplicate keys. Strict readers reject them; do not rely on a legacy reader retaining a particular duplicate.
+- Give each key one value. Duplicate keys are rejected by strict readers and can behave differently in older readers.
 - Target resolution must be unambiguous.
 - The loaded object's fields and row layout are checked before a change.
 - Strict registry ownership conflicts reject the registration. Ordinary field overrides can intentionally replace an earlier mod's value; use a small compatibility patch and document its order.

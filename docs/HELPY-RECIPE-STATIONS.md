@@ -1,7 +1,8 @@
 # Helpy recipe stations
 
-The Recipes station picker is populated from native crafting/processing table rows,
-not from item outputs or every asset with a recipe array. A compatible row must
+Choose a station in Recipes to work with its crafting or processing table rows.
+The picker uses those native rows rather than item outputs or unrelated recipe
+arrays. A compatible row must
 expose a typed `StationBuildingPieceData` reference and a supported native recipe
 collection. Vendor rows are excluded by their actual `bIsVendor` value, not by a
 filename containing the word "vendor". Independent mod tables remain supported

@@ -21,27 +21,25 @@ hide:
 </section>
 
 <aside class="rs-release" aria-label="Current release">
-  <span class="rs-release__tag">Released on main</span>
-  <p><strong>0.8.0.2</strong> — both DLLs rebuilt, reusable native artwork, an independent cache feed, and offline PAK cache tooling.</p>
+  <span class="rs-release__tag">Current download</span>
+  <p><strong>0.8.0.2</strong> brings RuneSchema and Helpy together in one download, with reusable artwork and optional tools for building your mod’s cache.</p>
   <a href="RELEASE-0.8.0.2/">Release notes and verification <span aria-hidden="true">→</span></a>
 </aside>
 
-<p>The earlier 0.8.0.1 release includes a cleaned package and a complete
-<a href="CHANGELOG-0.8.0.1/">line-by-line implemented and removed changelog</a>.
-Historical releases and tags remain available.</p>
-<p><strong>Source and binaries together: 0.8.0.2.</strong> Main, experimental and
-the release tag include the earlier <a href="CHANGELOG-0.8.0.1b/">quick bug fixes</a>
-and the <a href="CHANGELOG-0.8.0.2/">current cache and authoring improvements</a>.</p>
+<p>Looking for the latest improvements? The <a href="CHANGELOG-0.8.0.2/">changelog</a>
+includes the October 27 source update, with better cache discovery, cart controls
+and a configurable Helpy shortcut. Check <a href="CURRENT-RELEASE/">download and source status</a>
+to see which changes are in the release package.</p>
 
 <h2 class="rs-section-heading">Choose your path</h2>
 <div class="rs-paths">
   <article class="rs-path">
     <h3><a href="users/">Play with mods <span aria-hidden="true">↗</span></a></h3>
-    <p>Install the runtime, manage your add-ons, and keep your saves safe.</p>
+    <p>Install RuneSchema, choose your add-ons, and get comfortable with Helpy.</p>
   </article>
   <article class="rs-path">
     <h3><a href="modders/">Create content <span aria-hidden="true">↗</span></a></h3>
-    <p>Start with a schema or connect cooked assets to the game's native systems.</p>
+    <p>Try a small data change or bring your own cooked assets into the game.</p>
   </article>
   <article class="rs-path">
     <h3><a href="servers/">Run a server <span aria-hidden="true">↗</span></a></h3>

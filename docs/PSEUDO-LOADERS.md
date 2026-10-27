@@ -1,5 +1,8 @@
 # Blueprint and Lua companion folders
 
+Keep a mod’s PAKs, Blueprint companions and Lua packages together in its own
+folder. Pick the route below that matches the content you already have.
+
 ## Step-by-step workflow
 
 1. Choose ordinary cooked content (`paks`), a client ModActor (`logicmods`) or a

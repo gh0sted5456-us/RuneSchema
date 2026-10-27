@@ -1,5 +1,9 @@
 # Create your first RuneSchema mod
 
+Start with one small change and build from there. RuneSchema helps connect your
+definitions to the game; the walkthrough below takes you from a mod folder to a
+change you can try in Dragonwilds.
+
 ## Step-by-step workflow
 
 1. Create and enable one stable mod folder under `RuneSchema/mods`; add only the loader folders your feature uses.
@@ -11,7 +15,7 @@ The [worked tutorials](modders/index.md#learn-with-real-mod-patterns) distinguis
 real mod patterns, reconstructed FModel excerpts and placeholders. A valid JSONC
 file cannot supply a missing cooked dependency.
 
-**Tie-ins:** [All loaders](LOADER-WALKTHROUGHS.md), [quests and boards](modders/quests-and-questboards.md), [cache bundles](CACHE-BUNDLES.md) and [diagnostic codes](ERROR-CODES.md).
+**Related guides:** [All loaders](LOADER-WALKTHROUGHS.md), [quests and boards](modders/quests-and-questboards.md), [cache bundles](CACHE-BUNDLES.md) and [diagnostic codes](ERROR-CODES.md).
 
 
 RuneSchema lets a mod connect content to Dragonwilds without replacing large

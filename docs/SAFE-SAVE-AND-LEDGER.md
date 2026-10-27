@@ -1,8 +1,9 @@
 # Save cleanup and safe mod removal
 
-RuneSchema checks saved mod content against the game lists that are live for the
-current launch. It does not guess that an item is missing because its mod folder
-changed, and it does not depend on a separate history file.
+RuneSchema helps a character keep loading after you remove a mod by checking
+saved content against the game’s current registered lists. Folder changes alone
+do not mark an item as missing, and this check works without a separate history
+file.
 
 ## What happens during character loading
 
@@ -42,8 +43,9 @@ the load. A character-specific game notification reports cleanup, skipped
 uncertain sections, or an attributed fallback once the player is ready. Details
 remain in RuneSchema.log. Unattributed native calls produce only a generic
 session notice on the local client, never a remote player's character receipt.
-This cannot guarantee recovery of truncated or genuinely
-corrupt saves, and fallback acceptance is not proof that every record loaded.
+For a truncated or damaged save, use a known working backup. Fallback acceptance
+can let loading continue without confirming every record, so check the character
+and world before continuing normal play.
 
 ## What the check protects
 

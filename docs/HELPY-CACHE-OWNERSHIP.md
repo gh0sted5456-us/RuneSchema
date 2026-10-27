@@ -3,8 +3,8 @@
 Published source-owner IDs are canonical lowercase labels, for example
 `mods/rsdwspears`. A destination folder rename does not change cached content
 identity. Version-2 fingerprints hash content, excluding installation paths and
-mod folder names; older bundles are still accepted as presentation references. A shared Unreal mount is not proof that one mod owns
-all its assets.
+mod folder names; older bundles are still accepted as presentation references. Several mods can share an Unreal mount, so Helpy checks which source supplied
+each asset rather than assigning the whole mount to one mod.
 
 ## Container-first discovery
 
@@ -51,10 +51,10 @@ metadata hashes join the existing platform/content fingerprints, so directory
 changes invalidate the affected cache identities even at the same size/time.
 This does not hash every payload byte or certify container signatures.
 
-An indexed file is a **supplier candidate**, not proof that Unreal mounted it
-successfully. Actual catalog items and gameplay actions still require native
-discovery/validation. These cache associations never authorize save pruning,
-registration, item delivery or arbitrary asset loading.
+An indexed file is a **supplier candidate** that helps Helpy label cached
+content. Live discovery confirms what the game actually mounted. Registration,
+save cleanup, delivery and asset loading keep their own checks; source labels
+provide browsing context rather than permission to perform those actions.
 
 Container package maps stay process-local. Cache import/export requests exact
 provider tokens in revision-bound read-only pages; no package map is broadcast

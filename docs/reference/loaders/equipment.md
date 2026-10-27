@@ -2,15 +2,16 @@
 
 ## Step-by-step workflow
 
-Examples with placeholder paths/IDs are templates. Use inspected values and the
-[shared testing checklist](../../modders/testing-and-compatibility.md) before sharing.
+Start with the example closest to your idea. Replace its sample paths and IDs
+with values from your game, then use the
+[testing checklist](../../modders/testing-and-compatibility.md) to try it out before sharing.
 
 1. Resolve the worn ItemData path and verify its native equipment/slot class.
 2. Create `equipment/10-camp-gear.jsonc` with only the behaviors needed by that item.
 3. Replace mock-up item/effect references. Choose Append, Replace or Clear deliberately for granted effects.
 4. Restart and check equip, unequip, death, respawn and reconnect on host and clients; unavailable native behavior is not a successful application.
 
-**Tie-ins:** [Assets](assets.md) creates/patches the item; [effects](effects.md) and [Niagara](niagara.md) supply supported effect references.
+**Related guides:** [Assets](assets.md) creates/patches the item; [effects](effects.md) and [Niagara](niagara.md) supply supported effect references.
 
 
 **Folder:** `RuneSchema/mods/<ModName>/equipment/`

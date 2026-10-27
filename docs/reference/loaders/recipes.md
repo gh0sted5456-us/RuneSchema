@@ -2,15 +2,16 @@
 
 ## Step-by-step workflow
 
-Examples with placeholder paths/IDs are templates. Use inspected values and the
-[shared testing checklist](../../modders/testing-and-compatibility.md) before sharing.
+Start with the example closest to your idea. Replace its sample paths and IDs
+with values from your game, then use the
+[testing checklist](../../modders/testing-and-compatibility.md) to try it out before sharing.
 
 1. Resolve registered input/output ItemData paths and the actual station or vendor row.
 2. Create `recipes/10-camp-supplies.jsonc`; replace the sample key, item paths and quantities.
 3. Choose a Category destination or direct Array layout. Decide unconditional Unlock versus supported conditional Discovery; do not combine both.
 4. Restart and verify placement separately from learning, then craft/process and confirm exact quantities, persistence and multiplayer authority.
 
-**Tie-ins:** [Assets](assets.md), [buildings](buildings.md), [vendors](vendors.md), [journal](journal.md) and [quest contracts](../../modders/quests-and-questboards.md).
+**Related guides:** [Assets](assets.md), [buildings](buildings.md), [vendors](vendors.md), [journal](journal.md) and [quest contracts](../../modders/quests-and-questboards.md).
 
 
 **Folder:** `RuneSchema/mods/<ModName>/recipes/`

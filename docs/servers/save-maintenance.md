@@ -14,11 +14,10 @@ alone even if a removed station once stood on them.
 4. Change only that mod's line to `0` in `runeschema.txt`.
 5. Restart and read the startup log before letting players enter the world.
 
-Do not assume the current downloadable release will remove a placed building
-when its mod is disabled. A world save is separate from a character save, and
-character-ID cleanup is not a promise of world-building cleanup. Dismantle
-modded structures in a backed-up world before removing their content when
-possible.
+Where possible, dismantle modded structures in a backed-up world before removing
+their content. World and character cleanup are separate, so check the current
+release’s world-cleanup behavior rather than relying on character-ID cleanup to
+remove placed buildings.
 
 ## After startup
 

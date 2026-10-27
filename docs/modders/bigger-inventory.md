@@ -1,9 +1,9 @@
 # Bigger inventory: patch pages, then verify the UI
 
-The author's **Bigger Inventory** mod illustrates a change that spans native
-inventory data and interface layout. A larger inventory window is not more
-storage. A larger storage count is not proof that the window can reach it.
-Carry weight is a third, separate setting.
+Expand inventory storage and give the interface room to show it. The author’s
+**Bigger Inventory** mod demonstrates both parts: the game’s page capacities and
+the UI layout that lets you reach those slots. Adjust carry weight separately
+if that is part of your mod.
 
 ## Inspect the pages before writing a list
 
@@ -12,9 +12,9 @@ The native `InventoryPages` field is an array of structs. Each page has a
 discard another page introduced by the game or a different mod. Instead,
 select the intended entries by their enum value and change only `NumSlots`.
 
-Do not assume `InventoryItems` is permanently element zero. Inspect the current
-class/default, inherited values and the player controller's component as well
-as the UI's inventory-body widgets.
+Find `InventoryItems` by its current value rather than assuming it is always
+element zero. Check the class/default, inherited values, player controller’s
+component and the UI’s inventory-body widgets together.
 
 ## Read the author's focused rules
 
@@ -33,17 +33,16 @@ as the UI's inventory-body widgets.
 | `WBP_Inventory_VerticalNavigation → InventoryBody_*` | The author's page-specific UI row counts. This does not allocate gameplay slots. |
 
 The four changed pages total **304** slots (`120 + 56 + 56 + 72`), while this
-installed profile supplies `MaxSlotCount: 312`. The four snippets alone do not
-explain the difference. Inspect unmodified/native pages and capacity semantics
-before deriving a new preset; do **not** invent an eight-slot explanation or
-call 312 the sum of those four values.
+installed profile supplies `MaxSlotCount: 312`. Keep those two values separate when making your preset. The snippets do not
+explain the remaining eight slots; inspect the unchanged pages and native capacity
+behavior before deciding how to account for them.
 
 Likewise, the author's row counts correspond to an eight-column layout. If
 your UI uses another layout, inspect it rather than copying those row counts
 as universal constants. Keep any window-size/scrollbar adjustments in a
 separate file so you can distinguish a storage failure from a display failure.
 
-## What the selector guarantees
+## How matching keeps the edit focused {#what-the-selector-guarantees}
 
 `$Match` must find exactly one matching entry. A missing page or duplicated
 enum value causes that array patch to fail instead of silently editing a

@@ -2,15 +2,16 @@
 
 ## Step-by-step workflow
 
-Examples with placeholder paths/IDs are templates. Use inspected values and the
-[shared testing checklist](../../modders/testing-and-compatibility.md) before sharing.
+Start with the example closest to your idea. Replace its sample paths and IDs
+with values from your game, then use the
+[testing checklist](../../modders/testing-and-compatibility.md) to try it out before sharing.
 
 1. Identify a supported loaded enum and confirm the consumer already handles the proposed values.
 2. Create `enums/10-camp-values.jsonc` using the mock-up below.
 3. Replace the enum name and supply unqualified value names; do not include EnumName:: in each value.
 4. Restart and inspect enum resolution and the consuming feature. Added names do not implement new game logic.
 
-**Tie-ins:** [Raw](raw.md) and [assets](assets.md) may reference supported enum values; use cooked code/Blueprint content for new behavior.
+**Related guides:** [Raw](raw.md) and [assets](assets.md) may reference supported enum values; use cooked code/Blueprint content for new behavior.
 
 
 **Folder:** `RuneSchema/mods/<ModName>/enums/`

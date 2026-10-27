@@ -2,15 +2,16 @@
 
 ## Step-by-step workflow
 
-Examples with placeholder paths/IDs are templates. Use inspected values and the
-[shared testing checklist](../../modders/testing-and-compatibility.md) before sharing.
+Start with the example closest to your idea. Replace its sample paths and IDs
+with values from your game, then use the
+[testing checklist](../../modders/testing-and-compatibility.md) to try it out before sharing.
 
 1. Resolve the existing class/component or widget; inspect its supported reflected fields.
 2. Create `blueprints/10-camp-widget.jsonc` using the matching default-object or live-widget example below.
 3. Replace the class path, property path and value together. `$RuntimeWidget` targets an existing live widget, not a new Blueprint.
 4. Restart and visit the relevant screen; check missing fields/bindings and storefront gates. Keep delegates compatible with the target function.
 
-**Tie-ins:** [PAK content](../../PAK-CONTENT-GUIDE.md) supplies new classes; [strings](strings.md) handles supported source-text replacement.
+**Related guides:** [PAK content](../../PAK-CONTENT-GUIDE.md) supplies new classes; [strings](strings.md) handles supported source-text replacement.
 
 
 **Folder:** `RuneSchema/mods/<ModName>/blueprints/`

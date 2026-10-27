@@ -1,8 +1,9 @@
 # Bug reports in Helpy
 
-Report a bug is available by default in navigation and on Home, including at the
-game menu. No world or character is required. Draft text remains while switching
-pages in that Helpy session; it is not automatically written to disk or uploaded.
+Choose **Report a bug** from navigation or Home to tell us what happened. You can
+start at the game menu without loading a character or world. Your draft stays
+with you while switching Helpy pages in that session; it is not automatically
+saved to disk or uploaded.
 
 The form includes title, category, what happened, reproduction steps, expected
 behavior, and optional additional text or a manually pasted log excerpt. The
@@ -12,8 +13,8 @@ account IDs or install paths. The exact report can be previewed or copied.
 
 GitHub issues are public. Review the content for sensitive information. Review &
 submit on GitHub opens a title/body-prefilled issue for gh0sted5456-us/RuneSchema.
-The user must sign into GitHub and press Submit new issue there. Opening the
-browser is not confirmation that an issue was posted. No GitHub tokens, bot
+On GitHub, sign in, review the prefilled report and press **Submit new issue**.
+Your issue is posted after that final step. No GitHub tokens, bot
 credentials, OAuth flow or background posting are included in this version.
 
 Reports whose encoded URLs exceed 6000 bytes use Copy report & open GitHub:

@@ -90,7 +90,7 @@ Right-click a party member and choose **View profile**. Profile metadata is
 self-declared presentation, never authorization. Both ends need the updated
 RuneSchema/Helpy. Live two-client/dedicated verification is still required.
 
-## Not implemented in this build
+## Features planned for later {#not-implemented-in-this-build}
 
 - Network portrait/image transfer; local image drop, crop and circular portraits
   remain available.

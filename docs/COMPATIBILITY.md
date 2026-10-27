@@ -1,7 +1,6 @@
 # Platform and multiplayer support
 
-RuneSchema uses one mod format for Steam, Epic, and Game Pass. Authors do not
-need separate JSON files for each store. The game program is different between
+RuneSchema uses one mod format for Steam, Epic, and Game Pass. You can use the same JSON definitions across stores. The game program is different between
 store versions, so the correct RuneSchema and UE4SS package still matters.
 
 ## Character saves

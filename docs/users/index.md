@@ -5,7 +5,7 @@ hide:
 
 # For players
 
-<p class="rs-hub-lead">Install RuneSchema once, put each compatible add-on in its own mod folder, and choose what loads. You do not need to write JSON or cook a PAK.</p>
+<p class="rs-hub-lead">Install RuneSchema, add the mods you want to try, and use Helpy to browse content and manage your setup. You can play with compatible mods without writing JSON or cooking a PAK.</p>
 
 <div class="rs-hub-links">
   <a href="../CURRENT-RELEASE/">Download RuneSchema<small>One package for supported game installs.</small></a>

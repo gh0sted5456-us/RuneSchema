@@ -2,15 +2,16 @@
 
 ## Step-by-step workflow
 
-Examples with placeholder paths/IDs are templates. Use inspected values and the
-[shared testing checklist](../../modders/testing-and-compatibility.md) before sharing.
+Start with the example closest to your idea. Replace its sample paths and IDs
+with values from your game, then use the
+[testing checklist](../../modders/testing-and-compatibility.md) to try it out before sharing.
 
 1. Define each enemy/actor template in spawns with EventOnly enabled before building waves.
 2. Create `events/10-camp-encounter.jsonc`, choose a stable event ID and reference the exact SpawnIDs.
 3. Replace coordinates, wave composition, timeout and any quest contract filters. Do not confuse world coordinates with participant-relative offsets.
 4. Connect a supported start/cancel route, restart and verify authority, wave completion, timeout and cleanup without duplicate actors.
 
-**Tie-ins:** [Spawns](spawns.md), [dialogue](dialogue.md), [quests](quests.md) and [quest boards](../../modders/quests-and-questboards.md).
+**Related guides:** [Spawns](spawns.md), [dialogue](dialogue.md), [quests](quests.md) and [quest boards](../../modders/quests-and-questboards.md).
 
 
 **Folder:** `RuneSchema/mods/<ModName>/events/`

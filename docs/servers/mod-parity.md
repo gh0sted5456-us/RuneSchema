@@ -1,9 +1,9 @@
 # Keep server and clients aligned
 
-The server decides gameplay state. Clients need the assets and supported
-presentation paths that let them see and use that state. RuneSchema reports
-what it loaded; it is not a PAK download or automatic mod synchronization
-service.
+Help everyone see and use the same content by sharing a clear mod list. The
+server applies gameplay changes, and clients use their matching assets to display
+them. RuneSchema reports what loaded; distribute the PAKs separately because it
+does not download or synchronize them automatically.
 
 ## Build a simple mod list
 

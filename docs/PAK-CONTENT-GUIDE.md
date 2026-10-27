@@ -1,5 +1,9 @@
 # Create new PAK content for RuneSchema
 
+Bring new art, sounds, items and Blueprint behavior into Dragonwilds with cooked
+PAK content. This guide shows how to package your assets and connect them through
+RuneSchema.
+
 ## Step-by-step workflow
 
 1. Author complete Unreal assets under a mod-owned root with stable identities and all dependencies.
@@ -7,10 +11,11 @@
 3. Mount through the enabled mod, resolve exact object paths, then enroll content through its owning loader or a cooked registry declaration.
 4. Connect gameplay consumers, restart and verify native registration, actual behavior, save/reload and supported client/server combinations.
 
-JSONC snippets are authoring mock-ups. Replace example paths, IDs and values with
-inspected content; a valid snippet cannot supply missing cooked dependencies.
+Use these JSONC examples as a starting point, with your own paths, IDs and
+values. Include the cooked assets they reference so the game can find everything
+your mod needs.
 
-**Tie-ins:** [Cooked registry declarations](COOKED-PAK-REGISTRY-MANIFEST.md), [first cooked item](modders/first-cooked-item.md), [items](WEAPONS-AND-ITEMS.md) and [stations](STATIONS-AND-RECIPES.md).
+**Related guides:** [Cooked registry declarations](COOKED-PAK-REGISTRY-MANIFEST.md), [first cooked item](modders/first-cooked-item.md), [items](WEAPONS-AND-ITEMS.md) and [stations](STATIONS-AND-RECIPES.md).
 
 
 A PAK is the package that carries new Unreal content into Dragonwilds. Use one
@@ -284,8 +289,9 @@ Treat these as separate checks:
 4. **Registered:** the matching live game list accepted it.
 5. **Connected:** a recipe, station, quest, or vendor points to it.
 
-A mounted PAK is not proof that an item registered. A visible icon is not proof
-that a saved identity is healthy. Read the complete startup summary.
+After mounting, check the startup summary for the item’s registration and saved
+identity, then try it in-game. An icon is useful for browsing, while those checks
+confirm the content is connected correctly.
 
 ## Large content packs
 

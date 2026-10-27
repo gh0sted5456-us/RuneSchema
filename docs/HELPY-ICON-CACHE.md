@@ -81,9 +81,9 @@ is unavailable, conservative declared/virtual-root grouping remains a fallback:
 - `plugins/<mount>`: other plugin/GameFeature content roots without a declared
   managed-mod owner.
 
-The indexed supplier is a candidate, not proof of a successful Unreal mount.
-Ambiguous owners are not resolved by guessing mount order. Shared mounts retain
-conservative compatibility checks. References to
+The index helps identify the supplier; live discovery checks that Unreal mounted
+it. When several sources could own an asset, Helpy keeps the ownership unresolved
+until it can check, rather than choosing one from mount order. References to
 core icons do not relabel all core content as belonging to the referencing mod.
 Native plugin/GameFeature container files and descriptors participate in source
 comparison when present; packed features also depend on their game containers.
@@ -135,8 +135,8 @@ trusted across the layout change; they can be removed with the cleanup control.
 Existing stale source generations remain bounded by the global cache limit.
 
 Advanced mode exposes the disk limit (default 200 MB). Turning persistence off
-uses `item-icons-live` for session-only captures. Cleanup validates the exact
-cache targets and refuses redirected/junction trees. Cached pixels are installed
+uses `item-icons-live` for session-only captures. Cleanup checks the exact cache location and leaves redirected or junction trees
+alone, keeping the operation within the intended folder. Cached pixels are installed
 only from the expected per-icon path and never create catalogue entries or
 prove that a mod's content registered successfully.
 
@@ -210,7 +210,7 @@ checks prevent malformed packs from writing outside the cache, not from
 containing unattractive or intentionally misleading pictures. Download packs
 from authors you trust.
 
-## Validation boundary
+## How Helpy checks cached pictures {#validation-boundary}
 
 Automated fixtures cover source-local invalidation, unchanged-source reuse,
 disabled-source exclusion, malformed manifests, cross-source dependencies,
