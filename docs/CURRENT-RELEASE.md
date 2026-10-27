@@ -1,18 +1,18 @@
 # RuneSchema downloads and source updates
 
 The published download and maintained source use version **0.8.0.2**.
-Branch source also contains the October 27 maintenance changes listed below.
+The release download was refreshed on October 27 with the maintenance changes listed below.
 [Read the changelog](CHANGELOG-0.8.0.2.md). This release includes the earlier
 0.8.0.1b source-only fixes as well as the current cache improvements.
 
 ## Published download: 0.8.0.2
 
-The current release is **0.8.0.2**, published October 25, 2026.
+The current release is **0.8.0.2**, originally published October 25 and refreshed October 27, 2026.
 [Download 0.8.0.2](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.0.2/RuneSchema-0.8.0.2.zip)
 · [Package, defaults and verification](RELEASE-0.8.0.2.md)
 · [Changes since 0.8.0.1](CHANGELOG-0.8.0.2.md).
 The release source is published on `main` and `experimental`, and the
-`0.8.0.2` tag identifies the source used for the rebuilt DLLs. The cleaned ZIP
+`0.8.0.2` tag now identifies the refreshed source for this maintenance package. The cleaned ZIP
 is locally built and verified, not a hosted CI artifact.
 
 RuneSchema loads enabled mod folders, mounts their cooked content, and connects
@@ -24,18 +24,18 @@ The package uses one core DLL for Steam/Epic, Game Pass and servers, plus Helpy.
 · [Historical changelog](CHANGELOG-0.8.0.0.md)
 · [Installation guide](INSTALLATION.md)
 
-## October 27 source update
+## October 27 maintenance refresh
 
 `main` and `experimental` include additional cache discovery/persistence fixes,
 cart selection and presets, map-cache export, bounded teleport ground probing,
 a configurable Helpy shortcut, diagnostic improvements and guarded server startup
 corrections. Read the [complete changelog since 0.8.0.1](CHANGELOG-0.8.0.2.md).
 
-These source updates retain version 0.8.0.2. They do not replace the October 25
-release ZIP or move its tag. Experimental registry-ID alignment remains disabled
-by default; source availability is not a default-enable or multiplayer readiness
-claim. The latest locally built maintenance DLL pair passed 248 core and 109
-Helpy tests. See the changelog for remaining live-game test boundaries.
+The refreshed download retains version 0.8.0.2 and replaces the October 25 ZIP
+under the same URL. Its verification JSON and checksums identify the new bytes;
+the release tag was moved to the matching current source. Experimental registry-ID
+alignment remains disabled by default. The maintenance DLL pair passed 248 core
+and 109 Helpy tests; see the changelog for remaining live-game checks.
 
 ## What changed
 

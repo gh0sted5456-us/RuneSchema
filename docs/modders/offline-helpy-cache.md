@@ -82,7 +82,7 @@ execute Blueprint gameplay, edit PAKs, register items or modify saves.
 
 ## Download the authoring tools ZIP
 
-The October 27 Helpy source maintenance update adds **Tools > Utilities > Download authoring
+The October 27 Helpy maintenance refresh adds **Tools > Utilities > Download authoring
 tools ZIP**. This manual download saves `RuneSchema-Authoring-Tools.zip` in
 Helpy's authoring-tools export folder. **Open authoring-tools folder** opens
 the actual location. Extract the ZIP and start with its `README.md`.
@@ -96,7 +96,8 @@ background update polling for these tools.
 
 The tools are published independently of the DLL release. Existing builds can
 still use the [single-file script](https://raw.githubusercontent.com/gh0sted5456-us/RuneSchema/main/resources/tools/build-helpy-cache.sh)
-and this walkthrough; the original 0.8.0.2 ZIP does not have the new button.
+and this walkthrough. The original October 25 ZIP lacks the button; the
+refreshed October 27 package includes it.
 
 **Bash route requires:** Windows, Git Bash and the .NET 10 SDK. The same
 automatic game, mapping and decoder setup applies. First use restores locked

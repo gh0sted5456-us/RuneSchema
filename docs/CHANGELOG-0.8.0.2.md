@@ -3,11 +3,11 @@
 This changelog includes the 0.8.0.1b fixes, the October 25, 2026 release and the
 October 27 source maintenance update. Both DLLs continue to identify as 0.8.0.2.
 
-**Source and download status:** the October 27 maintenance changes are published
-to `main` and `experimental`. The tagged October 25 release archive remains the
-published download; publishing branch source does not replace its DLLs or tag.
-See [downloads and source updates](CURRENT-RELEASE.md) and the
-[October 25 package record](RELEASE-0.8.0.2.md).
+**Source and download status:** the 0.8.0.2 release was refreshed on October 27
+with the current maintenance DLLs, Lua helpers and defaults. The existing release
+ZIP, verification JSON and checksums were replaced, and the `0.8.0.2` tag now
+identifies the refreshed source shared by `main` and `experimental`.
+See [downloads](CURRENT-RELEASE.md) and the [package record](RELEASE-0.8.0.2.md).
 
 ## Registries and save cleanup
 

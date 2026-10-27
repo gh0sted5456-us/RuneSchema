@@ -1,58 +1,65 @@
 # RuneSchema and Helpy 0.8.0.2
 
-October 25, 2026. [Download the complete runtime](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.0.2)
-· [Changelog since 0.8.0.1](CHANGELOG-0.8.0.2.md).
+**Refreshed October 27, 2026.** This replaces the October 25 download with the
+current maintenance build under the same version and release URL.
+[Download the runtime](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.0.2)
+· [Full changelog since 0.8.0.1](CHANGELOG-0.8.0.2.md).
 
-Both `RuneSchema/dlls/main.dll` and
-`RuneSchema/plugins/RuneSchema.Helpy/dll/RuneSchema.Helpy.dll` are freshly built
-from the 0.8.0.2 source. The release includes the earlier source-only 0.8.0.1b
-registry, save-cleanup and cart fixes, plus the current cache improvements.
-The `0.8.0.2` tag identifies the release source; main and experimental contain
-the same authored release files.
+The refreshed package includes the current core and Helpy DLLs, cache discovery
+and persistence fixes, cart selection and presets, bounded teleport preparation,
+server startup improvements, and the configurable Helpy shortcut. The matching
+Lua helpers and default settings are included too.
 
-## Install and contents
+The `0.8.0.2` tag now identifies the refreshed source. `main` and `experimental`
+contain the same update. The verification download records the exact source
+commit and file hashes, so you can distinguish this refresh from the original
+October 25 archive even though both use version 0.8.0.2.
 
-Use the full `RuneSchema-0.8.0.2.zip` with your existing stock UE4SS installation.
-Close the target game/server before updating. Replace the runtime files while
-preserving your mods, personal settings and AppData profiles/caches.
+## Install or update
 
-The ZIP retains one cleaned `RuneSchema/` root, the compressed DLL pair,
-bundled bridge content/manifests, Lua helpers, defaults and consolidated legal
-notice. It does not include UE4SS.dll, third-party mods, player saves, generated
-mappings, debug symbols, the author tool's dependencies or a baked AppData cache.
-Optional artwork and the base cache remain separate explicit downloads.
+1. Close the target game or dedicated server normally.
+2. Back up your existing RuneSchema installation and keep your mods, settings,
+   AppData profiles/caches and game saves.
+3. Extract `RuneSchema-0.8.0.2.zip` into the same UE4SS Mods location. Keep your
+   established settings when your archive tool asks about replacing them.
+4. Start the game or server and check Diagnostics or the startup log.
 
-Packaging removes an identical duplicate RegistryBridge container set from
-RSNetworking and restores the UE4SS enable marker, dedicated-server settings
-helper and application icon. Helpy is enabled; automatic opening remains off
-in the supplied defaults. Existing user settings take precedence.
+Use your existing stock UE4SS host. The archive has one clean `RuneSchema/`
+root with the compressed DLL pair, shared bridge PAKs/manifests, Lua helpers,
+default settings, application icon, dedicated-server settings helper and
+consolidated legal notice. It contains no UE4SS.dll, third-party mods, personal
+saves, generated mappings, debug symbols or baked AppData caches.
 
-## Cache updates
+Helpy is enabled, automatic opening is off in the supplied defaults, and F2 is
+the default shortcut. Change the shortcut or startup preference in Quick settings.
+**Reload theme** is now a button there. Existing settings take precedence.
 
-The GitHub cache catalogue can update independently of this DLL release.
-Exact-build/cook matches admit compatible records and pictures; changed cooks
-may reuse native pictures as display-only references. Current object paths,
-ownership, item IDs and gameplay operations still require native checks.
-The published Steam hotfix bundle contains 2,903 records and 4,246 pictures;
-coverage remains partial. See [cache bundles](CACHE-BUNDLES.md).
-
-The [offline cache builder](modders/offline-helpy-cache.md) is optional author
-tooling. It runs only when invoked and is not added to normal game startup.
+Optional artwork, the base-game cache and authoring tools remain separate
+manual downloads. [Cache bundles](CACHE-BUNDLES.md) can update independently
+of the DLL release. They help with browsing; live game checks still apply to
+delivery, equipment and other gameplay actions.
 
 ## Verification
 
-`RuneSchema-0.8.0.2-verification.json` records exact archive/DLL hashes, source
-identity, automated test counts, compression round-trip checks and package
-inventory. `SHA256SUMS.txt` covers the downloadable ZIP and verification file.
-The package is locally built using the existing pinned SDK libraries; it is
-not represented as a GitHub Actions compiler artifact. Compiler timestamps
-and dependency environments can prevent bit-for-bit reproduction.
+The refreshed `RuneSchema-0.8.0.2-verification.json` records the source commit,
+ZIP and DLL hashes, package inventory, test results and compression checks.
+`SHA256SUMS.txt` covers the ZIP and verification JSON. The superseded assets
+were downloaded and hash-checked before replacement.
 
-Automated tests and isolated plugin startup are not live gameplay or frame-time
-measurements. Historical releases and tags remain intact.
+- 248 core tests and 109 Helpy tests passed for the maintenance DLL pair.
+- Quick settings was checked at 1280×900, 960×700 and 760×560.
+- Both compressed DLLs passed integrity and decompression comparisons.
+- The compressed Helpy plugin boundary passed without opening a game.
+- Documentation links and anchors were checked across 108 rendered pages.
+- The DLLs were installed and independently hash/version-verified on Steam,
+  Game Pass and the dedicated server, with backups.
 
-Validation passed 243 native contracts and all 103 Helpy contracts, plus the
-compressed Helpy startup checks, 286-symbol UE4SS import checks against Steam,
-Game Pass and server hosts, and strict documentation/link checks across 108
-pages. Two cache fixtures required shorter temporary directories to stay
-within Windows path limits; no production behavior was changed for that run.
+The DLLs are locally built and verified, rather than GitHub Actions compiler
+artifacts. Exact bit-for-bit rebuilding depends on the toolchain and dependencies.
+The final hotkey build has not received an in-game gameplay test; automated
+checks do not measure frame times or establish every mod's compatibility.
+
+Registry-ID alignment remains experimental and disabled by default. Isolated
+Game Pass tests covered world entry, reconnect, one item replication and one
+recipe-ID notification; complete crafting and simultaneous authenticated-client
+gameplay remain unverified. See the changelog for the full scope.

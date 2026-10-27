@@ -22,12 +22,12 @@ hide:
 
 <aside class="rs-release" aria-label="Current release">
   <span class="rs-release__tag">Current download</span>
-  <p><strong>0.8.0.2</strong> brings RuneSchema and Helpy together in one download, with reusable artwork and optional tools for building your mod’s cache.</p>
+  <p><strong>0.8.0.2</strong> brings RuneSchema and Helpy together in one download, with improved caching, cart controls, a configurable shortcut and optional cache-authoring tools.</p>
   <a href="RELEASE-0.8.0.2/">Release notes and verification <span aria-hidden="true">→</span></a>
 </aside>
 
 <p>Looking for the latest improvements? The <a href="CHANGELOG-0.8.0.2/">changelog</a>
-includes the October 27 source update, with better cache discovery, cart controls
+includes the October 27 maintenance refresh, with better cache discovery, cart controls
 and a configurable Helpy shortcut. Check <a href="CURRENT-RELEASE/">download and source status</a>
 to see which changes are in the release package.</p>
 
