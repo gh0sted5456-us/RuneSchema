@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/ProcessExitFuture.h"
 
 #include "Core/DiagnosticCenterModel.h"
 #include "Core/StructuredDiagnosticAdvice.h"
@@ -64,7 +65,7 @@ inline std::uint64_t PendingExportGroup=0;
 inline std::string PendingExportSession,PendingReportText,PendingExportStatus;
 inline DiagnosticCenterReport::Options PendingReportOptions{};
 inline bool RequestExportPopup=false;
-inline std::future<std::string> ReportWorker;
+inline PS::ProcessExitFuture<std::string> ReportWorker;
 inline void RequestReport(DiagnosticCenterModel::Store& store,ExportKind kind,std::uint64_t group=0){
     if(kind==ExportKind::Issue&&!store.FindGroup(group))return;
     PendingReportStore=store;PendingExportKind=kind;PendingExportGroup=group;
@@ -139,7 +140,7 @@ inline void DrawExportPopup(const HelpyImGuiTheme::Theme& theme){
     const float maxH=std::max(1.0f,work.y-theme.Y(28.0f));
     ImGui::SetNextWindowSizeConstraints(ImVec2(std::min(theme.X(420.0f),maxW),std::min(theme.Y(320.0f),maxH)),
         ImVec2(maxW,maxH));
-    if(ImGui::BeginPopupModal("Review diagnostic report##helpy-d4",nullptr,ImGuiWindowFlags_None)){
+    if(HelpyImGuiTheme::BeginCenteredModal("Review diagnostic report##helpy-d4",nullptr,ImGuiWindowFlags_None)){
         ImGui::TextWrapped("Export %s from %s",
             PendingExportKind==ExportKind::Issue?"selected issue":"selected session",PendingExportSession.c_str());
         bool edited=ImGui::Checkbox("Include original retained log evidence",&PendingReportOptions.IncludeEvidence);
@@ -656,7 +657,7 @@ inline void DrawInspectorWindowHeader(DiagnosticCenterModel::Store& store,
         if(requestMuteDialog)ImGui::OpenPopup("Mute notifications##inspector-actions");
         const float modalW=std::min(theme.X(430.0f),std::max(1.0f,viewport->WorkSize.x-theme.X(24.0f)));
         ImGui::SetNextWindowSizeConstraints(ImVec2(modalW,0.0f),ImVec2(modalW,std::numeric_limits<float>::max()));
-        if(ImGui::BeginPopupModal("Mute notifications##inspector-actions",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
+        if(HelpyImGuiTheme::BeginCenteredModal("Mute notifications##inspector-actions",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
             ImGui::TextWrapped("Mute pop-up notifications. Reports remain in Diagnostics and the original logs.");
             ImGui::SeparatorText("Scope");
             if(ImGui::RadioButton("This issue only",PendingMuteScope==DiagnosticCenterMutes::Scope::Exact))

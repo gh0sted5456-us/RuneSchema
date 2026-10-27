@@ -42,6 +42,7 @@
 #include "Core/HelpyCacheSources.h"
 #include "Core/RegistryEnrollment.h"
 #include "Core/NetworkIdentityPlan.h"
+#include "Core/CacheBundleIO.h"
 #include "Core/RegistrationDiagnostics.h"
 #include "Core/NetworkIdentityState.h"
 #include "Loader/AssetProvenance.h"
@@ -75,6 +76,8 @@ namespace DragonWilds {
             bool Valid = false;
             std::size_t Count = 0;
             std::unordered_set<UObject*> Objects;
+            std::vector<UObject*> OrderedObjects;
+            std::vector<std::string> OrderedPaths;
             std::string Fingerprint;
             std::string Detail;
         };
@@ -135,6 +138,7 @@ namespace DragonWilds {
                     return result;
                 }
                 orderedPaths.push_back(RC::to_string(object->GetPathName()));
+                result.OrderedObjects.push_back(object);
             }
 
             std::size_t reverseCount = 0;
@@ -163,6 +167,7 @@ namespace DragonWilds {
             result.Count = orderedPaths.size();
             result.Objects = std::move(seen);
             result.Fingerprint = PS::NetworkIdentityPlan::Fingerprint(orderedPaths);
+            result.OrderedPaths = std::move(orderedPaths);
             return result;
         }
 
@@ -1076,6 +1081,7 @@ namespace DragonWilds {
 
     void DragonWildsDataRegistrar::Shutdown()
     {
+        m_networkSyncLanes.clear();
         (void)PS::CharacterLoadAudit::End(m_nativePolicyAttempt);
         m_nativePolicyContext=nullptr;m_nativePolicyFunction=nullptr;m_nativePolicyParameters=nullptr;
         if(m_characterJsonPostHook!=Hook::ERROR_ID)Hook::UnregisterCallback(m_characterJsonPostHook);
@@ -2011,6 +2017,14 @@ namespace DragonWilds {
             return false;
         }
 
+        const auto syncKey = std::string("network:") + RC::to_string(statusTag ? statusTag : TEXT("UNKNOWN"))
+            + ":" + RC::to_string(subsystem->GetClassPrivate()->GetPathName());
+        auto& syncLane = m_networkSyncLanes[syncKey];
+        if (syncLane.Subsystem.Get() != subsystem) {
+            syncLane = {}; syncLane.Subsystem.Assign(subsystem);
+            syncLane.PrefixCount = baselineAudit.Count;
+            syncLane.PrefixFingerprint = baselineAudit.Fingerprint;
+        }
         TArray<UObject*> discovered;
         UECustom::UObjectGlobals::GetObjectsOfClass(dataClass, discovered, true);
         struct CandidateRecord {
@@ -2127,6 +2141,7 @@ namespace DragonWilds {
                 {
                     throw std::runtime_error("network registry rejected the asset");
                 }
+                if (!baselineAudit.Objects.contains(candidate)) syncLane.Managed.insert(candidate);
                 if (stats) EquipmentWearableBridge::TryRegister(subsystem, candidate);
                 try{cacheSourcePaths.try_emplace(PS::HelpyCacheSources::Source(record.AssetPath),record.AssetPath);}catch(...){}
                 if(PS::PSConfig::Get()->IsDebugLoggingEnabled())sourceCounts.Add(record.AssetPath,inserted);
@@ -2174,8 +2189,11 @@ namespace DragonWilds {
             for(const auto& planned:plan) {
                 auto path=planned.AssetPath;
                 std::string owner="<unknown>";
-                if(path.starts_with("/Game/Mods/")) {
-                    const auto begin=std::string("/Game/Mods/").size();
+                std::string_view ownPrefix;
+                const auto foldedPath=PS::HelpyCacheSources::Lower(path);
+                for(const std::string_view prefix:{"/game/mods/","/game/runeschema/","/game/gameplay/mods/"})if(foldedPath.starts_with(prefix)){ownPrefix=prefix;break;}
+                if(!ownPrefix.empty()) {
+                    const auto begin=ownPrefix.size();
                     const auto slash=path.find('/',begin);
                     owner=path.substr(begin,slash==std::string::npos?slash:slash-begin);
                 } else if(path.starts_with('/')) {
@@ -2190,7 +2208,7 @@ namespace DragonWilds {
                     PS::NetworkIdentityPlan::Fingerprint(rows));
             if (m_registryStatusReported.emplace(auditKey).second)
                 PS::Log<LogLevel::Normal>(STR(
-                    "[NETWORK-REGISTRY][{}][SEALED] preserved_prefix={} final_count={} added={} ordered_fingerprint={}; client and authority must report the same fingerprint.\n"),
+                    "[NETWORK-REGISTRY][{}][SEALED] preserved_prefix={} final_count={} added={} ordered_fingerprint={}; the authority defines shared IDs and client-only content remains local.\n"),
                     statusTag ? statusTag : TEXT("UNKNOWN"),
                     baselineAudit.Count, finalAudit.Count,
                     finalAudit.Count - baselineAudit.Count,
@@ -2210,6 +2228,102 @@ namespace DragonWilds {
             }
         }
         return complete;
+    }
+
+    nlohmann::json DragonWildsDataRegistrar::NetworkIdentityManifest() const {
+        using namespace PS::NetworkIdentitySync;
+        Require(m_initialized && GetCurrentThreadId() == m_registrationThread, "Registry ID snapshot requires the initialized game thread");
+        nlohmann::json result = {{"kind", "RuneSchemaNetworkIdentityPlan"}, {"version", 1},
+            {"registryOwners", nlohmann::json::object()}, {"lanes", nlohmann::json::object()},
+            {"fixedLanes", PS::NetworkIdentityState::Snapshot()}};
+        for (const auto& [key, lane] : m_networkSyncLanes) {
+            auto* subsystem = lane.Subsystem.Get(); const auto audit = AuditNetworkRegistry(subsystem);
+            Require(audit.Valid && audit.Count >= lane.PrefixCount, "Registry changed before connection synchronization");
+            const std::vector<std::string> prefix(audit.OrderedPaths.begin(), audit.OrderedPaths.begin() + lane.PrefixCount);
+            Require(PS::NetworkIdentityPlan::Fingerprint(prefix) == lane.PrefixFingerprint, "Protected native IDs changed after startup");
+            auto rows = nlohmann::json::array(), protectedRows = nlohmann::json::array();
+            for (std::size_t i = 0; i < audit.Count; ++i) {
+                auto* object = audit.OrderedObjects[i];
+                auto* property = CastField<FStrProperty>(PropertyHelper::GetPropertyByName(object->GetClassPrivate(), TEXT("PersistenceID")));
+                Require(property != nullptr, "Registry identity field is unavailable");
+                const auto identity = property->GetPropertyValue(property->ContainerPtrToValuePtr<void>(object));
+                const auto identityText=RC::to_string(RC::StringType(*identity));
+                if (i >= lane.PrefixCount && !lane.Managed.contains(object)
+                    && !PS::NetworkIdentityState::HasNativeEnrollment(reinterpret_cast<uintptr_t>(subsystem),reinterpret_cast<uintptr_t>(object),identityText))
+                    throw std::runtime_error("Registry entry outside RuneSchema enrollment: lane=" + key
+                        + " index=" + std::to_string(i) + " protected=" + std::to_string(lane.PrefixCount)
+                        + " asset=" + audit.OrderedPaths[i]);
+                (i < lane.PrefixCount ? protectedRows : rows).push_back({{"path", audit.OrderedPaths[i]}, {"identity", identityText},
+                    {"type", RC::to_string(object->GetClassPrivate()->GetPathName())}});
+            }
+            result["lanes"][key] = {{"prefixCount", lane.PrefixCount}, {"prefixFingerprint", PS::CacheBundleIO::Hash(protectedRows.dump())}, {"entries", std::move(rows)}};
+            result["fixedLanes"].erase(key);
+        }
+        Validate(result); return result;
+    }
+
+    void DragonWildsDataRegistrar::ApplyNetworkIdentityOrder(const PS::NetworkIdentitySync::Permutations& orders) {
+        using namespace PS::NetworkIdentitySync;
+        Require(m_initialized && GetCurrentThreadId() == m_registrationThread, "Registry ID alignment requires the initialized game thread");
+        Require(orders.size() == m_networkSyncLanes.size(), "Registry ID transaction is incomplete");
+        struct Patch {
+            UObject* Subsystem; FArrayProperty* ArrayProperty; std::size_t Prefix;
+            std::vector<UObject*> Before, After; std::vector<void*> ReverseSlots;
+            std::vector<std::uint16_t> AfterReverse;
+            std::string Key, Fingerprint;
+        };
+        std::vector<Patch> patches;
+        for (const auto& [key, order] : orders) {
+            const auto found = m_networkSyncLanes.find(key); Require(found != m_networkSyncLanes.end(), "Unknown registry lane");
+            const auto& lane = found->second; auto* subsystem = lane.Subsystem.Get(); const auto audit = AuditNetworkRegistry(subsystem);
+            Require(audit.Valid && audit.Count >= lane.PrefixCount && order.size() == audit.Count - lane.PrefixCount, "Registry changed during ID planning");
+            const std::vector<std::string> prefix(audit.OrderedPaths.begin(), audit.OrderedPaths.begin() + lane.PrefixCount);
+            Require(PS::NetworkIdentityPlan::Fingerprint(prefix) == lane.PrefixFingerprint, "Protected native IDs changed during ID planning");
+            auto* type = subsystem->GetClassPrivate();
+            auto* array = CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(type, TEXT("NetIdToData")));
+            auto* map = CastField<FMapProperty>(PropertyHelper::GetPropertyByName(type, TEXT("DataToNetIdMap")));
+            Require(array && map && array->GetInner()->GetSize() == sizeof(UObject*)
+                && map->GetKeyProp()->GetSize() == sizeof(UObject*) && map->GetValueProp()->GetSize() == sizeof(std::uint16_t), "Native registry layout changed");
+            Patch patch{subsystem, array, lane.PrefixCount, audit.OrderedObjects, audit.OrderedObjects, {}, {}, key, {}};
+            patch.AfterReverse.resize(audit.Count);
+            UECustom::FScriptMapHelper reverse(map, map->ContainerPtrToValuePtr<void>(subsystem));
+            std::set<std::size_t> seen;
+            for (std::size_t i = 0; i < order.size(); ++i) {
+                Require(order[i] < order.size() && seen.insert(order[i]).second, "Registry order is not a permutation");
+                auto* object = audit.OrderedObjects[lane.PrefixCount + order[i]];
+                if(!lane.Managed.contains(object)) {
+                    auto* property=CastField<FStrProperty>(PropertyHelper::GetPropertyByName(object->GetClassPrivate(),TEXT("PersistenceID")));
+                    Require(property!=nullptr,"Registry identity field is unavailable during alignment");
+                    const auto identity=property->GetPropertyValue(property->ContainerPtrToValuePtr<void>(object));
+                    Require(PS::NetworkIdentityState::HasNativeEnrollment(reinterpret_cast<uintptr_t>(subsystem),reinterpret_cast<uintptr_t>(object),RC::to_string(RC::StringType(*identity))),
+                        "Only RuneSchema-appended IDs can be aligned");
+                }
+                patch.After[lane.PrefixCount + i] = object;
+                patch.AfterReverse[lane.PrefixCount + order[i]] = static_cast<std::uint16_t>(lane.PrefixCount + i);
+            }
+            std::vector<std::string> paths; paths.reserve(patch.After.size());
+            for (auto* object : patch.After) paths.push_back(RC::to_string(object->GetPathName()));
+            patch.Fingerprint = PS::NetworkIdentityPlan::Fingerprint(paths);
+            for (auto* object : patch.Before) { auto* slot = reverse.FindValue(&object); Require(slot != nullptr, "Reverse registry slot disappeared"); patch.ReverseSlots.push_back(slot); }
+            patches.push_back(std::move(patch));
+        }
+        const auto write = [&](bool restore) {
+            for (auto& patch : patches) {
+                FScriptArrayHelper array(patch.ArrayProperty, patch.ArrayProperty->ContainerPtrToValuePtr<FScriptArray>(patch.Subsystem));
+                const auto& objects = restore ? patch.Before : patch.After;
+                for (std::size_t i = patch.Prefix; i < objects.size(); ++i) std::memcpy(array.GetRawPtr(static_cast<int32>(i)), &objects[i], sizeof(UObject*));
+                // Slots are captured before mutation; neither container is resized.
+                for (std::size_t old = patch.Prefix; old < patch.Before.size(); ++old) {
+                    const auto id = restore ? static_cast<std::uint16_t>(old) : patch.AfterReverse[old];
+                    std::memcpy(patch.ReverseSlots[old], &id, sizeof(id));
+                }
+            }
+        };
+        Commit([&]{write(false);}, [&]{
+            for (const auto& patch : patches) { const auto audit = AuditNetworkRegistry(patch.Subsystem); if (!audit.Valid || audit.Fingerprint != patch.Fingerprint) return false; }
+            return true;
+        }, [&]{write(true);});
+        for (const auto& patch : patches) PS::NetworkIdentityState::Publish(patch.Key, patch.Fingerprint);
     }
 
     int32_t DragonWildsDataRegistrar::EnsureNetworkIdentity(

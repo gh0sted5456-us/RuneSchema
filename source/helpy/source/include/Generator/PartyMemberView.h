@@ -251,6 +251,7 @@ inline void RenderInspector(){
     if(!InspectorOpen)return;if(InspectorGeneration!=SpawnToolRequests::CurrentGeneration()){InspectorOpen=false;Inspector=nlohmann::json::object();return;}
     const auto& t=HelpyImGuiTheme::Current;HelpyImGuiTheme::Scope skin(t);
     ImGui::SetNextWindowSize({t.X(560),t.Y(270)},ImGuiCond_FirstUseEver);ImGui::SetNextWindowSizeConstraints({t.X(260),t.Y(120)},{ImGui::GetIO().DisplaySize.x-t.X(24),ImGui::GetIO().DisplaySize.y-t.Y(24)});
+    HelpyImGuiTheme::CenterNextWindow();
     if(ImGui::Begin("Party equipment###party-equipment-inspector",&InspectorOpen)){
         ImGui::TextUnformatted(RuneSchemaProfile::Name(Inspector).c_str());ImGui::TextDisabled("Right-click equipped items for Preview, Restore durability, or Change gear.");
         const auto start=ImGui::GetCursorScreenPos();const float width=ImGui::GetContentRegionAvail().x;ImGui::InvisibleButton("##equipped-region",{width,GearHeight(Inspector,width)});GearRow(Inspector,start,width,Now());

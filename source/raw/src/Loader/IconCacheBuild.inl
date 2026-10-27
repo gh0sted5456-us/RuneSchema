@@ -91,7 +91,7 @@ struct BulkIconCacheJob {
             const auto limitMB=PS::ItemIconThumbnail::CacheLimitMB();
             if(limitMB<=0)throw std::runtime_error("Enable Keep icons between launches before building a cache.");
             auto plan=PS::HelpySourceCache::ItemPlan();
-            if(!PS::HelpySourceCache::Ready()||!plan.Authoritative||plan.Registered.empty()) {
+            if(!PS::HelpySourceCache::Ready()||PS::HelpySourceCache::Current.Provisional||!plan.Authoritative||plan.Registered.empty()) {
                 if(Clock::now()-WaitingSince>std::chrono::seconds(60))throw std::runtime_error("Registered source identities are not ready; retry after startup completes.");
                 Stage="Waiting for registered sources";Publish();return;
             }

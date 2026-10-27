@@ -23,7 +23,7 @@ int main(int argc,char** argv){
     const auto panel=Read(source/"helpy/source/include/Generator/SpawnToolsPanel.h");
     Check(panel.find("Place at world coordinates")!=std::string::npos&&panel.find("request[\"TargetLocation\"]={{\"X\",buildingX},{\"Y\",buildingY}}")!=std::string::npos,"Building coordinate controls must use the validated native map-placement path");
     Check(panel.find("std::isfinite(buildingX)")!=std::string::npos&&tools.find("if(mapPlacement)ground=ToolMapGround(world,*request,pawn)")!=std::string::npos,"Coordinate placement must retain finite-number, world-bound and loaded-ground checks");
-    for(const auto* fragment:{"BeginPopupModal(\"Building menu\"","BuildingMenu::Matches(","BuildingMenu::BlockedReason(","ItemIconCache::Draw(","Retry ground","Building placement confirmed.","Do not place a duplicate."})
+    for(const auto* fragment:{"BeginCenteredModal(\"Building menu\"","BuildingMenu::Matches(","BuildingMenu::BlockedReason(","ItemIconCache::Draw(","Retry ground","Building placement confirmed.","Do not place a duplicate."})
         Check(ui.find(fragment)!=std::string::npos,"Building selection or explicit outcome feedback is missing");
     Check(ui.find("Data.Operation==1){Data.Permanent=true;")!=std::string::npos,"Native buildings without save-exclusion must use explicit persistent placement, not an unsupported temporary default");
     Check(tools.find("[HELPY][BUILDING][FAILED]")!=std::string::npos&&ui.find("PlacementResult,\"Error\"")!=std::string::npos,"Building failures must retain the actionable runtime reason");

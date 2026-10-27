@@ -6,6 +6,7 @@
 #include <mutex>
 #include <deque>
 #include "Runtime/RuneSchemaPluginApi.h"
+#include "Core/ProcessExitFuture.h"
 #include "Runtime/PluginRuntimeServices.h"
 #include "Generator/HelpyStandaloneWindow.h"
 #include "Generator/HelpyImGuiTheme.h"
@@ -42,7 +43,7 @@ bool CallCore(State* state,const nlohmann::json& request,nlohmann::json& respons
     if(!state||!state->Host)return false;
     const auto input=request.dump();
     const auto action=request.value("Action",std::string{});
-    const bool readOnly=action=="Read"||action=="AuthoringSnapshot"||action=="SettingsRead"||action=="ModsRead"||action=="IconCacheOwnership"||action=="IconCacheSources";
+    const bool readOnly=action=="Read"||action=="AuthoringSnapshot"||action=="SettingsRead"||action=="ModsRead"||action=="IconCacheOwnership"||action=="IconCacheSources"||action=="CrashDumpRead";
     uint32_t size=0;
     std::string output;
     if(readOnly){
@@ -52,7 +53,7 @@ bool CallCore(State* state,const nlohmann::json& request,nlohmann::json& respons
     }else{
         // These core operations reject an undersized buffer before doing any
         // work. Allocate once: never retry a mutation just to fetch its reply.
-        const bool maximum=action=="Completed"||action=="SettingsSave"||action=="ModsSave"||action=="ModsImport"||action=="QuickLoadSave"||action=="AdditionalLoggingSave";
+        const bool maximum=action=="Completed"||action=="SettingsSave"||action=="ModsSave"||action=="ModsImport"||action=="QuickLoadSave"||action=="AdditionalLoggingSave"||action=="CrashDumpSave";
         output.resize(maximum?RUNESCHEMA_PLUGIN_MAX_MESSAGE:4096);
     }
     const auto code=state->Host->CallService(Descriptor.Id,"runeschema.tools",input.c_str(),output.data(),static_cast<uint32_t>(output.size()),&size);
@@ -263,6 +264,7 @@ extern "C" __declspec(dllexport) int32_t RS_PLUGIN_CALL RuneSchemaPlugin_OnUnrea
         state->InventoryReady=true;
         state->Host->Log(RS_LOG_INFO,Descriptor.Id,"using RuneSchema host reflection services");
         ConfigureTransport(state);
+        PS::RuneSchemaSettingsPanel::Load();
         nlohmann::json environment;
         if(CallCore(state,{{"Action","Environment"}},environment))PS::HelpyEnvironment::Configure(environment);
         if(PS::HelpyEnvironment::Server()){
@@ -273,8 +275,8 @@ extern "C" __declspec(dllexport) int32_t RS_PLUGIN_CALL RuneSchemaPlugin_OnUnrea
         }
         state->Window=std::make_unique<PS::HelpyStandaloneWindow>(Module);
         if(!state->Window->Start())state->Host->Log(RS_LOG_WARNING,Descriptor.Id,("standalone UI unavailable: "+state->Window->Error()).c_str());
-        else state->Host->Log(RS_LOG_INFO,Descriptor.Id,"standalone RSMK ready: F2 toggle, F5 theme reload");
-        state->Host->Log(RS_LOG_INFO,Descriptor.Id,"hotkeys active: F2 desktop RSMK (close to return to game), F5 skin reload");return RS_PLUGIN_OK;
+        else state->Host->Log(RS_LOG_INFO,Descriptor.Id,("standalone Helpy ready: "+PS::HelpySettings::HotkeyHint()).c_str());
+        state->Host->Log(RS_LOG_INFO,Descriptor.Id,("shortcut active: "+PS::HelpySettings::HotkeyHint()+" (close to return to game); theme reload is in Quick settings").c_str());return RS_PLUGIN_OK;
     } catch(const std::exception& error) {state->Host->Log(RS_LOG_ERROR,Descriptor.Id,error.what());return RS_PLUGIN_FAILED;}
       catch(...) {state->Host->Log(RS_LOG_ERROR,Descriptor.Id,"unknown Unreal initialization failure");return RS_PLUGIN_FAILED;}
 }
@@ -295,4 +297,8 @@ extern "C" __declspec(dllexport) void RS_PLUGIN_CALL RuneSchemaPlugin_Shutdown(v
     delete state;
     PS::PluginRuntimeServices::Reset();
 }
-BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID) {if(reason==DLL_PROCESS_ATTACH)Module=module;return TRUE;}
+BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID reserved) {
+    if(reason==DLL_PROCESS_ATTACH)Module=module;
+    if(reason==DLL_PROCESS_DETACH&&reserved)PS::ProcessExitInProgress.store(true,std::memory_order_relaxed);
+    return TRUE;
+}

@@ -8,6 +8,17 @@ int main()try{
     namespace R=PS::ModDataRelay;using J=R::Json;
     assert(R::Crc("123456789")==0xcbf43926u);assert(R::Unhex(R::Hex(std::string("a\0b",3)))==std::string("a\0b",3));
     const auto route=R::Declaration("RSHC",{{"Channel","appearance"},{"Version",1},{"ClientPublish",true},{"Broadcast",true},{"Snapshot",true}});
+    assert(route.Limit==65536);
+    const auto bulk=R::Declaration("RSHC",{{"Channel","bulk"},{"MaxBytes",R::MaxBytes},{"ClientPublish",true}});
+    R::Message large{bulk.Key,"p",std::string(R::MaxBytes,'z'),1,1,0}; large.Checksum=R::Crc(large.Data);
+    assert(large.Checksum==3677983029u);
+    R::Assembler largeReceiver; std::optional<R::Message> largeResult; const auto start=R::Clock::now();
+    for(size_t part=0;part<(large.Data.size()+1023)/1024;++part) largeResult=largeReceiver.Push(bulk,"p",R::Packet(large,part),start+std::chrono::milliseconds(part*250));
+    assert(largeResult&&largeResult->Data==large.Data);
+    Reject([&]{R::Declaration("RSHC",{{"Channel","too-big"},{"MaxBytes",R::MaxBytes+1}});});
+    std::vector<R::Channel> many;
+    for(size_t i=0;i<R::MaxChannels;++i) many.push_back(R::Declaration("RSHC",{{"Channel","lane"+std::to_string(i)}}));
+    R::Server manyServer; manyServer.Configure(many); many.push_back(R::Declaration("RSHC",{{"Channel","overflow"}})); Reject([&]{manyServer.Configure(many);});
     Reject([&]{R::Declaration("RSHC",{{"Channel","../bad"}});});Reject([&]{R::Declaration("RSHC",{{"Channel","ok"},{"MaxBytes",-1}});});
     Reject([&]{R::Declaration("RSHC",{{"Channel","ok"},{"Snapshot",true}});});
     R::Server server;server.Configure({route});Reject([&]{server.Subscribe("player-1","Missing:x",1);});Reject([&]{server.Subscribe("player-1",route.Key,2);});

@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/ProcessExitFuture.h"
 #include "Core/PlayerPortraits.h"
 #include "Core/RuneSchemaProfile.h"
 #include "Core/ItemPresentation.h"
@@ -15,11 +16,11 @@ namespace PS::PlayerPortraitPicker {
 inline HelpyBackgrounds::Pixels Draft;
 inline ID3D11ShaderResourceView* DraftTexture=nullptr;
 inline PlayerPortraits::Crop Crop;
-inline std::future<HelpyBackgrounds::Pixels> ImportWorker;
-inline std::future<std::string> CropWorker;
+inline PS::ProcessExitFuture<HelpyBackgrounds::Pixels> ImportWorker;
+inline PS::ProcessExitFuture<std::string> CropWorker;
 inline std::string CropPlayer,DiskPlayer;
 inline uint64_t PictureRevision=0,DiskRevision=0;
-inline std::future<HelpyBackgrounds::Pixels> DiskWorker;
+inline PS::ProcessExitFuture<HelpyBackgrounds::Pixels> DiskWorker;
 struct Picture {ID3D11ShaderResourceView* Texture=nullptr;int Frame=0;};
 inline std::map<std::string,Picture> Pictures;
 inline std::set<std::string> Missing;
@@ -28,9 +29,9 @@ inline int DropFrame=-10;
 inline std::vector<std::pair<ID3D11ShaderResourceView*,int>> Retired;
 struct Listing {std::vector<std::string> Icons;std::string Error;};
 inline PlayerPortraits::Choices Choices;
-inline std::future<PlayerPortraits::Choices> Load;
-inline std::future<Listing> Scan;
-inline std::future<std::string> Save;
+inline PS::ProcessExitFuture<PlayerPortraits::Choices> Load;
+inline PS::ProcessExitFuture<Listing> Scan;
+inline PS::ProcessExitFuture<std::string> Save;
 inline std::vector<std::string> Icons,Filtered;
 inline std::string Player,Name,Error,LastFilter;
 inline std::map<std::string,std::string> Labels;
@@ -120,7 +121,7 @@ inline void Render(){
     Pump();if(OpenWanted){ImGui::OpenPopup("Player portrait");OpenWanted=false;}const auto& t=HelpyImGuiTheme::Current;
     const auto area=ImGui::GetMainViewport()->WorkSize;
     ImGui::SetNextWindowSize({std::min(t.X(620),area.x-t.X(24)),std::min(t.Y(500),area.y-t.Y(24))},ImGuiCond_Appearing);
-    if(!ImGui::BeginPopupModal("Player portrait",nullptr,ImGuiWindowFlags_NoSavedSettings))return;
+    if(!HelpyImGuiTheme::BeginCenteredModal("Player portrait",nullptr,ImGuiWindowFlags_NoSavedSettings))return;
     NativeJournalCache::Poll();if(JournalRevision!=NativeJournalCache::Revision){
         JournalRevision=NativeJournalCache::Revision;std::set<std::string> merged(Icons.begin(),Icons.end());
         const auto add=[&](const nlohmann::json& rows){for(const auto& row:rows){const auto icon=ItemPresentation::Text(row,"Icon");if(PlayerPortraits::Icon(icon)){merged.insert(icon);Labels[icon]=ItemPresentation::Text(row,"Name");}}};

@@ -22,6 +22,12 @@ int Run(){
     // Logical content, not physical path, storefront lane or file times.
     fs::last_write_time(root2/"mods"/"First"/"assets"/"item.jsonc",fs::file_time_type::clock::now()+std::chrono::hours(24));
     auto second=HelpySourceCache::Inspect(root2,plan);assert(second.Key!=first.Key);assert(Portable(root2,second,wanted,cache2,progress)==keys);
+    {const auto stable=Portable(root2,second,{"firstmount"},cache2,progress,false,"mods/first",2);
+        fs::rename(root2/"mods"/"First",root2/"mods"/"Renamed");auto renamed=plan;renamed.Owners["firstmount"]={"renamed"};
+        const auto snapshot=HelpySourceCache::Inspect(root2,renamed);
+        assert(Portable(root2,snapshot,{"firstmount"},cache2,progress,false,"mods/renamed",2)==stable);
+        fs::rename(root2/"mods"/"Renamed",root2/"mods"/"First");
+    }
     const std::string icon="/FirstMount/Art/T_A.T_A",icon2="/SecondMount/Art/T_B.T_B";
     std::vector<char> pixels(16+64*64*4,100);std::memcpy(pixels.data(),"RSI3",4);uint32_t w=64,n=64*64*4;std::memcpy(pixels.data()+4,&w,4);std::memcpy(pixels.data()+8,&w,4);std::memcpy(pixels.data()+12,&n,4);Pixels(pixels);
     for(const auto& path:{icon,icon2}){const auto target=Target(cache,first,path);Publish(target,pixels);Index(target,path);}
@@ -138,7 +144,7 @@ int Run(){
     const auto native2=root2.parent_path().parent_path().parent_path().parent_path().parent_path()/"Content"/"Paks"/"Game.pak";
     write(native2,"dedicated server cook without texture pixels");second=HelpySourceCache::Inspect(root2,missing);
     const auto serverCache=fixture/"server-visuals";
-    assert(Import(pack,root2,serverCache,second,1024*1024,progress).Imported==0);
+    assert(Import(pack,root2,fixture/"mod-survives-native-update",second,1024*1024,progress).Imported==1);
     result=Import(pack,root2,serverCache,second,1024*1024,progress,ImportPolicy::ServerDisplayOnly);
     assert(result.Imported==1&&result.Skipped==1&&result.Message.find("Display-only")!=std::string::npos);
     assert(Read(Target(serverCache,second,icon),100000)==pixels);

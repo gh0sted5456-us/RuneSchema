@@ -1,70 +1,286 @@
 {
-  "RS-CFG-001": ["Reading, validating or initializing the runtime configuration failed. The original exception distinguishes syntax, type and access failures.", "Inspect the named settings file and original exception. The runtime is using session defaults; preserve the original instead of deleting unrelated caches or saves."],
-  "RS-CFG-002": ["Current settings were explicitly saved after configuration recovery, and an original-file backup was created.", "Review the reported backup path and resulting settings. Restart to apply startup-only preferences; restore individual original values only after checking their validity."],
-  "RS-CFG-003": ["Settings serialization, validation, backup or writing reported a failure.", "Read the exact exception and any backup path. Check permissions and free space, then reload before retrying; session values are not proof of a successful disk save."],
-  "RS-PLUG-001": ["The plugin discovery pass threw an exception. This is different from one plugin failing its native initialization.", "Keep the original exception and inspect plugin manifests and directory access. RuneSchema core continues; do not infer a game crash from this report."],
-  "RS-PLUG-002": ["The manifest's resolved native entry point is absent or is not a regular file.", "Compare plugin.json with the installed DLL path. Restore the correct package without changing unrelated PAKs or UE4SS host files."],
-  "RS-PLUG-003": ["Windows rejected LoadLibraryExW. The retained Windows number may indicate missing dependencies, invalid architecture or access restrictions; the RS code does not select one cause.", "Keep the exact Windows number, plugin ID and DLL path. Verify a matching x64 plugin build and its dependencies before reinstalling. Do not disable security software as a generic fix."],
-  "RS-PLUG-004": ["The DLL loaded but did not export all mandatory RuneSchema plugin API functions.", "Check for RuneSchemaPlugin_Query, RuneSchemaPlugin_Initialize and RuneSchemaPlugin_Shutdown in the intended plugin build. A generic UE4SS main.dll is not interchangeable."],
-  "RS-PLUG-005": ["The queried descriptor was absent, too small, had a different API version/ID or lacked required identity fields.", "Align the manifest and DLL descriptor with the running host. A manifest version mismatch alone is not this rejection; preserve the actual descriptor evidence."],
-  "RS-PLUG-006": ["Initialize returned failure, threw, or did not register all capabilities declared by the manifest.", "Check preceding plugin errors and the result value. A successful return value can still fail capability verification; compare declared and registered capabilities."],
-  "RS-PLUG-007": ["The UI initialization callback returned failure or threw. This does not imply every plugin service has been unloaded.", "Keep the plugin name and callback outcome. Inspect earlier frontend/device/configuration errors and use a matching plugin build."],
-  "RS-PLUG-008": ["The Unreal initialization callback did not confirm success. An earlier plugin-specific error may explain why.", "Read the earlier plugin messages and returned result. Do not treat this wrapper failure as a missing-asset or migration diagnosis without that evidence."],
-  "RS-WORLD-001": ["The native buffer pointer/length/content no longer matched the prevalidated cleanup input at commit time.", "Keep the original save and backup. Investigate overlapping native loading or lifecycle changes. Never bypass the comparison to force a stale cleanup result."],
-  "RS-WORLD-002": ["Orphan IDs were detected but the verified native world-load repair contract was not satisfied.", "Review the preceding contract/binding and registry evidence for this exact game build. Do not disable save validation merely to silence this warning."],
-  "RS-WORLD-003": ["A world-buffer repair stage reported an exception before its cleanup could be accepted.", "Keep the original exception and backup path. Resolve the named validation or repair condition; this code does not claim the native game save is corrupt."],
-  "RS-WORLD-004": ["Native world data could not be parsed or validated by this cleanup adapter.", "Preserve the original data and exact exception. Compare the adapter with the game build; native loading can still proceed without an invented repair."],
-  "RS-WORLD-005": ["One or more required Game Pass world-loading hooks were unavailable for the current executable.", "Use a matching RuneSchema build/binding and keep the original save. Do not install a different UE4SS host just to suppress this framework cleanup warning."],
-  "RS-QST-001": ["Two mods or duplicate files declare the same quest identity; an old and new release may both be enabled.", "Find the named owners and declaration files in the original event. Disable only the duplicate release or ask the authors to resolve ownership; do not rename persistence IDs in an existing save."],
-  "RS-REG-001": ["Startup enrollment is still running, a content module has not registered, or a declaration was rejected earlier.", "Wait for startup to finish, then locate the first registry rejection before this message. Check the matching mod, framework and game versions. Do not enable pruning to force readiness."],
-  "RS-NET-001": ["The compared client/server registry identities differ. This reference does not mean every content difference rejects the entire session; the original message identifies the affected operation.", "Compare the named owner and protocol/build information on host and client. Update that content on both sides and reconnect normally; do not treat latency tuning as a registry fix."],
-  "RS-WEAR-001": ["A wearable declaration is missing its supported native slot contract, or its enrollment was rejected.", "Check the named equipment definition and earlier enrollment errors. Verify its slot and cooked class against the current game version; leave unsupported equipment unequipped."],
-  "RS-PERF-001": ["A measured game-thread work slice exceeded its threshold, often during discovery, refresh or a large content pass.", "Compare the named phase, elapsed_ms, peak_ms and slow_calls. Use a compatible bundle and incremental refresh first. Report repeatable slow phases with game/storefront versions; do not erase the entire cache as a first step."],
-  "RS-CAT-001": ["The item catalogue is not ready, or a query cursor belongs to an older content generation.", "Keep the last-good results visible. Refresh the affected query once after source changes settle. If it repeats, include the search text, category/source filters and first catalogue error in a report."],
-  "RS-SPAWN-001": ["The destination is outside loaded collision, or the placement footprint cannot be confirmed.", "Move closer to load the target area and retry at a visible ground point. Review slope/footprint details. Do not bypass collision validation or assume the cached map provides ground height."],
-  "RS-LOG-000": ["An older or uncoded warning/error has no exact registered diagnosis. A symptom-based suggestion may accompany it.", "Read and copy the original event and the preceding failures. Record the subsystem and versions. A suggested code is a troubleshooting lead, not proof of that cause; preserve unfamiliar code text exactly."],
-  "RS-LOG-001": ["The mod's log or archive directory cannot be opened, storage is full, or a previous log cannot be archived safely.", "Check free space and write access to the active RuneSchema mod folder and logs directory. Preserve the previous log. Check the UE4SS warning for the original failure and retry on the next normal launch."],
-  "RS-LOG-002": ["The selected export path resolves to a live source log or a protected RuneSchema archive.", "Export to a new filename in a separate directory. Check aliases/junctions if the displayed path looks different. Do not delete the live log to make the export succeed."],
-  "RS-RT-001": ["The game/storefront build exposes a reflected function or field layout that this operation does not support.", "Record the exact function/field, game build, Steam or Game Pass, UE4SS and RuneSchema versions. Install compatible components. Do not substitute guessed memory offsets."],
-  "RS-RT-002": ["The world, player or service is still starting, changing worlds or becoming available.", "Wait for the current world to become ready and retry only the affected action. If it persists after loading, capture the first readiness/contract failure. An unavailable meter is not a zero reading."],
-  "RS-CACHE-001": ["A mod, mounted source list or source generation changed while cache work was in progress.", "Let the source list settle, retain the last-good cache and retry the affected owner's work. Avoid starting repeated full sweeps while mods are still mounting."],
-  "RS-CACHE-002": ["The file is truncated, uses an unsupported bundle version, or contains invalid manifest fields, record identities, bounds or artwork metadata.", "Check that the selected file is an original .rsmk-cache or supported legacy .rsmk-icons export. Download it again or ask the publisher for a current export. Renaming another archive does not convert it."],
-  "RS-CACHE-003": ["The installed owner fingerprints, game build, required sources or locale do not match the bundle group.", "Inspect the affected owner and locale. Download a matching pack or use local Build / update for that owner. Unrelated matching groups can remain in use; a cache does not install the missing mod."],
-  "RS-CACHE-004": ["Downloaded or cached bytes differ from the declared SHA-256, or the pixel extent is invalid.", "Retry the original publication and check available disk space. If the same publication still fails, report the pack identity to its owner. Never disable checksum verification."],
-  "RS-CACHE-005": ["The import/export exceeds configured disk usage, metadata, record or artwork limits.", "Read which limit was exceeded. Increase an exposed cache budget if appropriate, or use explicit old-cache cleanup and a smaller owner-specific bundle. Do not remove mod sources or saves."],
-  "RS-CACHE-006": ["The user cancelled work, or a source-generation change invalidated the in-flight operation.", "No repair is needed for cancellation alone. Keep committed cache content and retry after mounted sources stabilize if the operation is still wanted."],
-  "RS-CACHE-007": ["A bundle captures an observed subset, or export found no indexed presentation records/artwork yet.", "Read the coverage report and original event. Observe or build the missing category locally, or import a compatible fuller bundle. Do not interpret missing cached entries as removed gameplay content."],
-  "RS-CACHE-008": ["A record's claimed owner lacks matching active-source or exact asset evidence.", "Inspect the owner manifest and declared asset paths. Ask the publisher to correct and re-export the bundle. Shared/borrowed artwork must not change the item's owning mod."],
-  "RS-CACHE-009": ["A staged cache file could not be written, flushed, renamed or activated safely.", "Check the destination's permissions and free space and preserve the last committed metadata. Retry once those are resolved; do not manually activate a partially written staging file."],
-  "RS-CACHE-010": ["An older pixel-only icon pack was imported instead of a metadata-bearing cache bundle.", "Pictures may still be useful; this is not an integrity failure. Import a compatible .rsmk-cache for item identities, pathing, persistence IDs and journal records when available."],
-  "RS-DL-001": ["Connectivity failed, or the publication index has no pack compatible with the active build and sources.", "Check the original download result and supported-build list. Retry later if offline; otherwise use local Build / update. Existing caches remain available."],
-  "RS-DL-002": ["The remote index version, filename, nesting, size or integrity metadata is unsupported or unsafe.", "Use the project's supported publication index. Report the rejected index/pack identity to its publisher. Keep the previous cache and do not bypass path or integrity checks."],
-  "RS-JRN-001": ["Only journal entries observed or explicitly declared in the bundle are cached.", "Check category coverage for World, Recipes and Knowledge. Import a compatible journal bundle or observe additional entries. Cached visibility does not grant journal unlocks."],
-  "RS-JRN-002": ["A journal cache contains unsupported records or invalid text/page bounds.", "Keep the original save intact. Import a supported bundle or refresh the native journal cache, then inspect the original record error if it recurs."],
-  "RS-SAVE-001": ["The operation targets a protected original save or a character/world that is still active.", "Use an editable copy, close the relevant world normally when required, and review the export diff. Export to a new path; never force an active-save overwrite."],
-  "RS-SAVE-002": ["The applicable stable registry evidence is unavailable for one or more sections; incomplete loading must not be mistaken for removed content.", "Review the SECTION-SKIPPED entries. Certified sections continue independently; unresolved sections are retained. Native loading still runs, using relaxed mode and rejection fallback where enabled."],
-  "RS-EQUIP-001": ["The exact delivered item instance, supported equipment slot or native equip contract is ambiguous.", "Check delivery results separately, then equip the existing item manually if needed. Do not deliver it again merely because automatic equipping was unavailable."],
-  "RS-EQUIP-002": ["The native call returned but exact-instance equipment readback did not confirm the intended slot/item.", "Inspect inventory and loadout before retrying. Record the item and slot. A native acceptance flag is not proof of equipping and should not trigger another grant."],
-  "RS-PARTY-001": ["A player meter, skill or equipment reading is stale, missing, out of scope or unsupported by the native contract.", "Wait for fresh host/server data and reselect the player. Check which field is unavailable. Do not interpret missing data as dead, empty or zero."],
-  "RS-PARTY-002": ["The requester lacks current host/server authority for the selected action.", "Use the authorized host/server workflow. Confirm the selected player and permission settings; a visual host badge does not itself confer authority."],
-  "RS-PARTY-003": ["The selected player/chest serial or world generation no longer identifies the original target.", "Refresh and explicitly reselect the current target after reconnecting or changing worlds. Do not replay a stale action against a player with the same display name."],
-  "RS-MAP-001": ["The map reference exists but its live ground, resource node or storage actor is not currently loaded.", "Move within live observation range and refresh the target. A marker is a location reference, not proof of available resources or empty chest contents."],
-  "RS-MAP-002": ["The live observation does not establish a native respawn deadline for this resource.", "Observe the nearby node after harvesting and wait for fresh supported timer data. Keep the timer marked unknown until verified; do not start an invented countdown from a cached marker."],
-  "RS-CHEST-001": ["The native lock, owner, deposit permission or persistence contract is not verified for this storage type.", "Use normal game interaction. Keep direct deposits and unlock overrides disabled until this build's access contract is supported; do not infer permission from map visibility."],
-  "RS-CHEST-002": ["The selected building has no unique owned native inventory, or multiple components could be mistaken for it.", "Refresh and inspect the selected building's component contract. Keep contents unavailable rather than selecting an unrelated inventory. Do not deposit until the inventory is uniquely identified."],
-  "RS-ITEM-001": ["Individual cart entries failed native validation or delivery while other entries may have succeeded.", "Read each placard's result and resolve only failed entries. Verify the intended recipient and availability. Never resend the entire cart to compensate for a partial failure."],
-  "RS-SRC-001": ["The source mod is absent, disabled, unmounted or has not completed registration.", "Enable/install the matching content and let registration finish, or leave its references unavailable. Downloading its pictures/cache alone cannot create its gameplay definitions."],
-  "RS-GAME-001": ["ChangePowerLevelInRowName rejected a row whose expected numeric positions contain non-digits. This often indicates authored or cloned row naming, not an obsolete USMAP.", "Keep the exact item and row name. Compare it with a working native item of the same type and power-level family. Repair the authoring definition and recook; do not delete unrelated save content or suppress the error."],
-  "RS-GAME-002": ["The engine found an animation/skeleton identity mismatch left in cooked content. Registry enrollment does not repair that cooked relationship.", "Check the exact montage or sequence in the message. Resave it in the matching Unreal project against the intended skeleton, recook and verify that the warning disappears on the target platform."],
-  "RS-GAME-003": ["A package may be unmounted, incorrectly named or unavailable; alternatively an optional conventional registry lookup may legitimately be absent while another declaration works.", "Read the owning registrar's accepted/rejected result and exact path. Verify archive contents and mounts before changing declarations. Do not invent a native asset or treat cache artwork as package registration."],
-  "RS-GAME-004": ["The named material lacks a usable shader map for this game/platform/cook, or the engine reports an unnamed invalid material resource.", "Keep surrounding asset-loading errors and game/storefront versions. Compare the package with the correct cooked target. A USMAP rebuild cannot manufacture missing shader data."],
-  "RS-GAME-005": ["A Blueprint attempted to access an object that is absent, destroyed or not initialized at the point of use.", "Retain the native Blueprint, function and call-site text. Inspect initialization order and earlier load failures. A suggested reference is guidance, not proof of mod ownership or a completed action."],
-  "RS-GAME-000": ["No specific classifier matched this native category and message. The original error may include an engine, EOS, HTTP or platform-owned code.", "Read the original message and first preceding failure. Keep provider codes unchanged. Record game build, storefront and whether the event occurred during startup, play or shutdown; this generic reference does not claim a root cause."],
-  "RS-GAME-006": ["A native vitals-widget callback could not be removed. This can occur while widgets or their owners are being destroyed.", "Record the exact callback and whether the UI malfunctions while playing. Compare the timestamp with world exit and shutdown. Do not mark a mod unhealthy solely because of an unattributed teardown warning."],
-  "RS-GAME-007": ["A native settings access occurred before initialization, after teardown, or while its expected settings object was unavailable.", "Check whether settings work during normal play. Preserve the earliest settings initialization failure. A shutdown-only message does not justify deleting configuration or character/world saves."],
-  "RS-GAME-008": ["The crowd manager did not find a RecastNavMesh in its current world. The world may be loading or already tearing down.", "Record the world and any AI navigation symptoms during play. Keep surrounding load/teardown events. Do not generate replacement navigation data or blame a mod without asset evidence."],
-  "RS-GAME-009": ["Native tagged-object registration and cleanup did not agree about an object's lifecycle.", "Capture the full object path and preceding lifecycle messages. This is not the RuneSchema persistence-ID registry, and neither automatic pruning nor invented declarations will repair it."],
-  "RS-CACHE-011": ["An item query selected cache-first or game-first browsing and its passive refresh policy.", "Use Quick settings > Content & cache to choose a loading order and passive updates. This controls item presentation and bounded discovery; live action validation remains enabled."],
-  "RS-CACHE-012": ["Game-first browsing has no ready or matching live item page and is displaying saved references.", "Wait for bounded discovery, search again, or use Cache first for immediate browsing. Pictures and references remain available; a reference alone does not prove an item is loaded or deliverable."],
-  "RS-CACHE-013": ["The cache loadOrder setting is neither cacheFirst nor gameFirst.", "Correct cache.loadOrder in ui.jsonc, then reload Helpy. Use cacheFirst or gameFirst. The invalid preference is rejected; the original configuration is retained."]
+  "RS-CFG-001": [
+    "Reading, validating or initializing the runtime configuration failed. The original exception distinguishes syntax, type and access failures.",
+    "Inspect the named settings file and original exception. The runtime is using session defaults; preserve the original instead of deleting unrelated caches or saves."
+  ],
+  "RS-CFG-002": [
+    "Current settings were explicitly saved after configuration recovery, and an original-file backup was created.",
+    "Review the reported backup path and resulting settings. Restart to apply startup-only preferences; restore individual original values only after checking their validity."
+  ],
+  "RS-CFG-003": [
+    "Settings serialization, validation, backup or writing reported a failure.",
+    "Read the exact exception and any backup path. Check permissions and free space, then reload before retrying; session values are not proof of a successful disk save."
+  ],
+  "RS-PLUG-001": [
+    "The plugin discovery pass threw an exception. This is different from one plugin failing its native initialization.",
+    "Keep the original exception and inspect plugin manifests and directory access. RuneSchema core continues; do not infer a game crash from this report."
+  ],
+  "RS-PLUG-002": [
+    "The manifest's resolved native entry point is absent or is not a regular file.",
+    "Compare plugin.json with the installed DLL path. Restore the correct package without changing unrelated PAKs or UE4SS host files."
+  ],
+  "RS-PLUG-003": [
+    "Windows rejected LoadLibraryExW. The retained Windows number may indicate missing dependencies, invalid architecture or access restrictions; the RS code does not select one cause.",
+    "Keep the exact Windows number, plugin ID and DLL path. Verify a matching x64 plugin build and its dependencies before reinstalling. Do not disable security software as a generic fix."
+  ],
+  "RS-PLUG-004": [
+    "The DLL loaded but did not export all mandatory RuneSchema plugin API functions.",
+    "Check for RuneSchemaPlugin_Query, RuneSchemaPlugin_Initialize and RuneSchemaPlugin_Shutdown in the intended plugin build. A generic UE4SS main.dll is not interchangeable."
+  ],
+  "RS-PLUG-005": [
+    "The queried descriptor was absent, too small, had a different API version/ID or lacked required identity fields.",
+    "Align the manifest and DLL descriptor with the running host. A manifest version mismatch alone is not this rejection; preserve the actual descriptor evidence."
+  ],
+  "RS-PLUG-006": [
+    "Initialize returned failure, threw, or did not register all capabilities declared by the manifest.",
+    "Check preceding plugin errors and the result value. A successful return value can still fail capability verification; compare declared and registered capabilities."
+  ],
+  "RS-PLUG-007": [
+    "The UI initialization callback returned failure or threw. This does not imply every plugin service has been unloaded.",
+    "Keep the plugin name and callback outcome. Inspect earlier frontend/device/configuration errors and use a matching plugin build."
+  ],
+  "RS-PLUG-008": [
+    "The Unreal initialization callback did not confirm success. An earlier plugin-specific error may explain why.",
+    "Read the earlier plugin messages and returned result. Do not treat this wrapper failure as a missing-asset or migration diagnosis without that evidence."
+  ],
+  "RS-WORLD-001": [
+    "The native buffer pointer/length/content no longer matched the prevalidated cleanup input at commit time.",
+    "Keep the original save and backup. Investigate overlapping native loading or lifecycle changes. Never bypass the comparison to force a stale cleanup result."
+  ],
+  "RS-WORLD-002": [
+    "Orphan IDs were detected but the verified native world-load repair contract was not satisfied.",
+    "Review the preceding contract/binding and registry evidence for this exact game build. Do not disable save validation merely to silence this warning."
+  ],
+  "RS-WORLD-003": [
+    "A world-buffer repair stage reported an exception before its cleanup could be accepted.",
+    "Keep the original exception and backup path. Resolve the named validation or repair condition; this code does not claim the native game save is corrupt."
+  ],
+  "RS-WORLD-004": [
+    "Native world data could not be parsed or validated by this cleanup adapter.",
+    "Preserve the original data and exact exception. Compare the adapter with the game build; native loading can still proceed without an invented repair."
+  ],
+  "RS-WORLD-005": [
+    "One or more required Game Pass world-loading hooks were unavailable for the current executable.",
+    "Use a matching RuneSchema build/binding and keep the original save. Do not install a different UE4SS host just to suppress this framework cleanup warning."
+  ],
+  "RS-QST-001": [
+    "Two mods or duplicate files declare the same quest identity; an old and new release may both be enabled.",
+    "Find the named owners and declaration files in the original event. Disable only the duplicate release or ask the authors to resolve ownership; do not rename persistence IDs in an existing save."
+  ],
+  "RS-REG-001": [
+    "Startup enrollment is still running, a content module has not registered, or a declaration was rejected earlier.",
+    "Wait for startup to finish, then locate the first registry rejection before this message. Check the matching mod, framework and game versions. Do not enable pruning to force readiness."
+  ],
+  "RS-NET-001": [
+    "The compared client/server registry identities differ. This reference does not mean every content difference rejects the entire session; the original message identifies the affected operation.",
+    "Compare the named owner and protocol/build information on host and client. Update that content on both sides and reconnect normally; do not treat latency tuning as a registry fix."
+  ],
+  "RS-WEAR-001": [
+    "A wearable declaration is missing its supported native slot contract, or its enrollment was rejected.",
+    "Check the named equipment definition and earlier enrollment errors. Verify its slot and cooked class against the current game version; leave unsupported equipment unequipped."
+  ],
+  "RS-PERF-001": [
+    "A measured game-thread work slice exceeded its threshold, often during discovery, refresh or a large content pass.",
+    "Compare the named phase, elapsed_ms, peak_ms and slow_calls. Use a compatible bundle and incremental refresh first. Report repeatable slow phases with game/storefront versions; do not erase the entire cache as a first step."
+  ],
+  "RS-CAT-001": [
+    "The item catalogue is not ready, or a query cursor belongs to an older content generation.",
+    "Keep the last-good results visible. Refresh the affected query once after source changes settle. If it repeats, include the search text, category/source filters and first catalogue error in a report."
+  ],
+  "RS-SPAWN-001": [
+    "The destination is outside loaded collision, or the placement footprint cannot be confirmed.",
+    "Move closer to load the target area and retry at a visible ground point. Review slope/footprint details. Do not bypass collision validation or assume the cached map provides ground height."
+  ],
+  "RS-LOG-000": [
+    "An older or uncoded warning/error has no exact registered diagnosis. A symptom-based suggestion may accompany it.",
+    "Read and copy the original event and the preceding failures. Record the subsystem and versions. A suggested code is a troubleshooting lead, not proof of that cause; preserve unfamiliar code text exactly."
+  ],
+  "RS-LOG-001": [
+    "The mod's log or archive directory cannot be opened, storage is full, or a previous log cannot be archived safely.",
+    "Check free space and write access to the active RuneSchema mod folder and logs directory. Preserve the previous log. Check the UE4SS warning for the original failure and retry on the next normal launch."
+  ],
+  "RS-LOG-002": [
+    "The selected export path resolves to a live source log or a protected RuneSchema archive.",
+    "Export to a new filename in a separate directory. Check aliases/junctions if the displayed path looks different. Do not delete the live log to make the export succeed."
+  ],
+  "RS-RT-001": [
+    "The game/storefront build exposes a reflected function or field layout that this operation does not support.",
+    "Record the exact function/field, game build, Steam or Game Pass, UE4SS and RuneSchema versions. Install compatible components. Do not substitute guessed memory offsets."
+  ],
+  "RS-RT-002": [
+    "The world, player or service is still starting, changing worlds or becoming available.",
+    "Wait for the current world to become ready and retry only the affected action. If it persists after loading, capture the first readiness/contract failure. An unavailable meter is not a zero reading."
+  ],
+  "RS-CACHE-001": [
+    "A mod, mounted source list or source generation changed while cache work was in progress.",
+    "Let the source list settle, retain the last-good cache and retry the affected owner's work. Avoid starting repeated full sweeps while mods are still mounting."
+  ],
+  "RS-CACHE-002": [
+    "The file is truncated, uses an unsupported bundle version, or contains invalid manifest fields, record identities, bounds or artwork metadata.",
+    "Check that the selected file is an original .rsmk-cache or supported legacy .rsmk-icons export. Download it again or ask the publisher for a current export. Renaming another archive does not convert it."
+  ],
+  "RS-CACHE-003": [
+    "The installed owner fingerprints, game build, required sources or locale do not match the bundle group.",
+    "Inspect the affected owner and locale. Download a matching pack or use local Build / update for that owner. Unrelated matching groups can remain in use; a cache does not install the missing mod."
+  ],
+  "RS-CACHE-004": [
+    "Downloaded or cached bytes differ from the declared SHA-256, or the pixel extent is invalid.",
+    "Retry the original publication and check available disk space. If the same publication still fails, report the pack identity to its owner. Never disable checksum verification."
+  ],
+  "RS-CACHE-005": [
+    "The import/export exceeds configured disk usage, metadata, record or artwork limits.",
+    "Read which limit was exceeded. Increase an exposed cache budget if appropriate, or use explicit old-cache cleanup and a smaller owner-specific bundle. Do not remove mod sources or saves."
+  ],
+  "RS-CACHE-006": [
+    "The user cancelled work, or a source-generation change invalidated the in-flight operation.",
+    "No repair is needed for cancellation alone. Keep committed cache content and retry after mounted sources stabilize if the operation is still wanted."
+  ],
+  "RS-CACHE-007": [
+    "A bundle captures an observed subset, or export found no indexed presentation records/artwork yet.",
+    "Read the coverage report and original event. Observe or build the missing category locally, or import a compatible fuller bundle. Do not interpret missing cached entries as removed gameplay content."
+  ],
+  "RS-CACHE-008": [
+    "A record's claimed owner lacks matching active-source or exact asset evidence.",
+    "Inspect the owner manifest and declared asset paths. Ask the publisher to correct and re-export the bundle. Shared/borrowed artwork must not change the item's owning mod."
+  ],
+  "RS-CACHE-009": [
+    "A staged cache file could not be written, flushed, renamed or activated safely.",
+    "Check the destination's permissions and free space and preserve the last committed metadata. Retry once those are resolved; do not manually activate a partially written staging file."
+  ],
+  "RS-CACHE-010": [
+    "An older pixel-only icon pack was imported instead of a metadata-bearing cache bundle.",
+    "Pictures may still be useful; this is not an integrity failure. Import a compatible .rsmk-cache for item identities, pathing, persistence IDs and journal records when available."
+  ],
+  "RS-DL-001": [
+    "Connectivity failed, or the publication index has no pack compatible with the active build and sources.",
+    "Check the original download result and supported-build list. Retry later if offline; otherwise use local Build / update. Existing caches remain available."
+  ],
+  "RS-DL-002": [
+    "The remote index version, filename, nesting, size or integrity metadata is unsupported or unsafe.",
+    "Use the project's supported publication index. Report the rejected index/pack identity to its publisher. Keep the previous cache and do not bypass path or integrity checks."
+  ],
+  "RS-JRN-001": [
+    "Only journal entries observed or explicitly declared in the bundle are cached.",
+    "Check category coverage for World, Recipes and Knowledge. Import a compatible journal bundle or observe additional entries. Cached visibility does not grant journal unlocks."
+  ],
+  "RS-JRN-002": [
+    "A journal cache contains unsupported records or invalid text/page bounds.",
+    "Keep the original save intact. Import a supported bundle or refresh the native journal cache, then inspect the original record error if it recurs."
+  ],
+  "RS-SAVE-001": [
+    "The operation targets a protected original save or a character/world that is still active.",
+    "Use an editable copy, close the relevant world normally when required, and review the export diff. Export to a new path; never force an active-save overwrite."
+  ],
+  "RS-SAVE-002": [
+    "The applicable stable registry evidence is unavailable for one or more sections; incomplete loading must not be mistaken for removed content.",
+    "Review the SECTION-SKIPPED entries. Certified sections continue independently; unresolved sections are retained. Native loading still runs, using relaxed mode and rejection fallback where enabled."
+  ],
+  "RS-EQUIP-001": [
+    "The exact delivered item instance, supported equipment slot or native equip contract is ambiguous.",
+    "Check delivery results separately, then equip the existing item manually if needed. Do not deliver it again merely because automatic equipping was unavailable."
+  ],
+  "RS-EQUIP-002": [
+    "The native call returned but exact-instance equipment readback did not confirm the intended slot/item.",
+    "Inspect inventory and loadout before retrying. Record the item and slot. A native acceptance flag is not proof of equipping and should not trigger another grant."
+  ],
+  "RS-PARTY-001": [
+    "A player meter, skill or equipment reading is stale, missing, out of scope or unsupported by the native contract.",
+    "Wait for fresh host/server data and reselect the player. Check which field is unavailable. Do not interpret missing data as dead, empty or zero."
+  ],
+  "RS-PARTY-002": [
+    "The requester lacks current host/server authority for the selected action.",
+    "Use the authorized host/server workflow. Confirm the selected player and permission settings; a visual host badge does not itself confer authority."
+  ],
+  "RS-PARTY-003": [
+    "The selected player/chest serial or world generation no longer identifies the original target.",
+    "Refresh and explicitly reselect the current target after reconnecting or changing worlds. Do not replay a stale action against a player with the same display name."
+  ],
+  "RS-MAP-001": [
+    "The map reference exists but its live ground, resource node or storage actor is not currently loaded.",
+    "Move within live observation range and refresh the target. A marker is a location reference, not proof of available resources or empty chest contents."
+  ],
+  "RS-MAP-002": [
+    "The live observation does not establish a native respawn deadline for this resource.",
+    "Observe the nearby node after harvesting and wait for fresh supported timer data. Keep the timer marked unknown until verified; do not start an invented countdown from a cached marker."
+  ],
+  "RS-CHEST-001": [
+    "The native lock, owner, deposit permission or persistence contract is not verified for this storage type.",
+    "Use normal game interaction. Keep direct deposits and unlock overrides disabled until this build's access contract is supported; do not infer permission from map visibility."
+  ],
+  "RS-CHEST-002": [
+    "The selected building has no unique owned native inventory, or multiple components could be mistaken for it.",
+    "Refresh and inspect the selected building's component contract. Keep contents unavailable rather than selecting an unrelated inventory. Do not deposit until the inventory is uniquely identified."
+  ],
+  "RS-ITEM-001": [
+    "Individual cart entries failed native validation or delivery while other entries may have succeeded.",
+    "Read each placard's result and resolve only failed entries. Verify the intended recipient and availability. Never resend the entire cart to compensate for a partial failure."
+  ],
+  "RS-SRC-001": [
+    "The source mod is absent, disabled, unmounted or has not completed registration.",
+    "Enable/install the matching content and let registration finish, or leave its references unavailable. Downloading its pictures/cache alone cannot create its gameplay definitions."
+  ],
+  "RS-GAME-001": [
+    "ChangePowerLevelInRowName rejected a row whose expected numeric positions contain non-digits. This often indicates authored or cloned row naming, not an obsolete USMAP.",
+    "Keep the exact item and row name. Compare it with a working native item of the same type and power-level family. Repair the authoring definition and recook; do not delete unrelated save content or suppress the error."
+  ],
+  "RS-GAME-002": [
+    "The engine found an animation/skeleton identity mismatch left in cooked content. Registry enrollment does not repair that cooked relationship.",
+    "Check the exact montage or sequence in the message. Resave it in the matching Unreal project against the intended skeleton, recook and verify that the warning disappears on the target platform."
+  ],
+  "RS-GAME-003": [
+    "A package may be unmounted, incorrectly named or unavailable; alternatively an optional conventional registry lookup may legitimately be absent while another declaration works.",
+    "Read the owning registrar's accepted/rejected result and exact path. Verify archive contents and mounts before changing declarations. Do not invent a native asset or treat cache artwork as package registration."
+  ],
+  "RS-GAME-004": [
+    "The named material lacks a usable shader map for this game/platform/cook, or the engine reports an unnamed invalid material resource.",
+    "Keep surrounding asset-loading errors and game/storefront versions. Compare the package with the correct cooked target. A USMAP rebuild cannot manufacture missing shader data."
+  ],
+  "RS-GAME-005": [
+    "A Blueprint attempted to access an object that is absent, destroyed or not initialized at the point of use.",
+    "Retain the native Blueprint, function and call-site text. Inspect initialization order and earlier load failures. A suggested reference is guidance, not proof of mod ownership or a completed action."
+  ],
+  "RS-GAME-000": [
+    "No specific classifier matched this native category and message. The original error may include an engine, EOS, HTTP or platform-owned code.",
+    "Read the original message and first preceding failure. Keep provider codes unchanged. Record game build, storefront and whether the event occurred during startup, play or shutdown; this generic reference does not claim a root cause."
+  ],
+  "RS-GAME-006": [
+    "A native vitals-widget callback could not be removed. This can occur while widgets or their owners are being destroyed.",
+    "Record the exact callback and whether the UI malfunctions while playing. Compare the timestamp with world exit and shutdown. Do not mark a mod unhealthy solely because of an unattributed teardown warning."
+  ],
+  "RS-GAME-007": [
+    "A native settings access occurred before initialization, after teardown, or while its expected settings object was unavailable.",
+    "Check whether settings work during normal play. Preserve the earliest settings initialization failure. A shutdown-only message does not justify deleting configuration or character/world saves."
+  ],
+  "RS-GAME-008": [
+    "The crowd manager did not find a RecastNavMesh in its current world. The world may be loading or already tearing down.",
+    "Record the world and any AI navigation symptoms during play. Keep surrounding load/teardown events. Do not generate replacement navigation data or blame a mod without asset evidence."
+  ],
+  "RS-GAME-009": [
+    "Native tagged-object registration and cleanup did not agree about an object's lifecycle.",
+    "Capture the full object path and preceding lifecycle messages. This is not the RuneSchema persistence-ID registry, and neither automatic pruning nor invented declarations will repair it."
+  ],
+  "RS-CACHE-011": [
+    "An item query selected cache-first or game-first browsing and its passive refresh policy.",
+    "Use Quick settings > Content & cache to choose a loading order and passive updates. This controls item presentation and bounded discovery; live action validation remains enabled."
+  ],
+  "RS-CACHE-012": [
+    "Game-first browsing has no ready or matching live item page and is displaying saved references.",
+    "Wait for bounded discovery, search again, or use Cache first for immediate browsing. Pictures and references remain available; a reference alone does not prove an item is loaded or deliverable."
+  ],
+  "RS-SRV-001": [
+    "The dedicated server reached a real world and RuneSchema invoked the game's native accessibility-filter setup with its existing preferences. The client-only settings path can otherwise leave this subsystem uninitialized.",
+    "Native dictionary loading is asynchronous. Preserve any later native filter warnings when reporting an issue; this information code alone does not certify filtering, a player join or shutdown."
+  ],
+  "RS-SRV-002": [
+    "The correction could not verify the exact server executable/method, install its world-ready callback, or obtain the required native settings and game-instance references.",
+    "Retain the full reason and executable/game version. Unsupported builds keep native handling and need a verified compatibility update; do not patch flags or turn filtering off as a generic workaround."
+  ],
+  "RS-CACHE-013": [
+    "The cache loadOrder setting is neither cacheFirst nor gameFirst.",
+    "Correct cache.loadOrder in ui.jsonc, then reload Helpy. Use cacheFirst or gameFirst. The invalid preference is rejected; the original configuration is retained."
+  ],
+  "RS-NET-002": [
+    "The authority and client differ in content definitions, source membership, a protected registry baseline, or the availability of a verified mapping. Client-only content and version drift do not themselves cause a RuneSchema entry refusal.",
+    "Read the original source/lane detail. Keep extra client mods installed if desired. Shared IDs are aligned only when their identities and native types are verified; update required content for unavailable server features. A warning does not certify that the game itself can deserialize a missing cooked class."
+  ]
 }

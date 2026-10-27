@@ -1,5 +1,6 @@
 #pragma once
 #include "Generator/ToolRequest.h"
+#include "Generator/HelpyRuntimePreferences.h"
 #include "Core/ItemSource.h"
 #include "Core/ItemCategory.h"
 #include <algorithm>
@@ -56,9 +57,11 @@ inline constexpr int MoreRows=24;
 inline constexpr int MaxCachedQueries=16;
 inline constexpr size_t MaxCachedRows=8192,MaxRowsPerQuery=2048;
 inline std::function<bool(json)> RemoteSubmit;
+inline std::function<bool(const json&)> LocalSubmit,IgnoreResponse;
+inline std::function<void()> LocalPoll,LocalShutdown;
 inline std::function<void(int,uint64_t)> RemoteCancel;
 inline void ConfigureRemote(std::function<bool(json)> submit,std::function<void(int,uint64_t)> cancel){RemoteSubmit=std::move(submit);RemoteCancel=std::move(cancel);}
-inline void ClearRemote(){RemoteSubmit={};RemoteCancel={};}
+inline void ClearRemote(){if(LocalShutdown)LocalShutdown();LocalSubmit={};LocalPoll={};LocalShutdown={};IgnoreResponse={};RemoteSubmit={};RemoteCancel={};}
 
 inline State& For(int category){return Windows[static_cast<size_t>(std::clamp(category,0,2))];}
 inline const char* KeyFor(int category){return category==0?"Items":"Definitions";}
@@ -75,7 +78,7 @@ inline void RebuildRandomSeen(State& state) {
     for(const auto& row:state.Rows){const auto identity=RandomIdentity(row);if(!identity.empty())state.RandomSeen.insert(identity);}
 }
 inline const char* BrowseMode(int category){return category==0?"Alphabetical":"Search";}
-inline std::string CacheKey(const State& state,int category){return category==0&&state.Query.empty()?"@alphabetical":state.Query;}
+inline std::string CacheKey(const State& state,int category){return std::to_string(HelpyRuntimePreferences::CacheFirst.load())+std::to_string(HelpyRuntimePreferences::PassiveRefresh.load())+":"+(category==0&&state.Query.empty()?"@alphabetical":state.Query);}
 inline void SaveCache(int category) {
     auto& state=For(category);if(state.Refreshing||!state.Started||!state.RuntimeGeneration||!state.LastError.empty()
         ||(state.Rows.empty()&&(state.HasMore||state.Pending))||state.Rows.size()>MaxRowsPerQuery)return;
@@ -89,7 +92,7 @@ inline void SaveCache(int category) {
     state.Cache[key]={state.Rows,state.NextCursor,state.HasMore,state.RuntimeGeneration,++state.CacheClock,state.Coverage,state.CachePreview,state.CheckingChanges};
 }
 inline bool RestoreCache(int category,const std::string& query,uint64_t generation) {
-    auto& state=For(category);const auto key=category==0&&query.empty()?std::string("@alphabetical"):query;
+    auto& state=For(category);const auto key=std::to_string(HelpyRuntimePreferences::CacheFirst.load())+std::to_string(HelpyRuntimePreferences::PassiveRefresh.load())+":"+(category==0&&query.empty()?std::string("@alphabetical"):query);
     const auto found=state.Cache.find(key);if(found==state.Cache.end()||found->second.Generation!=generation)return false;
     found->second.LastUsed=++state.CacheClock;
     state.Query=query;state.Rows=found->second.Rows;state.RowsRevision=++RowsClock;state.NextCursor=found->second.NextCursor;state.HasMore=found->second.HasMore;
@@ -102,6 +105,8 @@ inline bool RestoreCache(int category,const std::string& query,uint64_t generati
     state.Started=true;state.Pending=false;state.LastError.clear();state.StalledWindows=0;state.RuntimeGeneration=generation;state.FillTarget=static_cast<int>(state.Rows.size());return true;
 }
 inline bool SubmitRequest(json request) {
+    if(request.value("Category",-1)==0&&request.value("Cursor",std::string{}).starts_with("S:"))request["Mode"]="Search";
+    if(LocalSubmit&&LocalSubmit(request))return true;
     if(RemoteSubmit)return RemoteSubmit(std::move(request));
     request["Action"]="CatalogWindow";return SpawnToolRequests::TrySubmit(std::move(request));
 }
@@ -112,6 +117,7 @@ inline bool Request(int category,const char* mode,const std::string& query,bool 
     json request={{"Operation","CatalogWindow"},{"_Source","HelpyStandalone"},{"RequestId",requestId},{"Category",category},{"Mode",mode},
         {"Query",query},{"Limit",limit},{"Reset",reset},{"FieldSet","BasicRow"},{"Priority",priority},
         {"ClientGeneration",generation},{"CancelGeneration",state.CancelGeneration}};
+    request["BrowsePolicy"]={{"loadOrder",HelpyRuntimePreferences::CacheFirst.load()?"cacheFirst":"gameFirst"},{"passiveRefresh",HelpyRuntimePreferences::PassiveRefresh.load()}};
     if(!cursor.empty())request["Cursor"]=cursor;
     if(std::string_view(mode)=="Random") {std::random_device rd;request["Seed"]=(static_cast<uint64_t>(rd())<<32)^rd();}
     if(!SubmitRequest(request)){state.LastError="The runtime did not accept this request. Retry when the world is ready.";return false;}
@@ -143,6 +149,7 @@ inline void CancelLoading(int category){
     state.LastError="Loading cancelled. Search again or retry this list.";
 }
 inline void CheckTimeouts(std::chrono::steady_clock::time_point now=std::chrono::steady_clock::now()) {
+    if(LocalPoll)LocalPoll();
     for(auto& state:Windows)if(state.Pending&&now-state.RequestedAt>std::chrono::seconds(15)) {
         state.Pending=false;state.ActiveRequestId=0;
         ++state.CancelGeneration;
@@ -165,7 +172,7 @@ inline bool FillTo(int category,int count) {
 }
 inline bool More(int category){return FillTo(category,static_cast<int>(For(category).Rows.size())+MoreRows);}
 inline void FirstOpen(uint64_t generation) {
-    if(!generation||FirstOpenGeneration==generation)return;
+    if((!generation&&!LocalSubmit)||(FirstOpenGeneration==generation&&For(0).Started))return;
     FirstOpenGeneration=generation;FirstOpenPendingGeneration=0;
     auto& state=For(0);if(state.RuntimeGeneration!=generation){SaveCache(0);const auto cancel=state.CancelGeneration;state=State{};state.CancelGeneration=cancel;}state.RuntimeGeneration=generation;
     if(RestoreCache(0,{},generation))return;
@@ -180,6 +187,7 @@ inline void PumpBackendSignal(){
     if(Request(0,BrowseMode(0),{},true,InitialRows,{},2)){FirstOpenPendingGeneration=0;state.LastError.clear();}
 }
 inline void ApplyWindow(const json& window,uint64_t revision) {
+    if(IgnoreResponse&&IgnoreResponse(window))return;
     const int category=window.value("Category",-1);if(category<0||category>2)return;auto& state=For(category);
     const auto cancel=window.value("CancelGeneration",uint64_t{});if(cancel!=state.CancelGeneration)return;
     const auto generation=window.value("RuntimeGeneration",state.RuntimeGeneration);if(state.RuntimeGeneration&&generation!=state.RuntimeGeneration)return;

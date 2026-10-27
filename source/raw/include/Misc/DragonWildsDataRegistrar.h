@@ -10,6 +10,8 @@
 #include "Unreal/NameTypes.hpp"
 #include "Unreal/Hooks.hpp"
 #include "Core/PersistencePruner.h"
+#include "Core/NetworkIdentitySync.h"
+#include "SDK/WeakObjectHandle.h"
 
 namespace RC::Unreal {
     class UObject;
@@ -24,6 +26,8 @@ namespace DragonWilds {
     public:
         void Initialize();
         bool IsInitialized() const { return m_initialized; }
+        nlohmann::json NetworkIdentityManifest() const;
+        void ApplyNetworkIdentityOrder(const PS::NetworkIdentitySync::Permutations& order);
         void SetCharacterRegistryPreparation(std::function<void(RC::Unreal::UObject*)> prepare)
         { m_prepareCharacterRegistries=std::move(prepare); }
         void Shutdown();
@@ -64,6 +68,13 @@ namespace DragonWilds {
         RC::Unreal::UFunction* m_nativePolicyFunction=nullptr;
         void* m_nativePolicyParameters=nullptr;
         std::uint32_t m_registrationThread=0;
+        struct NetworkSyncLane {
+            PS::WeakObjectHandle Subsystem;
+            std::size_t PrefixCount = 0;
+            std::string PrefixFingerprint;
+            std::unordered_set<RC::Unreal::UObject*> Managed;
+        };
+        std::map<std::string, NetworkSyncLane> m_networkSyncLanes;
         std::uint64_t m_nativePolicyAttempt=0;
         RC::Unreal::Hook::GlobalCallbackId m_combatLifecycleHook = RC::Unreal::Hook::ERROR_ID;
         bool m_initialized = false;

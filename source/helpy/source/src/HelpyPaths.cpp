@@ -2,6 +2,7 @@
 #include "Runtime/HostServices.h"
 #include "Core/HelpyUiAssets.h"
 #include "Core/RuneSchemaDataRoot.h"
+#include "Core/HelpyEnvironment.h"
 #include <windows.h>
 #include <stdexcept>
 #include <vector>
@@ -38,7 +39,12 @@ std::filesystem::path StateDirectory(){return RuneSchemaData::SharedDirectory("H
 std::filesystem::path ProfileDirectory(){return RuneSchemaData::SharedDirectory("runeschema.profile");}
 std::filesystem::path RuntimeDirectory(){return StateDirectory()/"runtime";}
 std::filesystem::path SavedDirectory(){return RuntimeDirectory()/"saved";}
-std::filesystem::path CacheDirectory(){return SavedDirectory()/"cache";}
+std::filesystem::path CacheDirectory(){
+    using enum HelpyEnvironment::Kind;
+    const auto kind=HelpyEnvironment::Current;
+    const char* platform=kind==GamePass?"gamepass":kind==Dedicated?"server":kind==Epic?"epic":kind==Steam||kind==SteamEpic?"steam":"unknown";
+    return RuneSchemaData::PlatformDirectory(platform)/"cache";
+}
 std::filesystem::path ProgressDirectory(){return SavedDirectory()/"progress";}
 std::filesystem::path ReferencesDirectory(){return SavedDirectory()/"references";}
 std::filesystem::path JobsDirectory(){return RuntimeDirectory()/"jobs";}

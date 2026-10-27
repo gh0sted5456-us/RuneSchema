@@ -5,6 +5,7 @@
 #include "Loader/ItemIdentity.h"
 #include "Core/SaveRegistrySnapshot.h"
 #include "Core/NativeDataFamilies.h"
+#include "Core/NetworkIdentityState.h"
 #include "Unreal/UnrealInitializer.hpp"
 #include "SDK/Helper/ActorHelper.h"
 #include "SDK/Helper/PropertyHelper.h"
@@ -241,6 +242,8 @@ private:
         if(!publish)return plan.Id;
         idStage.Publish();nameStage.Publish();assetStage.Publish();reverseStage.Publish();arrayStage.Publish();
         // Non-throwing additive bookkeeping, after the native maps commit.
+        if(plan.Append)try {PS::NetworkIdentityState::RecordNativeEnrollment(
+            reinterpret_cast<uintptr_t>(subsystem),reinterpret_cast<uintptr_t>(quest),RC::to_string(persistenceText));}catch(...){}
         if(!family)PS::SaveCleanup::IncludeVerifiedIdentity(journal?PS::SaveCleanup::VerifiedKind::Journal:PS::SaveCleanup::VerifiedKind::Quest,RC::to_string(persistenceText));
         return plan.Id;
     }

@@ -1,5 +1,6 @@
 #pragma once
 #include <nlohmann/json.hpp>
+#include "Core/HelpyBrowsePolicy.h"
 #include <string>
 #include <cstddef>
 #include <cstdint>
@@ -17,8 +18,10 @@ nlohmann::json ItemMetadata(const std::string& path);
 nlohmann::json LoadoutWindow(const std::string& slot,const std::string& query,std::size_t offset);
 nlohmann::json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,std::uint64_t startSeed=0,bool randomOrder=false,
     const std::string& fieldSet="BasicRow",std::size_t scanBudget=1536,std::uint64_t timeBudgetMicros=800,bool classIndex=false);
-nlohmann::json AlphabeticalItemWindow(const std::string& query,const std::string& cursor,std::size_t limit,const std::string& fieldSet="BasicRow");
+HelpyBrowsePolicy::Policy ItemBrowsePolicy() noexcept;
+nlohmann::json AlphabeticalItemWindow(const std::string& query,const std::string& cursor,std::size_t limit,const std::string& fieldSet="BasicRow",HelpyBrowsePolicy::Policy policy=ItemBrowsePolicy());
 void ShutdownItemCatalog() noexcept;
+void NotifyImportedCache() noexcept;
 // One bounded game-thread read slice; call only when no mutation/read dispatched.
 void PumpItemCatalog();
 }

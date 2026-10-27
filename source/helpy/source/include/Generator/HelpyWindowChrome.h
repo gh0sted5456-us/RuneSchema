@@ -31,6 +31,9 @@ inline void RenderNativeCaption(const HelpyNativeFrame::Metrics& frame,ImVec2 or
     }
 }
 inline void Prepare(State& state){
+    HelpyImGuiTheme::CenterNextWindow();
+    const auto area=ImGui::GetMainViewport()->WorkSize;
+    if(!state.Maximized)ImGui::SetNextWindowSizeConstraints({0,0},{std::max(1.f,area.x-HelpyImGuiTheme::Current.X(24)),std::max(1.f,area.y-HelpyImGuiTheme::Current.Y(24))});
     if(state.Maximized&&Size.x>0&&Size.y>0){ImGui::SetNextWindowPos({Origin.x+8,Origin.y+8});ImGui::SetNextWindowSize({std::max(1.f,Size.x-16),std::max(1.f,Size.y-16)});}
     else if(state.RestoreWanted){ImGui::SetNextWindowPos(state.RestorePos);ImGui::SetNextWindowSize(state.RestoreSize);state.RestoreWanted=false;}
 }

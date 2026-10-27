@@ -107,8 +107,9 @@ does not reactivate a disabled mod. Only `1` enables a folder; invalid values
 remain disabled. Save this file as UTF-8. If it changes while the load-order
 editor is open, reload from disk before saving; stale edits are not applied.
 
-Helpy opens as a separate desktop window with F2. It has its own taskbar entry
-and normal keyboard/mouse focus. Press F2 again or close the window to return
+Helpy opens as a separate desktop window with F2 by default. Change the shortcut
+in **Home > Quick settings** or [settings.ini](SETTINGS-INI.md#helpy-shortcut).
+It has its own taskbar entry and normal keyboard/mouse focus. Press your shortcut again or close the window to return
 to the game. Switching to another application does not force it closed.
 
 ## Check for updates in Helpy

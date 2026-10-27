@@ -124,8 +124,8 @@ PS::RegistryManifestSummary::Fingerprints OwnerFingerprints(
     if(!owners.is_object()||owners.size()>256)
         throw std::runtime_error(std::string(key)+" must be a bounded owner fingerprint object");
     for(const auto& [owner,fingerprint]:owners.items()) {
-        if(owner.empty()||owner.size()>96||!fingerprint.is_string()
-            ||fingerprint.get_ref<const std::string&>().size()>96)
+        if(owner.empty()||owner.size()>(std::string_view(key)=="networkIdentityLanes"?512:96)||!fingerprint.is_string()
+            ||fingerprint.get_ref<const std::string&>().empty()||fingerprint.get_ref<const std::string&>().size()>96)
             throw std::runtime_error(std::string(key)+" contains an invalid owner fingerprint");
         result.emplace(owner,fingerprint.get<std::string>());
     }
@@ -318,7 +318,7 @@ void RegistryBridge::ResetWorld() {
     m_seenRegistryRevision=m_seenActivationRevision=m_seenPersistentRevision=0;
     m_activeAuthorityGraph=nullptr;m_nativeAuthorityActionObserved=false;
     m_manifestFingerprint.clear();m_activationEnvelope.clear();m_persistentStateEnvelope.clear();
-    m_sessionRegistryOwners.clear();m_sessionNetworkOwners.clear();m_sessionAuthorityFingerprint.clear();
+    m_sessionRegistryOwners.clear();m_sessionNetworkOwners.clear();m_sessionAuthorityFingerprint.clear();m_sessionComparisonFingerprint.clear();
     m_registryRevision=m_activationRevision=m_persistentRevision=0;
     m_outboundRevision=0;m_activeRequestRevision=0;m_activeRequestCorrelation.clear();m_requestWindows.clear();m_worldInstances.clear();m_worldLedgerRevision=0;
     m_consumptionPermits.clear();m_pendingAuthorityActions.clear();m_pendingClientActions.clear();m_lastAuthorityDeferred=false;
@@ -330,6 +330,11 @@ void RegistryBridge::ResetWorld() {
     const auto& mapping=LocalMapping();
     m_diagnostics.BeginWorld(role,BuildIdentity,Protocol,EffectiveRegistryFingerprint(m_registrySnapshot),mapping.Available?"available":"unavailable",
         PS::PSConfig::Get()->GetSettings().bridgeDiagnostics.verbose);
+}
+
+std::map<std::string, std::string> RegistryBridge::RegistryOwnerFingerprints() const {
+    return m_registrySnapshot.empty() ? std::map<std::string, std::string>{}
+        : PS::RegistryManifestSummary::Owners(m_registrySnapshot);
 }
 
 void RegistryBridge::SetRegistrySnapshot(std::string snapshot) {
@@ -360,10 +365,11 @@ std::string RegistryBridge::CompactPayload() const {
         {"activationRevision",m_activationRevision},{"persistentStateRevision",m_persistentRevision}};
     payload["sessionPolicy"]={{"mode","server-baseline-permissive"},
         {"clientExtras","allowed"},{"missingContent","allowed"},
-        {"actionValidation","independent"}};
+        {"actionValidation","independent"},{"sharedRegistries","authority-first-warn"}};
     payload["registryOwners"]=PS::RegistryManifestSummary::Owners(m_registrySnapshot);
     payload["networkIdentityLanes"]=PS::NetworkIdentityState::Snapshot();
     payload["networkIdentityOwners"]=PS::NetworkIdentityState::OwnerSnapshot();
+    payload["nativeIdAuthority"]=PS::NetworkIdentityState::GetAuthorityOrderProof();
     if(!m_activationEnvelope.empty())payload["activation"]=nlohmann::json::parse(m_activationEnvelope);
     if(!m_persistentStateEnvelope.empty())payload["persistentState"]=nlohmann::json::parse(m_persistentStateEnvelope);
     return payload.dump();
@@ -909,14 +915,18 @@ void RegistryBridge::HandleGenericRequest(UObject* source,UFunction* function,vo
                 PS::RegistryManifestSummary::Owners(m_registrySnapshot));
             const auto networkSession=PS::RegistryManifestSummary::Negotiate(clientNetwork,
                 PS::NetworkIdentityState::OwnerSnapshot());
-            const auto detail=protocolMatch
-                ?"RuneSchema session accepted: registry("+registrySession.Summary()+
-                    "); network("+networkSession.Summary()+"); build="+
-                    (buildMatch?"match":"different")+", registry="+
-                    (registryMatch?"match":"different")+", mapping="+mappingState+
-                    ", permissive=true."
-                :"RuneSchema session rejected: protocol=different.";
-            SendReceipt(source,channel,entity,revision,protocolMatch,detail);return;
+            const auto parity=PS::RegistryManifestSummary::Compatibility(registrySession,networkSession,
+                payload.contains("registryOwners")&&payload.contains("networkIdentityOwners"),payload.contains("networkIdentityLanes"),
+                OwnerFingerprints(payload,"networkIdentityLanes"),PS::NetworkIdentityState::Snapshot(),
+                PS::NetworkIdentityState::MatchesAuthorityOrderProof(payload.value("nativeIdAuthority",std::string{})));
+            const bool compatible=protocolMatch;
+            window.RegistryRejected=!compatible;
+            const auto detail=std::string("RuneSchema session ")+(compatible?"accepted":"rejected")+
+                ": protocol="+(protocolMatch?"match":"different")+", shared-registries="+parity+
+                "; registry("+registrySession.Summary()+"); network("+networkSession.Summary()+
+                "); build="+(buildMatch?"match":"different")+", registry="+(registryMatch?"match":"different")+
+                ", mapping-telemetry="+mappingState+". Content differences are warnings; individual operations remain authority-validated.";
+            SendReceipt(source,channel,entity,revision,compatible,detail);return;
         }
         if(channel=="registry.action") {
             if(action!="execute")throw std::runtime_error("Unsupported registry action verb");
@@ -1161,8 +1171,10 @@ void RegistryBridge::SendCompatibilityAck(const std::string& remoteFingerprint) 
             {"authorityFingerprint",remoteFingerprint},{"mappingFingerprint",LocalMapping().Fingerprint},
             {"registryOwners",PS::RegistryManifestSummary::Owners(m_registrySnapshot)},
             {"networkIdentityOwners",PS::NetworkIdentityState::OwnerSnapshot()},
+            {"nativeIdAuthority",PS::NetworkIdentityState::GetAuthorityOrderProof()},
+            {"networkIdentityLanes",PS::NetworkIdentityState::Snapshot()},
             {"sessionPolicy",{{"mode","server-baseline-permissive"},{"clientExtras","allowed"},
-                {"missingContent","allowed"},{"actionValidation","independent"}}},
+                {"missingContent","allowed"},{"actionValidation","independent"},{"sharedRegistries","authority-first-warn"}}},
             {"channels",{"system.compat","registry.action","quest.control","quest.state","dialogue.session","event.state","spawn.state","npc.state","vendor.state","player.profile","nameplate.profile","world.state","notify.player"}}};
         const auto revision=++m_outboundRevision;const auto correlation=DiagnosticCorrelation(player,revision);
         Trace("system.compat",player,"client","hello",revision,correlation,"compatibility_handshake_started","pending","accepted");
@@ -1351,6 +1363,9 @@ void RegistryBridge::InvokeAuthorityActionForCaster(UObject* caster,const Author
     if(!caster || !actorClass || !caster->IsA(actorClass))throw std::runtime_error("registry authority request has no actor Caster");
     DragonWilds::ActorHelper::FunctionCall authority(caster,TEXT("/Script/Engine.Actor:HasAuthority"));authority.Invoke();
     if(!authority.Result<bool>())return;
+    const auto compatibility=m_requestWindows.find(DiagnosticOwner(caster)+"|system.compat");
+    if(compatibility!=m_requestWindows.end()&&compatibility->second.RegistryRejected)
+        throw std::runtime_error("Registry action refused: client/server registry compatibility failed; align enabled mods and restart before retrying");
     if(action.Action=="ConsumedItemAuthority") {
         if(!ConsumeAuthorityPermit(caster,action)) {
             const auto duplicate=std::find_if(m_pendingAuthorityActions.begin(),m_pendingAuthorityActions.end(),
@@ -1536,22 +1551,29 @@ void RegistryBridge::Observe(UObject* source,UFunction* function) {
             || state.value("protocolVersion",0)!=Protocol)throw std::runtime_error("Compact registry bridge state is invalid");
         const auto& local=m_registrySnapshot;
         const auto remote=state.value("registryFingerprint",std::string{});
-        const bool manifestMatch=!local.empty()&&EffectiveRegistryFingerprint(local)==remote;
-        if(m_sessionAuthorityFingerprint!=remote) {
+        const auto localMapping=LocalMapping().Fingerprint;
+        const auto remoteMapping=state.value("mappingFingerprint",std::string{});
+        const auto comparison=remote+"|"+EffectiveRegistryFingerprint(local)+"|"+localMapping+"|"+remoteMapping;
+        if(m_sessionComparisonFingerprint!=comparison) {
             m_sessionRegistryOwners=OwnerFingerprints(state,"registryOwners");
             m_sessionNetworkOwners=OwnerFingerprints(state,"networkIdentityOwners");
             const auto registrySession=PS::RegistryManifestSummary::Negotiate(
                 PS::RegistryManifestSummary::Owners(local),m_sessionRegistryOwners);
             const auto networkSession=PS::RegistryManifestSummary::Negotiate(
                 PS::NetworkIdentityState::OwnerSnapshot(),m_sessionNetworkOwners);
-            PS::Log<LogLevel::Normal>(STR("RuneSchema server manifest applied: registry ({}); network ({}); client extras remain active, unavailable local content is permitted, and actions validate independently.\n"),
-                PS::ToWideSafe(registrySession.Summary().c_str()),
-                PS::ToWideSafe(networkSession.Summary().c_str()));
-            m_sessionAuthorityFingerprint=remote;
+            const auto parity=PS::RegistryManifestSummary::Compatibility(registrySession,networkSession,
+                state.contains("registryOwners")&&state.contains("networkIdentityOwners"),state.contains("networkIdentityLanes"),
+                PS::NetworkIdentityState::Snapshot(),OwnerFingerprints(state,"networkIdentityLanes"),
+                PS::NetworkIdentityState::MatchesAuthorityOrderProof(state.value("nativeIdAuthority",std::string{})));
+            if(parity=="different")
+                PS::Log<LogLevel::Warning>(STR("[RS-NET-002] RuneSchema registry parity DIFFERENT: registry ({}; {}); network ({}; {}). Content differences are warnings; ID synchronization is reported separately and operations remain authority-validated.\n"),
+                    PS::ToWideSafe(registrySession.Summary().c_str()),PS::ToWideSafe(PS::RegistryManifestSummary::Difference(PS::RegistryManifestSummary::Owners(local),m_sessionRegistryOwners).c_str()),
+                    PS::ToWideSafe(networkSession.Summary().c_str()),PS::ToWideSafe(PS::RegistryManifestSummary::Difference(PS::NetworkIdentityState::OwnerSnapshot(),m_sessionNetworkOwners).c_str()));
+            else PS::Log<LogLevel::Normal>(STR("RuneSchema shared registry parity {}: registry ({}); network ({}); client extras remain active, unavailable local content is permitted, and actions validate independently.\n"),
+                PS::ToWideSafe(parity.c_str()),PS::ToWideSafe(registrySession.Summary().c_str()),PS::ToWideSafe(networkSession.Summary().c_str()));
+            PS::Log<LogLevel::Normal>(STR("RuneSchema platform mapping telemetry: {}. Platform-local reflection remains active; mapping files are not shared.\n"),PS::ToWideSafe(MappingState(localMapping,remoteMapping).c_str()));
+            m_sessionAuthorityFingerprint=remote;m_sessionComparisonFingerprint=comparison;
         }
-        const auto mappingState=MappingState(LocalMapping().Fingerprint,state.value("mappingFingerprint",std::string{}));
-        if(mappingState=="different"||mappingState=="authority-only"||mappingState=="client-only")
-            PS::Log<LogLevel::Warning>(STR("RuneSchema mapping differs from authority ({}). Live reflection remains active.\n"),PS::ToWideSafe(mappingState.c_str()));
         const auto registry=state.value("registryRevision",0u);
         if(registry>m_seenRegistryRevision){m_seenRegistryRevision=registry;SendCompatibilityAck(remote);}
         const auto activation=state.value("activationRevision",0u);
@@ -1574,7 +1596,7 @@ void RegistryBridge::Observe(UObject* source,UFunction* function) {
         const auto remote=ReadString(source,contract.RegistryFingerprint);
         const bool manifestMatch=!local.empty()&&EffectiveRegistryFingerprint(local)==remote;
         if(!manifestMatch&&m_sessionAuthorityFingerprint!=remote) {
-            PS::Log<LogLevel::Normal>(STR("RuneSchema legacy server manifest applied as a permissive session baseline; client extras and unavailable local content are allowed.\n"));
+            PS::Log<LogLevel::Normal>(STR("RuneSchema legacy registry parity unverified: authority fingerprint differs and legacy telemetry cannot verify native network IDs. No registry IDs were rewritten.\n"));
             m_sessionAuthorityFingerprint=remote;
         }
         m_seenRegistryRevision=revision;

@@ -28,6 +28,11 @@ void RunChecks(){
     std::size_t backups=0;for(const auto& entry:fs::directory_iterator(root))if(entry.path().extension()==".bak")++backups;CHECK(backups==1);
     PS::ConfigFiles::Write(root/"Malformed.json","{");CHECK(Rejects([&]{(void)Kits::Read(root,"Malformed.json");}));
     PS::ConfigFiles::Write(root/"Oversized.json",std::string(Kits::MaxBytes+1,' '));CHECK(Rejects([&]{(void)Kits::Read(root,"Oversized.json");}));
+    CHECK(cart.Add({{"Path","/Game/Items/B.B"}}));CHECK(cart.Select("/Game/Items/A.A"));
+    (void)Kits::Write(root,"Selection",false,cart,false,true);
+    const auto selectedDoc=Kits::Read(root,"Selection.json");
+    CHECK(selectedDoc["Items"].size()==1&&selectedDoc["Items"][0]["Item"]=="/Game/Items/A.A");
+    imported.ImportKits({selectedDoc,selectedDoc});CHECK(imported.Payload()[0]["Count"]==8);
     std::error_code error;fs::create_symlink(file,root/"Linked.jsonc",error);if(!error)CHECK(Rejects([&]{(void)Kits::Read(root,"Linked.jsonc");}));
     // Exact private fixture, not a user save or broad temporary directory.
     CHECK(fs::weakly_canonical(root).parent_path()==fs::weakly_canonical(fs::temp_directory_path()));

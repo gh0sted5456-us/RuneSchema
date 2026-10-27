@@ -1,4 +1,6 @@
 #include "Generator/HelpyMapRuntime.h"
+#include "Runtime/HostServices.h"
+#include "Core/MapPresentationCache.h"
 #include "Generator/HelpyMapTexture.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "SDK/Helper/ActorHelper.h"
@@ -101,13 +103,23 @@ MapProjection::Projection Projection(UWorld* world){
     if(!result.Valid())throw std::runtime_error("Native map bounds or camera axes are invalid");return result;
 }
 nlohmann::json Snapshot(UWorld* world,const nlohmann::json& players){
-    const auto alignment=Projection(world);static nlohmann::json readyImage;
+    static uint64_t mapRevision=UINT64_MAX;static nlohmann::json cachedMap,readyImage;
+    if(mapRevision!=MapPresentationCache::Revision.load()){
+        mapRevision=MapPresentationCache::Revision.load();cachedMap=nlohmann::json::object();
+        try{cachedMap=MapPresentationCache::Reference(HostServices::CacheDirectory()/"item-icons");}catch(...){}
+        if(!cachedMap.empty())readyImage=cachedMap["Image"];
+    }
+    MapProjection::Projection alignment;bool cachedAlignment=false;
+    try{alignment=Projection(world);}catch(...){
+        if(!world||!RC::to_string(world->GetPathName()).starts_with("/Game/Maps/World/L_World.")||cachedMap.empty())throw;
+        alignment=MapProjection::Projection::From(cachedMap["Projection"]);cachedAlignment=true;
+    }
     if(!readyImage.is_object()||readyImage.value("Status",std::string{})!="Ready"||!std::filesystem::is_regular_file(readyImage.value("File",std::string{})))readyImage=HelpyMapTexture::Render(world,WorldTexture);
     auto image=readyImage;
     // Host actions address controller identities. Clients still see replicated
     // pawn locations without pretending those pawn paths are authority handles.
     auto locations=players.empty()?PlayerLocations(world):players;
-    return {{"BridgeVersion",1},{"World",RC::to_string(world->GetPathName())},{"Projection",alignment.ToJson()},{"Players",std::move(locations)},{"Image",std::move(image)}};
+    return {{"BridgeVersion",1},{"World",RC::to_string(world->GetPathName())},{"CachedMapReference",cachedAlignment},{"Projection",alignment.ToJson()},{"Players",std::move(locations)},{"Image",std::move(image)}};
 }
 nlohmann::json Buildings(const std::string& query,std::size_t offset){
     if(query.size()>256||offset>4096)throw std::runtime_error("Building search exceeds its bounds");

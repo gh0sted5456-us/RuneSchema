@@ -1,13 +1,14 @@
 #pragma once
+#include "Core/ProcessExitFuture.h"
 #include "Core/SpawnBrowserPreferences.h"
 #include "Generator/PlayerPortraitPicker.h"
 namespace PS::SpawnBrowserSettings {
 using ChoicesType=SpawnBrowserPreferences::Choices;
 struct Stored {ChoicesType Choices;std::string Baseline;};
 inline ChoicesType Choices;
-inline std::future<Stored> Load;
-inline std::future<std::string> Save,Export;
-inline std::future<ChoicesType> Import;
+inline PS::ProcessExitFuture<Stored> Load;
+inline PS::ProcessExitFuture<std::string> Save,Export;
+inline PS::ProcessExitFuture<ChoicesType> Import;
 inline bool Initialized=false,Loaded=false,Dirty=false,SaveFailed=false;
 inline uint64_t Revision=1,FilterRevision=1;
 inline std::string Error,Notice,Baseline;

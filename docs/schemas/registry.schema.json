@@ -183,7 +183,7 @@
               },
               "MaxBytes": {
                 "default": 65536,
-                "maximum": 65536,
+                "maximum": 1048576,
                 "minimum": 1,
                 "type": "integer"
               },

@@ -77,6 +77,12 @@ inline std::optional<Candidate> MountedCandidate(const std::string& path,const s
     if(UnderAny(path,EnemyRoots()))return Candidate{cls,name,p.find("/npcs/")!=p.npos?Kind::Npc:Kind::Enemy};
     return {};
 }
+inline std::optional<Candidate> MountedItemPackage(const std::string& package){
+    if(!ValidRoot(package))return {};
+    const auto name=package.substr(package.find_last_of('/')+1);
+    const auto candidate=MountedCandidate(package+"."+name,name,{});
+    return candidate&&candidate->kind==Kind::Item?candidate:std::nullopt;
+}
 struct Sources {
     std::vector<std::string> resources=ResourceRoots(),enemies=EnemyRoots();
     bool onlineReference=true;

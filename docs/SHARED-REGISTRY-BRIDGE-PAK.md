@@ -12,6 +12,30 @@ content PAKs register together without replacing one another.
 
 ## Bridge boundary
 
+### Client/server compatibility telemetry
+
+The registry bridge exchanges local mapping fingerprints, registry owner
+fingerprints and ordered native network-ID lane fingerprints during its existing
+compatibility handshake. Mapping fingerprints describe platform-local `.usmap`
+files. Steam, Game Pass and dedicated-server mappings may differ; this is
+informational telemetry, reported once per changed comparison. Each process keeps
+its own reflection mapping.
+
+Shared mod registry definitions must match. Native network-ID lanes must also
+match, including their ordering. A conflict rejects the compatibility handshake
+and subsequent RuneSchema registry actions from that peer. Align the enabled
+mods, their versions and load order, then restart and reconnect. A mapping
+difference alone never rejects this handshake.
+
+Client-only content remains allowed when it does not change the shared native
+network-ID tables. Missing server content is still reported independently. An
+older peer that omits owner or lane telemetry is **unverified**, never described
+as matched or resolved. This check does not disconnect the game, rewrite native
+IDs after a world has loaded, or replace another platform's mapping file.
+
+The fingerprints check consistency; they do not authenticate a peer or grant
+gameplay permissions. Existing per-action authority checks still apply.
+
 RuneSchema's cooked bridge PAKs provide transport and registration boundaries;
 they do not own another mod's gameplay. Every mod that uses a bridge must cook
 its own complete Blueprints, data, and content into its own PAK. Authors should

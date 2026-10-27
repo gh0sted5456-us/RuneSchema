@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/ProcessExitFuture.h"
 #include "Core/AlphabeticalItemCatalog.h"
 #include "Core/ItemCatalogFilter.h"
 #include <filesystem>
@@ -78,7 +79,7 @@ inline Json Read(const fs::path& file,const std::string& scope,const std::string
     if(reset){result["Reset"]=true;result["CursorRecovered"]=true;}return result;
 }
 class Store {
-    struct Result {std::string Key,Scope;Json Window;std::string Error;};std::future<Result> m_read;std::string m_scope,m_key,m_failed;Json m_window;
+    struct Result {std::string Key,Scope;Json Window;std::string Error;};PS::ProcessExitFuture<Result> m_read;std::string m_scope,m_key,m_failed;Json m_window;
 public:
     std::string Failure;
     std::optional<Json> Lookup(const fs::path& manifest,const std::string& scope,const std::string& query,const std::string& cursor,size_t limit,bool preview=false,const std::string& locale={},const std::set<std::string>& nativeProviders={}){

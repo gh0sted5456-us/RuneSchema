@@ -1,5 +1,7 @@
 #pragma once
+#include "Core/ProcessExitFuture.h"
 #include "Core/RuneSchemaDataRoot.h"
+#include "Runtime/HostServices.h"
 #include "Core/NativeContentProviders.h"
 #include "Core/HelpyCacheSources.h"
 #include "Core/ContentSource.h"
@@ -181,8 +183,8 @@ inline Snapshot Inspect(const std::filesystem::path& root,const HelpyCacheSource
 inline Snapshot Current;
 inline HelpyCacheSources::Plan ItemPlan(){auto plan=HelpyCacheSources::Snapshot();plan.AuthoredAssets=Current.AuthoredAssets;plan.ContainerAssets=Current.ContainerAssets;plan.ContainerFiles=Current.ContainerFiles;
     for(const auto& [source,owners]:Current.Owners)plan.Owners[source].insert(owners.begin(),owners.end());return plan;}
-inline std::future<Snapshot> Worker;
-inline std::future<nlohmann::json> CachedSourcesWorker;
+inline PS::ProcessExitFuture<Snapshot> Worker;
+inline PS::ProcessExitFuture<nlohmann::json> CachedSourcesWorker;
 inline bool CachedSourcesAttempted=false;
 inline std::chrono::steady_clock::time_point Next{};
 inline uint64_t Revision=0,RemovalRevision=0,CatalogInvalidationRevision=0;
@@ -224,10 +226,10 @@ inline uint64_t InspectingRevision=0;
 inline bool RefreshingFiles=true;
 inline bool HexKey(const std::string& key){return key.size()==16&&key.find_first_not_of("0123456789abcdef")==key.npos;}
 inline nlohmann::json ForClient(){Requested=true;std::lock_guard lock(PublishedMutex);auto result=Published;
-    const auto plan=HelpyCacheSources::Snapshot();const bool checking=result.value("PlanRevision",uint64_t{})!=plan.Revision;
+    const auto plan=HelpyCacheSources::Snapshot();const bool checking=result.value("Provisional",false)||result.value("PlanRevision",uint64_t{})!=plan.Revision;
     if(!plan.Complete||(checking&&result.value("ContentRevision",uint64_t{})!=plan.ContentRevision))result["Ready"]=false;
     result["CheckingChanges"]=checking;return result;}
-inline nlohmann::json Document(const Snapshot& value){return {{"Version",4},{"Ready",value.Complete&&!value.Key.empty()&&(!value.Authoritative||!value.SourceKeys.empty())},
+inline nlohmann::json Document(const Snapshot& value){return {{"Version",4},{"Ready",!value.Provisional&&value.Complete&&!value.Key.empty()&&(!value.Authoritative||!value.SourceKeys.empty())},{"Provisional",value.Provisional},
     {"Authoritative",value.Authoritative},{"PlanRevision",value.PlanRevision},{"ContentRevision",value.ContentRevision},{"Key",value.Key},{"CatalogKey",value.CatalogKey},{"Sources",value.SourceKeys},{"Owners",value.Owners},{"DeclaredOwners",value.DeclaredOwners},{"NativePlugins",value.NativePlugins},
     {"Discovery","ContainerDirectoryIndex"},{"Containers",value.Containers},{"ModNames",value.DisplayNames}};}
 inline bool AcceptRemote(const nlohmann::json& value){
@@ -289,7 +291,7 @@ inline bool AcceptRemote(const nlohmann::json& value){
 }
 inline std::filesystem::path Directory(bool liveOnly);
 inline void Persist(const Snapshot& value) noexcept {
-    try {if(!value.Authoritative||!value.Complete)return;const auto folder=Directory(false);std::filesystem::create_directories(folder);
+    try {if(!value.Authoritative||!value.Complete||value.Provisional)return;const auto folder=Directory(false);std::filesystem::create_directories(folder);
         const auto target=folder/"sources.json",temporary=folder/("sources-"+std::to_string(GetCurrentProcessId())+".tmp");
         {std::ofstream file(temporary,std::ios::binary|std::ios::trunc);file<<Document(value).dump(2);file.close();if(!file)throw std::runtime_error("Icon source manifest write failed");}
         if(!MoveFileExW(temporary.c_str(),target.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)){std::error_code ec;std::filesystem::remove(temporary,ec);}
@@ -299,12 +301,18 @@ inline void Persist(const Snapshot& value) noexcept {
 // returns a value; it never accesses Unreal, ImGui, or mutable cache state.
 inline bool Poll(const std::filesystem::path& root){
     bool changed=false;const auto now=std::chrono::steady_clock::now();
-    if(RemoteSnapshot){
-        if(!CachedSourcesAttempted){CachedSourcesAttempted=true;const auto file=Directory(false)/"sources.json";
+    // Both the native host and desktop can display saved references before the
+    // live census completes. Provisional sources never publish a live contract.
+    if(!CachedSourcesAttempted){CachedSourcesAttempted=true;if(Current.Key.empty()){const auto file=Directory(false)/"sources.json";
             CachedSourcesWorker=std::async(std::launch::async,[file]{try{if(std::filesystem::file_size(file)>2*1024*1024)return nlohmann::json{};std::ifstream input(file);return nlohmann::json::parse(input);}catch(...){return nlohmann::json{};}});}
-        if(CachedSourcesWorker.valid()&&CachedSourcesWorker.wait_for(std::chrono::seconds(0))==std::future_status::ready){
-            try{auto value=CachedSourcesWorker.get();if(Current.Key.empty()&&AcceptRemote(value)){Current.Provisional=true;changed=true;}}catch(...){}
-        }
+    }
+    if(CachedSourcesWorker.valid()&&CachedSourcesWorker.wait_for(std::chrono::seconds(0))==std::future_status::ready){
+        try{auto value=CachedSourcesWorker.get();if(Current.Key.empty()&&AcceptRemote(value)){
+            Current.Provisional=true;changed=true;
+            if(!RemoteSnapshot){std::lock_guard lock(PublishedMutex);Published=Document(Current);}
+        }}catch(...){}
+    }
+    if(RemoteSnapshot){
         if(now<Next)return changed;Next=now+std::chrono::seconds(2);try{nlohmann::json value;
         if(!RemoteSnapshot(value)||!value.value("Ready",false))return changed;
         const bool provisional=Current.Provisional;const bool accepted=AcceptRemote(value);Current.Provisional=false;
@@ -316,7 +324,7 @@ inline bool Poll(const std::filesystem::path& root){
             if(result.ContentRevision!=plan.ContentRevision||result.FileKey.empty()){Next={};return false;}
             result=Replan(std::move(result),plan);
         }
-        if(result.Key!=Current.Key){bool removed=false;for(const auto& path:Current.Files)if(!result.Files.contains(path)){removed=true;break;}
+        if(result.Key!=Current.Key||Current.Provisional){bool removed=false;for(const auto& path:Current.Files)if(!result.Files.contains(path)){removed=true;break;}
             const bool invalidate=InvalidatesCatalog(Current,result);
             Current=std::move(result);++Revision;if(removed)RemovalRevision=Revision;if(invalidate)CatalogInvalidationRevision=Revision;changed=true;}
         else Current=std::move(result); // A metadata-only revision still completes live source verification.
@@ -343,7 +351,7 @@ inline std::string Fingerprint(const std::string& icon){if(!Current.Authoritativ
     const auto found=Current.SourceKeys.find(HelpyCacheSources::Source(icon));return found==Current.SourceKeys.end()?std::string{}:found->second;}
 inline std::string Key(const std::string& icon){return Hex(Hash(Fingerprint(icon)+"|"+icon));}
 inline std::filesystem::path Directory(bool liveOnly){
-    return RuneSchemaData::SharedDirectory("HELPY")/"runtime"/"saved"/"cache"/(liveOnly?"item-icons-live":"item-icons");
+    return HostServices::CacheDirectory()/(liveOnly?"item-icons-live":"item-icons");
 }
 inline std::filesystem::path IconDirectory(const std::string& icon,bool liveOnly){
     const auto fingerprint=Fingerprint(icon);if(fingerprint.empty())return {};

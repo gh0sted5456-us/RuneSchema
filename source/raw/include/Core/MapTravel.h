@@ -1,7 +1,28 @@
 #pragma once
 #include "Core/MapLanding.h"
 #include <cstdint>
+#include <optional>
 namespace PS::MapTravel {
+// Keep completed samples when yielding; never repeat terrain discovery just
+// because the rest of a footprint would exceed this frame's work budget.
+struct LandingProbe {
+    struct Yield {};
+    std::array<MapLanding::Position,5> Hits{};
+    size_t Count=0;
+    template<class Query> MapLanding::Position Resolve(const MapProjection::Projection& map,
+        MapProjection::Point point,double radius,double halfHeight,Query&& query) {
+        size_t index=0;unsigned queries=0;
+        return MapLanding::ResolveNear(map,point,radius,halfHeight,false,
+            [&](MapProjection::Point sample,double top,double bottom){
+                if(index==Count){
+                    if(queries>=2)throw Yield{};
+                    const auto hit=query(sample,top,bottom,Count?std::optional<double>{Hits[0].Z}:std::nullopt);
+                    Hits[Count++]=hit;++queries;
+                }
+                return Hits[index++];
+            });
+    }
+};
 // Times are monotonic milliseconds. No sleeps, blocking stream flushes, or
 // position changes belong in the preparation phase.
 struct Gate {

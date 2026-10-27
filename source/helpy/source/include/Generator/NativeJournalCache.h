@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/ProcessExitFuture.h"
 #include "Core/JournalWorkspace.h"
 #include "Core/HelpyIconPack.h"
 #include "Generator/ToolRequest.h"
@@ -17,12 +18,12 @@ inline size_t BuildingBytes=0;
 inline uint64_t Pending=0,Sequence=0x5600000000000000ull,Generation=0;
 inline uint64_t Revision=1;
 inline Clock::time_point Next{},Started{};
-inline std::future<Json> Reader;
-inline std::future<Json> BundleReader;
+inline PS::ProcessExitFuture<Json> Reader;
+inline PS::ProcessExitFuture<Json> BundleReader;
 inline Json BundleArt=Json::array();
 inline std::string BundleStamp;
 inline Clock::time_point NextBundle{};
-inline std::future<std::string> Writer;
+inline PS::ProcessExitFuture<std::string> Writer;
 inline std::optional<Json> SaveWanted;
 inline void Poll(){
     if(!Initialized){Initialized=true;const auto file=HostServices::CacheDirectory()/"journal"/"catalog.json";

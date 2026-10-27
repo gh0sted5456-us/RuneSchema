@@ -10,6 +10,7 @@ inline void Render(){
     if(SeenRevision!=ItemPreviewRequest::Revision){CharacterPreviewPanel::Close();SeenRevision=ItemPreviewRequest::Revision;}
     ImGui::SetNextWindowSize({theme.X(480),theme.Y(660)},ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSizeConstraints({0,0},{ImGui::GetIO().DisplaySize.x-theme.X(24),ImGui::GetIO().DisplaySize.y-theme.Y(24)});
+    HelpyImGuiTheme::CenterNextWindow();
     if(ImGui::Begin("Preview Window###shared-item-preview",&ItemPreviewRequest::Open)){
         ImGui::TextWrapped("%s",ItemPresentation::Name(ItemPreviewRequest::Item).c_str());const char* qualities[]={"Economy","Balanced","Detail"};
         if(ImGui::Combo("Quality",&Quality,qualities,3)){ItemPreviewRequest::Requested=false;++ItemPreviewRequest::Revision;}

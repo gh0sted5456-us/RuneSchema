@@ -1,3 +1,4 @@
+#include "Core/ProcessExitFuture.h"
 #include "Runtime/HelpyWikiIcons.h"
 #include "Runtime/HostServices.h"
 #include "Core/HelpyIconPack.h"
@@ -13,7 +14,7 @@ namespace {
 using Json=nlohmann::json;using Bytes=std::vector<char>;namespace fs=std::filesystem;
 struct Entry {std::string Name,Alias,Key,Page,Image,Journal;ImTextureData* Texture=nullptr;int Wanted=-10000;};
 struct Result {std::vector<Entry> Entries;std::string Status;};
-std::vector<Entry> Entries;std::vector<ImTextureData*> Retired;std::future<Result> Worker;
+std::vector<Entry> Entries;std::vector<ImTextureData*> Retired;PS::ProcessExitFuture<Result> Worker;
 std::atomic<bool> Cancelled=false;std::atomic<unsigned> Done=0,Total=0;
 bool Initialized=false;std::string Message;
 fs::path Folder(){return HostServices::CacheDirectory()/"wiki-icons";}

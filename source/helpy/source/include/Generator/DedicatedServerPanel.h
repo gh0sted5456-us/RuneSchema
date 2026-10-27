@@ -42,11 +42,11 @@ inline void Render(){
     ImGui::TextWrapped("File: %s",File.string().c_str());
     if(ImGui::Button("Select active DedicatedServer.ini")){if(dirty){ChooseAfterDiscard=true;ImGui::OpenPopup("Discard server configuration edits?");}else Choose();}
     ImGui::SameLine();if(ImGui::Button("Reload from disk")){if(dirty){ChooseAfterDiscard=false;ImGui::OpenPopup("Discard server configuration edits?");}else Load();}
-    if(ImGui::BeginPopupModal("Discard server configuration edits?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
+    if(HelpyImGuiTheme::BeginCenteredModal("Discard server configuration edits?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
         ImGui::TextUnformatted("Discard unsaved edits before selecting or reloading a file?");if(ImGui::Button("Discard edits")){if(ChooseAfterDiscard)Choose();else Load();ImGui::CloseCurrentPopup();}ImGui::SameLine();if(ImGui::Button("Cancel"))ImGui::CloseCurrentPopup();ImGui::EndPopup();}
     ImGui::TextColored(HelpyImGuiTheme::Current.warning,"Stage while running; apply only after stopping the server. Live INI edits can be overwritten by the game.");
     ImGui::BeginDisabled(!dirty||Preview);if(ImGui::Button("Stage reviewed changes"))ImGui::OpenPopup("Stage server configuration changes?");ImGui::EndDisabled();
-    if(ImGui::BeginPopupModal("Stage server configuration changes?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
+    if(HelpyImGuiTheme::BeginCenteredModal("Stage server configuration changes?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
         ImGui::TextWrapped("Write a private adjacent change file, leaving the active INI unchanged? Only documented scalar settings are staged. Runtime player/admin records are preserved by the offline apply helper. No live rights are granted.");
         if(ImGui::Button("Confirm stage")){try{Stage();}catch(const std::exception& error){Status=error.what();}ImGui::CloseCurrentPopup();}
         ImGui::SameLine();if(ImGui::Button("Cancel"))ImGui::CloseCurrentPopup();ImGui::EndPopup();}

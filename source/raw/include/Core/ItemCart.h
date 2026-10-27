@@ -6,6 +6,7 @@
 #include <vector>
 #include <functional>
 #include <map>
+#include <set>
 #include <nlohmann/json.hpp>
 
 namespace PS::ItemCart {
@@ -21,16 +22,43 @@ class Model {
     json m_submitted=json::array();
     std::map<std::string,Check> m_checks;
     std::vector<Outcome> m_outcomes;
+    std::set<std::string> m_selected,m_selectedOutcomes;
 public:
     static constexpr std::size_t Limit=64;
     const std::vector<Entry>& Entries() const {return m_entries;}
     std::uint64_t Delivery() const {return m_delivery;}
     const std::vector<Outcome>& Outcomes()const{return m_outcomes;}
+    const std::set<std::string>& Selection()const{return m_selected;}
+    const std::set<std::string>& OutcomeSelection()const{return m_selectedOutcomes;}
+    bool Select(const std::string& path,bool additive=false){
+        if(m_delivery||std::none_of(m_entries.begin(),m_entries.end(),[&](const auto& e){return e.Path==path;}))return false;
+        if(!additive)m_selected.clear();
+        if(additive&&m_selected.contains(path))m_selected.erase(path);else m_selected.insert(path);return true;
+    }
+    void SelectAll(bool selected=true){if(m_delivery)return;m_selected.clear();if(selected)for(const auto& e:m_entries)m_selected.insert(e.Path);}
+    bool SelectOutcome(const std::string& path,bool additive=false){
+        if(m_delivery||std::none_of(m_outcomes.begin(),m_outcomes.end(),[&](const auto& e){return e.Item.Path==path&&e.State=="Confirmed";}))return false;
+        if(!additive)m_selectedOutcomes.clear();
+        if(additive&&m_selectedOutcomes.contains(path))m_selectedOutcomes.erase(path);else m_selectedOutcomes.insert(path);return true;
+    }
+    void SelectAllOutcomes(bool selected=true){if(m_delivery)return;m_selectedOutcomes.clear();if(selected)for(const auto& e:m_outcomes)if(e.State=="Confirmed")m_selectedOutcomes.insert(e.Item.Path);}
+    bool MoveSelected(int direction){
+        if(m_delivery||(direction!=-1&&direction!=1))return false;bool moved=false;
+        if(direction<0){for(size_t i=1;i<m_entries.size();++i)if(m_selected.contains(m_entries[i].Path)&&!m_selected.contains(m_entries[i-1].Path)){std::swap(m_entries[i],m_entries[i-1]);moved=true;}}
+        else for(size_t i=m_entries.size();i>1;--i)if(m_selected.contains(m_entries[i-2].Path)&&!m_selected.contains(m_entries[i-1].Path)){std::swap(m_entries[i-2],m_entries[i-1]);moved=true;}
+        return moved;
+    }
+    size_t RemoveSelected(){if(m_delivery)return 0;for(const auto& path:m_selected)m_checks.erase(path);const auto count=std::erase_if(m_entries,[&](const auto& e){return m_selected.contains(e.Path);});m_selected.clear();return count;}
     bool Reorder(const std::string& path={}) {
+        return ReorderPaths(path.empty()?std::set<std::string>{}:std::set<std::string>{path});
+    }
+    bool ReorderSelected(){return !m_selectedOutcomes.empty()&&ReorderPaths(m_selectedOutcomes);}
+private:
+    bool ReorderPaths(const std::set<std::string>& paths) {
         if(m_delivery)return false;
         auto staged=*this;bool added=false;
         for(const auto& outcome:m_outcomes) {
-            if(outcome.State!="Confirmed"||(!path.empty()&&outcome.Item.Path!=path))continue;
+            if(outcome.State!="Confirmed"||(!paths.empty()&&!paths.contains(outcome.Item.Path)))continue;
             const auto& item=outcome.Item;int quantity=item.Quantity;
             for(const auto& entry:staged.m_entries)if(entry.Path==item.Path)quantity+=entry.Quantity;
             if(quantity>10000||!staged.Add(item.Row))return false;
@@ -39,6 +67,7 @@ public:
         if(added){m_entries=std::move(staged.m_entries);m_checks=std::move(staged.m_checks);}
         return added;
     }
+public:
     const Check* Validation(const std::string& path)const{const auto i=m_checks.find(path);return i==m_checks.end()?nullptr:&i->second;}
     void ClearValidation(){m_checks.clear();}
     void ApplyValidation(const json& rows){
@@ -64,9 +93,9 @@ public:
     }
     bool Remove(const std::string& path) {
         if(m_delivery)return false;
-        m_checks.erase(path);return std::erase_if(m_entries,[&](const auto& entry){return entry.Path==path;})!=0;
+        m_selected.erase(path);m_checks.erase(path);return std::erase_if(m_entries,[&](const auto& entry){return entry.Path==path;})!=0;
     }
-    void Clear(){if(!m_delivery){m_entries.clear();m_checks.clear();m_outcomes.clear();}}
+    void Clear(){if(!m_delivery){m_entries.clear();m_checks.clear();m_outcomes.clear();m_selected.clear();m_selectedOutcomes.clear();}}
     void SetQuantity(const std::string& path,int quantity) {
         if(m_delivery)return;
         for(auto& entry:m_entries)if(entry.Path==path){entry.Quantity=std::clamp(quantity,1,10000);return;}
@@ -79,20 +108,29 @@ public:
         }
     }
     void ImportKit(const json& document,const std::function<json(const std::string&)>& resolve={}) {
+        ImportKits({document},false,resolve);
+    }
+    void ImportKits(const std::vector<json>& documents,bool append=false,const std::function<json(const std::string&)>& resolve={}) {
         if(m_delivery)throw std::runtime_error("Wait for delivery before importing a kit");
-        const auto items=KitItems(document);std::vector<Entry> staged;staged.reserve(items.size());
-        for(const auto& item:items) {
-            const auto path=item.at("Item").get<std::string>();auto row=resolve?resolve(path):json::object();
+        if(documents.empty()||documents.size()>256)throw std::invalid_argument("Select 1..256 presets");
+        std::vector<Entry> staged=append?m_entries:std::vector<Entry>{};
+        for(const auto& document:documents)for(const auto& item:KitItems(document)) {
+            const auto path=item.at("Item").get<std::string>();const int quantity=item.at("Count").get<int>();
+            const auto existing=std::find_if(staged.begin(),staged.end(),[&](const auto& e){return e.Path==path;});
+            if(existing!=staged.end()){if(existing->Quantity>10000-quantity)throw std::invalid_argument("Combined preset quantity exceeds 10000");existing->Quantity+=quantity;continue;}
+            if(staged.size()>=Limit)throw std::invalid_argument("Combined presets exceed 64 item types");
+            auto row=resolve?resolve(path):json::object();
             if(!row.is_object())row=json::object();
             row["Path"]=path;if(!row.contains("Name")||!row.at("Name").is_string())row["Name"]=path.substr(path.find_last_of('.')+1);
-            staged.push_back({path,std::move(row),item.at("Count").get<int>()});
+            staged.push_back({path,std::move(row),quantity});
         }
         // Commit only after every row validates/resolves. Import never delivers.
-        m_entries=std::move(staged);m_checks.clear();m_outcomes.clear();
+        m_entries=std::move(staged);m_checks.clear();m_outcomes.clear();m_selected.clear();m_selectedOutcomes.clear();
     }
-    json Payload(int mode=0) const {
+    json Payload(int mode=0,bool selectedOnly=false) const {
         json items=json::array();
         for(const auto& entry:m_entries) {
+            if(selectedOnly&&!m_selected.contains(entry.Path))continue;
             int stack=1;
             const auto it=entry.Row.find("MaxStackSize");
             if(it!=entry.Row.end() && it->is_number_unsigned())stack=static_cast<int>(std::clamp<std::uint64_t>(it->get<std::uint64_t>(),1,10000));
@@ -102,9 +140,9 @@ public:
         }
         return items;
     }
-    bool BeginDelivery(std::uint64_t request,int mode=0) {
-        if(!request||m_delivery||m_entries.empty()||mode<0||mode>3)return false;
-        m_submitted=Payload(mode);m_delivery=request;m_outcomes.clear();return true;
+    bool BeginDelivery(std::uint64_t request,int mode=0,bool selectedOnly=false) {
+        if(!request||m_delivery||m_entries.empty()||(selectedOnly&&m_selected.empty())||mode<0||mode>3)return false;
+        m_submitted=Payload(mode,selectedOnly);m_delivery=request;m_outcomes.clear();m_selectedOutcomes.clear();return true;
     }
     void CancelDelivery(){m_delivery=0;m_submitted=json::array();}
     // Only an exact, single native inventory-delta confirmation consumes a slot.
@@ -136,7 +174,7 @@ public:
                 }
                 if(matches==1&&(exact||rejected)){
                     const auto removed=std::erase_if(m_entries,[&](const auto& entry){return entry.Path==path;});
-                    if(exact)confirmed+=removed;m_checks.erase(path);
+                    if(exact)confirmed+=removed;m_checks.erase(path);m_selected.erase(path);
                 }
             }
         }
@@ -173,8 +211,8 @@ inline json KitItems(const json& document) {
     }
     return items;
 }
-inline json KitDocument(const Model& cart,const std::string& name={}) {
-    json doc={{"SchemaVersion",1},{"Type","RuneSchemaHelpyKit"},{"Name",name},{"Items",cart.Payload()}};
+inline json KitDocument(const Model& cart,const std::string& name={},bool selectedOnly=false) {
+    json doc={{"SchemaVersion",1},{"Type","RuneSchemaHelpyKit"},{"Name",name},{"Items",cart.Payload(0,selectedOnly)}};
     (void)KitItems(doc);return doc;
 }
 }

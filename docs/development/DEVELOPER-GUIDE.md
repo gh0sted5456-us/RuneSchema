@@ -129,8 +129,10 @@ compile, compression/signing checks, and package validation succeed.
 
 ## Helpy
 
-Helpy is a plugin-owned standalone desktop UI. F2 opens or closes it; F5 reloads
-its theme. The legacy F7 Canvas renderer and its input hooks have been removed.
+Helpy is a plugin-owned standalone desktop UI. F2 opens or closes it by default;
+Home > Quick settings changes that shortcut and provides a Reload theme button.
+The binding is stored as `[RuneSchema] helpyHotkey` in settings.ini. The legacy
+F7 Canvas renderer and its input hooks have been removed.
 The first opening presents a repeating Dragonwilds/RuneSchema splash with an
 immediately available Enter action for Home. Catalogue/cache refresh continues
 behind the splash. Returning with F2 preserves the current workspace rather

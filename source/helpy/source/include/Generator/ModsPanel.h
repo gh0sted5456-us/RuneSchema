@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/ProcessExitFuture.h"
 #include "Core/ModHealth.h"
 #include "Generator/LiveLogPanel.h"
 #include "Generator/HelpyIconPacks.h"
@@ -11,7 +12,7 @@
 namespace PS::ModsPanel {
 using Json=nlohmann::json;
 inline Json Snapshot,Rows=Json::array();
-inline std::future<Json> Worker;
+inline PS::ProcessExitFuture<Json> Worker;
 inline std::string Status;
 inline bool Dirty=false,Restart=false;
 inline bool WorkerMutates=false;

@@ -25,6 +25,8 @@ int main(int argc,char** argv){
     for(unsigned flags=0;flags<4;++flags){
         Require(CanToggle(flags&1,flags&2)==(flags!=0));
         Require(ReturnToGame(flags&1,flags&2)==(flags==3));
+        Require(!CanToggle(flags&1,flags&2,false,true));
+        Require(CanToggle(flags&1,flags&2,true)==bool((flags&1)&&!(flags&2)));
     }
     HotkeyLatch latch;Require(latch.Poll(true));Require(!latch.Poll(true));Require(!latch.Press());
     Require(!latch.Poll(false));Require(latch.Press());Require(!latch.Poll(true));
@@ -40,8 +42,10 @@ int main(int argc,char** argv){
     Require(source.find("if(returnToGame)SetForegroundWindow(m_gameWindow)")!=std::string::npos);
     Require(source.find("WH_KEYBOARD_LL")==std::string::npos);
     Require(source.find("ClipCursor(")==std::string::npos&&source.find("SetKeyboardState(")==std::string::npos);
-    Require(source.find("if(Hotkey.Press())ClosePopup()")!=std::string::npos);
-    Require(source.find("CanToggle(GameWindow(foreground),OwnsWindow(foreground))")!=std::string::npos);
+    Require(source.find("PollHotkey(msg.message==WM_KEYDOWN)")!=std::string::npos);
+    Require(source.find("CanToggle(GameWindow(foreground),OwnsWindow(foreground),editing,modified)")!=std::string::npos);
+    Require(source.find("if(key!=boundKey){Hotkey.Poll(down);boundKey=key;}else PollHotkey(down);")!=std::string::npos);
+    Require(source.find("GetAsyncKeyState(VK_F5)")==std::string::npos);
     const auto detached=Read((std::filesystem::path(argv[1]).parent_path()/"DetachedWorkspaces.inl").string().c_str());
     for(const auto* owned:{"m_publishedWindow.load()","m_publishedBayWindow.load()","m_publishedCacheWindow.load()","m_publishedWorkspaces"})Require(detached.find(owned)!=std::string::npos);
     Require(source.find("if(m_visible.load()&&GetForegroundWindow()!=m_gameWindow)ClosePopup()")==std::string::npos);

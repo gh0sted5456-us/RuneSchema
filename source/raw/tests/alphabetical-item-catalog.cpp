@@ -160,6 +160,7 @@ int main(int argc,char** argv){try{
     if(argc>=3){
         const auto read=[](const char* path){std::ifstream input(path,std::ios::binary);assert(input.good());return std::string(std::istreambuf_iterator<char>(input),{});};
         assert(read(argv[1])==read(argv[2]));
-        if(argc==4){const auto native=read(argv[3]);assert(native.find("PS::AssetSearch::AlphabeticalItemWindow(query,cursor,limit,fieldSet)")!=std::string::npos);}
+        if(argc==4){const auto native=read(argv[3]);assert(native.find("PS::AssetSearch::AlphabeticalItemWindow(query,cursor,limit,fieldSet,PS::HelpyBrowsePolicy::Read")!=std::string::npos);
+            assert(native.find("PS::AssetSearch::ItemWindow(query,offset,limit,0,false,fieldSet,4096,1800,true)")!=std::string::npos);}
     }
 }catch(const std::exception& error){std::cerr<<error.what()<<"\n";return 1;}}

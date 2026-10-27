@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/ProcessExitFuture.h"
 #include "Core/HelpyPersonalization.h"
 #include <objbase.h>
 #include <chrono>
@@ -13,7 +14,7 @@ inline Json Document=Json::object();
 inline std::string Baseline,Status;
 inline std::atomic<bool> Initialized=false,Ready=false;
 inline std::atomic<uint64_t> Revision=0;
-inline std::future<std::string> Migration;
+inline PS::ProcessExitFuture<std::string> Migration;
 inline std::chrono::steady_clock::time_point NextObserve{};
 struct SharedProfile{Json Public;std::chrono::steady_clock::time_point Expires;};
 inline std::map<std::string,SharedProfile> Shared;

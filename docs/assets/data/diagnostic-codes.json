@@ -884,6 +884,45 @@
       "causes": "The cache loadOrder setting is neither cacheFirst nor gameFirst.",
       "troubleshooting": "Correct cache.loadOrder in ui.jsonc, then reload Helpy. Use cacheFirst or gameFirst. The invalid preference is rejected; the original configuration is retained.",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-cache-013"
+    },
+    {
+      "id": "NetworkContentWarning",
+      "code": "RS-NET-002",
+      "title": "Authority registry negotiation warning",
+      "severity": "warning",
+      "subsystem": "Multiplayer",
+      "summary": "Client content or mapping availability differs from the authority.",
+      "impact": "RuneSchema warns and preserves native entry; it only aligns shared IDs when identity and type checks succeed. Individual unsupported operations can remain unavailable.",
+      "action": "Read the named source or registry difference. Client-only mods do not need to be removed merely to enter; align required content to use unavailable server features.",
+      "causes": "The authority and client differ in content definitions, source membership, a protected registry baseline, or the availability of a verified mapping. Client-only content and version drift do not themselves cause a RuneSchema entry refusal.",
+      "troubleshooting": "Read the original source/lane detail. Keep extra client mods installed if desired. Shared IDs are aligned only when their identities and native types are verified; update required content for unavailable server features. A warning does not certify that the game itself can deserialize a missing cooked class.",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-net-002"
+    },
+    {
+      "id": "ServerFilterSetup",
+      "code": "RS-SRV-001",
+      "title": "Native server filter setup requested",
+      "severity": "info",
+      "subsystem": "Server",
+      "summary": "RuneSchema applied the server's existing accessibility filter preferences to its actual world.",
+      "impact": "The game's native filter can finish initialization before processing player names. No filter preference is changed; native loading completes asynchronously.",
+      "action": "No action is normally needed. This records the setup request, not a complete server-health check.",
+      "causes": "The dedicated server reached a real world and RuneSchema invoked the game's native accessibility-filter setup with its existing preferences. The client-only settings path can otherwise leave this subsystem uninitialized.",
+      "troubleshooting": "Native dictionary loading is asynchronous. Preserve any later native filter warnings when reporting an issue; this information code alone does not certify filtering, a player join or shutdown.",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-srv-001"
+    },
+    {
+      "id": "ServerFilterUnavailable",
+      "code": "RS-SRV-002",
+      "title": "Native server filter setup unavailable",
+      "severity": "warning",
+      "subsystem": "Server",
+      "summary": "The dedicated-server executable, native method or required settings/world reference could not be verified.",
+      "impact": "RuneSchema skips its initialization correction and retains the game's handling. The native filter setup/shutdown wait can still occur.",
+      "action": "Keep the original reason and game version. Use a RuneSchema build verified for that server executable; do not disable filtering to conceal the wait.",
+      "causes": "The correction could not verify the exact server executable/method, install its world-ready callback, or obtain the required native settings and game-instance references.",
+      "troubleshooting": "Retain the full reason and executable/game version. Unsupported builds keep native handling and need a verified compatibility update; do not patch flags or turn filtering off as a generic workaround.",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-srv-002"
     }
   ],
   "structuredCodes": [
@@ -3654,8 +3693,8 @@
     {
       "code": "incompatible",
       "title": "Compatibility handshake rejected",
-      "causes": "The compatibility receipt was unsuccessful. The current session handler rejects a different protocol; other differences can be reported permissively.",
-      "troubleshooting": "Read the original handshake detail and compare protocol/framework versions. Do not assume every registry or mapping difference rejects the session.",
+      "causes": "The compatibility receipt was unsuccessful. A protocol conflict, different shared registry definitions, or different ordered native network-ID lanes rejects compatibility. Platform mapping fingerprints are informational.",
+      "troubleshooting": "Read the handshake detail and compare enabled mod versions, load order and native network-ID fingerprints. Align conflicts, restart and reconnect. Older peers without owner/lane telemetry are unverified; no IDs are automatically rewritten.",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#bridge-incompatible"
     },
     {

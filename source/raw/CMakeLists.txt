@@ -141,6 +141,7 @@ target_link_libraries(${TARGET} PRIVATE
     Zydis
     Zycore
     version
+    cabinet
 )
 
 # Apply size optimization to UE4SS's custom Shipping configurations.

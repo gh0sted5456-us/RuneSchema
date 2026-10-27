@@ -1,3 +1,4 @@
+#include "Core/ProcessExitFuture.h"
 #include "Runtime/HelpyUpdates.h"
 #include "Core/RuneSchemaUpdateInfo.h"
 #include "Core/SteamNewsInfo.h"
@@ -17,7 +18,7 @@
 
 namespace PS::HelpyUpdates {
 namespace {
-View Result;std::future<View> Worker;std::atomic_bool Cancelled=false;std::atomic_int Progress=0;
+View Result;PS::ProcessExitFuture<View> Worker;std::atomic_bool Cancelled=false;std::atomic_int Progress=0;
 bool Loaded=false;std::chrono::steady_clock::time_point NextManual{};
 std::int64_t Now(){return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();}
 std::filesystem::path CachePath(){return RuneSchemaData::SharedDirectory("HELPY")/"updates.json";}

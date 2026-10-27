@@ -82,7 +82,7 @@ execute Blueprint gameplay, edit PAKs, register items or modify saves.
 
 ## Download the authoring tools ZIP
 
-The next Helpy maintenance build adds **Tools > Utilities > Download authoring
+The October 27 Helpy source maintenance update adds **Tools > Utilities > Download authoring
 tools ZIP**. This manual download saves `RuneSchema-Authoring-Tools.zip` in
 Helpy's authoring-tools export folder. **Open authoring-tools folder** opens
 the actual location. Extract the ZIP and start with its `README.md`.

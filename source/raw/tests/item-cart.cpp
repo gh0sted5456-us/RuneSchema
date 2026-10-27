@@ -80,4 +80,37 @@ int main(){
     assert(PS::ItemBadges::Masterwork({{"Masterwork",true}}));assert(!PS::ItemBadges::Masterwork({{"Masterwork",1}}));
     assert(PS::ItemBadges::Power({{"PowerLevel",25}})==25);assert(!PS::ItemBadges::Power({{"PowerLevel",-1}}));
     assert(!PS::ItemBadges::Power({{"PowerLevel","25"}}));assert(!PS::ItemBadges::Power({{"PowerLevel",std::numeric_limits<double>::infinity()}}));
+    {
+        PS::ItemCart::Model multi;
+        const auto path=[](char c){return std::string("/Game/Items/")+c+"."+c;};
+        for(char c='A';c<='D';++c)assert(multi.Add({{"Path",path(c)}}));
+        assert(multi.Select(path('B'))&&multi.Select(path('C'),true));
+        assert(multi.MoveSelected(-1)&&multi.Payload()[0]["Item"]==path('B')&&multi.Payload()[1]["Item"]==path('C'));
+        assert(!multi.MoveSelected(-1));
+        assert(multi.MoveSelected(1)&&multi.Payload()[0]["Item"]==path('A')&&multi.Payload()[2]["Item"]==path('C'));
+        assert(multi.Select(path('C'),true)&&multi.Selection().size()==1);
+        assert(multi.Select(path('D'),true)&&multi.MoveSelected(-1));
+        assert(multi.Payload()[0]["Item"]==path('B')&&multi.Payload()[2]["Item"]==path('D'));
+        assert(PS::ItemCart::KitDocument(multi,"selection",true)["Items"].size()==2);
+        assert(multi.BeginDelivery(321,0,true));
+        assert(!multi.Select(path('A'))&&!multi.MoveSelected(1)&&multi.RemoveSelected()==0);
+        assert(multi.CompleteDelivery(321,{{"GrantResults",nlohmann::json::array({
+            {{"Item",path('B')},{"Count",1},{"State","Confirmed"}},
+            {{"Item",path('D')},{"Count",1},{"State","Rejected"}}})}})==1);
+        assert(multi.Entries().size()==2&&multi.Payload()[0]["Item"]==path('A')&&multi.Payload()[1]["Item"]==path('C'));
+        assert(!multi.SelectOutcome(path('D'))&&!multi.ReorderSelected());
+        multi.SelectAllOutcomes();assert(multi.OutcomeSelection().size()==1&&multi.ReorderSelected());
+        assert(multi.Payload().back()["Item"]==path('B')&&multi.Outcomes().size()==2);
+        multi.SelectAll();assert(multi.RemoveSelected()==3&&multi.Entries().empty());
+        multi.ImportKits({kit,kit});assert(multi.Payload()[0]["Count"]==2);
+        multi.ImportKits({kit},true);assert(multi.Payload()[0]["Count"]==3);
+        const auto before=multi.Payload();bool failed=false;
+        try{multi.ImportKits({kit,invalid});}catch(...){failed=true;}assert(failed&&multi.Payload()==before);
+        multi.SetQuantity("/Game/Items/A.A",10000);const auto full=multi.Payload();failed=false;
+        try{multi.ImportKits({kit},true);}catch(...){failed=true;}assert(failed&&multi.Payload()==full);
+        assert(multi.BeginDelivery(322));failed=false;
+        try{multi.ImportKits({kit});}catch(...){failed=true;}assert(failed&&multi.Payload()==full);multi.CancelDelivery();
+        multi.Clear();assert(multi.Selection().empty()&&multi.OutcomeSelection().empty());
+    }
+
 }

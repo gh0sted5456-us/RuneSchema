@@ -1,6 +1,7 @@
 #pragma once
 #include "nlohmann/json.hpp"
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <deque>
@@ -14,19 +15,22 @@
 
 namespace PS::ModDataRelay {
 using Json=nlohmann::json;using Clock=std::chrono::steady_clock;
-inline constexpr size_t ChunkBytes=1024,MaxBytes=65536,MaxPeers=64,MaxChannels=64,AssemblyBudget=2*1024*1024,SnapshotBudget=2*1024*1024,QueueBudget=4*1024*1024;
+inline constexpr size_t ChunkBytes=1024,DefaultBytes=65536,MaxBytes=1024*1024,MaxPeers=64,MaxChannels=256,AssemblyBudget=8*1024*1024,SnapshotBudget=8*1024*1024,QueueBudget=16*1024*1024;
 inline void Require(bool value,const char* reason){if(!value)throw std::runtime_error(reason);}
 inline bool Token(const std::string& value,size_t max=193){return !value.empty()&&value.size()<=max&&std::all_of(value.begin(),value.end(),[](unsigned char c){return (c>='a'&&c<='z')||(c>='A'&&c<='Z')||(c>='0'&&c<='9')||c=='_'||c=='-'||c=='.'||c==':';});}
-inline uint32_t Crc(const std::string& bytes){uint32_t result=~uint32_t{};for(unsigned char c:bytes){result^=c;for(int bit=0;bit<8;++bit)result=(result>>1)^(0xedb88320u&uint32_t(-int(result&1)));}return ~result;}
+inline uint32_t Crc(const std::string& bytes){
+    static constexpr auto table=[] {std::array<uint32_t,256> rows{};for(uint32_t i=0;i<256;++i){auto v=i;for(int bit=0;bit<8;++bit)v=(v>>1)^(0xedb88320u&uint32_t(-int(v&1)));rows[i]=v;}return rows;}();
+    uint32_t result=~uint32_t{};for(unsigned char c:bytes)result=(result>>8)^table[(result^c)&255];return ~result;
+}
 inline std::string Hex(const std::string& value){constexpr char digits[]="0123456789abcdef";std::string out;out.reserve(value.size()*2);for(unsigned char c:value){out+=digits[c>>4];out+=digits[c&15];}return out;}
 inline std::string Unhex(const std::string& value){Require(value.size()<=ChunkBytes*2&&value.size()%2==0,"Relay chunk length is invalid");std::string out;out.reserve(value.size()/2);const auto digit=[](char c){return c>='0'&&c<='9'?c-'0':c>='a'&&c<='f'?c-'a'+10:-1;};for(size_t i=0;i<value.size();i+=2){const int a=digit(value[i]),b=digit(value[i+1]);Require(a>=0&&b>=0,"Relay chunk encoding is invalid");out+=char(a*16+b);}return out;}
-struct Channel {std::string Key;uint32_t Version=1;size_t Limit=MaxBytes;bool ClientPublish=false,Broadcast=false,Snapshot=false;bool operator==(const Channel&)const=default;};
+struct Channel {std::string Key;uint32_t Version=1;size_t Limit=DefaultBytes;bool ClientPublish=false,Broadcast=false,Snapshot=false;bool operator==(const Channel&)const=default;};
 inline Channel Declaration(const std::string& owner,const Json& value){
     Require(Token(owner,96)&&owner.find(':')==owner.npos&&value.is_object(),"Relay owner/declaration is invalid");
     for(const auto& [key,_]:value.items())Require(key=="Channel"||key=="Version"||key=="MaxBytes"||key=="ClientPublish"||key=="Broadcast"||key=="Snapshot","Unsupported Relay declaration field");
     for(const auto* field:{"Version","MaxBytes"})if(value.contains(field))Require(value[field].is_number_integer(),"Relay version/size must be integers");
     const auto name=value.at("Channel").get<std::string>();Require(Token(name,96)&&name.find(':')==name.npos,"Relay channel name is invalid");
-    Channel out{owner+":"+name,value.value("Version",uint32_t{1}),value.value("MaxBytes",MaxBytes),value.value("ClientPublish",false),value.value("Broadcast",false),value.value("Snapshot",false)};
+    Channel out{owner+":"+name,value.value("Version",uint32_t{1}),value.value("MaxBytes",DefaultBytes),value.value("ClientPublish",false),value.value("Broadcast",false),value.value("Snapshot",false)};
     Require(out.Version>0&&out.Version<=65535&&out.Limit>0&&out.Limit<=MaxBytes&&(!out.Snapshot||out.Broadcast),"Relay declaration limits/policy are invalid");return out;
 }
 struct Message {std::string Channel,Sender,Data;uint32_t Version=1;int64_t Sequence=0;uint32_t Checksum=0;};
@@ -53,7 +57,8 @@ public:
         if(at==Pending.end()){
             Require(part==0&&Pending.size()<256&&bytes<=AssemblyBudget-Reserved,"Relay assembly capacity/order exceeded");
             size_t count=0;for(const auto& [_,row]:Pending)if(row.Value.Sender==sender)++count;Require(count<4,"Too many incomplete transfers for this sender");
-            at=Pending.emplace(key,Assembly{{route.Key,sender,{},route.Version,sequence,crc},bytes,0,total,now+std::chrono::seconds(30)}).first;Reserved+=bytes;at->second.Value.Data.reserve(bytes);
+            const auto seconds=bytes<=DefaultBytes?30:30+(bytes+4095)/4096;
+            at=Pending.emplace(key,Assembly{{route.Key,sender,{},route.Version,sequence,crc},bytes,0,total,now+std::chrono::seconds(seconds)}).first;Reserved+=bytes;at->second.Value.Data.reserve(bytes);
         }
         auto& assembly=at->second;
         Require(assembly.Value.Sequence==sequence&&assembly.Value.Checksum==crc&&assembly.Bytes==bytes&&assembly.Total==total&&assembly.Next==part,"Relay transfer is interleaved, duplicated or out of order");

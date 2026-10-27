@@ -144,10 +144,14 @@ The sender comes from the owning native component's serial-validated identity;
 any claimed sender in an upload is ignored. CRC32 detects corruption, not
 malicious peers; native RPC ownership and server policy provide authority.
 
-Limits: 64 channels, 64 session peers; 1 KiB raw chunks in at most 4 KiB
-JSON envelopes; 64 KiB completed messages; 30-second assembly deadlines; four
-incomplete transfers per sender; 2 MiB aggregate incoming reservations;
-2 MiB latest-snapshot storage; 4 MiB conservative outbound delivery budget.
+Limits: 256 channels, 64 session peers; 1 KiB raw chunks in at most 4 KiB
+JSON envelopes. Completed messages default to 64 KiB; a declaration can opt
+into up to 1 MiB with `"MaxBytes": 1048576`. Assembly deadlines remain 30
+seconds for ordinary messages and scale to 286 seconds at 1 MiB to accommodate
+the paced transport. There are at most four incomplete transfers per sender,
+8 MiB aggregate incoming reservations, 8 MiB latest-snapshot storage and a
+16 MiB conservative outbound delivery budget. The Lua helper retains 4 MiB
+incoming and outgoing budgets and verifies receive checksums incrementally.
 The server drains at most four chunks each 250 ms, rejects stale completed
 sequences and enforces per-peer rate/byte limits. Oversized or full-capacity
 operations fail explicitly, not with unbounded buffering. Server-side native

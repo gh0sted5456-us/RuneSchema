@@ -8,6 +8,16 @@
 int main(){
     try{
     using namespace PS;namespace fs=std::filesystem;
+    assert(HelpyShortcut::DefaultKey==VK_F2);
+    for(const auto& binding:HelpyShortcut::Choices){
+        assert(HelpyShortcut::Find(binding.Name)==&binding&&HelpyShortcut::Name(binding.Key)==binding.Name);
+        for(const auto& other:HelpyShortcut::Choices)assert(&binding==&other||binding.Key!=other.Key);
+    }
+    assert(HelpyShortcut::Find("f5")->Key==VK_F5&&HelpyShortcut::Find("pageup")->Key==VK_PRIOR);
+    for(const auto* unsupported:{"","Escape","Ctrl+F2","F25","Mouse1"})assert(!HelpyShortcut::Find(unsupported));
+    HelpySettings::ApplyHotkey("X");assert(HelpySettings::Hotkey=='X'&&HelpySettings::HotkeyHint()=="X for Helpy");
+    HelpySettings::ApplyHotkey("f5");assert(HelpySettings::Hotkey==VK_F5&&HelpySettings::HotkeyHint()=="F5 for Helpy");
+    HelpySettings::ApplyHotkey("unsupported");assert(HelpySettings::Hotkey==VK_F2);
     std::ifstream panelFile(fs::path(__FILE__).parent_path().parent_path()/"include"/"Generator"/"RuneSchemaSettingsPanel.h");
     const std::string panel((std::istreambuf_iterator<char>(panelFile)),{});
     const auto toggle=panel.find("ImGui::Checkbox(\"Open Helpy at startup\"");

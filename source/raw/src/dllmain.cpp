@@ -1,3 +1,5 @@
+#include "Runtime/BuildingPolicy/Bridge.h"
+#include "Core/ProcessExitFuture.h"
 #include "Utility/StructuredDiagnostics.h"
 #include "Utility/StructuredDiagnosticB3D.h"
 #include <atomic>
@@ -375,6 +377,7 @@ public:
 
     ~RuneSchema() override
     {
+        m_buildingPolicy.Stop();
         PS::InventoryMarkInput.Reset();
         m_consoleCommands.Shutdown();
         PS::ModHealthService::Shutdown();
@@ -834,6 +837,7 @@ public:
                 m_pluginHost.Shutdown();
             });
             MainLoader.Initialize();
+            m_buildingPolicy.Start();
             PS::ModHealthService::Initialize();
             PS::QuickLoad::Initialize();
             PS::AdditionalLogging::Initialize();
@@ -904,6 +908,7 @@ public:
 private:
     PS::Network::RoleMonitor m_networkRoleMonitor;
     DragonWilds::DragonWildsMainLoader MainLoader;
+    PS::Buildings::Bridge m_buildingPolicy;
     PS::PluginHost m_pluginHost;
     PS::Console::Commands m_consoleCommands;
     std::atomic<bool> m_generateSchemas = false;
@@ -919,6 +924,10 @@ private:
 };
 
 #define RuneSchema_API __declspec(dllexport)
+BOOL APIENTRY DllMain(HMODULE,DWORD reason,LPVOID reserved) {
+    if(reason==DLL_PROCESS_DETACH&&reserved)PS::ProcessExitInProgress.store(true,std::memory_order_relaxed);
+    return TRUE;
+}
 extern "C"
 {
     RuneSchema_API RC::CppUserModBase* start_mod()

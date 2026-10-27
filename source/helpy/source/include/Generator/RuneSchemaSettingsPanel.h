@@ -1,12 +1,14 @@
 #pragma once
 #include "Generator/HelpyImGuiTheme.h"
 #include "Runtime/HelpySettings.h"
+#include "Generator/LazyCatalog.h"
 #include "Core/HelpyEnvironment.h"
 #include <nlohmann/json.hpp>
 #include <functional>
 #include <map>
 #include <vector>
 #include <cctype>
+#include <algorithm>
 
 namespace PS::RuneSchemaSettingsPanel {
 using json=nlohmann::json;
@@ -24,11 +26,11 @@ inline std::string Label(std::string value){
         result+=i?static_cast<char>(std::tolower(c)):static_cast<char>(std::toupper(c));}return result;
 }
 inline std::string Lower(std::string value){for(auto& c:value)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));return value;}
-inline void Accept(const json& result){Snapshot=result;Draft=result.at("Document");Loaded=true;Dirty=false;ArrayText.clear();ArrayErrors.clear();}
+inline void Accept(const json& result){Snapshot=result;Draft=result.at("Document");Loaded=true;Dirty=false;ArrayText.clear();ArrayErrors.clear();HelpySettings::ApplyHotkey(Draft.value("helpyHotkey",std::string("F2")));}
 inline void Load(){
     json result;if(!Remote||!Remote({{"Action","SettingsRead"}},result)){Status="RuneSchema settings service is unavailable. Update the matching core and RSMK together.";return;}
     if(!result.value("Ok",false)){Status=result.value("Status",std::string("Could not read settings.ini."));return;}
-    Accept(result);Status="Changes are saved for the next launch. Running loaders remain unchanged.";
+    Accept(result);Status="The Helpy shortcut applies immediately. Other changes are saved for the next launch.";
 }
 inline json Patch(){json result=json::object();if(!Loaded)return result;
     for(const auto& [path,type]:Snapshot.at("Editable").items()){
@@ -40,32 +42,70 @@ inline void Save(){
     json result;if(!Remote||!Remote({{"Action","SettingsSave"},{"ExpectedContents",Snapshot.at("ExpectedContents")},{"Patch",patch}},result)){
         Status="Save was not confirmed. Reload settings from disk before retrying.";return;}
     if(!result.value("Ok",false)){Status=result.value("Status",std::string("Settings were not saved."));return;}
-    Accept(result);Status=result.value("Status",std::string("Saved. Restart Dragonwilds to apply."));
+    Accept(result);Status=result.value("Status",std::string("Saved. Restart Dragonwilds to apply."))+" The Helpy shortcut is active now.";
 }
-inline void SaveQuick(const std::string& path,bool value){
+inline void SaveQuick(const std::string& path,const json& value){
     QuickToggleError=true;
     if(!Loaded||!Patch().empty()){Status="Finish or discard the Settings draft before using quick toggles.";return;}
     json result;if(!Remote||!Remote({{"Action","SettingsSave"},{"ExpectedContents",Snapshot.at("ExpectedContents")},{"Patch",{{path,value}}}},result)){
         Status="Save was not confirmed; reload settings before retrying.";return;}
     if(!result.value("Ok",false)){Status=result.value("Status",std::string("Setting was not saved."));return;}
-    Accept(result);QuickToggleError=false;Status="Saved for the next game launch. The running session has not changed.";
+    Accept(result);QuickToggleError=false;Status=path=="/helpyHotkey"?"Saved. "+HelpySettings::HotkeyHint()+"; active now.":"Saved for the next game launch. The running session has not changed.";
 }
 inline void QuickToggle(const char* label,const char* path,bool risky=false){
     const auto pointer=json::json_pointer(path);if(!Snapshot.at("Editable").contains(path)||!Snapshot.at("Document").contains(pointer))return;
     ImGui::PushID(path);bool value=Snapshot.at("Document").at(pointer).get<bool>();const bool dirty=!Patch().empty();ImGui::BeginDisabled(dirty);
     if(ImGui::Checkbox(label,&value)){if(risky&&value)ImGui::OpenPopup("Confirm save bypass");else SaveQuick(path,value);}ImGui::EndDisabled();
-    if(ImGui::BeginPopupModal("Confirm save bypass",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
+    if(HelpyImGuiTheme::BeginCenteredModal("Confirm save bypass",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX()+HelpyImGuiTheme::Current.X(390));
         ImGui::TextWrapped("Use Save Bypass by default next launch, rather than failure-only fallback? Back up your character and disable any standalone bypass. This does not repair the save; later saves may persist incomplete progress.");ImGui::PopTextWrapPos();
         if(HelpyImGuiTheme::SoftButton("Save for next launch")){SaveQuick(path,true);ImGui::CloseCurrentPopup();}ImGui::SameLine();
         if(HelpyImGuiTheme::SoftButton("Cancel"))ImGui::CloseCurrentPopup();ImGui::EndPopup();
     }ImGui::PopID();
 }
+inline void CachePreferences(){
+    using namespace HelpyRuntimePreferences;
+    ImGui::SeparatorText("Content & cache");
+    int order=CacheFirst.load()?0:1;const char* choices[]{"Cache first (recommended)","Game first, cache fallback"};
+    ImGui::SetNextItemWidth(-1);bool changed=ImGui::Combo("##content-load-order",&order,choices,2);
+    if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Cache first opens saved/imported item references immediately. Game first discovers loaded game items in bounded slices, using saved references when a live page is unavailable. Neither mode loads every PAK asset or bypasses gameplay validation.");
+    bool passive=PassiveRefresh.load();changed|=ImGui::Checkbox("Passive content updates",&passive);
+    if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Allow bounded background item-catalogue discovery after content changes. Turn off to update through searches and explicit refresh instead. Source verification and live action checks remain active; this does not disable every map or icon update.");
+    if(changed){CacheFirst=order==0;PassiveRefresh=passive;HelpyImGuiTheme::SaveCurrent();auto& list=LazyCatalog::For(0);list.Cache.clear();if(list.Started)LazyCatalog::Retry(0);}
+    if(HelpyImGuiTheme::Status.starts_with("[RS-CFG-003]"))ImGui::TextWrapped("%s",HelpyImGuiTheme::Status.c_str());
+}
 inline void QuickSettings(){
     const auto hint=[](const std::string& text){if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)){
         PS::HelpyImGuiTheme::Tooltip("%s",text.c_str());}};
     if(!Loaded&&Status.empty())Load();
-    {
+    ImGui::SeparatorText("Helpy");
+    bool autoOpen=HelpySettings::OpenOnGameStart();
+    if(ImGui::Checkbox("Open Helpy at startup",&autoOpen))HelpySettings::SetOpenOnGameStart(autoOpen);
+    hint("Open automatically on the next game launch, or use "+HelpySettings::HotkeyName()+" when disabled.\n"+HelpySettings::Message());
+    ImGui::TextUnformatted("Helpy shortcut");
+    static std::string hotkeyStatus;
+    const bool editable=Loaded&&Snapshot.at("Editable").contains("/helpyHotkey")&&Patch().empty();
+    ImGui::BeginDisabled(!editable);
+    const auto current=HelpySettings::HotkeyName();
+    const float resetWidth=ImGui::CalcTextSize("Reset to F2").x+ImGui::GetStyle().FramePadding.x*2;
+    ImGui::SetNextItemWidth(std::max(HelpyImGuiTheme::Current.X(55),ImGui::GetContentRegionAvail().x-resetWidth-ImGui::GetStyle().ItemSpacing.x));
+    if(ImGui::BeginCombo("##helpy-hotkey",current.c_str())){
+        for(const auto& binding:HelpyShortcut::Choices){
+            const bool selected=binding.Name==current;
+            if(ImGui::Selectable(binding.Name.data(),selected)&&!selected){SaveQuick("/helpyHotkey",std::string(binding.Name));hotkeyStatus=QuickToggleError?Status:"Saved. Shortcut active immediately.";}
+            if(selected)ImGui::SetItemDefaultFocus();
+        }ImGui::EndCombo();
+    }
+    hint("Choose one key to open or close Helpy. Saved to [RuneSchema] helpyHotkey in settings.ini and applied immediately. Pick a key that does not conflict with your game or other mods; single-key bindings only.");
+    ImGui::SameLine();ImGui::BeginDisabled(current=="F2");
+    if(HelpyImGuiTheme::SoftButton("Reset to F2")){SaveQuick("/helpyHotkey","F2");hotkeyStatus=QuickToggleError?Status:"Saved. Shortcut active immediately.";}
+    ImGui::EndDisabled();ImGui::EndDisabled();
+    if(!editable){ImGui::TextDisabled("Shortcut unavailable. Hover for details.");hint(Loaded&&!Patch().empty()?"Finish or discard the Settings draft before changing this shortcut.":"Update RuneSchema and Helpy together, then reload RuneSchema settings.");}
+    if(!hotkeyStatus.empty())ImGui::TextWrapped("%s",hotkeyStatus.c_str());
+    if(HelpyImGuiTheme::SoftButton("Reload theme"))HelpyImGuiTheme::RequestReload();
+    hint("Reload the current theme from disk. This does not reload mods or game content.");
+    CachePreferences();
+    if(ImGui::TreeNode("Game launch & saves")){
         static json quick=json::object();static char character[257]{},world[257]{};static int mode=1;static bool dirty=false,unconfirmed=false;static std::string message;
         static bool saved=false;static int choicePolls=0;static double nextChoicePoll=0,retryRead=0;
         const auto load=[&](bool discard){json result;if(!Remote||!Remote({{"Action","QuickLoadRead"}},result)||!result.is_object()||!result.value("Ok",false)){message=result.is_object()?result.value("Status",std::string("Quick Launch service unavailable; use a matching core build.")):"Quick Launch service unavailable; use a matching core build.";return;}
@@ -110,9 +150,6 @@ inline void QuickSettings(){
         if(unconfirmed||quick.empty()){ImGui::TextColored(HelpyImGuiTheme::Current.error,"Launch settings need attention. Hover for details.");hint(message);}
         else if(saved){ImGui::TextDisabled("Saved for next launch");hint(message);}
         ImGui::Separator();
-        bool autoOpen=HelpySettings::OpenOnGameStart();
-        if(ImGui::Checkbox("Open Helpy at startup",&autoOpen))HelpySettings::SetOpenOnGameStart(autoOpen);
-        hint("Checked: open Helpy automatically next game launch. Unchecked: keep it closed until F2. This does not disable RuneSchema or load a world.\n"+HelpySettings::Message());
         if(Loaded){QuickToggle("Save Bypass","/persistence/allowCorruptCharacterEntry",true);
             hint("Checked: use bypass by default. Unchecked: Normal, Quick Launch and dedicated servers use relaxed native loading first, then fallback only after native rejection. Native loading runs once. Does not repair unreadable data; keep backups and disable any standalone bypass. Next launch only.\n\nCurrent session: "+Snapshot.value("BypassStatus",std::string("Not reported")));}
         ImGui::TextDisabled("Backup-first save pruning");
@@ -136,6 +173,7 @@ inline void QuickSettings(){
             if(HelpyImGuiTheme::SoftButton("Reload RuneSchema settings")){Load();QuickToggleError=false;}hint(Status);
             ImGui::TreePop();
         }
+        ImGui::TreePop();
     }
 }
 inline void Field(const std::string& key,json& value,const std::string& path){
@@ -171,7 +209,7 @@ inline void Render(){
     if(!Loaded&&Status.empty())Load();
     if(Loaded)Dirty=!Patch().empty();
     ImGui::TextUnformatted("RuneSchema configuration");
-    ImGui::TextWrapped("Edit this installation's settings.ini. Saves create a backup and take effect after restarting the game or server; they do not change a connected remote server.");
+    ImGui::TextWrapped("Edit this installation's settings.ini. Saves create a backup. The Helpy shortcut applies immediately; other changes require a restart. These settings do not change a connected remote server.");
     if(HelpyImGuiTheme::SoftButton(Dirty?"Discard / reload":"Reload from disk"))Load();
     bool invalid=false;for(const auto& [path,error]:ArrayErrors)invalid|=error;
     ImGui::SameLine();ImGui::BeginDisabled(!Loaded||!Dirty||invalid);
@@ -179,7 +217,7 @@ inline void Render(){
         const auto pointer=json::json_pointer("/persistence/allowCorruptCharacterEntry");
         if(Draft.at(pointer).get<bool>()&&!Snapshot.at("Document").at(pointer).get<bool>())ImGui::OpenPopup("Enable character validation bypass?");else Save();
     }ImGui::EndDisabled();
-    if(ImGui::BeginPopupModal("Enable character validation bypass?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
+    if(HelpyImGuiTheme::BeginCenteredModal("Enable character validation bypass?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
         ImGui::TextWrapped("Use Save Bypass by default next launch? Keep an original character backup and disable CorruptCharacterBypass. This does not guarantee complete loading or progress retention.");
         if(HelpyImGuiTheme::SoftButton("Save for next launch")){Save();ImGui::CloseCurrentPopup();}ImGui::SameLine();
         if(HelpyImGuiTheme::SoftButton("Cancel"))ImGui::CloseCurrentPopup();ImGui::EndPopup();

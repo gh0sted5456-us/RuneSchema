@@ -25,6 +25,13 @@ receipt(nil,param("mod.data"),param("RSHC:appearance"),nil,param(false),param("d
 api.Resync("RSHC:appearance");api.Tick();assert(calls[#calls][3]=="resync")
 notification(nil,param("mod.data"),nil,param(packet));assert(#received==2)
 api.Send("RSHC:appearance",string.rep("x",3000));for _=1,3 do api.Tick()end;assert(calls[#calls][4]:find('"part":2',1,true))
-local ok=pcall(api.Send,"RSHC:appearance",string.rep("x",65537));assert(not ok)
+api.Send("RSHC:appearance",string.rep("x",65537))
+local before=#received
+for part=0,1023 do
+    local large=string.format('{"bytes":1048576,"channel":"RSHC:appearance","crc":3677983029,"hex":"%s","part":%d,"sender":"peer-1-2","sequence":2,"total":1024,"v":1,"version":1}',string.rep("7a",1024),part)
+    notification(nil,param("mod.data"),nil,param(large))
+end
+assert(#received==before+1 and #received[#received][2]==1048576)
+local ok=pcall(api.Send,"RSHC:appearance",string.rep("x",1048577));assert(not ok)
 alive=false;api.Tick();assert(#timers==1)
 print("Lua relay API: scheduling, chunk/CRC interoperability, receive/replay, bounds, receipts, resync and disconnect passed")

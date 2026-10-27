@@ -45,6 +45,15 @@ std::string Toc(const std::string& mount="../../../RSDragonwilds/Content/",uint3
 }
 int main(int argc,char** argv)try{
     namespace fs=std::filesystem;namespace P=PS::PakDiscovery;namespace C=PS::HelpyCacheSources;namespace S=PS::HelpySourceCache;
+    if(argc==4&&std::string_view(argv[1])=="--inspect"){
+        const fs::path root=argv[2];std::ifstream input(argv[3]);const auto document=nlohmann::json::parse(input);S::AcceptRemote(document);
+        auto plan=PS::CacheBundleStore::Plan(S::Current);plan.DisplayNames=S::Current.DisplayNames;
+        auto game=root;for(int i=0;i<5;++i)game=game.parent_path();
+        for(const auto& [name,entry]:document.at("Containers").items()){
+            const auto owner=entry.value("Owner",std::string{});if(owner.starts_with("mods/"))P::RememberRoot((game/name).parent_path(),owner.substr(5));
+        }
+        std::cout<<S::Document(S::Inspect(root,plan)).dump()<<'\n';return 0;
+    }
     if(argc>1){for(int i=1;i<argc;++i){const auto start=std::chrono::steady_clock::now();const auto result=P::Read(argv[i],"RSDragonwilds");
         std::cout<<fs::path(argv[i]).filename().string()<<" "<<nlohmann::json{{"Complete",result.Complete},{"Packages",result.Packages.size()},{"IndexKey",result.IndexKey},{"Reason",result.Error},{"Milliseconds",std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-start).count()}}.dump()<<'\n';}return 0;}
     const auto fixture=fs::temp_directory_path()/("runeschema-pak-discovery-"+std::to_string(GetCurrentProcessId()));
@@ -53,6 +62,12 @@ int main(int argc,char** argv)try{
     const auto toc=P::Read(file,"RSDragonwilds");assert(toc.Complete&&toc.Packages==std::set<std::string>{"/game/stone"});
     const auto pak=file.parent_path()/"Example.pak";Write(pak,Pak());const auto indexed=P::Read(pak,"RSDragonwilds");
     assert(indexed.Complete&&indexed.Packages==std::set<std::string>{"/game/items/stone"});
+    const auto alias=fixture/"XboxGames alias";
+    if(CreateSymbolicLinkW(alias.c_str(),file.parent_path().c_str(),SYMBOLIC_LINK_FLAG_DIRECTORY|SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE)){
+        const auto redirected=P::Read(alias/pak.filename(),"RSDragonwilds");assert(redirected.Complete&&redirected.IndexKey==indexed.IndexKey);
+        bool blocked=false;try{PS::CacheBundleIO::Safe(alias/"index.json");}catch(...){blocked=true;}assert(blocked);
+        fs::remove(alias);
+    }
     for(bool compressed:{false,true}){Write(pak,LegacyPak("Items/Stone.uasset",compressed));const auto legacy=P::Read(pak,"RSDragonwilds");
         assert(legacy.Complete&&legacy.Packages==std::set<std::string>{"/game/items/stone"});}
     Write(pak,LegacyPak("../Private/Stone.uasset"));assert(!P::Read(pak,"RSDragonwilds").Complete);

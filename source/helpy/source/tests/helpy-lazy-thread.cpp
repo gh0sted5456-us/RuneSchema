@@ -1,5 +1,6 @@
 #include "Generator/LazyCatalog.h"
 #include "Core/CatalogWindowProgress.h"
+#include "Core/HelpyBrowsePolicy.h"
 #include <cassert>
 #include <thread>
 int main(){
@@ -75,9 +76,9 @@ int main(){
     // survives stale in-flight basic rows without creating new catalogue items.
     For(0)=State{};auto& cloneWindow=For(0);cloneWindow.CancelGeneration=fence;cloneWindow.RuntimeGeneration=13;cloneWindow.Started=true;
     const json stale={{"Path","/Game/RuneSchema/MyClones/Helm.Helm"},{"Icon","/Game/UI/Source.Source"}};
-    cloneWindow.Rows=json::array({stale});cloneWindow.Cache["helm"]={cloneWindow.Rows,"",false,13};
+    cloneWindow.Rows=json::array({stale});cloneWindow.Cache["11:helm"]={cloneWindow.Rows,"",false,13};
     RecordNativeIcon(stale.at("Path"),"/Mod/UI/Clone.Clone");assert(cloneWindow.Rows[0]["Icon"]=="/Mod/UI/Clone.Clone");
-    assert(cloneWindow.Cache.at("helm").Rows[0]["Icon"]=="/Mod/UI/Clone.Clone");
+    assert(cloneWindow.Cache.at("11:helm").Rows[0]["Icon"]=="/Mod/UI/Clone.Clone");
     assert(Request(0,"Search","helm",true,1));
     ApplyWindow({{"Category",0},{"CancelGeneration",cloneWindow.CancelGeneration},{"RuntimeGeneration",13},{"RequestId",cloneWindow.ActiveRequestId},
         {"Reset",true},{"Rows",json::array({stale})},{"HasMore",false}},102);
@@ -87,7 +88,7 @@ int main(){
     InvalidateSources(false);resetFixture();auto& cached=For(0);cached.Started=true;cached.RuntimeGeneration=13;cached.HasMore=false;cached.Coverage="cached";
     for(int i=0;i<MaxCachedQueries;++i){cached.Query="query"+std::to_string(i);cached.Rows=json::array({{{"Path","/Game/I"+std::to_string(i)}}});SaveCache(0);}
     assert(RestoreCache(0,"query0",13));cached.Query="new";cached.Rows=json::array({{{"Path","/Game/New"}}});SaveCache(0);
-    assert(cached.Cache.size()==MaxCachedQueries&&cached.Cache.contains("query0")&&!cached.Cache.contains("query1"));
+    assert(cached.Cache.size()==MaxCachedQueries&&cached.Cache.contains("11:query0")&&!cached.Cache.contains("11:query1"));
     assert(RestoreCache(0,"query0",13)&&cached.Coverage=="cached");
     const auto cachedSubmissions=accepted;assert(Search(0,"query0")&&accepted==cachedSubmissions&&!cached.Pending);
     cached.Query="empty";cached.Rows=json::array();cached.HasMore=false;SaveCache(0);
@@ -95,7 +96,7 @@ int main(){
     assert(!RestoreCache(0,"query0",14));
     cached.Query.clear();cached.Rows=json::array({{{"Path","/FutureExpansion/Items/X.X"},{"SourceKind","unknown"}}});cached.HasMore=false;SaveCache(0);
     const auto metadataRequests=accepted;RefreshSourceMetadata({},{"futureexpansion"});
-    assert(accepted==metadataRequests&&cached.Rows[0]["SourceKind"]=="expansion"&&cached.Cache.at("@alphabetical").Rows[0]["SourceKind"]=="expansion");
+    assert(accepted==metadataRequests&&cached.Rows[0]["SourceKind"]=="expansion"&&cached.Cache.at("11:@alphabetical").Rows[0]["SourceKind"]=="expansion");
     InvalidateSources(true);assert(RestoreCache(0,"query0",13)&&cached.CheckingChanges);
     assert(Search(0,"query0")&&cached.Pending&&cached.Rows.size()==1); // Stale search remains visible while refreshing.
     InvalidateSources(false);resetFixture();assert(Request(0,"Alphabetical","",true,28));
@@ -193,5 +194,21 @@ int main(){
     Overlay(actorSnapshot,1);assert(actorSnapshot.at("_CatalogRowsRevision")!=emptyRowsRevision);
     assert(Search(1,"old actors"));Overlay(actorSnapshot,1);
     assert(actorSnapshot.at("Definitions")[0]["Key"]=="A"&&actorSnapshot.at("_CatalogRowsRevision")!=oldRowsRevision);
+    // A preference change cannot restore query pages from the previous policy.
+    resetFixture();PS::HelpyRuntimePreferences::CacheFirst=false;PS::HelpyRuntimePreferences::PassiveRefresh=false;
+    json captured;ConfigureRemote([&](json request){captured=std::move(request);return true;},[](int,uint64_t){});
+    assert(Request(0,"Alphabetical","policy",true,28));
+    const auto policy=PS::HelpyBrowsePolicy::Read(captured.at("BrowsePolicy"));assert(!policy.CacheFirst&&!policy.PassiveRefresh);
+    For(0).Pending=false;For(0).Rows=json::array({{{"Path","/Game/PolicyItem.PolicyItem"}}});SaveCache(0);
+    assert(RestoreCache(0,"policy",13));PS::HelpyRuntimePreferences::CacheFirst=true;assert(!RestoreCache(0,"policy",13));
+    assert(!policy.UseBundle(true,false)&&policy.UseBundle(false,false)&&policy.UseBundle(true,true));
+    assert(PS::HelpyBrowsePolicy::Read(json::object()).UseBundle(true,false));
+    for(const auto invalid:{json{{"loadOrder","unknown"}},json{{"loadOrder",3}}}){
+        bool refused=false;try{(void)PS::HelpyBrowsePolicy::Read(invalid);}catch(const std::exception& e){refused=std::string(e.what()).find("RS-CACHE-013")!=std::string::npos;}assert(refused);
+    }
+    for(const auto invalid:{json{{"passiveRefresh","yes"}},json::array()}){
+        bool refused=false;try{(void)PS::HelpyBrowsePolicy::Read(invalid);}catch(const std::exception& e){refused=std::string(e.what()).find("RS-CFG-001")!=std::string::npos;}assert(refused);
+    }
+    PS::HelpyRuntimePreferences::CacheFirst=true;PS::HelpyRuntimePreferences::PassiveRefresh=true;
     ClearRemote();
 }

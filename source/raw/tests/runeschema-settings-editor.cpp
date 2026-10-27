@@ -19,6 +19,8 @@ int main()try{
         Need(!save(patch,original).at("Ok").get<bool>());Need(ConfigFiles::Read(file)==original);
     }
     Need(!save(json{{"/advancedLogging",true}},"stale").at("Ok").get<bool>());
+    Need(!save(json{{"/helpyHotkey","not-a-key"}},original).at("Ok").get<bool>());Need(ConfigFiles::Read(file)==original);
+    Need(initial["Document"]["helpyHotkey"]=="F2"&&initial["Editable"].contains("/helpyHotkey"));
     const auto saved=save(json{{"/advancedLogging",true},{"/archiveLogs",true},{"/persistence/allowCorruptCharacterEntry",true}},original);
     Need(saved.at("Ok").get<bool>()&&saved.at("RestartRequired").get<bool>());
     Need(ConfigFiles::Read(saved.at("Backup").get<std::string>())==original);
@@ -28,6 +30,9 @@ int main()try{
     Need(saved["Document"]["archiveLogs"]==true);
     Need(saved["Document"]["persistence"]["recovery"]==false);
     const auto current=ConfigFiles::Read(file);Need(!save(json{{"/advancedLogging",false}},original).at("Ok").get<bool>());Need(ConfigFiles::Read(file)==current);
+    const auto shortcut=save(json{{"/helpyHotkey","F5"}},current);Need(shortcut.at("Ok").get<bool>());
+    Need(shortcut["Document"]["helpyHotkey"]=="F5"&&DecodeSettings(DecodeIniDocument(ConfigFiles::Read(file)).dump()).helpyHotkey=="F5");
+    Need(ConfigFiles::Read(shortcut.at("Backup").get<std::string>())==current);
     ConfigFiles::Write(file,"broken settings");Need(!RuneSchemaSettingsEditor::Read(root).at("Ok").get<bool>());
     Need(!save(json{{"/advancedLogging",false}},"broken settings").at("Ok").get<bool>());Need(ConfigFiles::Read(file)=="broken settings");
     // Only the exact test-created temporary directory is removed.

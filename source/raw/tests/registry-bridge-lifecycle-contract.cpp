@@ -47,9 +47,18 @@ int main(int argc,char** argv) {
         && source.find("missingContent\",\"allowed")!=std::string::npos
         && source.find("actionValidation\",\"independent")!=std::string::npos,
         "the server does not publish the permissive session policy");
-    require(source.find("SendReceipt(source,channel,entity,revision,protocolMatch,detail)")!=std::string::npos
+    require(source.find("SendReceipt(source,channel,entity,revision,compatible,detail)")!=std::string::npos
+        && source.find("const bool compatible=protocolMatch;")!=std::string::npos
+        && source.find("MatchesAuthorityOrderProof")!=std::string::npos
+        && source.find("m_requestWindows.find(DiagnosticOwner(caster)+\"|system.compat\")")!=std::string::npos
+        && source.find("compatibility->second.RegistryRejected")!=std::string::npos
         && source.find("protocolMatch&&buildMatch&&registryMatch")==std::string::npos,
-        "manifest or build differences can still reject a compatible client");
+        "content/version differences must remain warnings; verified shared IDs must not be invalidated by client-only content");
+    require(source.find("RuneSchema mapping differs from authority")==std::string::npos
+        && source.find("RuneSchema platform mapping telemetry")!=std::string::npos
+        && source.find("m_sessionComparisonFingerprint!=comparison")!=std::string::npos
+        && source.find("legacy registry parity unverified")!=std::string::npos,
+        "mapping telemetry must be informational and deduplicated; legacy mismatches cannot be called resolved");
     require(source.find("client extras remain active, unavailable local content is permitted")!=std::string::npos
         && source.find("m_sessionRegistryOwners.clear();m_sessionNetworkOwners.clear();m_sessionAuthorityFingerprint.clear()")!=std::string::npos,
         "the permissive session is not announced once or cleared on world reset");

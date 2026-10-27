@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/ProcessExitFuture.h"
 #include "Generator/HelpyImGuiTheme.h"
 #include "Core/MapProjection.h"
 #include "Core/MapViewport.h"
@@ -10,6 +11,9 @@
 #include "Core/SpawnCatalogSearch.h"
 #include "Core/BuildingMenu.h"
 #include "Runtime/HelpyMapCache.h"
+#include "Core/MapPresentationCache.h"
+#include "Generator/HelpyRuntimePreferences.h"
+#include <future>
 #include "Generator/HelpyLoadingIndicator.h"
 #include "Generator/SpawnToolsPanel.h"
 #include "Generator/PartyMemberView.h"
@@ -149,7 +153,8 @@ inline void ReadGround(MapProjection::Point point,bool selected){
     }
 }
 inline void Reap(){for(auto it=Data.Retired.begin();it!=Data.Retired.end();){auto* texture=*it;if(texture->Status!=ImTextureStatus_Destroyed){++it;continue;}ImGui::UnregisterUserTexture(texture);IM_DELETE(texture);it=Data.Retired.erase(it);}}
-inline void LoadImage(const Json& image){
+inline PS::ProcessExitFuture<void> MapCacheWriter;
+inline void LoadImage(const Json& image,bool remember=true){
     const auto file=ItemPresentation::Text(image,"File");if(file.empty()||file==Data.ImageFile||ItemPresentation::Text(image,"Status")!="Ready")return;
     std::ifstream input(std::filesystem::path(file),std::ios::binary|std::ios::ate);if(!input)throw std::runtime_error("Native map image is not accessible");
     const auto bytes=input.tellg();if(bytes<16||bytes>16+2048*2048*4)throw std::runtime_error("Native map image exceeds its bounds");
@@ -159,12 +164,25 @@ inline void LoadImage(const Json& image){
     Data.Ocean=MapOceanMask::Mask::Build(pixels,int(width),int(height));
     auto* texture=IM_NEW(ImTextureData)();texture->Create(ImTextureFormat_RGBA32,width,height);std::memcpy(texture->GetPixels(),pixels.data(),size);texture->UseColors=true;texture->RefCount=1;texture->SetStatus(ImTextureStatus_WantCreate);ImGui::RegisterUserTexture(texture);
     if(Data.Texture){Data.Texture->SetStatus(ImTextureStatus_WantDestroy);Data.Retired.push_back(Data.Texture);}Data.Texture=texture;Data.ImageFile=file;
+    if(remember&&Data.Projection.Valid()&&!MapCacheWriter.valid()&&HelpyRuntimePreferences::IconCacheLimitMB.load()>0){
+        const auto cache=HostServices::CacheDirectory()/"item-icons";const auto projection=Data.Projection.ToJson();
+        MapCacheWriter=std::async(std::launch::async,[cache,projection,file]{MapPresentationCache::Capture(cache,projection,std::filesystem::path(file));});
+    }
 }
 inline void Poll(){
+    if(MapCacheWriter.valid()&&MapCacheWriter.wait_for(std::chrono::seconds(0))==std::future_status::ready)try{MapCacheWriter.get();}catch(const std::exception& error){Data.Error=error.what();}
     Reap();if(Data.Texture&&Data.Texture->Status==ImTextureStatus_OK&&Data.Texture->Pixels)Data.Texture->DestroyPixels();
     const auto generation=SpawnToolRequests::CurrentGeneration();const auto now=Clock::now();
     if(generation!=Data.Generation){Data.RiskSamples.clear();Data.GroundReadPending=0;Data.HoverActive=false;Data.HoverGround=Json::object();Data.NextGroundRead={};Data.View={};Data.FitRequested=false;Data.BuildingAction=Data.BuildingBrowserOpen=false;Data.PlacementResult=Json::object();Data.BuildingCategories=Json::array();Data.BuildingCategory=-1;}
     if(generation!=Data.Generation){Data.PartyMoving.clear();Data.PartyDestination.clear();Data.PartyPicking.clear();Data.PartyConfirmWanted=false;Data.PartySelection.clear();Data.PartyTarget.clear();Data.Generation=generation;Data.Pending=Data.SpawnPending=Data.ProbePending=Data.BuildingsPending=0;Data.Snapshot=Json::object();Data.Projection={};Data.Definition=Data.Building=Data.Ground=Json::object();Data.Buildings=Json::array();Data.ProbeWanted=Data.BuildingsWanted=Data.HasPoint=false;Data.Next={};Data.Popup=false;Data.Error.clear();Data.Status.clear();Data.Center={0.5,0.5};Data.Zoom=1;Data.TravelAction=Data.CancelSent=false;}
+    static uint64_t mapRevision=UINT64_MAX;static Json cachedMap=Json::object();
+    if(mapRevision!=MapPresentationCache::Revision.load()){
+        mapRevision=MapPresentationCache::Revision.load();try{cachedMap=MapPresentationCache::Reference(HostServices::CacheDirectory()/"item-icons");}catch(const std::exception& error){cachedMap=Json::object();Data.Error=error.what();}
+    }
+    const auto useCachedMap=[&]{if(!cachedMap.empty()&&(!Data.Projection.Valid()||Data.Snapshot.value("CachedMapReference",false))){
+        Data.Projection=MapProjection::Projection::From(cachedMap["Projection"]);Data.Snapshot["Projection"]=cachedMap["Projection"];Data.Snapshot["Image"]=cachedMap["Image"];Data.Snapshot["CachedMapReference"]=true;LoadImage(cachedMap["Image"],false);
+    }};
+    try{useCachedMap();}catch(const std::exception& error){Data.Error=error.what();}
     Json receipt;
     const auto& live=SpawnToolsPanel::UiSnapshot;
     if(Data.Snapshot.contains("Players")&&live.contains("Players"))PartyStatWire::Merge(Data.Snapshot["Players"],live["Players"],PartyMemberView::Now());
@@ -196,7 +214,7 @@ inline void Poll(){
         if(receipt.contains("MapSnapshot")&&receipt["MapSnapshot"].is_object()){
             Data.Snapshot=receipt["MapSnapshot"];Data.Projection=MapProjection::Projection::From(Data.Snapshot.value("Projection",Json::object()));
             try{const auto error=ItemPresentation::Text(Data.Snapshot,"Error");if(!error.empty())throw std::runtime_error(error);if(!Data.Projection.Valid())throw std::runtime_error("The game did not provide valid map alignment");LoadImage(Data.Snapshot.value("Image",Json::object()));Data.Error.clear();}
-            catch(const std::exception& error){Data.Error=error.what();}
+            catch(const std::exception& error){Data.Error=error.what();try{useCachedMap();}catch(...) {}}
         }else Data.Error="Map data is unavailable. Install the matching RuneSchema Map bridge and load a world.";
     }
     if(Data.Pending&&now-Data.Requested>std::chrono::seconds(15)){Data.Pending=0;Data.Error="Map refresh timed out. Use Refresh to try again.";}
@@ -216,7 +234,7 @@ inline void BuildingBrowser(){
     const auto& t=HelpyImGuiTheme::Current;const auto screen=ImGui::GetIO().DisplaySize;
     ImGui::SetNextWindowSize(ImVec2(std::min(t.X(960),screen.x-t.X(32)),std::min(t.Y(650),screen.y-t.Y(32))),ImGuiCond_Appearing);
     bool open=true;
-    if(!ImGui::BeginPopupModal("Building menu",&open,ImGuiWindowFlags_NoSavedSettings)){Data.BuildingBrowserOpen=false;return;}
+    if(!HelpyImGuiTheme::BeginCenteredModal("Building menu",&open,ImGuiWindowFlags_NoSavedSettings)){Data.BuildingBrowserOpen=false;return;}
     Data.BuildingBrowserOpen=true;
     ImGui::TextDisabled("Game building menu");
     ImGui::SetNextItemWidth(-1);ImGui::InputTextWithHint("##building-menu-search","Search pieces, categories or groups...",Data.BuildingSearch,sizeof(Data.BuildingSearch));
@@ -282,34 +300,50 @@ inline void PlacePopup(){
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::MapPopupWindow={ImGui::GetWindowPos().x,ImGui::GetWindowPos().y,ImGui::GetWindowPos().x+size.x,ImGui::GetWindowPos().y+size.y};
 #endif
+    ImGui::PushStyleVar(ImGuiStyleVar_SeparatorTextAlign,{.5f,.5f});
     ImGui::BeginChild("##map-options-body",{0,std::max(t.Y(60),ImGui::GetContentRegionAvail().y-t.Y(110))},false);
+#if defined(HELPY_PREVIEW)
+    {const auto a=ImGui::GetCursorScreenPos();HelpyPreviewHooks::MapOptionsBody={a.x,a.y,a.x+ImGui::GetContentRegionAvail().x,a.y};}
+#endif
     HelpyImGuiTheme::DetailsTextUnformatted(Data.SelectionName.empty()?"Selected map point":Data.SelectionName.c_str());
     HelpyImGuiTheme::DetailsText("X %.0f   Y %.0f",Data.Point.X,Data.Point.Y);
     const bool groundReady=Data.Ground.value("GroundAvailable",false)&&Data.Ground.contains("Location")&&Data.Ground["Location"].is_array()&&Data.Ground["Location"].size()==3;
-    if(groundReady){ImGui::Text("Z %.0f (ground)",Data.Ground["Location"][2].get<double>());ImGui::SameLine();if(ImGui::SmallButton("Copy coordinates")){char value[128];std::snprintf(value,sizeof(value),"X=%.0f Y=%.0f Z=%.0f",Data.Point.X,Data.Point.Y,Data.Ground["Location"][2].get<double>());ImGui::SetClipboardText(value);}}
-    else if(Data.Operation!=2)ImGui::TextWrapped("%s",Data.ProbePending||Data.ProbeWanted?"Reading ground height...":ItemPresentation::Text(Data.Ground,"Error").c_str());
+    if(groundReady){HelpyImGuiTheme::DetailsText("Z %.0f (ground)",Data.Ground["Location"][2].get<double>());HelpyImGuiTheme::CenterRow(ImGui::CalcTextSize("Copy coordinates").x+ImGui::GetStyle().FramePadding.x*2);if(ImGui::SmallButton("Copy coordinates")){char value[128];std::snprintf(value,sizeof(value),"X=%.0f Y=%.0f Z=%.0f",Data.Point.X,Data.Point.Y,Data.Ground["Location"][2].get<double>());ImGui::SetClipboardText(value);}}
+    else if(Data.Operation!=2)HelpyImGuiTheme::DetailsText("%s",Data.ProbePending||Data.ProbeWanted?"Reading ground height...":ItemPresentation::Text(Data.Ground,"Error").c_str());
     ImGui::Separator();
+    const auto radioWidth=[&](const char* text){return ImGui::CalcTextSize(text).x+ImGui::GetFrameHeight()+ImGui::GetStyle().ItemInnerSpacing.x;};
+    HelpyImGuiTheme::CenterRow(radioWidth("Spawn")+radioWidth("Build")+radioWidth("Teleport")+ImGui::GetStyle().ItemSpacing.x*2);
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::MapOperationRow={ImGui::GetCursorScreenPos().x,0,0,0};
+#endif
     if(ImGui::RadioButton("Spawn",Data.Operation==0)){Data.Operation=0;if(!groundReady)Data.ProbeWanted=true;}ImGui::SameLine();
     if(ImGui::RadioButton("Build",Data.Operation==1)){Data.Operation=1;Data.Permanent=true;if(!groundReady)Data.ProbeWanted=true;if(Data.Buildings.empty()){Data.BuildingsOffset=0;Data.BuildingsWanted=true;}}ImGui::SameLine();
     if(ImGui::RadioButton("Teleport",Data.Operation==2)){Data.Operation=2;Data.ProbeWanted=false;}
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::MapOperationRow.z=ImGui::GetItemRectMax().x;
+#endif
     if(Data.Operation==2){
         if(Data.Ground.empty()&&!Data.GroundReadPending)ReadGround(Data.Point,true);
         if(!groundReady)ImGui::TextDisabled("%s",Data.GroundReadPending?"Reading native ground Z (optional)...":"Ground Z unavailable here; travel prepares the destination separately.");
     }
     if(Data.Operation==0){
     const char* types[]{"Resources", "Ore / mineral nodes", "Trees / wood", "Enemies / AI"};
-    ImGui::SetNextItemWidth(t.X(340));if(ImGui::Combo("##spawn-type",&Data.SpawnType,types,4)){
+    ImGui::SetNextItemWidth(-1);if(ImGui::Combo("##spawn-type",&Data.SpawnType,types,4)){
         Data.Kind=Data.SpawnType==3?1:2;Data.Definition=Json::object();Data.SearchWanted=true;Data.SearchDue={};
     }
     SpawnToolsPanel::RefreshSnapshot(Data.Kind);auto& window=LazyCatalog::For(Data.Kind);
     if(!window.Started&&!window.Pending){Data.SearchWanted=true;Data.SearchDue={};}
-    ImGui::SetNextItemWidth(t.X(340));const bool enter=ImGui::InputTextWithHint("##map-spawn-search","Iron ore node... (Enter to search)",Data.Search,sizeof(Data.Search),ImGuiInputTextFlags_EnterReturnsTrue);
+    ImGui::SetNextItemWidth(-1);const bool enter=ImGui::InputTextWithHint("##map-spawn-search","Iron ore node... (Enter to search)",Data.Search,sizeof(Data.Search),ImGuiInputTextFlags_EnterReturnsTrue);
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::MapSearchField=HelpyPreviewHooks::LastRect();
+#endif
     if(Data.TypedSearch!=Data.Search){Data.TypedSearch=Data.Search;Data.Definition=Json::object();Data.SearchWanted=Data.LiveSearch;Data.SearchDue=Clock::now()+std::chrono::milliseconds(400);}
+    HelpyImGuiTheme::CenterRow(ImGui::CalcTextSize("Search").x+ImGui::GetStyle().FramePadding.x*2+radioWidth("Search as I type")+ImGui::GetStyle().ItemSpacing.x);
     const bool search=ImGui::Button("Search");ImGui::SameLine();ImGui::Checkbox("Search as I type",&Data.LiveSearch);
     if(enter||search){Data.SearchWanted=true;Data.SearchDue={};}
     const auto query=std::string(Data.Search)+(Data.SpawnType==1?" ore node":Data.SpawnType==2?" tree":"");
     if(Data.SearchWanted&&Clock::now()>=Data.SearchDue){LazyCatalog::Search(Data.Kind,query);Data.SearchWanted=false;}
-    ImGui::BeginChild("##spawn-results",ImVec2(t.X(340),t.Y(130)),true);
+    ImGui::BeginChild("##spawn-results",ImVec2(0,t.Y(130)),true);
     size_t matches=0;
     if(!Data.SearchWanted&&window.Query==query)for(const auto& row:window.Rows){
         const auto type=ItemPresentation::Text(row,"Type");if(type!=(Data.Kind==2?"Resource":"AI")||!SpawnCatalogSearch::Matches(row,query))continue;
@@ -331,20 +365,20 @@ inline void PlacePopup(){
         ImGui::TextWrapped("Selected: %s",!Data.Prefab.empty()?Data.PrefabName.c_str():Data.Building.empty()?"Choose a building piece":ItemPresentation::Text(Data.Building,"Name").c_str());
         if(!Data.Prefab.empty()){ImGui::Text("%zu pieces · centered here",Data.Prefab["pieces"].size());if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("The layout's bounds center goes at the selected ground point. Relative height, scale and rotation are preserved. Ghosted pieces are excluded.");ImGui::TextDisabled("Buildings only; stored items aren't copied.");}
         if(Data.BuildingsPending||Data.BuildingsWanted)ImGui::TextDisabled("Reading the game's building menu...");
-        ImGui::SetNextItemWidth(t.X(140));ImGui::SliderFloat("Rotation",&Data.Yaw,0,360,"%.0f degrees");
-        if(Data.Prefab.empty())ImGui::TextDisabled("Native building checks apply.");
+        HelpyImGuiTheme::DetailsTextUnformatted("Rotation");ImGui::SetNextItemWidth(-1);ImGui::SliderFloat("##map-rotation",&Data.Yaw,0,360,"%.0f degrees");
+        if(Data.Prefab.empty())HelpyImGuiTheme::DetailsTextDisabled("Native building checks apply.");
     }
     if(Data.Operation!=2){
     ImGui::Separator();if(Data.Operation==1){Data.Permanent=true;}
-    else{if(ImGui::RadioButton("Temporary",!Data.Permanent))Data.Permanent=false;ImGui::SameLine();if(ImGui::RadioButton("Permanent",Data.Permanent))Data.Permanent=true;}
-    ImGui::TextDisabled("%s",Data.Permanent?"Saved as RuneSchema placements.":"Temporary placement for this session.");
+    else{HelpyImGuiTheme::CenterRow(radioWidth("Temporary")+radioWidth("Permanent")+ImGui::GetStyle().ItemSpacing.x);if(ImGui::RadioButton("Temporary",!Data.Permanent))Data.Permanent=false;ImGui::SameLine();if(ImGui::RadioButton("Permanent",Data.Permanent))Data.Permanent=true;}
+    HelpyImGuiTheme::DetailsTextDisabled("%s",Data.Permanent?"Saved as RuneSchema placements.":"Temporary placement for this session.");
     }
     if(Data.Operation==0){
-    ImGui::SetNextItemWidth(t.X(140));ImGui::InputInt("Count",&Data.Count);Data.Count=std::clamp(Data.Count,1,20);
-    if(Data.Count>1){ImGui::SetNextItemWidth(t.X(140));ImGui::InputFloat("Spread (cm)",&Data.Radius);Data.Radius=std::clamp(Data.Radius,0.0f,10000.0f);}
+    HelpyImGuiTheme::DetailsTextUnformatted("Count");ImGui::SetNextItemWidth(-1);ImGui::InputInt("##map-count",&Data.Count);Data.Count=std::clamp(Data.Count,1,20);
+    if(Data.Count>1){HelpyImGuiTheme::DetailsTextUnformatted("Spread (cm)");ImGui::SetNextItemWidth(-1);ImGui::InputFloat("##map-spread",&Data.Radius);Data.Radius=std::clamp(Data.Radius,0.0f,10000.0f);}
     }
-    ImGui::TextUnformatted(Data.Operation==2?"Player to teleport":"Player context");SpawnToolsPanel::RenderCartRecipient(SpawnToolsPanel::UiSnapshot);
-    if(Data.Operation==2)ImGui::TextWrapped("%s",Data.NearMarker?"Loads this destination, checks ground beside the stone (within 2 metres), then uses native travel.":"Loads the destination before departure, verifies a safe landing, then uses the game's native travel and loading screen. Unsafe or unavailable ground cancels departure.");
+    HelpyImGuiTheme::DetailsTextUnformatted(Data.Operation==2?"Player to teleport":"Player context");SpawnToolsPanel::RenderCartRecipient(SpawnToolsPanel::UiSnapshot);
+    if(Data.Operation==2)HelpyImGuiTheme::DetailsText("%s",Data.NearMarker?"Loads this destination, checks ground beside the stone (within 2 metres), then uses native travel.":"Loads the destination before departure, verifies a safe landing, then uses the game's native travel and loading screen. Unsafe or unavailable ground cancels departure.");
     ImGui::EndChild();
     const bool choice=Data.Operation==2||(Data.Operation==1?(!Data.Building.empty()||!Data.Prefab.empty()):!Data.Definition.empty());
     const bool authority=Data.Operation==0||Data.Snapshot.value("CanBuildAndTeleport",false);
@@ -368,7 +402,7 @@ inline void PlacePopup(){
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::MapSpawn=HelpyPreviewHooks::LastRect();
 #endif
-    ImGui::EndDisabled();ImGui::EndPopup();
+    ImGui::EndDisabled();ImGui::PopStyleVar();ImGui::EndPopup();
 }
 inline void SelectPartyMember(const Json& player){
     Data.PartySelection=ItemPresentation::Text(player,"Path");
@@ -493,7 +527,7 @@ inline void Party(ImVec2 mapMin,ImVec2 mapMax,bool detached=false){
         ImGui::SetNextWindowSize({std::min(t.X(420),ImGui::GetIO().DisplaySize.x-t.X(32)),0},ImGuiCond_Appearing);
         ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(),ImGuiCond_Appearing,{.5f,.5f});
     }
-    if(ImGui::BeginPopupModal("Confirm party travel",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
+    if(HelpyImGuiTheme::BeginCenteredModal("Confirm party travel",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
         const auto* moving=MapParty::Find(Data.Snapshot,Data.PartyMoving);const auto* target=MapParty::Find(Data.Snapshot,Data.PartyDestination);
         const auto name=moving?RuneSchemaProfile::Name(*moving):std::string("Disconnected player");
         if(Data.PartyToMap)ImGui::TextWrapped("Teleport %s to map point X %.0f, Y %.0f?",name.c_str(),Data.PartyMapPoint.X,Data.PartyMapPoint.Y);
@@ -525,9 +559,9 @@ inline void ResourceDetails(){
     const auto& t=HelpyImGuiTheme::Current;if(Data.ResourceDetailsWanted){ImGui::OpenPopup("Map resource details");Data.ResourceDetailsWanted=false;}
     const auto area=ImGui::GetMainViewport()->WorkSize;
     ImGui::SetNextWindowSize({std::min(t.X(510),area.x-t.X(24)),std::min(t.Y(390),area.y-t.Y(24))},ImGuiCond_Appearing);
-    bool open=true;if(!ImGui::BeginPopupModal("Map resource details",&open,ImGuiWindowFlags_NoSavedSettings))return;
-    auto& item=Data.ResourceDetails;const auto name=ItemPresentation::Text(item,"Name");ImGui::TextUnformatted(name.c_str());
-    ImGui::TextDisabled("X %.0f   Y %.0f",item.value("X",0.0),item.value("Y",0.0));ImGui::Separator();
+    bool open=true;if(!HelpyImGuiTheme::BeginCenteredModal("Map resource details",&open,ImGuiWindowFlags_NoSavedSettings))return;
+    auto& item=Data.ResourceDetails;const auto name=ItemPresentation::Text(item,"Name");HelpyImGuiTheme::DetailsTextUnformatted(name.c_str());
+    HelpyImGuiTheme::DetailsTextDisabled("X %.0f   Y %.0f",item.value("X",0.0),item.value("Y",0.0));ImGui::Separator();
     if(ImGui::BeginTabBar("##resource-details-tabs",ImGuiTabBarFlags_Reorderable)){
         if(ImGui::BeginTabItem("Live availability")){
             // Refresh the selected native node by exact path only. A wiki point

@@ -17,6 +17,13 @@ int main(){
     const auto held=MountedCandidate("/Custom/Items/Blade.Blade","Blade","/Script/Dominion.HeldEquipmentData");
     assert(held&&held->kind==Kind::Item);
     assert(!MountedCandidate("/Game/Art/UI/T_Tree.T_Tree","T_Tree","Texture2D"));
+    const auto cannon=MountedItemPackage("/game/mods/siegewarfare/workshop/contracts/item_cannoncontract");
+    assert(cannon&&cannon->kind==Kind::Item&&cannon->path.ends_with("/item_cannoncontract.item_cannoncontract"));
+    assert(!MountedItemPackage("/game/mods/example/item_meshdata_cannon"));
+    assert(!MountedItemPackage("/game/mods/example/t_cannon"));
+    assert(!MountedItemPackage("/game/mods/example/bp_cannon"));
+    assert(!MountedItemPackage("/game/../item_cannon"));
+    assert(!MountedItemPackage("/game/mods/item_cannon.uasset"));
     assert(!MountedCandidate("not a path","ITEM_Test","ItemData"));
     // Unknown directories are not invented resource classes. Explicit authored
     // definitions and manual full classification remain separate discovery paths.

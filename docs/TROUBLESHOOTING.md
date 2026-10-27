@@ -9,7 +9,7 @@ while its recipe still points to the wrong station.
 | Symptom | First check |
 | --- | --- |
 | RuneSchema never starts | Active UE4SS installation, `Mods/mods.txt`, then the first startup failure |
-| Helpy stays closed | F2, enabled Helpy plugin, then Home → Quick settings → Open Helpy when the game starts |
+| Helpy stays closed | Your configured shortcut (F2 by default), enabled Helpy plugin, then Home → Quick settings → Open Helpy at startup |
 | Item is listed but its picture is blank | Native icon/cache status; do not delete the item mod or save |
 | PAK mounts but content is absent | Exact cooked path, native enrollment and its recipe/build/station connection |
 | A patch changes nothing | Correct loader, case-sensitive field/directive, target class/row and first rejected field |

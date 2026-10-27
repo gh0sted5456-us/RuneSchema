@@ -1,4 +1,4 @@
-// Desktop HELPY is F2. Close it or press F2 again to return to the game.
+// Change the Helpy shortcut in Quick settings or RuneSchema/settings/settings.ini.
 {
   "enabled": true,
   "openOnGameStart": false

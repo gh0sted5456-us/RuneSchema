@@ -1,7 +1,7 @@
 #pragma once
 #include <atomic>
 namespace PS::HelpyPopupInput {
-inline bool CanToggle(bool gameForeground,bool helpyForeground){return gameForeground||helpyForeground;}
+inline bool CanToggle(bool gameForeground,bool helpyForeground,bool editing=false,bool modified=false){return (gameForeground||helpyForeground)&&!modified&&!(helpyForeground&&editing);}
 inline bool ReturnToGame(bool helpyForeground,bool gameValid){return helpyForeground&&gameValid;}
 class HotkeyLatch {
     std::atomic<bool> m_down=false;

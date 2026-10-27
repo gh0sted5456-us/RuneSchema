@@ -59,9 +59,9 @@ inline nlohmann::json Read(const fs::path& directory,const std::string& file) {
     const auto path=Target(directory,file);const auto text=ConfigFiles::Read(path,MaxBytes);
     auto doc=nlohmann::json::parse(text,nullptr,true,true);(void)ItemCart::KitItems(doc);return doc;
 }
-inline fs::path Write(const fs::path& directory,const std::string& name,bool jsonc,const ItemCart::Model& cart,bool replace=false) {
+inline fs::path Write(const fs::path& directory,const std::string& name,bool jsonc,const ItemCart::Model& cart,bool replace=false,bool selectedOnly=false) {
     if(!FileName(name))throw std::runtime_error("Kit name: 1..80 letters, numbers, spaces, '-' or '_'; no extension or reserved device names");
-    const auto document=ItemCart::KitDocument(cart,name);const auto target=Target(directory,name+(jsonc?".jsonc":".json"));
+    const auto document=ItemCart::KitDocument(cart,name,selectedOnly);const auto target=Target(directory,name+(jsonc?".jsonc":".json"));
     if(fs::exists(target)) {
         if(!replace)throw std::runtime_error("A kit with this name already exists; confirm replacement or choose a new name");
         (void)ConfigFiles::Backup(target);

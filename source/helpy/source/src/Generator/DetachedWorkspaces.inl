@@ -22,8 +22,8 @@ bool HelpyStandaloneWindow::SyncWorkspacePanel(size_t index){
     if(!panel.Window){
         RECT parent{};GetWindowRect(m_hwnd,&parent);MONITORINFO monitor{sizeof(monitor)};GetMonitorInfoW(MonitorFromWindow(m_hwnd,MONITOR_DEFAULTTONEAREST),&monitor);
         const int width=std::min(index==3?640:index==2?680:1000,int(monitor.rcWork.right-monitor.rcWork.left)),height=std::min(index==3?360:index==2?640:760,int(monitor.rcWork.bottom-monitor.rcWork.top));
-        const int x=std::clamp(int(parent.left+48+int(index)*32),int(monitor.rcWork.left),std::max(int(monitor.rcWork.left),int(monitor.rcWork.right)-width));
-        const int y=std::clamp(int(parent.top+48+int(index)*32),int(monitor.rcWork.top),std::max(int(monitor.rcWork.top),int(monitor.rcWork.bottom)-height));
+        const int x=std::clamp(int((parent.left+parent.right-width)/2),int(monitor.rcWork.left),std::max(int(monitor.rcWork.left),int(monitor.rcWork.right)-width));
+        const int y=std::clamp(int((parent.top+parent.bottom-height)/2),int(monitor.rcWork.top),std::max(int(monitor.rcWork.top),int(monitor.rcWork.bottom)-height));
         wchar_t windowClass[256]{};GetClassNameW(m_hwnd,windowClass,256);
         panel.Window=CreateWindowExW(WS_EX_TOOLWINDOW,windowClass,WorkspaceCaption(index),WS_OVERLAPPEDWINDOW,x,y,width,height,m_hwnd,nullptr,m_module,this);
         if(panel.Window)DragAcceptFiles(panel.Window,TRUE);

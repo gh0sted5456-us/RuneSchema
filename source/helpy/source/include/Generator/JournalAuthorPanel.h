@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/ProcessExitFuture.h"
 #include "Core/JournalWorkspace.h"
 #include "Core/HelpyIconPack.h"
 #include "Runtime/HostServices.h"
@@ -16,7 +17,7 @@ inline char TriggerAsset[2049]{},MapRegion[2049]{},Extra[65537]="{}";
 inline int Placement=0,Discovery=0,Trigger=0,RegionId=0;inline bool CreateGroup=false,UseRegionId=false;
 inline bool OpenRequested=false;
 inline std::string Status;
-inline std::future<std::string> Exporter;
+inline PS::ProcessExitFuture<std::string> Exporter;
 inline void SetPage(int page){Page=std::clamp(page,0,int(Pages.size())-1);std::snprintf(Text,sizeof(Text),"%s",Pages[Page].get<std::string>().c_str());}
 inline void Template(const Json& row){
     std::snprintf(Title,sizeof(Title),"%s",row.value("Name",std::string{}).c_str());std::snprintf(Image,sizeof(Image),"%s",row.value("Icon",std::string{}).c_str());

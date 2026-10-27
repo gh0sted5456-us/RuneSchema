@@ -8,8 +8,11 @@
 #include <deque>
 #include <fstream>
 #include <thread>
+#include <iostream>
+#undef assert
+#define assert(value) ((value)?static_cast<void>(0):throw std::runtime_error("line "+std::to_string(__LINE__)+": "+#value))
 
-int main() {
+int Run() {
     using namespace PS;
     {namespace quick=RuneSchemaSettingsPanel;unsigned writes=0;
         const nlohmann::json settings={{"advancedLogging",false},{"autoUpdateMappings",true},{"persistence",{{"allowCorruptCharacterEntry",false}}}};
@@ -19,6 +22,15 @@ int main() {
         quick::SaveQuick("/advancedLogging",true);assert(writes==1&&quick::Snapshot["Document"]["advancedLogging"]==true&&quick::Snapshot["Document"]["persistence"]["allowCorruptCharacterEntry"]==false);
         quick::Draft["autoUpdateMappings"]=false;quick::SaveQuick("/advancedLogging",false);assert(writes==1); // Never save an unrelated pending Settings draft.
         quick::Loaded=false;quick::Snapshot=quick::Draft=nlohmann::json::object();quick::Status.clear();quick::Remote={};}
+    {namespace quick=RuneSchemaSettingsPanel;unsigned writes=0;
+        quick::Accept({{"Document",{{"helpyHotkey","F3"}}},{"Editable",{{"/helpyHotkey","F2"}}},{"ExpectedContents","shortcut fixture"}});
+        assert(HelpySettings::HotkeyName()=="F3"&&HelpySettings::HotkeyHint()=="F3 for Helpy");
+        quick::Remote=[&](const nlohmann::json& request,nlohmann::json& reply){++writes;assert(request.at("Patch")==nlohmann::json({{"/helpyHotkey","X"}}));
+            reply=quick::Snapshot;reply["Ok"]=true;reply["Document"]["helpyHotkey"]="X";return true;};
+        quick::SaveQuick("/helpyHotkey","X");assert(writes==1&&HelpySettings::Hotkey=='X'&&quick::Status.find("X for Helpy")!=std::string::npos);
+        quick::Remote=[](const nlohmann::json&,nlohmann::json& reply){reply={{"Ok",false},{"Status","Disk changed"}};return true;};
+        quick::SaveQuick("/helpyHotkey","F2");assert(HelpySettings::Hotkey=='X'&&quick::QuickToggleError);
+        quick::Loaded=false;quick::Snapshot=quick::Draft=nlohmann::json::object();quick::Status.clear();quick::QuickToggleError=false;quick::Remote={};HelpySettings::ApplyHotkey("F2");}
     namespace icons=ItemIconCache;
     ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;
     {auto theme=HelpyImGuiTheme::Current;theme.workspaces={true,false,true,true,true};theme.itemShowPlaceholders=true;
@@ -156,11 +168,11 @@ int main() {
     // First-open client page: cached thumbnails load off-thread with bounded uploads,
     // without entering the single-flight engine capture queue, even though
     // native captures are available and the normal queue has a 32-entry cap.
-    HelpyEnvironment::Configure({{"DedicatedServer",false},{"NativeIconCaptureAvailable",true}});
+    HelpyEnvironment::Configure({{"DedicatedServer",false},{"Storefront","Steam/Epic"},{"Platform","Steam"},{"NativeIconCaptureAvailable",true}});
     assert(HelpyEnvironment::NativeIconCaptureAvailable);
     HelpySourceCache::Current.Provisional=true;
     for(int i=0;i<40;++i){const auto icon="/Game/Art/Test/T_FirstOpen_"+std::to_string(i)+".T_FirstOpen_"+std::to_string(i);
-        const auto target=icons::detail::DiskFile(icon);std::filesystem::copy_file(file,target,std::filesystem::copy_options::overwrite_existing);
+        const auto target=icons::detail::DiskFile(icon);std::filesystem::create_directories(target.parent_path());std::filesystem::copy_file(file,target,std::filesystem::copy_options::overwrite_existing);
         cached(icon);assert(state.Textures.contains(icon));}
     icons::Update();assert(submissions==requestsBeforeDiskHit&&state.Pending.empty()&&state.Queued.empty());
     const std::string provisionalMissing="/Game/Art/Test/T_ProvisionalMiss.T_ProvisionalMiss";
@@ -199,6 +211,14 @@ int main() {
     assert(submissions==requestsAfterSourceChecks&&state.Pending.empty()&&state.Queued.empty()&&state.Failed.empty());
     end();
     unsigned accountingResets=0;icons::RemoteResetAccounting=[&]{++accountingResets;};
+    {const auto cache=HelpySourceCache::Directory(false);const std::string path="/Game/Art/Test/T_Presentation.T_Presentation";
+        std::vector<char> bytes(20,100);std::memcpy(bytes.data(),"RSI3",4);const uint32_t dimensions[]{1,1,4};std::memcpy(bytes.data()+4,dimensions,12);
+        HelpyPresentationCache::Group group;group.Owner="core";group.Locale=CacheBundleStore::Locale();group.Fingerprint=std::string(64,'c');group.Icons[path]={{"SHA256",HelpyIconPack::Hash(bytes)},{"Bytes",uint64_t(bytes.size())}};
+        HelpyPresentationCache::Commit(cache,{group},1024*1024,[&](const auto&){return bytes;});
+        HelpySourceCache::Current={};icons::InvalidateSource();const auto before=submissions;
+        begin();cached(path);assert(submissions==before&&state.TextureSourceKeys.at(path)=="presentation");
+        auto* texture=state.Textures.at(path);icons::InvalidateSource(true);assert(state.Textures.at(path)==texture);end();
+    }
     assert(!icons::RemoveDiskFolder(HostServices::CacheDirectory()));
     assert(!icons::RemoveDiskFolder(HostServices::CacheDirectory()/"unrelated"));
     assert(std::filesystem::exists(file));
@@ -208,4 +228,6 @@ int main() {
     for(auto* texture:state.RetiredTextures)if(texture)texture->SetStatus(ImTextureStatus_Destroyed);
     icons::detail::ReapRetired(state);icons::ClearRemote();ImGui::DestroyContext();
     HelpyEnvironment::Configure(nlohmann::json::object());
+    return 0;
 }
+int main(){try{return Run();}catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

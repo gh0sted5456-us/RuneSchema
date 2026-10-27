@@ -8,7 +8,7 @@ static void Check(bool value,const char* reason){if(!value)throw std::runtime_er
 int main(int argc,char** argv){try{
     Check(argc==5,"Expected travel, spawn tools, lifecycle and map UI");const auto travel=Read(argv[1]),tools=Read(argv[2]),life=Read(argv[3]),ui=Read(argv[4]);
     Check(travel.contains("WorldPartitionStreamingSourceComponent:IsStreamingCompleted")&&travel.contains("\"Activated\""),"Destination must be activated, not only metadata-loaded");
-    Check(travel.find("MapLanding::ResolveNear")<travel.find("teleport.Invoke()"),"Ground/capsule footprint must be verified before native departure");
+    Check(travel.find("job.GroundProbe.Resolve")<travel.find("teleport.Invoke()"),"Ground/capsule footprint must be verified before native departure");
     Check(travel.contains("TeleportationSubsystem:TeleportWithParams")&&travel.contains("\"bNoCheck\",false")&&travel.contains("\"bIsATest\",false"),"Use normal native travel checks, never test/no-check teleport");
     Check(!travel.contains("K2_TeleportTo")&&!travel.contains("sleep_for")&&!travel.contains("BlockTillLevelStreaming"),"No blind position jump or blocking streaming flush");
     Check(travel.contains("ToolMapTravelTeleporting(pawn)")&&travel.contains("MapTravel::Arrived"),"Acceptance alone must not report arrival");
@@ -37,5 +37,7 @@ int main(int argc,char** argv){try{
     Check(travel.contains("milliseconds(500)"),"Travel progress must be throttled");
     Check(tools.contains("SpawnToolRequests::TakeMapGround()")&&tools.contains("if(!PS::SpawnToolRequests::IsWaiting()&&groundNow>=nextMapGround)"),"Height queries must stay below queued travel/mutation priority");
     Check(ui.contains("SpawnToolRequests::SubmitMapGround")&&ui.contains("milliseconds(120)")&&tools.contains("milliseconds(150)")&&ui.contains("ground unavailable"),"Hover Z must be debounced, independently requested and honest about unloaded ground");
-    Check(ui.contains("request[\"TargetLocation\"][\"Z\"]")&&travel.contains("groundHint.value_or(origin.Z())")&&travel.contains("MapLanding::ResolveNear"),"Measured Z must guide streaming but never bypass runtime ground verification");
+    Check(ui.contains("request[\"TargetLocation\"][\"Z\"]")&&travel.contains("groundHint.value_or(origin.Z())")&&travel.contains("job.GroundProbe.Resolve"),"Measured Z must guide streaming but never bypass runtime ground verification");
+    Check(travel.contains("job.TerrainIgnored.push_back")&&travel.contains("LandingProbe::Yield")&&travel.contains("milliseconds(2)")&&travel.contains("job.GroundProbe={}"),"Terrain discovery and footprint checks must yield and discard samples when readiness changes");
+    Check(travel.contains("if(groundContractFailed)throw;")&&travel.contains("[HELPY][MAP-TRAVEL]")&&travel.contains("\"bShowLoadingScreen\",false"),"Broken native contracts must stop with evidence and prepared travel must not request another loading overlay");
 }catch(const std::exception& error){std::cerr<<error.what()<<"\n";return 1;}}

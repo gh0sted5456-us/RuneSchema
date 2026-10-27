@@ -1,3 +1,4 @@
+#include "Core/ProcessExitFuture.h"
 #include "Runtime/HelpyMapCache.h"
 #include "Runtime/HostServices.h"
 #include "Core/HelpyEnvironment.h"
@@ -14,7 +15,7 @@ using Clock=std::chrono::steady_clock;using Json=nlohmann::json;
 View State;bool Initialized=false,Dirty=false;std::atomic<bool> Cancelled=false;
 Clock::time_point SaveAt{};std::string AttemptedBuild;
 struct Result {std::shared_ptr<const MapFilters::Dataset> Data;std::string Build,Status;MapFilters::Selection Filters;bool Load=false;};
-std::future<Result> Worker;
+PS::ProcessExitFuture<Result> Worker;
 std::string Lane(){using K=HelpyEnvironment::Kind;switch(HelpyEnvironment::Current){case K::Steam:return "steam";case K::GamePass:return "gamepass";case K::Dedicated:return "dedicated";case K::Epic:return "epic";case K::SteamEpic:return "desktop";default:return "unknown";}}
 std::string Installed(){return MapFilters::ConfirmedBuild(HelpyEnvironment::GameVersion);}
 std::filesystem::path Folder(){return HostServices::CacheDirectory()/"map"/Lane();}

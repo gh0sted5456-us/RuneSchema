@@ -35,6 +35,20 @@ be browsed without starting a native catalogue sweep. Missing artwork can still
 be captured on demand. Persistent artwork remains controlled separately by
 **Keep icons between launches** and the cache size limit.
 
+**Passive content updates defaults to enabled.** A search with no cached matches
+falls through to a targeted live lookup, including after a large saved catalogue
+has been scanned in several pages. Matching live rows are written asynchronously
+to that platform's AppData `cache/content-bundles` store. Later searches and
+launches reuse them without waiting for a complete catalogue rebuild. These
+partial observations do not mark the catalogue complete or grant permission to
+spawn an item. Disabled or removed providers remain excluded.
+
+Discovery also checks the exact package inventory of enabled containers when
+the native item registry omits mod assets. `ITEM_` package names are presentation
+candidates; the actual native type and availability are still checked when used.
+Learned references survive installation-folder and game-content version changes;
+their current source ownership is checked again before display.
+
 Quick settings keeps **Open Helpy at startup** visible. Game launch, save
 bypass and the existing advanced controls are under **Game launch & saves**.
 Those launch/save options still apply on the next game launch; changing the
@@ -75,6 +89,34 @@ After import, the open item list and journal references refresh automatically.
 On later launches, the same platform store is read immediately. A Steam cache
 does not become Game Pass's cache: download/import it in that runtime too.
 Profiles and shared UI assets remain under `core`; caches are platform-local.
+
+A downloaded cache is a partial starting point, not a complete inventory of
+enabled mods. A search with no cached match immediately falls through to a
+bounded native item search, including modded items. Native pagination stays on
+that search. Passive discovery also runs when no cache was hit; an asynchronous
+cache read must not leave the native catalogue waiting forever.
+
+Saved native discoveries are merged with downloaded data. Downloading a newer
+vanilla bundle does not hide mod items already learned from the current game.
+Once the native catalogue is saved, subsequent launches reuse those discoveries.
+Saved native disk pages are read directly for browsing and searches. Helpy does
+not rebuild the whole JSON catalogue for each query; its in-memory sorted index
+is also reused until the underlying cache or active sources change.
+
+PAK/IoStore directory discovery accepts installed content behind Game Pass or
+mod-manager directory redirects. It only reads bounded, validated directory
+metadata. Cache writes retain their separate protection against redirected
+destinations. A detected PAK supplies attribution, not permission to grant items
+or skip live gameplay validation.
+Source fingerprints control revalidation, rather than the game version alone.
+
+Only enabled source owners contribute mod records. Before the current owner
+list is available, cached vanilla content can still display; mod references
+wait for that list, without requiring a world login or native item sweep.
+Disabling/removing a source hides its cached records and saved native rows;
+its files can remain on disk for later re-enabling. Packaged cache imports keep
+the containing folder as an owner alias, so renaming an installed mod does not
+change the publisher's content identity.
 
 The first file read is asynchronous, not literally zero-time. A cached item is
 a **presentation reference**: its ID/path does not prove it exists, is unlocked,
@@ -262,3 +304,47 @@ references, checks byte counts/SHA-256 before import, and keeps its existing
 cache on a network or validation failure. UI artwork still uses its separate
 compiled, immutable manifest. No DLL, script or gameplay definition is fetched
 from this cache feed.
+
+## Map artwork in base-game bundles
+
+Base-game `.rsmk-cache` exports include the cached world-map image and its exact
+map alignment when available. Open **World → Map** in a client world once to
+capture the native map. Capture writes to the platform's AppData cache on a file
+worker. Export **All sources** or **core** to include it; a mod-only export leaves
+the base map out.
+
+Import the resulting bundle on a dedicated server through Helpy's cache window.
+The map becomes available from local cache without a client graphics device or
+another render-target capture. Later Helpy sessions reuse the same map immediately.
+The portable map contains image pixels and coordinate alignment, not players,
+chests, placed buildings, character progress or saved filter preferences. Those
+world details still come from the running server. Older bundles without a map
+remain supported; they cannot supply artwork they did not contain.
+
+The optional `WorldMap` descriptor identifies the fixed native map asset, RSI3
+pixel dimensions/byte count, SHA-256 and validated projection. Its image payload
+follows the icon payloads. Helpy validates the entire map before publishing a
+content-addressed `.rsmap` file and atomically replacing its local `current.json`.
+Corrupt, oversized or over-budget input retains the previous map. Map-bearing
+bundles require this updated reader; use older bundles with older Helpy builds.
+
+Map snapshots can use cached alignment to display the known Ashenfall world when
+the server's native map background is unavailable. That display fallback does not
+replace native projection or ground checks used for teleporting or placement.
+Static resource/quest reference filters keep their separate map-cache workflow.
+
+## Export the cache you already have
+
+The cache window follows **Add cached content → Fill missing content (optional)
+→ Save current cache**. **Export current cache...** works without running Build
+first or waiting for live ownership verification. It includes downloaded library
+records/pictures, learned local references and the map when available. A game
+update or changed PAK inventory does not invalidate this saved snapshot.
+Build / update remains the optional way to discover more content before export.
+
+Snapshot fingerprints describe cached records and picture checksums, independent
+of installation/folder names. These bundles carry `PresentationOnly: true` and
+partial coverage, so a reader cannot mistake them for a verified current native
+registry. Helpy imports them as display references and filters unavailable mod
+sources during browsing. Gameplay actions still validate live. Author builds
+that verify inactive PAK files retain their separate verification path.

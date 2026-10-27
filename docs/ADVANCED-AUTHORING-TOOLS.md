@@ -22,7 +22,7 @@ building a preview do not install a mod or change the game data.
 
 ### Helpy desktop workspace
 
-Open Helpy with **F2**. **Players → Items** handles browsing and delivery;
+Open Helpy with your shortcut (**F2** by default). **Players → Items** handles browsing and delivery;
 **Players → Clone / Recipes** and **Tools → Authoring** provide authoring
 workspaces. **Diagnostics** combines grouped issues and **Live Log**. UI
 preferences use `ui.jsonc`; runtime settings use [`settings.ini`](SETTINGS-INI.md).

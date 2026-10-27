@@ -3,6 +3,7 @@
 #include "Core/HelpyCacheOwnership.h"
 #include <cassert>
 #include <iostream>
+#include <thread>
 #undef assert
 #define assert(x) do{if(!(x))throw std::runtime_error("check failed at line "+std::to_string(__LINE__)+": "+#x);}while(false)
 using namespace PS;using Json=nlohmann::json;namespace fs=std::filesystem;
@@ -79,6 +80,11 @@ int main(){try{
     const auto collected=CacheBundleStore::Collect(fixture/"fresh"/"item-icons",root,journalFolder,iconSettingsChanged);
     assert(collected.size()==1&&collected[0]["Kind"]=="journal");
     assert(CacheBundleStore::Read(cache,root,snapshot,locale).size()==2);
+    {auto saved=snapshot;saved.Provisional=true;
+        const auto rows=CacheBundleStore::Read(cache,root,saved,locale);
+        assert(rows.size()==2&&!rows[0]["Data"].at("CacheSourceVerified").get<bool>());
+        assert(CacheBundleStore::Read(cache,root,saved,locale,{},false).empty());
+    }
     assert(CacheBundleStore::Read(cache,root,snapshot,"unmatched-locale").empty());
     const auto index=CacheBundleIO::Read(CacheBundleStore::Directory(cache,root)/"index.json",1024*1024);
     auto replacement=row;replacement.Data["Name"]="Changed";
@@ -91,6 +97,9 @@ int main(){try{
     auto page=CacheBundleItems::Page(references,"Health","",40);assert(page["Rows"].size()==1&&page["Rows"][0]["PersistenceID"]==row.PersistenceID);
     assert(page["CachePreview"]==true&&!page["HasMore"].get<bool>());
     assert(CacheBundleItems::Page(references,"missing","",40)["Rows"].empty());
+    const CacheBundleItems::Index prepared(references);
+    assert(prepared.Page("Health","",40)==page&&prepared.Page("missing","",40)["Rows"].empty());
+    assert(prepared.Page("Health","",40)==page); // Repeated searches reuse the sorted rows and stable cursor identity.
     auto stoneReference=references[0];stoneReference["Data"]={{"Path","/Game/Items/ITEM_Stone.ITEM_Stone"},{"Name","Stone"},{"Category","Building"},{"Tags","Item.BuildingResource ItemFilter.Material.Mineral"}};
     const auto stonePage=CacheBundleItems::Page(Json::array({stoneReference}),"__helpycat:resources stone","",40);
     assert(stonePage["Rows"].size()==1&&stonePage["Rows"][0]["Category"]=="Resources");
@@ -102,6 +111,20 @@ int main(){try{
     auto imported=HelpyIconPack::Import(bundle,root,destination,snapshot,1024*1024,progress);assert(imported.RecordsImported==2);
     imported=HelpyIconPack::Import(bundle,root,destination,snapshot,1024*1024,progress);assert(imported.RecordsImported==0);
     assert(CacheBundleStore::Read(destination,root,snapshot,locale).size()==2);
+    {
+        const auto awaitPage=[&](CacheBundleItems::Store& store){
+            const auto end=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+            for(;;){if(auto page=store.Lookup(destination,root,snapshot,locale,"","",40))return *page;
+                assert(std::chrono::steady_clock::now()<end);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+        };
+        CacheBundleItems::Store first;auto page=awaitPage(first);assert(page.at("Rows").size()==1);
+        auto update=row;update.Data["Name"]="Immediately imported item";
+        assert(CacheBundleStore::Commit(destination,root,snapshot,locale,{update})==1);
+        first.Invalidate();assert(!first.Lookup(destination,root,snapshot,locale,"","",40));
+        page=awaitPage(first);assert(page.at("Rows")[0].at("Name")=="Immediately imported item");first.Shutdown();
+        CacheBundleItems::Store reopened;
+        page=awaitPage(reopened);assert(page.at("Rows")[0].at("Name")=="Immediately imported item");reopened.Shutdown();
+    }
     imported=HelpyIconPack::Import(bundle,root,fixture/"denied"/"item-icons",snapshot,1024*1024,progress,HelpyIconPack::ImportPolicy::VerifiedContent,{},{},"mods/other");assert(imported.RecordsImported==0);
     imported=HelpyIconPack::Import(bundle,root,fixture/"visuals"/"item-icons",snapshot,1024*1024,progress,HelpyIconPack::ImportPolicy::ServerDisplayOnly);assert(imported.RecordsImported==0);
     auto document=Json{{"Version",2},{"Kind","RuneSchemaCacheBundle"},{"Locale",locale},{"Sources",{{"examplemount",std::string(64,'0')}}},{"Icons",Json::array()},{"Records",Json::array({original})}};
@@ -170,6 +193,49 @@ int main(){try{
         assert(fallback.Imported==0&&fallback.RecordsImported==0);
         exact->clear();fallback=HelpyIconPack::Import(nativeFile,root,fixture/"no-missing-path"/"item-icons",next,1024*1024,progress,HelpyIconPack::ImportPolicy::NativeArtworkFallback);
         assert(fallback.Imported==0&&fallback.RecordsImported==0);
+    }
+    {
+        const auto mapCache=fixture/"map-source"/"item-icons",serverCache=fixture/"map-server"/"item-icons";
+        std::string pixels(24,'\0');std::memcpy(pixels.data(),"RSI3",4);const uint32_t width=2,height=1,count=8;
+        std::memcpy(pixels.data()+4,&width,4);std::memcpy(pixels.data()+8,&height,4);std::memcpy(pixels.data()+12,&count,4);
+        MapProjection::Projection projection;projection.Center={100,200};projection.Right={1,0};projection.Up={0,1};projection.HalfWidth=1000;projection.HalfHeight=2000;projection.MinZ=-100;projection.MaxZ=100;
+        const Json metadata={{"Version",1},{"Asset",MapPresentationCache::Asset},{"Projection",projection.ToJson()},{"Bytes",pixels.size()},{"SHA256",CacheBundleIO::Hash(pixels)}};
+        auto worldData=metadata;worldData["Players"]={"private player"};worldData["World"]="private world";
+        assert(!MapPresentationCache::Metadata(worldData).contains("Players")&&!MapPresentationCache::Metadata(worldData).contains("World"));
+        MapPresentationCache::Install(mapCache,metadata,pixels);const auto before=MapPresentationCache::Reference(mapCache);
+        assert(!before.empty()&&MapPresentationCache::Bytes(mapCache,before)==pixels);
+        auto bad=metadata;bad["Projection"]["HalfWidth"]=0;Reject([&]{MapPresentationCache::Install(mapCache,bad,pixels);});
+        auto corrupt=pixels;corrupt.back()='x';Reject([&]{MapPresentationCache::Install(mapCache,metadata,corrupt);});
+        Reject([&]{MapPresentationCache::Pixels(std::string_view(pixels).substr(0,20));});
+        assert(MapPresentationCache::Reference(mapCache)==before);
+        const auto current=HelpySourceCache::Inspect(root,plan);const auto file=fixture/"world-map.rsmk-cache";
+        HelpyIconPack::Progress progress;const auto exported=HelpyIconPack::Export(file,root,mapCache,current,progress);
+        assert(exported.Message.find("World map and alignment included")!=std::string::npos);
+        HelpySourceCache::Snapshot idleServer;
+        const auto imported=HelpyIconPack::Import(file,root,serverCache,idleServer,1024*1024,progress,HelpyIconPack::ImportPolicy::Presentation);
+        assert(imported.MapImported&&MapPresentationCache::Bytes(serverCache,MapPresentationCache::Reference(serverCache))==pixels);
+        assert(MapPresentationCache::Reference(serverCache)["Projection"]==projection.ToJson());
+        auto bytes=HelpyIconPack::Read(file,HelpyIconPack::MaxPack);bytes.back()='x';HelpyIconPack::Publish(fixture/"bad-map.rsmk-cache",bytes);
+        const auto installed=MapPresentationCache::Reference(serverCache);
+        Reject([&]{HelpyIconPack::Import(fixture/"bad-map.rsmk-cache",root,serverCache,idleServer,1024*1024,progress,HelpyIconPack::ImportPolicy::Presentation);});
+        assert(MapPresentationCache::Reference(serverCache)==installed);
+        Reject([&]{HelpyIconPack::Import(file,root,serverCache,idleServer,16,progress,HelpyIconPack::ImportPolicy::Presentation);});
+        HelpyPresentationCache::Group group;group.Owner="mods/example";group.Fingerprint=CacheBundleIO::Hash("saved-source");group.Locale=locale;
+        group.Records=Json::array({CacheBundle::Document(row)});const std::string icon="/ExampleMount/Art/T_Saved.T_Saved";
+        group.Icons[icon]={{"SHA256",CacheBundleIO::Hash(pixels)},{"Bytes",uint64_t(pixels.size())}};
+        HelpyPresentationCache::Commit(serverCache,{group},1024*1024,[&](const auto&){return std::vector<char>(pixels.begin(),pixels.end());});
+        idleServer.Provisional=true;idleServer.Key="changed";
+        const auto savedFile=fixture/"current-cache.rsmk-cache",renamedFile=fixture/"renamed-cache.rsmk-cache";
+        const auto saved=HelpyIconPack::Export(savedFile,fixture/"game-removed",serverCache,idleServer,progress,{},Json::object(),Json::array(),true);
+        assert(saved.RecordsExported==1&&saved.Exported==1);
+        idleServer.Key="another-layout";
+        HelpyIconPack::Export(renamedFile,fixture/"game-renamed",serverCache,idleServer,progress,{},Json::object(),Json::array(),true);
+        assert(HelpyIconPack::Read(savedFile,HelpyIconPack::MaxPack)==HelpyIconPack::Read(renamedFile,HelpyIconPack::MaxPack));
+        const auto destination=fixture/"saved-reimport"/"item-icons";
+        const auto restored=HelpyIconPack::Import(savedFile,root,destination,idleServer,1024*1024,progress,HelpyIconPack::ImportPolicy::Presentation);
+        assert(restored.RecordsImported==1&&restored.Imported==1&&restored.MapImported);
+        const auto cached=HelpyPresentationCache::Records(destination,locale);assert(cached.size()==1&&!CacheBundleStore::Browsable(cached[0],idleServer));
+        Reject([&]{HelpyIconPack::Import(savedFile,root,destination,idleServer,1024*1024,progress,HelpyIconPack::ImportPolicy::VerifiedContent);});
     }
     // All paths generated from digests; no arbitrary member extraction.
     fs::remove_all(fixture);std::cout<<"Content bundles preserve paths/IDs, isolate owners, retain last-good state and support metadata-only round trips.\n";return 0;

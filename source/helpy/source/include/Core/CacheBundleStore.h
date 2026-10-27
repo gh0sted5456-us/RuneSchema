@@ -1,6 +1,7 @@
 #pragma once
 #include "Core/CacheBundle.h"
 #include "Core/CacheBundleIO.h"
+#include "Core/HelpyPresentationCache.h"
 #include "Core/HelpySourceCache.h"
 #include <mutex>
 // File-worker only. An index is committed LAST; interrupted imports leave the
@@ -23,14 +24,30 @@ inline HelpyCacheSources::Plan Plan(const HelpySourceCache::Snapshot& snapshot){
     for(const auto& [source,key]:snapshot.SourceKeys)plan.Registered.insert(source);return plan;
 }
 inline bool ActiveOwner(const CacheBundle::Record& row,const HelpySourceCache::Snapshot& snapshot){return snapshot.SourceKeys.contains(row.Source)&&CacheBundle::Owned(row,Plan(snapshot),snapshot.NativePlugins);}
+// Cached presentation never proves that a mod is enabled in this runtime.
+inline bool Browsable(const Json& value,const HelpySourceCache::Snapshot& snapshot){
+    const auto row=CacheBundle::Parse(value);
+    if(row.Owner=="core")return true;
+    if(row.Owner.starts_with("plugins/"))return !snapshot.Authoritative||snapshot.NativePlugins.contains(row.Source);
+    if(!snapshot.Authoritative||snapshot.Provisional||!snapshot.SourceKeys.contains(row.Source))return false;
+    auto aliases=value.at("Data").value("CacheOwners",Json::array());aliases.push_back(row.Owner);
+    for(const auto& owner:aliases)if(owner.is_string()){
+        const auto token=owner.get<std::string>();if(!token.starts_with("mods/")||!ContentSource::Valid(token))continue;
+        for(const auto* owners:{&snapshot.Owners,&snapshot.DeclaredOwners}){
+            const auto group=owners->find(row.Source);if(group!=owners->end()&&group->second.contains(token.substr(5)))return true;
+        }
+    }return false;
+}
 inline Json Read(const fs::path& cache,const fs::path& root,const HelpySourceCache::Snapshot& snapshot,const std::string& locale,const std::string& kind={},bool stale=true){
-    const auto folder=Directory(cache,root);auto result=Json::array();std::set<std::string> seen;size_t bytes=0;
+    auto result=Json::array();std::set<std::string> seen;size_t bytes=0;
+    if(stale)try{for(auto row:HelpyPresentationCache::Records(cache,locale,kind)){if(!Browsable(row,snapshot))continue;seen.insert(row.at("Kind").get<std::string>()+"|"+row.at("Path").get<std::string>());result.push_back(std::move(row));}}catch(...){}
+    for(const auto& folder:std::set<fs::path>{Directory(cache,root),Directory(cache,cache.parent_path())}){
     const auto index=Index(folder);
     for(const auto& [route,entry]:index["Routes"].items()){
         if(!entry.is_object()||entry.value("Locale",std::string{})!=locale||(!kind.empty()&&entry.value("Kind",std::string{})!=kind))continue;
         const auto digest=entry.value("SHA256",std::string{}),source=entry.value("Source",std::string{});
         const auto key=snapshot.SourceKeys.find(source);if(key==snapshot.SourceKeys.end()||!CacheBundleIO::Digest(digest))continue;
-        const bool current=entry.value("SourceKey",std::string{})==key->second;if(!current&&!stale)continue;
+        const bool current=!snapshot.Provisional&&entry.value("SourceKey",std::string{})==key->second;if(!current&&!stale)continue;
         try{
             const auto text=CacheBundleIO::Read(folder/(digest+".json"),CacheBundle::MaxMetadata);
             bytes+=text.size();if(bytes>CacheBundle::MaxMetadata)throw std::runtime_error("[RS-CACHE-005] Active bundle references exceed the metadata limit.");
@@ -50,7 +67,7 @@ inline Json Read(const fs::path& cache,const fs::path& root,const HelpySourceCac
                 result.push_back(CacheBundle::Document(row));if(result.size()>CacheBundle::MaxRecords)throw std::runtime_error("[RS-CACHE-005] Too many active references.");
             }
         }catch(const fs::filesystem_error&){continue;}
-    }return result;
+    }}return result;
 }
 inline size_t Commit(const fs::path& cache,const fs::path& root,const HelpySourceCache::Snapshot& snapshot,const std::string& locale,const std::vector<CacheBundle::Record>& records,const std::function<void()>& check={}){
     std::lock_guard lock(CommitMutex);const auto folder=Directory(cache,root);auto index=Index(folder);
@@ -78,17 +95,17 @@ inline size_t Commit(const fs::path& cache,const fs::path& root,const HelpySourc
     if(check)check();if(!routes.empty()&&Index(folder)!=index)CacheBundleIO::Publish(folder/"index.json",text);
     return changed;
 }
-inline Json Collect(const fs::path& cache,const fs::path& root,const fs::path& journal,const HelpySourceCache::Snapshot& snapshot){
+inline Json Collect(const fs::path& cache,const fs::path& root,const fs::path& journal,const HelpySourceCache::Snapshot& snapshot,bool savedPresentation=false){
     std::map<std::string,Json> unique;
     const auto add=[&](const std::string& kind,const Json& rows){if(!rows.is_array()||rows.size()>CacheBundle::MaxRecords)return;for(const auto& data:rows){
-        const auto row=CacheBundle::FromRow(kind,data);if(row.is_null())continue;const auto parsed=CacheBundle::Parse(row);if(ActiveOwner(parsed,snapshot))unique[kind+"|"+parsed.Path]=row;
+        const auto row=CacheBundle::FromRow(kind,data);if(row.is_null())continue;const auto parsed=CacheBundle::Parse(row);if(savedPresentation||ActiveOwner(parsed,snapshot))unique[kind+"|"+parsed.Path]=row;
     }};
     try{for(const auto& row:Read(cache,root,snapshot,Locale(),{},false))unique[row.at("Kind").get<std::string>()+"|"+row.at("Path").get<std::string>()]=row;}catch(...){}
-    const auto manifest=cache.parent_path()/"item-catalogues"/(HelpySourceCache::Hex(HelpySourceCache::Hash(root.generic_string()))+".json");
+    const auto manifest=cache.parent_path()/"item-catalogues"/"native-items.json";
     try{const auto doc=Parse(CacheBundleIO::Read(manifest,64*1024*1024));const auto scope=Parse(doc.value("Scope",std::string("{}")));
-        if(doc.value("Version",0)==1&&scope.is_array()&&scope.size()==4&&scope[0]=="item-browse-v2"&&scope[1]==snapshot.CatalogKey&&scope[3]==Locale())add("items",doc.at("Rows"));}catch(...){}
+        if(doc.value("Version",0)==1&&scope.is_array()&&scope.size()==4&&scope[0]=="item-browse-v2"&&(savedPresentation||scope[1]==snapshot.CatalogKey)&&scope[3]==Locale())add("items",doc.at("Rows"));}catch(...){}
     // Native journal entries are keyed by catalogue content, not icon settings.
-    try{const auto doc=Parse(CacheBundleIO::Read(journal/"catalog.json",16*1024*1024));if(doc.value("Version",0)==1&&doc.value("SourceKey",std::string{})==snapshot.CatalogKey)add("journal",doc.at("Entries"));}catch(...){}
+    try{const auto doc=Parse(CacheBundleIO::Read(journal/"catalog.json",16*1024*1024));if(doc.value("Version",0)==1&&(savedPresentation||doc.value("SourceKey",std::string{})==snapshot.CatalogKey))add("journal",doc.at("Entries"));}catch(...){}
     auto result=Json::array();for(const auto& [key,row]:unique)result.push_back(row);(void)CacheBundle::Records(result);return result;
 }
 }

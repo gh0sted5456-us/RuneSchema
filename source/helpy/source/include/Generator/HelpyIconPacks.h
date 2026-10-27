@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/ProcessExitFuture.h"
 #include "Generator/HelpyImGuiTheme.h"
 #include "Core/HelpyIconPack.h"
 #include "Core/HelpyCacheOwnership.h"
@@ -19,7 +20,7 @@
 #pragma comment(lib,"comdlg32.lib")
 
 namespace PS::HelpyIconPacks {
-inline std::future<HelpyIconPack::Result> Worker;
+inline PS::ProcessExitFuture<HelpyIconPack::Result> Worker;
 inline HelpyIconPack::Progress Progress;
 inline std::string Status;
 inline bool Importing=false;
@@ -30,6 +31,7 @@ inline std::filesystem::path ActiveFile,LastFile;
 inline bool LastOperationOK=false;
 inline bool Packaged=false;
 inline bool CompletionNotify=false;
+inline uint64_t ReferencesRevision=0;
 inline std::string PackagedKey;
 inline std::chrono::steady_clock::time_point NextPackaged{};
 inline std::function<bool(const nlohmann::json&,nlohmann::json&)> RemoteBuild;
@@ -51,25 +53,22 @@ inline bool Start(const std::filesystem::path& file,bool importing,const nlohman
     try{
         const auto extension=HelpyCacheSources::Lower(file.extension().string());
         if(extension!=".rsmk-icons"&&extension!=".rsmk-cache")throw std::runtime_error("[RS-CACHE-002] Choose a .rsmk-cache bundle or legacy .rsmk-icons pack.");
-        if(!HelpySourceCache::Ready()||!HelpySourceCache::Current.Authoritative||HelpySourceCache::Current.Provisional)throw std::runtime_error("Wait for live content-source verification, then retry. Cached content is retained.");
         const auto limit=HelpyRuntimePreferences::IconCacheLimitMB.load();if(limit<=0)throw std::runtime_error("Enable Keep icons between launches before using shared packs.");
         const auto snapshot=HelpySourceCache::Current;const auto root=HostServices::ModDirectory(),cache=HelpySourceCache::Directory(false);
         Progress.Cancel=false;Progress.Begin(HelpyIconPack::Phase::Discover);Importing=importing;Packaged=false;CompletionNotify=false;ActiveFile=file;LastOperationOK=false;
         const auto source=SelectedSource;
-        const auto policy=HelpyEnvironment::Server()&&ServerDisplayOnly?HelpyIconPack::ImportPolicy::ServerDisplayOnly:nativeArtworkFallback?HelpyIconPack::ImportPolicy::NativeArtworkFallback:HelpyIconPack::ImportPolicy::VerifiedContent;
-        const auto journal=HostServices::CacheDirectory()/"journal",assets=HelpyPaths::Asset("source-base-game.png").parent_path();const auto decoder=HelpyBackgrounds::Decode;
-        const auto ownership=RemoteBuild;
-        Worker=std::async(std::launch::async,[file,root,cache,snapshot,limit,importing,source,policy,coverage,journal,assets,decoder,ownership]{
-            const auto verified=HelpyCacheOwnership::Fetch(snapshot,source,ownership);
-            if(!importing)SourceBanners::EnsureBuiltins(cache,root,snapshot,assets,decoder);
-            return importing?HelpyIconPack::Import(file,root,cache,verified,uint64_t(limit)*1024*1024,Progress,policy,source):HelpyIconPack::Export(file,root,cache,verified,Progress,source,coverage,CacheBundleStore::Collect(cache,root,journal,verified));
-        });Status="Verifying content sources in the background...";return true;
+        const auto policy=HelpyIconPack::ImportPolicy::Presentation;
+        const auto journal=HostServices::CacheDirectory()/"journal";
+        Worker=std::async(std::launch::async,[file,root,cache,snapshot,limit,importing,source,policy,coverage,journal]{
+            const auto& verified=snapshot;
+            return importing?HelpyIconPack::Import(file,root,cache,verified,uint64_t(limit)*1024*1024,Progress,policy,source):HelpyIconPack::Export(file,root,cache,verified,Progress,source,coverage,CacheBundleStore::Collect(cache,root,journal,verified,true),true);
+        });Status=importing?"Processing cache and assigning item/artwork relationships...":"Exporting the current cache snapshot...";return true;
     }catch(const std::exception& error){Status=error.what();return false;}
 }
 inline void Poll(){PollBuild();
     if(PendingDownload.empty())PendingDownload=HelpyDownloads::TakeBaseCache();
     if(!PendingDownload.empty()&&!Busy()&&!Building()&&!SourceBanners::Busy()&&HelpyRuntimePreferences::IconCacheLimitMB.load()>0){
-        if(HelpySourceCache::Ready()&&HelpySourceCache::Current.Authoritative&&!HelpySourceCache::Current.Provisional){const auto savedSource=SelectedSource;SelectedSource.clear();const bool started=Start(PendingDownload,true,nlohmann::json::object(),true);SelectedSource=savedSource;if(started)PendingDownload.clear();}
+        {const auto savedSource=SelectedSource;SelectedSource.clear();const bool started=Start(PendingDownload,true,nlohmann::json::object(),true);SelectedSource=savedSource;if(started)PendingDownload.clear();}
     }
     if(!PendingBuildExport.empty()&&!Building()){
         const auto file=PendingBuildExport;
@@ -78,16 +77,15 @@ inline void Poll(){PollBuild();
             nlohmann::json coverage;
             if(RemoteBuild&&RemoteBuild({{"Action","IconCacheBuildRead"},{"IncludeManifest",true}},coverage)
                 &&coverage.value("Sequence",uint64_t{})==BuildState.value("Sequence",uint64_t{})){
-                if(!HelpySourceCache::Ready()||coverage.value("SourceKeys",nlohmann::json::object())!=nlohmann::json(HelpySourceCache::Current.SourceKeys)){
-                    Status="Finishing source verification before export...";return;
-                }
                 const auto selected=SelectedSource;SelectedSource=PendingBuildSource;const bool started=Start(file,false,coverage);SelectedSource=selected;if(started){PendingBuildExport.clear();PendingBuildSource.clear();}
             }else{PendingBuildExport.clear();Status="Build coverage could not be retrieved. Retry Export; cached icons are retained.";}
         }
         else {PendingBuildExport.clear();Status="Build/export stopped; completed thumbnails remain cached. No incomplete export was started.";}
     }
     if(!Worker.valid()||Worker.wait_for(std::chrono::seconds(0))!=std::future_status::ready)return;
-    try{const auto result=Worker.get();Status=result.Message;CompletionNotify=!Packaged||HelpyModIconPacks::NotifyAutomatic(result);if(!Packaged){LastFile=ActiveFile;LastOperationOK=true;}if(Importing&&result.Imported){ItemIconCache::InvalidateIcons(result.ChangedIcons);if(ItemIconCache::RemoteResetAccounting)ItemIconCache::RemoteResetAccounting();}if(Importing&&!Packaged&&(result.Imported||result.Unchanged||result.RecordsImported)&&HelpyDownloads::ReleaseImportedPack(ActiveFile))Status+=" Download staging removed; imported cache retained.";}
+    try{const auto result=Worker.get();Status=result.Message;CompletionNotify=!Packaged||HelpyModIconPacks::NotifyAutomatic(result);if(!Packaged){LastFile=ActiveFile;LastOperationOK=true;}if(Importing&&result.Imported){ItemIconCache::InvalidateIcons(result.ChangedIcons);if(ItemIconCache::RemoteResetAccounting)ItemIconCache::RemoteResetAccounting();}
+        if(Importing&&(result.RecordsImported||result.MapImported)){if(RemoteBuild){nlohmann::json ignored;RemoteBuild({{"Action","CacheBundleImported"}},ignored);}++ReferencesRevision;}
+        if(Importing&&!Packaged){if(result.Imported||result.Unchanged||result.RecordsImported||result.MapImported)HelpyDownloads::ReleaseImportedPack(ActiveFile);HelpyDownloads::CacheApplied(Status);}}
     catch(const HelpyCacheOwnership::Unavailable& error){
         Status=error.what();CompletionNotify=!Packaged;
         if(Packaged){PackagedKey.clear();NextPackaged=std::chrono::steady_clock::now()+std::chrono::seconds(2);}
@@ -95,21 +93,21 @@ inline void Poll(){PollBuild();
     catch(const std::exception& error){Status=error.what();CompletionNotify=true;} // Last-good images and records remain usable on failed validation.
 }
 inline void PollPackaged(){
-    if(Busy()||Building()||!PendingBuildExport.empty()||!HelpySourceCache::Ready()||!HelpySourceCache::Current.Authoritative||HelpySourceCache::Current.Provisional||std::chrono::steady_clock::now()<NextPackaged)return;
+    if(Busy()||Building()||!PendingBuildExport.empty()||std::chrono::steady_clock::now()<NextPackaged)return;
     const auto limit=HelpyRuntimePreferences::IconCacheLimitMB.load();if(limit<=0)return;
-    const auto snapshot=HelpySourceCache::Current;if(PackagedKey==snapshot.Key)return;PackagedKey=snapshot.Key;
+    const auto snapshot=HelpySourceCache::Current;NextPackaged=std::chrono::steady_clock::now()+std::chrono::seconds(60);
     const auto root=HostServices::ModDirectory(),cache=HelpySourceCache::Directory(false),shared=RuneSchemaData::Directory()/"core"/"cache";
     Progress.Cancel=false;Progress.Begin(HelpyIconPack::Phase::Discover);Importing=true;Packaged=true;CompletionNotify=false;
     const auto ownership=RemoteBuild;
     Worker=std::async(std::launch::async,[root,cache,shared,snapshot,limit,ownership]{
-        return HelpyModIconPacks::ImportAll(root,cache,HelpyCacheOwnership::Fetch(snapshot,{},ownership),uint64_t(limit)*1024*1024,Progress,shared);
+        return HelpyModIconPacks::ImportAll(root,cache,snapshot,uint64_t(limit)*1024*1024,Progress,shared,true);
     });
 }
 inline void Shutdown() noexcept {PendingBuildExport.clear();Progress.Cancel=true;if(RemoteBuild)try{nlohmann::json ignored;RemoteBuild({{"Action","IconCacheBuildCancel"}},ignored);}catch(...){}if(Worker.valid())try{(void)Worker.get();}catch(...){};}
 inline void Choose(bool importing,bool buildFirst=false){
     wchar_t file[32768]{};if(!importing){const auto name=SelectedSource.empty()?std::wstring(L"Helpy content cache.rsmk-cache"):std::filesystem::path(SelectedSource.substr(SelectedSource.find_last_of('/')+1)+".rsmk-cache").wstring();wcscpy_s(file,name.c_str());}
     OPENFILENAMEW dialog{};dialog.lStructSize=sizeof(dialog);dialog.hwndOwner=GetActiveWindow();dialog.lpstrFile=file;dialog.nMaxFile=32768;
-    dialog.lpstrFilter=L"Helpy content bundle (*.rsmk-cache;*.rsmk-icons)\0*.rsmk-cache;*.rsmk-icons\0Legacy icons only (*.rsmk-icons)\0*.rsmk-icons\0\0";dialog.lpstrDefExt=L"rsmk-cache";
+    dialog.lpstrFilter=importing?L"Helpy cache or legacy icons\0*.rsmk-cache;*.rsmk-icons\0\0":L"Helpy cache bundle (*.rsmk-cache)\0*.rsmk-cache\0\0";dialog.lpstrDefExt=L"rsmk-cache";
     dialog.Flags=OFN_EXPLORER|OFN_NOCHANGEDIR|OFN_PATHMUSTEXIST|(importing?OFN_FILEMUSTEXIST:OFN_OVERWRITEPROMPT);
     if(importing?GetOpenFileNameW(&dialog):GetSaveFileNameW(&dialog)){
         if(buildFirst){
@@ -128,37 +126,49 @@ inline void Render(bool catalogueBusy=false){
     auto choices=ContentSource::Choices(plan);if(BuildState.contains("Sources")&&BuildState["Sources"].is_array())for(const auto& value:BuildState["Sources"])if(value.is_string()&&ContentSource::Valid(value.get<std::string>()))choices.insert(value.get<std::string>());
     ImGui::BeginDisabled(Busy()||Building());
     ImGui::TextDisabled("Source");ImGui::SetNextItemWidth(-1);
-    if(ImGui::BeginCombo("##Cache source",SelectedSource.empty()?"All registered sources":SelectedSource.c_str())){
-        if(ImGui::Selectable("All registered sources",SelectedSource.empty()))SelectedSource.clear();for(const auto& source:choices)if(ImGui::Selectable(source.c_str(),SelectedSource==source))SelectedSource=source;ImGui::EndCombo();}
+    if(ImGui::BeginCombo("##Cache source",SelectedSource.empty()?"All sources":SelectedSource.c_str())){
+        if(ImGui::Selectable("All sources",SelectedSource.empty()))SelectedSource.clear();for(const auto& source:choices)if(ImGui::Selectable(source.c_str(),SelectedSource==source))SelectedSource=source;ImGui::EndCombo();}
     ImGui::EndDisabled();
-    if(!HelpySourceCache::Ready())ImGui::TextDisabled("Waiting for the running game's mounted-content manifest...");
-    ImGui::BeginDisabled(Busy()||Building()||catalogueBusy);
-    if(ImGui::Button("Import..."))Choose(true);
+    if(!HelpySourceCache::Ready())ImGui::TextDisabled("Cached content is available while the game checks mounted sources.");
+    ImGui::SeparatorText("1. Add cached content");
+    ImGui::BeginDisabled(Busy()||Building()||HelpyDownloads::Busy()||HelpyRuntimePreferences::IconCacheLimitMB.load()<=0);
+    if(ImGui::Button("Download base-game cache"))HelpyDownloads::StartBaseCache(HelpySourceCache::Current.SourceKeys,HelpySourceCache::Current.NativePlugins,HelpyEnvironment::Label(),HelpyEnvironment::GameVersion);
     ImGui::EndDisabled();
-    ImGui::SameLine();
-    ImGui::BeginDisabled(Busy()||Building()||SourceBanners::Busy()||!HelpySourceCache::Ready());
-    if(ImGui::Button("Export cached bundle..."))Choose(false);
+    if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))PS::HelpyImGuiTheme::Tooltip("Downloads items and artwork into this platform's AppData cache. Cached content appears immediately; the game checks current availability separately and updates it passively.");
+    ImGui::BeginDisabled(Busy()||Building());
+    if(ImGui::Button("Import cache..."))Choose(true);
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::CacheImport=HelpyPreviewHooks::LastRect();
+#endif
     ImGui::EndDisabled();
-    ImGui::BeginDisabled(Busy()||Building()||SourceBanners::Busy()||!HelpySourceCache::Ready()||!SelectedSource.starts_with("mods/"));
+    ImGui::SeparatorText("2. Fill missing content (optional)");
+    ImGui::BeginDisabled(Busy()||Building()||catalogueBusy||!RemoteBuild||!BuildState.value("Available",false)||!HelpySourceCache::Ready()||HelpyEnvironment::Server());
+    if(ImGui::Button("Build / update")){
+        nlohmann::json result;if(RemoteBuild({{"Action","IconCacheBuildStart"},{"Source",SelectedSource}},result)&&result.value("Accepted",false)){BuildState={{"Active",true},{"Stage","Queued"}};NextBuildRead={};}
+        else Status="Cache builder is unavailable or already running.";
+    }
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::CacheBuild=HelpyPreviewHooks::LastRect();
+#endif
+    ImGui::EndDisabled();
+    ImGui::TextWrapped("Build / update asks the game for missing items and pictures. Export can save the cache you already have.");
+    ImGui::SeparatorText("3. Save current cache");
+    ImGui::BeginDisabled(Busy()||Building()||SourceBanners::Busy());
+    if(ImGui::Button("Export current cache..."))Choose(false);
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::CacheExport=HelpyPreviewHooks::LastRect();
+#endif
+    ImGui::EndDisabled();
+    ImGui::BeginDisabled(Busy()||Building()||SourceBanners::Busy()||!SelectedSource.starts_with("mods/"));
     if(ImGui::Button("Share selected mod cache in core")){
         try{Start(HelpyModIconPacks::SharedFile(RuneSchemaData::Directory()/"core"/"cache",SelectedSource),false);}
         catch(const std::exception& error){Status=error.what();}
     }
     ImGui::EndDisabled();
     if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))PS::HelpyImGuiTheme::Tooltip("Saves this mod's current bundle under core/cache/mods. Other runtimes import it at their next source scan only when live ownership and content hashes match. Sharing does not load mods or grant permissions.");
-    ImGui::BeginDisabled(Busy()||Building()||catalogueBusy||!RemoteBuild||!BuildState.value("Available",false)||!HelpySourceCache::Ready()||HelpyEnvironment::Server());
-    if(ImGui::Button("Build / update")){
-        nlohmann::json result;if(RemoteBuild({{"Action","IconCacheBuildStart"},{"Source",SelectedSource}},result)&&result.value("Accepted",false)){BuildState={{"Active",true},{"Stage","Queued"}};NextBuildRead={};}
-        else Status="Cache builder is unavailable or already running.";
-    }
-    ImGui::EndDisabled();
-    SourceBanners::ExportArt(SelectedSource,Busy()||Building());
-    ImGui::TextWrapped(HelpyEnvironment::Server()?"Import client packs for server visuals. Native icon capture is unavailable on dedicated servers.":"Bundles include artwork, exact asset paths and known persistence IDs. Cached references stay usable while bounded native reads verify changes; gameplay actions still require live validation.");
-    ImGui::BeginDisabled(Busy()||Building()||HelpyDownloads::Busy()||HelpyRuntimePreferences::IconCacheLimitMB.load()<=0||!HelpySourceCache::Ready()||!HelpySourceCache::Current.Authoritative);
-    if(ImGui::Button("Download base-game cache"))HelpyDownloads::StartBaseCache(HelpySourceCache::Current.SourceKeys,HelpySourceCache::Current.NativePlugins,HelpyEnvironment::Label(),HelpyEnvironment::GameVersion);
-    ImGui::EndDisabled();
-    if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))PS::HelpyImGuiTheme::Tooltip("Downloads native base-cache candidates for this game build using shared Unreal paths. Client imports still verify native content hashes; servers can import display-only thumbnails. Inactive official plugin groups are skipped. Mods keep their own caches.");
-    if(!HelpyDownloads::Current().Status.empty())ImGui::TextWrapped("%s",HelpyDownloads::Current().Status.c_str());
+    ImGui::TextWrapped("Exports contain cached paths, known IDs, pictures and the map when available. Coverage can be partial; live availability is checked separately when used.");
+    if(HelpyDownloads::Busy()){const auto total=HelpyDownloads::BytesTotal(),done=HelpyDownloads::BytesCompleted();ImGui::ProgressBar(total?std::min(1.0f,float(done)/float(total)):-float(ImGui::GetTime()),{-1,0},"Downloading cache / assets");}
+    if(!Busy()&&!HelpyDownloads::Current().Status.empty())ImGui::TextWrapped("%s",HelpyDownloads::Current().Status.c_str());
     if(ImGui::TextLink("Open Helpy cache folder")){
         const auto folder=HostServices::CacheDirectory();std::error_code error;std::filesystem::create_directories(folder,error);
         if(!error)ShellExecuteW(nullptr,L"open",folder.c_str(),nullptr,nullptr,SW_SHOWNORMAL);
@@ -203,6 +213,7 @@ inline void Render(bool catalogueBusy=false){
     if(!Building()&&BuildState.value("DiscoveryFailed",size_t{}))ImGui::Text("Icon-owner discovery failures: %zu",BuildState.value("DiscoveryFailed",size_t{}));
     if(!BuildState.value("Error",std::string{}).empty())ImGui::TextWrapped("Warning: %s",BuildState["Error"].get_ref<const std::string&>().c_str());
     if(Advanced){
+    SourceBanners::ExportArt(SelectedSource,Busy()||Building());
     ImGui::TextWrapped("Writable cache: %s",HostServices::CacheDirectory().string().c_str());
     ImGui::TextWrapped("Mod authors can ship cache/*.rsmk-cache (or legacy *.rsmk-icons) inside their RuneSchema mod. Typed references are restricted to that active owner; supplied bundles are never edited.");
     ImGui::BeginDisabled(Busy()||Building()||catalogueBusy);
@@ -210,7 +221,7 @@ inline void Render(bool catalogueBusy=false){
         ImGui::Checkbox("Use client packs as display-only thumbnails",&ServerDisplayOnly);
         ImGui::TextWrapped("Matches exact icon paths in active server sources, even when the server cook omits textures. These pictures may differ from the server version; they are not item definitions and are excluded from verified cache exports.");
     }
-    if(ImGui::Button("Build missing icons, then export..."))Choose(false,true);ImGui::EndDisabled();
+    if(ImGui::Button("Build / update, then export..."))Choose(false,true);ImGui::EndDisabled();
     int megabytes=HelpyRuntimePreferences::IconCacheLimitMB.load();ImGui::BeginDisabled(Busy()||Building());
     if(ImGui::InputInt("Cache limit (MB)",&megabytes,64,256)){HelpyRuntimePreferences::IconCacheLimitMB.store(std::clamp(megabytes,1,16384));HelpyImGuiTheme::SaveCurrent();}ImGui::EndDisabled();
     ImGui::TextWrapped("Packs contain preview pixels, exact asset paths, source mappings and coverage. Imports merge matching sources automatically; missing mods are not registered. No world login is needed for menu capture.");
@@ -221,7 +232,7 @@ inline void Render(bool catalogueBusy=false){
     }
     if(Busy()){
         const auto phase=Progress.Stage.load();const auto total=Progress.Total.load(),done=Progress.Done.load();const auto bytes=Progress.BytesDone.load(),byteTotal=Progress.BytesTotal.load();
-        const char* label=phase==HelpyIconPack::Phase::Discover?"Finding cached icons":phase==HelpyIconPack::Phase::Verify?"Checking content sources":phase==HelpyIconPack::Phase::Validate?"Validating icons":phase==HelpyIconPack::Phase::Write?"Writing icon cache":phase==HelpyIconPack::Phase::Commit?"Saving file":"Complete";
+        const char* label=phase==HelpyIconPack::Phase::Discover?"Finding cached icons":phase==HelpyIconPack::Phase::Verify?"Checking content sources":phase==HelpyIconPack::Phase::Validate?"Validating icons":phase==HelpyIconPack::Phase::Write?"Assigning relationships and saving cache":phase==HelpyIconPack::Phase::Commit?"Saving file":"Complete";
         const bool measurable=phase!=HelpyIconPack::Phase::Commit&&(byteTotal||total);
         const float fraction=measurable?std::min(1.0f,byteTotal?float(bytes)/float(byteTotal):float(done)/float(total)):-static_cast<float>(ImGui::GetTime());
         ImGui::ProgressBar(fraction,{-1,0},Progress.Cancel?"Cancelling safely...":label);

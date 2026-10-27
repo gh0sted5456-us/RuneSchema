@@ -137,9 +137,15 @@ int main(int argc, char** argv)
         && panel.find("Export all loader schemas")!=std::string::npos
         && panel.find("SchemaExport")!=std::string::npos,
         "desktop authoring keeps workflow navigation and full schema export");
-    Check(entrypoint.find("DllMain") == std::string::npos
+    const auto dllMain=entrypoint.find("BOOL APIENTRY DllMain(");
+    const auto dllMainEnd=entrypoint.find("\n}",dllMain);
+    const auto dllBody=dllMain==std::string::npos?std::string{}:entrypoint.substr(dllMain,dllMainEnd-dllMain);
+    Check(!dllBody.empty() && dllBody.find("DLL_PROCESS_DETACH&&reserved")!=std::string::npos
+        && dllBody.find("ProcessExitInProgress.store(true")!=std::string::npos
+        && dllBody.find("DLL_PROCESS_ATTACH")==std::string::npos
+        && dllBody.find("RuneSchema(")==std::string::npos && dllBody.find("MainLoader")==std::string::npos
         && entrypoint.find("return new RuneSchema();") != std::string::npos,
-        "RuneSchema performs startup only when UE4SS calls start_mod (mods.txt authority)");
+        "DLL entrypoint only marks process teardown; startup remains under UE4SS start_mod authority");
     Check(entrypoint.find("[RuneSchema][DID-NOT-START][CONSTRUCTION]") != std::string::npos
         && entrypoint.find("MainLoader.AbortStartup(\"unreal-init\"") != std::string::npos,
         "fatal construction and Unreal lifecycle failures are not annotated");

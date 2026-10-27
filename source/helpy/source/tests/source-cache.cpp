@@ -230,5 +230,18 @@ int main(int argc,char** argv)try{namespace fs=std::filesystem;using namespace P
         Worker=std::async(std::launch::async,[completed]{return completed;});Worker.wait();RefreshingFiles=true;
         Poll(scoped);assert(Current.DisplayNames.at("first")=="An even newer label");Shutdown();
     }
+    // The host must expose saved references while its live file census is
+    // pending, without publishing them as a confirmed native source contract.
+    {
+        const auto live=Inspect(scoped,PS::HelpyCacheSources::Snapshot());
+        std::promise<nlohmann::json> saved;CachedSourcesWorker=saved.get_future();
+        std::promise<Snapshot> census;Worker=census.get_future();CachedSourcesAttempted=true;
+        Current={};Published={{"Ready",false}};saved.set_value(Document(live));
+        assert(Poll(scoped)&&Current.Provisional&&Current.SourceKeys==live.SourceKeys);
+        assert(!Document(Current).at("Ready").get<bool>()&&!ForClient().at("Ready").get<bool>());
+        const auto provisionalRevision=Revision;census.set_value(live);
+        assert(Poll(scoped)&&!Current.Provisional&&Revision>provisionalRevision);
+        assert(Document(Current).at("Ready").get<bool>());Shutdown();
+    }
     fs::remove_all(NativePath(base));
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}

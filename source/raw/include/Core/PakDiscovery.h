@@ -37,7 +37,11 @@ inline std::string Package(std::string name,const std::string& game){
 }
 struct File {
     std::filesystem::path Path;uintmax_t Size;std::filesystem::file_time_type Stamp;std::ifstream Input;
-    explicit File(const std::filesystem::path& path):Path(path){CacheBundleIO::Safe(path);Size=std::filesystem::file_size(path);Stamp=std::filesystem::last_write_time(path);Input.open(path,std::ios::binary);if(!Input)throw std::runtime_error("Container is unreadable");}
+    explicit File(const std::filesystem::path& path):Path(path){
+        // Installed containers may live behind Xbox/Vortex junctions; this reader never writes or extracts them.
+        if(!std::filesystem::is_regular_file(path))throw std::runtime_error("Container is not a regular file");
+        Size=std::filesystem::file_size(path);Stamp=std::filesystem::last_write_time(path);Input.open(path,std::ios::binary);if(!Input)throw std::runtime_error("Container is unreadable");
+    }
     std::string Read(uint64_t offset,uint64_t bytes){if(offset>Size||bytes>Size-offset||bytes>MaxIndex)throw std::runtime_error("Container index range exceeds its bound");
         std::string out(static_cast<size_t>(bytes),'\0');Input.seekg(static_cast<std::streamoff>(offset));Input.read(out.data(),static_cast<std::streamsize>(bytes));if(!Input)throw std::runtime_error("Container index read failed");return out;}
     void Stable(){if(std::filesystem::file_size(Path)!=Size||std::filesystem::last_write_time(Path)!=Stamp)throw std::runtime_error("Container changed during discovery");}

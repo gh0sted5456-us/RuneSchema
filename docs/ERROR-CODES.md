@@ -4,7 +4,7 @@ RuneSchema's stable diagnostic catalogue. A code identifies a condition, not a c
 
 Helpy's **Diagnostics** workspace combines overview, grouped issues and Live Log. Raw entries remain copyable; the viewer never changes source logs. Recent activity includes normal and diagnostic messages; notifications remain limited to warnings/errors.
 
-This page contains **68 legacy reference entries**, **222 structured diagnostic entries** and **19 bridge reason codes**. Three labels exist in both legacy and structured namespaces: RS-JRN-001, RS-JRN-002 and RS-SPAWN-001. Read the namespace and source rather than inferring meaning from the label alone. Existing links are preserved, with links between both meanings.
+This page contains **71 legacy reference entries**, **222 structured diagnostic entries** and **19 bridge reason codes**. Three labels exist in both legacy and structured namespaces: RS-JRN-001, RS-JRN-002 and RS-SPAWN-001. Read the namespace and source rather than inferring meaning from the label alone. Existing links are preserved, with links between both meanings.
 
 Structured reports in `RSDiagLog.jsonl` carry their own source, context and outcome. A catalogue entry does not imply that every operation emits it. `Unknown` cause means unknown; the actual emitted severity is authoritative. `Partial` can mean some changes occurred, `Deferred` means later/restart handling, and `Skipped`/`Blocked` do not establish that the entire mod failed.
 
@@ -60,6 +60,7 @@ Structured reports in `RSDiagLog.jsonl` carry their own source, context and outc
 | [RS-SAVE](#legacy-family-rs-save) | Save safety |
 | [RS-SPAWN](#legacy-family-rs-spawn) | Spawns |
 | [RS-SRC](#legacy-family-rs-src) | Content |
+| [RS-SRV](#legacy-family-rs-srv) | Server |
 | [RS-STR](#structured-family-rs-str) | Strings |
 | [RS-VND](#structured-family-rs-vnd) | Vendors |
 | [RS-WEAR](#legacy-family-rs-wear) | Equipment |
@@ -1273,6 +1274,34 @@ Compare the named owner and protocol/build information on host and client. Updat
 
 </section>
 
+<section class="rs-code-card" data-rs-code="RS-NET-002" data-rs-severity="warning" markdown="1">
+
+### RS-NET-002: Authority registry negotiation warning {#rs-net-002}
+
+**Multiplayer · Typical level: warning**
+
+Client content or mapping availability differs from the authority.
+
+**Common reasons**
+
+The authority and client differ in content definitions, source membership, a protected registry baseline, or the availability of a verified mapping. Client-only content and version drift do not themselves cause a RuneSchema entry refusal.
+
+**What RuneSchema does**
+
+RuneSchema warns and preserves native entry; it only aligns shared IDs when identity and type checks succeed. Individual unsupported operations can remain unavailable.
+
+**What to do next**
+
+Read the named source or registry difference. Client-only mods do not need to be removed merely to enter; align required content to use unavailable server features.
+
+**Troubleshooting checks**
+
+Read the original source/lane detail. Keep extra client mods installed if desired. Shared IDs are aligned only when their identities and native types are verified; update required content for unavailable server features. A warning does not certify that the game itself can deserialize a missing cooked class.
+
+[Direct link to RS-NET-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-net-002)
+
+</section>
+
 ## Party — RS-PARTY {#legacy-family-rs-party}
 
 <section class="rs-code-card" data-rs-code="RS-PARTY-001" data-rs-severity="info" markdown="1">
@@ -1851,6 +1880,64 @@ Mount matching content or keep its references marked unavailable.
 Enable/install the matching content and let registration finish, or leave its references unavailable. Downloading its pictures/cache alone cannot create its gameplay definitions.
 
 [Direct link to RS-SRC-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-src-001)
+
+</section>
+
+## Server — RS-SRV {#legacy-family-rs-srv}
+
+<section class="rs-code-card" data-rs-code="RS-SRV-001" data-rs-severity="info" markdown="1">
+
+### RS-SRV-001: Native server filter setup requested {#rs-srv-001}
+
+**Server · Typical level: info**
+
+RuneSchema applied the server's existing accessibility filter preferences to its actual world.
+
+**Common reasons**
+
+The dedicated server reached a real world and RuneSchema invoked the game's native accessibility-filter setup with its existing preferences. The client-only settings path can otherwise leave this subsystem uninitialized.
+
+**What RuneSchema does**
+
+The game's native filter can finish initialization before processing player names. No filter preference is changed; native loading completes asynchronously.
+
+**What to do next**
+
+No action is normally needed. This records the setup request, not a complete server-health check.
+
+**Troubleshooting checks**
+
+Native dictionary loading is asynchronous. Preserve any later native filter warnings when reporting an issue; this information code alone does not certify filtering, a player join or shutdown.
+
+[Direct link to RS-SRV-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-srv-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-SRV-002" data-rs-severity="warning" markdown="1">
+
+### RS-SRV-002: Native server filter setup unavailable {#rs-srv-002}
+
+**Server · Typical level: warning**
+
+The dedicated-server executable, native method or required settings/world reference could not be verified.
+
+**Common reasons**
+
+The correction could not verify the exact server executable/method, install its world-ready callback, or obtain the required native settings and game-instance references.
+
+**What RuneSchema does**
+
+RuneSchema skips its initialization correction and retains the game's handling. The native filter setup/shutdown wait can still occur.
+
+**What to do next**
+
+Keep the original reason and game version. Use a RuneSchema build verified for that server executable; do not disable filtering to conceal the wait.
+
+**Troubleshooting checks**
+
+Retain the full reason and executable/game version. Unsupported builds keep native handling and need a verified compatibility update; do not patch flags or turn filtering off as a generic workaround.
+
+[Direct link to RS-SRV-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-srv-002)
 
 </section>
 
@@ -6750,11 +6837,11 @@ Follow the same correlation to completion or expiry. Accepted/deferred is not co
 
 **Why it occurs**
 
-The compatibility receipt was unsuccessful. The current session handler rejects a different protocol; other differences can be reported permissively.
+The compatibility receipt was unsuccessful. A protocol conflict, different shared registry definitions, or different ordered native network-ID lanes rejects compatibility. Platform mapping fingerprints are informational.
 
 **What to check**
 
-Read the original handshake detail and compare protocol/framework versions. Do not assume every registry or mapping difference rejects the session.
+Read the handshake detail and compare enabled mod versions, load order and native network-ID fingerprints. Align conflicts, restart and reconnect. Older peers without owner/lane telemetry are unverified; no IDs are automatically rewritten.
 
 [Direct link to incompatible](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#bridge-incompatible)
 

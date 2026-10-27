@@ -34,11 +34,17 @@ inline std::string Hash(std::string_view bytes){
         throw std::runtime_error("[RS-CACHE-004] Bundle SHA-256 failed.");
     constexpr char digits[]="0123456789abcdef";std::string output;for(auto c:digest){output+=digits[c>>4];output+=digits[c&15];}return output;
 }
-inline std::string Read(const fs::path& path,size_t maximum){
+inline fs::path NativePath(const fs::path& path){
+    const auto text=fs::absolute(path).lexically_normal().wstring();if(text.starts_with(L"\\\\?\\"))return path;
+    return text.starts_with(L"\\\\")?fs::path(L"\\\\?\\UNC\\"+text.substr(2)):fs::path(L"\\\\?\\"+text);
+}
+inline std::string Read(const fs::path& logical,size_t maximum){
+    const auto path=NativePath(logical);
     Safe(path);const auto size=fs::file_size(path);if(size>maximum)throw std::runtime_error("[RS-CACHE-005] Bundle metadata exceeds its limit.");
     std::string bytes(size,'\0');std::ifstream input(path,std::ios::binary);input.read(bytes.data(),bytes.size());if(!input||input.peek()!=std::char_traits<char>::eof())throw std::runtime_error("[RS-CACHE-002] Bundle metadata changed while reading.");return bytes;
 }
-inline void Publish(const fs::path& target,const std::string& bytes){
+inline void Publish(const fs::path& logical,std::string_view bytes){
+    const auto target=NativePath(logical);
     Safe(target);fs::create_directories(target.parent_path());Safe(target);
     static std::atomic<uint64_t> sequence{0};const auto temporary=target.wstring()+L".bundle-"+std::to_wstring(GetCurrentProcessId())+L"-"+std::to_wstring(++sequence)+L".tmp";
     try{Safe(temporary);{

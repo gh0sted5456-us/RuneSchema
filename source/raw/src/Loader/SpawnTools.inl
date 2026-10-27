@@ -487,7 +487,7 @@ void DragonWildsSpawnLoader::PumpSpawnTools(PS::WorkSlice& work) {
                     const auto [point,projection]=ToolMapTarget(m_readyWorld,*query);bool allGround=true;
                     try{
                         (void)PS::MapLanding::Resolve(projection,point,width.Result<float>(),height.Result<float>(),[&](PS::MapProjection::Point at,double top,double bottom){
-                            FVector hit{};std::string error;if(!UECustom::UKismetSystemLibrary::FindGroundSurface(m_readyWorld,FVector(at.X,at.Y,top),FVector(at.X,at.Y,bottom),{pawn},hit,error)){allGround=false;throw std::runtime_error("Landing footprint is not fully loaded or measured");}
+                            FVector hit{};std::string error;if(!UECustom::UKismetSystemLibrary::FindGroundSurface(m_readyWorld,FVector(at.X,at.Y,top),FVector(at.X,at.Y,bottom),{pawn},hit,error,reply.at("Location").at(2).get<double>())){allGround=false;throw std::runtime_error("Landing footprint is not fully loaded or measured");}
                             return PS::MapLanding::Position{hit.X(),hit.Y(),hit.Z()};
                         });reply["LandingFootprintChecked"]=true;reply["LandingRisk"]="lower";reply["LandingRiskReason"]="Recent native ground/slope footprint check passed. Collision, streaming and arrival remain checked at travel time.";
                     }catch(const std::exception& error){
@@ -524,9 +524,9 @@ void DragonWildsSpawnLoader::PumpSpawnTools(PS::WorkSlice& work) {
                     const auto actualStart=page.value("Start",std::size_t{}),next=page.value("NextOffset",std::size_t{});
                     page["NextCursor"]="R:"+std::to_string(actualStart)+":"+std::to_string(next);
                 } else if(mode=="Alphabetical") {
-                    page=PS::AssetSearch::AlphabeticalItemWindow(query,cursor,limit,fieldSet);
+                    page=PS::AssetSearch::AlphabeticalItemWindow(query,cursor,limit,fieldSet,PS::HelpyBrowsePolicy::Read(queryRequest.value("BrowsePolicy",nlohmann::json::object())));
                 } else if(mode=="Search") {
-                    const auto offset=ToolCursorOffset(cursor,'S');page=PS::AssetSearch::ItemWindow(query,offset,limit,0,false,fieldSet,4096,1800);
+                    const auto offset=ToolCursorOffset(cursor,'S');page=PS::AssetSearch::ItemWindow(query,offset,limit,0,false,fieldSet,4096,1800,true);
                     page["NextCursor"]="S:"+std::to_string(page.value("NextOffset",std::size_t{}));
                 } else throw std::runtime_error("Unknown item catalog window mode");
             } else if(category==1||category==2) {

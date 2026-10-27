@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/ProcessExitFuture.h"
 #include "Core/StructuredDiagnosticReader.h"
 #include "Runtime/HostServices.h"
 #include <chrono>
@@ -9,7 +10,7 @@
 
 namespace PS::StructuredLogFeed {
 inline StructuredDiagnosticReader::Cursor Cursor;
-inline std::future<StructuredDiagnosticReader::Batch> Worker;
+inline PS::ProcessExitFuture<StructuredDiagnosticReader::Batch> Worker;
 inline std::chrono::steady_clock::time_point NextRead{};
 inline std::function<void(const StructuredDiagnostic::Record&)> OnRecord;
 inline std::string Status;

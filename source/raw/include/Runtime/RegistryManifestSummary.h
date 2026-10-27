@@ -25,6 +25,8 @@ namespace PS::RegistryManifestSummary {
                 && AuthorityOnly.empty();
         }
 
+        [[nodiscard]] bool SharedMatch() const { return Different.empty(); }
+
         [[nodiscard]] std::string Summary() const
         {
             return "matched=" + std::to_string(Matched.size())
@@ -130,5 +132,16 @@ namespace PS::RegistryManifestSummary {
         for (const auto& [owner, fingerprint] : authority)
             if (!client.contains(owner)) result.AuthorityOnly.push_back(owner);
         return result;
+    }
+
+    // Missing telemetry is unverified, never evidence that identities match.
+    inline std::string Compatibility(const Negotiation& registry,
+        const Negotiation& network, bool ownersKnown, bool lanesKnown,
+        const Fingerprints& clientLanes, const Fingerprints& authorityLanes,
+        bool authoritativeIdsVerified = false)
+    {
+        if (!registry.SharedMatch() || !network.SharedMatch()
+            || (!authoritativeIdsVerified && lanesKnown && clientLanes != authorityLanes)) return "different";
+        return ownersKnown && lanesKnown ? "verified" : "unverified";
     }
 }

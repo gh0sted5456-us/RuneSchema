@@ -1,3 +1,4 @@
+#include "Core/ProcessExitFuture.h"
 #include "Runtime/HelpyDownloads.h"
 #include "Runtime/HelpyPaths.h"
 #include "Runtime/HostServices.h"
@@ -22,8 +23,9 @@
 namespace PS::HelpyDownloads {
 namespace {
 using Bytes=std::vector<char>;
-struct Result {bool Artwork=false,NeedsArtwork=false,Dismissed=false;std::string Status;std::filesystem::path Pack;bool ApplyArtworkState=false;};
-View State;std::future<Result> Worker;std::atomic<bool> Cancelled=false;
+struct Result {bool Artwork=false,NeedsArtwork=false,Dismissed=false;std::string Status;std::filesystem::path Pack;bool ApplyArtworkState=false;std::filesystem::path AuthorTools;};
+View State;PS::ProcessExitFuture<Result> Worker;std::atomic<bool> Cancelled=false;
+std::atomic<uint64_t> DownloadedBytes=0,DownloadBytes=0;
 std::atomic<unsigned> Done=0,Count=0;bool Initialized=false;
 std::filesystem::path PendingPack;std::chrono::steady_clock::time_point NextAttempt{};
 std::filesystem::path Folder(){return HostServices::StateDirectory()/"ui-assets"/HelpyUiAssets::Version;}
@@ -59,10 +61,10 @@ bool ArtworkReady(const std::filesystem::path& folder){
 struct Handle {HINTERNET Value{};~Handle(){if(Value)WinHttpCloseHandle(Value);}operator HINTERNET()const{return Value;}};
 Bytes Fetch(const std::string& relative,size_t limit){
     if(Cancelled)throw std::runtime_error("Download cancelled.");
-    // Callers supply only compiled artwork names or a validated hex pack name.
+    // Callers supply compiled artwork names or validated content-addressed names.
     // UI images have compiled hashes; the data-only cache catalogue updates
     // independently of DLL releases. Import still verifies digest and scope.
-    const auto ref=relative.starts_with("cache-bundles/")?"main":"86c8c20ca6a8fb696781669179b3ef942114bf08";
+    const auto ref=relative.starts_with("cache-bundles/")||relative.starts_with("tools/authoring-tools/")?"main":"86c8c20ca6a8fb696781669179b3ef942114bf08";
     const std::string path=std::string("/gh0sted5456-us/RuneSchema/")+ref+"/resources/"+relative;
     const std::wstring wide(path.begin(),path.end());
     Handle session{WinHttpOpen(L"RuneSchema-Helpy-Assets/1",WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,WINHTTP_NO_PROXY_NAME,WINHTTP_NO_PROXY_BYPASS,0)};
@@ -75,11 +77,13 @@ Bytes Fetch(const std::string& relative,size_t limit){
     DWORD status=0,length=sizeof(status);
     if(!WinHttpQueryHeaders(request,WINHTTP_QUERY_STATUS_CODE|WINHTTP_QUERY_FLAG_NUMBER,WINHTTP_HEADER_NAME_BY_INDEX,&status,&length,WINHTTP_NO_HEADER_INDEX)||status!=200)
         throw std::runtime_error(status==404?"This asset/cache pack has not been published on GitHub yet. Helpy remains usable offline.":"GitHub download returned HTTP "+std::to_string(status));
+    DownloadedBytes=0;DownloadBytes=0;DWORD contentLength=0,contentSize=sizeof(contentLength);
+    if(WinHttpQueryHeaders(request,WINHTTP_QUERY_CONTENT_LENGTH|WINHTTP_QUERY_FLAG_NUMBER,WINHTTP_HEADER_NAME_BY_INDEX,&contentLength,&contentSize,WINHTTP_NO_HEADER_INDEX)){if(contentLength>limit)throw std::runtime_error("Download exceeds its size limit.");DownloadBytes=contentLength;}
     Bytes bytes;std::array<char,16384> buffer{};const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(120);
     for(;;){
         if(Cancelled||std::chrono::steady_clock::now()>deadline)throw std::runtime_error("Download cancelled or timed out; existing files retained.");
         DWORD count=0;if(!WinHttpReadData(request,buffer.data(),static_cast<DWORD>(buffer.size()),&count))throw std::runtime_error("Download interrupted; existing files retained.");
-        if(!count)break;if(bytes.size()+count>limit)throw std::runtime_error("Download exceeds its size limit.");bytes.insert(bytes.end(),buffer.data(),buffer.data()+count);
+        if(!count)break;if(bytes.size()+count>limit)throw std::runtime_error("Download exceeds its size limit.");bytes.insert(bytes.end(),buffer.data(),buffer.data()+count);DownloadedBytes=bytes.size();
     }return bytes;
 }
 void Commit(const std::filesystem::path& path,const Bytes& bytes){
@@ -108,6 +112,22 @@ Result InstallArtwork(const std::filesystem::path& folder,const Fetcher& fetch){
     Commit(folder/"ready",Bytes{'1'});return {true,false,true,"UI artwork ready. Saved locally for future launches.",{},true};
 }
 bool Hex(const std::string& text,size_t size){return text.size()==size&&text.find_first_not_of("0123456789abcdef")==text.npos;}
+Result InstallAuthorTools(const std::filesystem::path& folder,const Fetcher& fetch){
+    Count=2;Done=0;
+    const auto bytes=fetch("tools/authoring-tools/index.json",16*1024);
+    const auto index=nlohmann::json::parse(bytes,[](int depth,nlohmann::json::parse_event_t,nlohmann::json&){if(depth>8)throw std::runtime_error("[RS-DL-002] Authoring-tools index is too deeply nested.");return true;});
+    if(!index.is_object()||index.value("Format",0)!=1||index.value("Kind",std::string{})!="RuneSchemaAuthoringTools")throw std::runtime_error("[RS-DL-002] Unsupported authoring-tools index.");
+    const auto digest=index.value("SHA256",std::string{}),name=index.value("File",std::string{});const auto size=index.value("Bytes",uint64_t{});
+    if(!Hex(digest,64)||name!=digest+".zip"||size<22||size>2*1024*1024)throw std::runtime_error("[RS-DL-002] Invalid authoring-tools filename, size or checksum metadata.");
+    ++Done;const auto target=folder/"RuneSchema-Authoring-Tools.zip";
+    if(!Verified(target,static_cast<size_t>(size),digest)){
+        const auto archive=fetch("tools/authoring-tools/"+name,static_cast<size_t>(size));
+        if(archive.size()!=size||Hash(archive)!=digest||archive[0]!='P'||archive[1]!='K'||archive[2]!=3||archive[3]!=4)throw std::runtime_error("[RS-DL-002] Authoring-tools ZIP verification failed; previous download retained.");
+        if(Cancelled)throw std::runtime_error("Authoring-tools download cancelled; previous ZIP retained.");
+        Commit(target,archive);
+    }
+    ++Done;Result result;result.AuthorTools=target;result.Status="Authoring tools ZIP ready. Extract it and follow README.md; run the Bash script manually with the target game closed.";return result;
+}
 Result DownloadBase(const std::map<std::string,std::string>& sources,const std::set<std::string>& nativePlugins,const std::string& runtime,const std::string& gameVersion){
     Count=3;Done=0;
     for(const bool bundle:{true,false}){
@@ -129,13 +149,15 @@ Result DownloadBase(const std::map<std::string,std::string>& sources,const std::
         if(!Verified(path,static_cast<size_t>(size),hash)){
             const auto data=Fetch(directory+"/"+name,static_cast<size_t>(size));
             if(data.size()!=size||Hash(data)!=hash)throw std::runtime_error("[RS-CACHE-004] Base-game cache integrity check failed.");Commit(path,data);
-        }++Done;return {false,false,false,runtime=="Dedicated server"?"Native base-game pack downloaded; server imports use display-only thumbnails, not gameplay authority.":"Base-game pack downloaded; checking native content compatibility before import.",path};
+        }++Done;return {false,false,false,"Download verified; processing cached items and artwork relationships...",path};
     }}throw std::runtime_error("[RS-DL-001] No compatible base-game cache is published for these active sources. Build / update still works locally.");
 }
 }
 const View& Current(){return State;}
 bool Busy(){return Worker.valid();}
 unsigned Completed(){return Done.load();}unsigned Total(){return Count.load();}
+uint64_t BytesCompleted(){return DownloadedBytes.load();}uint64_t BytesTotal(){return DownloadBytes.load();}
+void CacheApplied(const std::string& status){State.Status=status;}
 void Initialize(){
     if(Initialized)return;Initialized=true;
     try{const auto folder=Folder(),bundled=HelpyPaths::PluginRoot()/"assets";Worker=std::async(std::launch::async,[folder,bundled]{
@@ -150,16 +172,28 @@ bool StartArtwork(){
     try{const auto folder=Folder();Worker=std::async(std::launch::async,[folder]{return InstallArtwork(folder,Fetch);});return true;}
     catch(...){State.Status="Could not start artwork download; offline mode remains available.";return false;}
 }
+std::filesystem::path AuthorToolsFolder(){return HostServices::ExportsDirectory()/"authoring-tools";}
+bool StartAuthorTools(){
+    if(Busy())return false;
+    if(std::chrono::steady_clock::now()<NextAttempt){State.Status="Please wait a few seconds before retrying the download.";return false;}
+    NextAttempt=std::chrono::steady_clock::now()+std::chrono::seconds(10);Cancelled=false;Done=0;Count=2;
+    State.Status="Downloading the authoring tools ZIP from GitHub...";
+    try{const auto folder=AuthorToolsFolder();Worker=std::async(std::launch::async,[folder]{return InstallAuthorTools(folder,Fetch);});return true;}
+    catch(...){State.Status="[RS-DL-001] Could not start the authoring-tools download. The previous ZIP is retained.";return false;}
+}
 bool StartBaseCache(const std::map<std::string,std::string>& sources,const std::set<std::string>& nativePlugins,const std::string& runtime,const std::string& gameVersion){
     if(Busy()||std::chrono::steady_clock::now()<NextAttempt)return false;NextAttempt=std::chrono::steady_clock::now()+std::chrono::seconds(10);Cancelled=false;
-    State.Status="Looking for a compatible base-game cache on GitHub...";
+    DownloadedBytes=0;DownloadBytes=0;State.Status="Looking for a base-game cache on GitHub...";
     try{Worker=std::async(std::launch::async,[sources,nativePlugins,runtime,gameVersion]{return DownloadBase(sources,nativePlugins,runtime,gameVersion);});return true;}
     catch(...){State.Status="Could not start cache download; local Build / update remains available.";return false;}
 }
 bool Poll(){
     if(!Worker.valid()||Worker.wait_for(std::chrono::seconds(0))!=std::future_status::ready)return false;
     try{const auto result=Worker.get();if(!result.Status.empty())State.Status=result.Status;
-        if(result.ApplyArtworkState){State.NeedsArtwork=result.NeedsArtwork;State.HintDismissed=State.HintDismissed||result.Dismissed;}PendingPack=result.Pack;return result.Artwork;
+        if(result.ApplyArtworkState){State.NeedsArtwork=result.NeedsArtwork;State.HintDismissed=State.HintDismissed||result.Dismissed;}
+        if(!result.Pack.empty())PendingPack=result.Pack;
+        if(!result.AuthorTools.empty())State.AuthorTools=result.AuthorTools;
+        return result.Artwork;
     }catch(const std::exception& error){State.Status=error.what();return false;}
 }
 std::filesystem::path TakeBaseCache(){auto file=std::move(PendingPack);PendingPack.clear();return file;}
@@ -172,10 +206,17 @@ bool ReleaseImportedPack(const std::filesystem::path& file) noexcept{
 }
 void DismissHint(){State.HintDismissed=true;try{Commit(Folder()/"hint-dismissed",Bytes{'1'});}catch(...){};}
 void Cancel()noexcept{Cancelled=true;}
-void Shutdown()noexcept{Cancelled=true;if(Worker.valid())try{(void)Worker.get();}catch(...){}Initialized=false;}
+void Shutdown()noexcept{Cancelled=true;if(Worker.valid())try{(void)Worker.get();}catch(...){}Initialized=false;PendingPack.clear();State.AuthorTools.clear();}
 #if defined(HELPY_ASSET_TEST)
 void TestArtwork(const std::filesystem::path& source,const std::filesystem::path& destination){
     Cancelled=false;(void)InstallArtwork(destination,[&](const std::string& name,size_t size){return Read(source/std::filesystem::path(name).filename(),size);});
+}
+void TestAuthorTools(const std::filesystem::path& source,const std::filesystem::path& destination,bool cancelBeforeCommit){
+    Cancelled=false;(void)InstallAuthorTools(destination,[&](const std::string& name,size_t size){
+        auto bytes=Read(source/std::filesystem::path(name).filename(),size);
+        if(cancelBeforeCommit&&name.ends_with(".zip"))Cancel();
+        return bytes;
+    });
 }
 #endif
 }

@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/ProcessExitFuture.h"
 #include "Core/BackgroundPolicy.h"
 #include "Core/HelpyUiAssets.h"
 #include "Generator/HelpyImGuiTheme.h"
@@ -20,7 +21,7 @@ inline std::set<std::string> Auxiliary;
 inline void RequestImage(const std::string& name){if(HelpyUiAssets::Known(name))Auxiliary.insert(name);}
 inline std::function<Pixels(const std::filesystem::path&)> Decode;
 inline std::function<ID3D11ShaderResourceView*(const Pixels&)> Upload;
-inline std::future<Pixels> Worker;
+inline PS::ProcessExitFuture<Pixels> Worker;
 inline std::string Pending,Selection,Error;
 inline std::map<std::string,Image> Images;
 inline std::set<std::string> Failed;

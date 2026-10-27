@@ -3,9 +3,10 @@
 #include <iterator>
 #include <stdexcept>
 #include <string>
+#include <iostream>
 static std::string Read(const std::filesystem::path& path){std::ifstream f(path);if(!f)throw std::runtime_error("Placement/cache input missing");return {std::istreambuf_iterator<char>(f),{}};}
 static void Check(bool ok,const char* message){if(!ok)throw std::runtime_error(message);}
-int main(int argc,char** argv){
+int main(int argc,char** argv)try{
     Check(argc==2,"Expected raw source root");const std::filesystem::path root(argv[1]);
     const auto npc=Read(root/"src/Loader/DragonWildsNpcLoader.cpp");
     const auto human=Read(root/"src/Loader/HumanNpc.inl");
@@ -30,7 +31,7 @@ int main(int argc,char** argv){
         Check(spawn.find(proof)!=std::string::npos,"Event reconciliation bypasses ground/collision/capsule/lifetime verification");
     Check(spawn.find("SetActorLocation(")==std::string::npos,"Event reconciliation uses an unchecked positional write");
     const auto metadata=catalog.find("static std::string mountedScope");
-    const auto scope=catalog.find("const auto metadataScope=json::array({generation,HelpySourceCache::PublishedCatalogKey()}).dump()",metadata);
+    const auto scope=catalog.find("const auto metadataScope=json::array({generation,HelpySourceCache::PublishedCatalogKey(),HelpySourceCache::Current.Authoritative,HelpySourceCache::Current.Provisional}).dump()",metadata);
     const auto refresh=catalog.find("if(!mountedReady||mountedScope!=metadataScope)",scope);
     const auto reset=catalog.find("if(mountedScope!=metadataScope){mountedReady=false;mountedItems.clear();}",refresh);
     const auto ensure=catalog.find("if(!classMetadataReady&&CookedAssets::TryEnsure())",reset);
@@ -79,4 +80,4 @@ int main(int argc,char** argv){
     Check(thumbnail.find("DiskMaintenance.Post(")!=std::string::npos,"Icon maintenance must be delegated to its filesystem worker");
     Check(Read(root/"src/Loader/DragonWildsSpawnLoader.cpp").find("PS::ItemIconThumbnail::ShutdownDiskCache()")!=std::string::npos,"Icon disk worker must join before the DLL unloads");
     for(const auto* phase:{"helpy.icons.cache-read","helpy.icons.cache-write","helpy.icons.asset-load","helpy.icons.draw","helpy.icons.gpu-readback"})Check(thumbnail.find(phase)!=std::string::npos,"Slow native captures need stage attribution");
-}
+}catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}

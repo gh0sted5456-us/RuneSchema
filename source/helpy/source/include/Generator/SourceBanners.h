@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/ProcessExitFuture.h"
 #include "Core/CacheBundleStore.h"
 #include "Core/ItemSource.h"
 #include "Generator/HelpyBackgrounds.h"
@@ -6,7 +7,7 @@
 #include <commdlg.h>
 namespace PS::SourceBanners {
 using Json=nlohmann::json;namespace fs=std::filesystem;
-inline std::future<std::map<std::string,HelpyBackgrounds::Pixels>> Worker;
+inline PS::ProcessExitFuture<std::map<std::string,HelpyBackgrounds::Pixels>> Worker;
 inline std::map<std::string,HelpyBackgrounds::Image> Images;
 inline std::map<std::string,std::string> Digests;
 inline std::set<std::string> Wanted;

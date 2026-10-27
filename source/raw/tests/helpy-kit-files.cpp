@@ -28,6 +28,11 @@ int main(){
     std::size_t backups=0;for(const auto& entry:fs::directory_iterator(root))if(entry.path().extension()==".bak")++backups;assert(backups==1);
     PS::ConfigFiles::Write(root/"Malformed.json","{");assert(Rejects([&]{(void)Kits::Read(root,"Malformed.json");}));
     PS::ConfigFiles::Write(root/"Oversized.json",std::string(Kits::MaxBytes+1,' '));assert(Rejects([&]{(void)Kits::Read(root,"Oversized.json");}));
+    assert(cart.Add({{"Path","/Game/Items/B.B"}}));assert(cart.Select("/Game/Items/A.A"));
+    (void)Kits::Write(root,"Selection",false,cart,false,true);
+    const auto selectedDoc=Kits::Read(root,"Selection.json");
+    assert(selectedDoc["Items"].size()==1&&selectedDoc["Items"][0]["Item"]=="/Game/Items/A.A");
+    imported.ImportKits({selectedDoc,selectedDoc});assert(imported.Payload()[0]["Count"]==8);
     std::error_code error;fs::create_symlink(file,root/"Linked.jsonc",error);if(!error)assert(Rejects([&]{(void)Kits::Read(root,"Linked.jsonc");}));
     // Exact private fixture, not a user save or broad temporary directory.
     fs::remove_all(root);

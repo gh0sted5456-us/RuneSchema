@@ -5,6 +5,8 @@
 #include "Core/ModIdentity.h"
 #include "Core/ModManager.h"
 #include "Core/ConfigFiles.h"
+#include "Runtime/NetworkIdentityBootstrap.h"
+#include "Runtime/ServerFilterStartup.h"
 #include <array>
 #include <atomic>
 #include <cctype>
@@ -872,6 +874,8 @@ namespace DragonWilds {
 
         DatatableSerializeCallbacks.clear();
         GameInstanceInitCallbacks.clear();
+        PS::NetworkIdentityBootstrap::Stop();
+        PS::ServerFilterStartup::Stop();
         m_registryBridge.Stop();
         m_dataRegistrar.Shutdown();
         m_characterEntryRecovery.Shutdown();
@@ -1204,6 +1208,17 @@ namespace DragonWilds {
             if (!PS::StructuredDiagnosticB3D::Report("RS-CORE-015","Error","Failed",
                 "Networking registry bridge unavailable",error.what(),"RegistryBridge","Application"))
                 PS::Log<LogLevel::Error>(STR("[DEGRADED][SERVICE:registry-bridge] Networking bridge unavailable: {}.\n"),PS::ToWideSafe(error.what()));
+        }
+        PS::ServerFilterStartup::Start();
+        try {
+            PS::NetworkIdentityBootstrap::Start([this] {
+                auto result = m_dataRegistrar.NetworkIdentityManifest();
+                result["registryOwners"] = m_registryBridge.RegistryOwnerFingerprints();
+                result["sourceVersions"] = PS::HelpyCacheSources::Snapshot().Versions; return result;
+            }, [this](const auto& order) { m_dataRegistrar.ApplyNetworkIdentityOrder(order); });
+        } catch (const std::exception& error) {
+            PS::NetworkIdentityBootstrap::Stop();
+            PS::Log<LogLevel::Warning>(STR("[NETWORK-ID-SYNC][UNAVAILABLE] {}\n"), PS::ToWideSafe(error.what()));
         }
         PS::HelpyCacheSources::Seal();
         PS::StartupTrace::Mark("GameInstanceInit loaders complete (deferred world work may remain)");
@@ -1592,6 +1607,8 @@ namespace DragonWilds {
         GetPakFolders_Hook = {};
         DatatableSerializeCallbacks.clear();
         GameInstanceInitCallbacks.clear();
+        PS::NetworkIdentityBootstrap::Stop();
+        PS::ServerFilterStartup::Stop();
         m_registryBridge.Stop();
         m_dataRegistrar.Shutdown();
         m_characterEntryRecovery.Shutdown();
@@ -1725,8 +1742,9 @@ namespace DragonWilds {
             {
                 const auto identity=ReadModIdentity(modPath,modName);
                 auto sourceName=identity.Nickname.empty()?identity.Name:identity.Nickname;
-                try{const auto metadata=PS::ModManager::Metadata(modPath);sourceName=metadata.value("nickname",std::string{});if(sourceName.empty())sourceName=metadata.value("name",identity.Name);}catch(...){}
-                PS::HelpyCacheSources::SetDisplayName(RC::to_string(modName),sourceName);
+                auto sourceVersion=identity.Version;
+                try{const auto metadata=PS::ModManager::Metadata(modPath);sourceName=metadata.value("nickname",std::string{});if(sourceName.empty())sourceName=metadata.value("name",identity.Name);sourceVersion=metadata.value("version",sourceVersion);}catch(...){}
+                PS::HelpyCacheSources::SetDisplayName(RC::to_string(modName),sourceName,sourceVersion);
                 bool modSuccessful=true;
                 PS::StartupTrace::Mark("load mod: " + RC::to_string(modName));
 

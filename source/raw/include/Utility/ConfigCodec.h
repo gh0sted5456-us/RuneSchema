@@ -1,5 +1,6 @@
 #pragma once
 #include "Utility/Config.h"
+#include "Core/HelpyShortcut.h"
 #include "glaze/glaze.hpp"
 #include <stdexcept>
 #include <string_view>
@@ -28,6 +29,8 @@ namespace PS {
         const auto error = glz::read<glz::opts{.error_on_unknown_keys = false, .error_on_missing_keys = false}>(candidate, json);
         if (error) throw std::runtime_error(glz::format_error(error, json));
         const auto source=nlohmann::json::parse(json);
+        const auto* shortcut=HelpyShortcut::Find(candidate.helpyHotkey);
+        candidate.helpyHotkey=shortcut?std::string(shortcut->Name):"F2";
         auto& launch=candidate.quickLaunch;
         if(!source.contains(nlohmann::json::json_pointer("/quickLaunch/mode")))
             launch.mode=launch.enabled?"quickLaunch":"lessRestrictive";

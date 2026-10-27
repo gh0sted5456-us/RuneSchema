@@ -55,6 +55,7 @@ inline void Italic(ImDrawList* draw,ImFont* font,float size,ImVec2 pos,ImU32 col
 }
 inline void Render(){
     if(!Open)return;const auto& theme=HelpyImGuiTheme::Current;HelpyImGuiTheme::Scope skin(theme);ImGui::SetNextWindowSize({theme.X(460),0},ImGuiCond_Appearing);
+    HelpyImGuiTheme::CenterNextWindow();
     if(ImGui::Begin("Helpy labels###personalization",&Open,ImGuiWindowFlags_AlwaysAutoResize)){
         ImGui::TextWrapped("Original: {%s}",Original.c_str());ImGui::SetNextItemWidth(theme.X(380));ImGui::InputText("Nickname",Nickname,sizeof(Nickname));
         if(Item){ImGui::SetNextItemWidth(theme.X(380));ImGui::InputText("Tags",Tags,sizeof(Tags));ImGui::TextDisabled("Comma-separated tags; use junk for removal review.");ImGui::Checkbox("Favorite",&Favorite);ImGui::Checkbox("Protect every copy from Helpy removal",&Locked);}

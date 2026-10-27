@@ -13,6 +13,7 @@ uint64_t HostGeneration=41,HostRevision=8;
 bool ThrowHost=false;
 unsigned SettingsWrites=0;
 unsigned IconManifestReads=0;
+unsigned CrashOptionReads=0;
 std::map<std::string,unsigned> GuardedCalls;
 json SettingsDoc={{"advancedLogging",false},{"persistence",{{"allowCorruptCharacterEntry",false}}},{"future",std::string(10000,'x')}};
 PS::HelpyAuthoring::Session AuthoringHost;
@@ -21,7 +22,7 @@ int32_t RS_PLUGIN_CALL HostCall(const char*,const char* service,const char* inpu
     assert(std::string(service)=="runeschema.tools");
     const auto request=json::parse(input);json reply;
     const auto action=request.value("Action",std::string{});
-    if(action=="ModsRead"||action=="ModsSave"||action=="ModsImport"||action=="QuickLoadSave"||action=="AdditionalLoggingSave"){
+    if(action=="ModsRead"||action=="ModsSave"||action=="ModsImport"||action=="QuickLoadSave"||action=="AdditionalLoggingSave"||action=="CrashDumpSave"){
         if(!output||capacity<RUNESCHEMA_PLUGIN_MAX_MESSAGE){*size=RUNESCHEMA_PLUGIN_MAX_MESSAGE;return RS_PLUGIN_BUFFER_TOO_SMALL;}
         ++GuardedCalls[action];reply={{"Ok",true},{"Root","D:/XboxGames/Active/RuneSchema"},{"Rows",json::array()},{"Padding",std::string(10000,'x')}};
     }
@@ -33,6 +34,9 @@ int32_t RS_PLUGIN_CALL HostCall(const char*,const char* service,const char* inpu
         }
         reply={{"Ok",true},{"Document",SettingsDoc},{"Editable",{{"/advancedLogging",false},{"/persistence/allowCorruptCharacterEntry",false}}},
             {"ExpectedContents","fixture-contents"},{"Status","Saved for next launch"}};
+    }
+    else if(action=="CrashDumpRead"){
+        ++CrashOptionReads;reply={{"Ok",true},{"FullMemoryDump",false},{"EnableDumping",true},{"ExpectedContents",std::string(10000,'x')}};
     }
     else if(action=="IconCacheSources"){
         ++IconManifestReads;
@@ -59,7 +63,12 @@ int main(){
     {
         auto preferences=PS::HelpyImGuiTheme::Theme{};preferences.runtimeTimeUnit=3;preferences.backgroundFile="Scene.png";preferences.backgroundStrength=.2f;
         preferences.diagnosticToastsEnabled=false;preferences.diagnosticToastLimit=2;preferences.diagnosticHistoryDays=7;preferences.diagnosticSplitRatio=.6f;preferences.diagnosticDeveloperMode=true;
+        PS::HelpyRuntimePreferences::CacheFirst=false;PS::HelpyRuntimePreferences::PassiveRefresh=false;
         const auto document=PS::HelpyImGuiTheme::DocumentFrom(preferences,200);
+        assert(document["cache"]["loadOrder"]=="gameFirst"&&document["cache"]["passiveRefresh"]==false);
+        assert(PS::HelpyImGuiTheme::DefaultDocument()["cache"]["loadOrder"]=="cacheFirst");
+        const auto roundTrip=PS::HelpyBrowsePolicy::Read(document["cache"]);assert(!roundTrip.CacheFirst&&!roundTrip.PassiveRefresh);
+        PS::HelpyRuntimePreferences::CacheFirst=true;PS::HelpyRuntimePreferences::PassiveRefresh=true;
         assert(document["runtime"]["timeUnit"]==3&&document["background"]["file"]=="Scene.png"&&document["background"]["strength"].get<float>()==.2f);
         assert(!document["notifications"]["enabled"].get<bool>()&&document["notifications"]["visibleLimit"]==2&&document["diagnosticHistory"]["ageDays"]==7);
         assert(document["diagnosticPresentation"]["splitRatio"].get<float>()==.6f&&document["diagnosticPresentation"]["developerMode"].get<bool>());
@@ -67,12 +76,13 @@ int main(){
     }
     PS::HelpyEnvironment::Configure({{"DedicatedServer",true}});
     RuneSchemaHostApi host{};host.CallService=HostCall;State state{&host};ConfigureTransport(&state);
+    {json reply;assert(CallCore(&state,{{"Action","CrashDumpRead"}},reply)&&reply.at("ExpectedContents").get<std::string>().size()==10000&&CrashOptionReads==2);}
     {json manifest;assert(PS::HelpySourceCache::RemoteSnapshot(manifest)&&manifest.at("Padding").get<std::string>().size()==20000&&IconManifestReads==2);
         PS::HelpySourceCache::Current.Provisional=true;PS::HelpySourceCache::CachedSourcesAttempted=true;PS::HelpySourceCache::Next={};
         assert(PS::HelpySourceCache::Poll({})&&PS::HelpySourceCache::Ready()&&!PS::HelpySourceCache::Current.Provisional);
         assert(PS::HelpySourceCache::Fingerprint("/Game/UI/T_Power.T_Power")=="abcdef0123456789");
         PS::HelpySourceCache::Current={};}
-    for(const auto* action:{"ModsRead","ModsSave","ModsImport","QuickLoadSave","AdditionalLoggingSave"}){
+    for(const auto* action:{"ModsRead","ModsSave","ModsImport","QuickLoadSave","AdditionalLoggingSave","CrashDumpSave"}){
         json reply;assert(CallCore(&state,{{"Action",action}},reply)&&reply.at("Ok")==true&&reply.at("Root")=="D:/XboxGames/Active/RuneSchema");assert(GuardedCalls[action]==1);
     }
     assert(state.ToolsGeneration==41&&state.ToolsAvailable&&state.Players.size()==1); // No bootstrap push required.

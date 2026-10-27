@@ -2,6 +2,7 @@
 #include "Core/RuneSchemaDataRoot.h"
 #include "imgui.h"
 #include "Core/ConfigFiles.h"
+#include "Core/HelpyBrowsePolicy.h"
 #include "Core/ItemBayLayout.h"
 #include "Core/ItemPaging.h"
 #include "Core/ItemSource.h"
@@ -96,6 +97,17 @@ struct Theme {
 };
 
 inline Theme Current{};
+inline void CenterNextWindow(){
+    const auto* viewport=ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(viewport->GetWorkCenter(),ImGuiCond_Appearing,{.5f,.5f});
+}
+inline bool BeginCenteredModal(const char* name,bool* open,ImGuiWindowFlags flags){
+    CenterNextWindow();const auto area=ImGui::GetMainViewport()->WorkSize;
+    ImGui::SetNextWindowSizeConstraints({0,0},{std::max(1.f,area.x-Current.X(24)),std::max(1.f,area.y-Current.Y(24))});
+    return ImGui::BeginPopupModal(name,open,flags);
+}
+inline void CenterRow(float width){ImGui::SetCursorPosX(ImGui::GetCursorPosX()+std::max(0.f,(ImGui::GetContentRegionAvail().x-width)*.5f));}
+
 inline void DetailsTextUnformatted(const char* text){
     const float startX=ImGui::GetCursorPosX(),width=std::max(1.f,ImGui::GetContentRegionAvail().x);
     const char* current=text;const char* end=text+std::char_traits<char>::length(text);
@@ -185,7 +197,7 @@ inline nlohmann::json LegacyDefaultDocument() {
         {"version",17},{"autoReload",true},
         {"display",{{"dpiAware",true},{"userScale",1.18},{"fontScale",1.34},{"density",1.14},{"fontFamily","Segoe UI"},{"textBold",false},{"verboseTooltips",false},{"tooltipDelay",0.35}}},
         {"views",{{"advancedMode",false},{"itemGrid",true},{"itemPageSize",ItemPaging::DefaultSize},{"itemGridColumns",ItemBayLayout::DefaultColumns},{"itemGridRows",ItemBayLayout::DefaultRows},{"itemGridFitRows",true},{"aiGrid",false},{"itemResultHeight",320.0},{"aiResultHeight",320.0},{"itemCategory","All"}}},
-        {"cache",{{"iconCacheMB",200}}},
+        {"cache",{{"iconCacheMB",200},{"loadOrder","cacheFirst"},{"passiveRefresh",true}}},
         {"colors",{
             {"window",{0.050,0.052,0.060,1.0}},{"panel",{0.075,0.078,0.090,1.0}},{"panelAlt",{0.100,0.104,0.120,1.0}},
             {"navigation",{0.062,0.064,0.074,1.0}},{"navigationHover",{0.125,0.115,0.155,1.0}},{"navigationActive",{0.155,0.115,0.225,1.0}},
@@ -229,7 +241,7 @@ inline nlohmann::json DocumentFrom(const Theme& t,int iconCacheMB) {
         {"workspaces",{{"authoring",t.workspaces.Authoring},{"tools",t.workspaces.Tools},{"liveLog",t.workspaces.LiveLog},{"saveEditor",t.workspaces.SaveEditor},{"serverTools",t.workspaces.ServerTools},{"journal",t.workspaces.Journal}}},
         {"display",{{"dpiAware",t.dpiAware},{"userScale",t.userScale},{"fontScale",t.fontScale},{"density",t.density},{"fontFamily",t.fontFamily},{"textBold",t.textBold},{"verboseTooltips",t.verboseTooltips},{"tooltipDelay",t.tooltipDelay}}},
         {"views",{{"advancedMode",t.advancedMode},{"itemGrid",t.itemGridView},{"itemPageSize",t.itemPageSize},{"itemGridColumns",t.itemGridColumns},{"itemGridRows",t.itemGridRows},{"itemGridFitRows",t.itemGridFitRows},{"itemShowPlaceholders",t.itemShowPlaceholders},{"aiGrid",t.aiGridView},{"itemResultHeight",t.itemResultHeight},{"aiResultHeight",t.aiResultHeight},{"itemCategory",t.itemCategory},{"itemSource",t.itemSource},{"itemBayBrowseRatio",t.itemBayBrowseRatio},{"dockedBayHeight",t.dockedBayHeight},{"itemCartWidth",t.itemCartWidth}}},
-        {"cache",{{"iconCacheMB",std::clamp(iconCacheMB,0,16384)}}},
+        {"cache",{{"iconCacheMB",std::clamp(iconCacheMB,0,16384)},{"loadOrder",HelpyRuntimePreferences::CacheFirst.load()?"cacheFirst":"gameFirst"},{"passiveRefresh",HelpyRuntimePreferences::PassiveRefresh.load()}}},
         {"updates",{{"automaticChecks",t.automaticUpdateChecks}}},
         {"preview",{{"quality",t.previewQuality},{"animation",t.previewAnimate},{"details",t.previewDetails},{"scaleUsePortrait",t.scaleUsePortrait},{"scaleReferenceIcon",t.scaleReferenceIcon}}},
         {"runtime",{{"timeUnit",t.runtimeTimeUnit}}},
@@ -260,7 +272,7 @@ inline nlohmann::json DocumentFrom(const Theme& t,int iconCacheMB) {
         }}
     };
 }
-inline nlohmann::json DefaultDocument(){return DocumentFrom(Theme{},200);}
+inline nlohmann::json DefaultDocument(){auto doc=DocumentFrom(Theme{},200);doc["cache"]["loadOrder"]="cacheFirst";doc["cache"]["passiveRefresh"]=true;return doc;}
 inline void UseSyncColors(){
     const auto source=DocumentFrom(Theme{},200).at("colors");
 #define SYNC_COLOR(name) Current.name=ReadColor(source,#name,Current.name)
@@ -276,11 +288,11 @@ inline void SaveCurrent() {
     try {
         ConfigFiles::Write(file,"// RSMK ImGui skin. Settings UI and this file share the same live values.\n// Set cache.iconCacheMB to 0 for session-only live icon caching.\n"+DocumentFrom(Current,HelpyRuntimePreferences::IconCacheLimitMB.load()).dump(2)+"\n");
         std::error_code ec;const auto stamp=std::filesystem::last_write_time(file,ec);if(!ec){Stamp=stamp;HaveStamp=true;}Loaded=true;Status="Saved "+file.string();
-    } catch(const std::exception& e) {Status=std::string("Theme save failed: ")+e.what();}
+    } catch(const std::exception& e) {Status=std::string("[RS-CFG-003] Theme save failed: ")+e.what();}
 }
-inline void ResetDefaults() {Current=Theme{};HelpyRuntimePreferences::IconCacheLimitMB.store(200);SaveCurrent();}
+inline void ResetDefaults() {Current=Theme{};HelpyRuntimePreferences::CacheFirst=true;HelpyRuntimePreferences::PassiveRefresh=true;HelpyRuntimePreferences::IconCacheLimitMB.store(200);SaveCurrent();}
 inline void WriteDefault(const std::filesystem::path& file) {
-    ConfigFiles::Write(file,"// RSMK ImGui skin. Edit while Dragonwilds is running.\n// Searches execute on Enter; style saves auto-reload. F5 forces refresh.\n"+DefaultDocument().dump(2)+"\n");
+    ConfigFiles::Write(file,"// RSMK ImGui skin. Edit while Dragonwilds is running.\n// Searches execute on Enter; style saves auto-reload. Quick settings can reload the theme.\n"+DefaultDocument().dump(2)+"\n");
 }
 inline void Reload(bool createIfMissing=true) {
     const auto file=FilePath();
@@ -295,7 +307,8 @@ inline void Reload(bool createIfMissing=true) {
         const auto doc=nlohmann::json::parse(ConfigFiles::Read(file),nullptr,true,true);Theme next{};next.autoReload=doc.value("autoReload",true);const int version=doc.value("version",0);
         next.windowOpacity=ReadFloat(doc,"windowOpacity",next.windowOpacity,0.60f,1.0f);
         const auto display=doc.value("display",nlohmann::json::object());
-        const auto cache=doc.value("cache",nlohmann::json::object());HelpyRuntimePreferences::IconCacheLimitMB.store(ReadInt(cache,"iconCacheMB",200,0,16384));
+        const auto cache=doc.value("cache",nlohmann::json::object());const auto browse=HelpyBrowsePolicy::Read(cache);
+        const int cacheLimit=ReadInt(cache,"iconCacheMB",200,0,16384);
         next.automaticUpdateChecks=doc.value("updates",nlohmann::json::object()).value("automaticChecks",true);
         const auto notifications=doc.value("notifications",nlohmann::json::object());
         next.diagnosticToastsEnabled=notifications.value("enabled",true);
@@ -353,6 +366,7 @@ inline void Reload(bool createIfMissing=true) {
         next.contentGutter=ReadFloat(l,"contentGutter",next.contentGutter,0.0f,40.0f);next.contentPaddingX=ReadFloat(l,"contentPaddingX",next.contentPaddingX,0.0f,40.0f);next.contentPaddingY=ReadFloat(l,"contentPaddingY",next.contentPaddingY,0.0f,24.0f);if(version<12&&std::abs(next.contentPaddingX-18.0f)<0.001f)next.contentPaddingX=10.0f;if(version<12&&std::abs(next.contentPaddingY-8.0f)<0.001f)next.contentPaddingY=6.0f;next.splitterWidth=ReadFloat(l,"splitterWidth",next.splitterWidth,3.0f,16.0f);
         next.minWindowWidth=ReadFloat(l,"minWindowWidth",next.minWindowWidth,560.0f,1600.0f);next.minWindowHeight=ReadFloat(l,"minWindowHeight",next.minWindowHeight,420.0f,1200.0f);next.resultListHeight=ReadFloat(l,"resultListHeight",next.resultListHeight,180.0f,900.0f);next.listIconSize=ReadFloat(l,"listIconSize",next.listIconSize,16.0f,96.0f);next.gridIconSize=ReadFloat(l,"gridIconSize",next.gridIconSize,28.0f,160.0f);next.gridCardHeight=ReadFloat(l,"gridCardHeight",next.gridCardHeight,72.0f,260.0f);next.gridMinCardWidth=ReadFloat(l,"gridMinCardWidth",next.gridMinCardWidth,92.0f,320.0f);next.navigationItemHeight=ReadFloat(l,"navigationItemHeight",next.navigationItemHeight,24.0f,72.0f);next.navigationIconSize=ReadFloat(l,"navigationIconSize",next.navigationIconSize,10.0f,40.0f);next.loadingSpinnerRadius=ReadFloat(l,"loadingSpinnerRadius",next.loadingSpinnerRadius,6.0f,40.0f);next.loadingSpinnerThickness=ReadFloat(l,"loadingSpinnerThickness",next.loadingSpinnerThickness,1.0f,8.0f);next.overscanRows=ReadInt(l,"overscanRows",next.overscanRows,0,16);
         ReadPair(l,"framePadding",next.framePaddingX,next.framePaddingY,0.0f,24.0f);ReadPair(l,"itemSpacing",next.itemSpacingX,next.itemSpacingY,0.0f,30.0f);
+        HelpyRuntimePreferences::CacheFirst=browse.CacheFirst;HelpyRuntimePreferences::PassiveRefresh=browse.PassiveRefresh;HelpyRuntimePreferences::IconCacheLimitMB=cacheLimit;
         Current=next;Stamp=std::filesystem::last_write_time(file);HaveStamp=true;Loaded=true;Status="Loaded "+file.string();
         if(version<20){std::filesystem::copy_file(file,file.parent_path()/"ui-before-gold.jsonc",std::filesystem::copy_options::skip_existing);SaveCurrent();}
     } catch(const std::exception& e) {

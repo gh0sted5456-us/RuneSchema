@@ -72,7 +72,7 @@ namespace PS::HostServices {
             / L"SystemAppData" / L"wgs";
     }
     std::filesystem::path SavedDirectory() { return RuntimeDirectory() / "saved"; }
-    std::filesystem::path CacheDirectory() { return SavedDirectory() / "cache"; }
+    std::filesystem::path CacheDirectory() { return RuneSchemaData::PlatformDirectory(Storefront::MappingCachePlatform(Storefront::CurrentDetection()))/"cache"; }
     std::filesystem::path MappingCacheDirectory() {
         return RuneSchemaData::MappingDirectory(Storefront::MappingCachePlatform(Storefront::CurrentDetection()));
     }

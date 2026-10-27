@@ -168,6 +168,7 @@ namespace PS {
 
     struct PSConfigSettings {
         bool enableAutoReload = false;
+        std::string helpyHotkey = "F2";
         // One native UE4SS reflection dump per changed executable; restart required.
         bool autoUpdateMappings = true;
         // Logging detail and advanced authoring/diagnostic facilities are

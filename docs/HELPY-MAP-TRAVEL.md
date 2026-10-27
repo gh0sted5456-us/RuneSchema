@@ -1,6 +1,6 @@
 # Helpy map travel
 
-In the next maintenance build, map action panels open in the center of Helpy. Their headings, coordinates
+In the October 27 source maintenance update, map action panels open in the center of Helpy. Their headings, coordinates
 and mode controls are centered; search fields and player selectors fill the
 available form width. Long content scrolls inside the panel, with the action
 button retained below it. Dialogs and floating tools open centered and can

@@ -35,6 +35,13 @@ int RunConfigSettings() {
     assert(!settings.colorCodeLoaderAnnotations);
     assert(!DecodeSettings("{}").advancedLogging);
     assert(DecodeSettings("{}").autoUpdateMappings);
+    assert(DecodeSettings("{}").helpyHotkey=="F2");
+    assert(DecodeSettings(R"({"helpyHotkey":"f5"})").helpyHotkey=="F5");
+    assert(DecodeSettings(R"({"helpyHotkey":"X"})").helpyHotkey=="X");
+    assert(DecodeSettings(R"({"helpyHotkey":"not-a-key"})").helpyHotkey=="F2");
+    auto shortcutSettings=DecodeSettings(R"({"helpyHotkey":"PageUp"})");
+    assert(DecodeSettings(EncodeSettings(shortcutSettings)).helpyHotkey=="PageUp");
+    Rejects([&]{DecodeSettings(R"({"helpyHotkey":99})");});
     auto mappingSettings=DecodeSettings(R"({"autoUpdateMappings":false})");
     assert(!mappingSettings.autoUpdateMappings);
     assert(!DecodeSettings(EncodeSettings(mappingSettings)).autoUpdateMappings);

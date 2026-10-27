@@ -389,6 +389,7 @@ std::optional<nlohmann::json> Cached(const std::string& iconPath) {
 nlohmann::json Render(UWorld* world,const std::string& iconPath) {
     if(iconPath.empty()||iconPath.size()>1024||iconPath.front()!='/')throw std::runtime_error("Item icon request requires a canonical texture path");
     HelpySourceCache::Poll(HostServices::ModDirectory());if(!HelpySourceCache::Ready())return {{"Icon",iconPath},{"Status","Pending"}};
+    if(HelpySourceCache::Current.Provisional){if(auto saved=Cached(iconPath))return *saved;return {{"Icon",iconPath},{"Status","Pending"}};}
     const auto cachedFile=OutputFile(iconPath);
     if(PendingWrite.valid()) {
         if(PendingWrite.wait_for(std::chrono::seconds(0))!=std::future_status::ready)return {{"Icon",iconPath},{"Status","Pending"}};

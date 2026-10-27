@@ -5,12 +5,12 @@ local routes, pending, seen, outgoing = {}, {}, {}, {}
 local reserved, queued, sequence, revision = 0, 0, 0, 0
 local endpoint, hooked, receipt_hooked, running, last_scan, last_subscribe = nil, false, false, false, 0, 0
 local path = "/RuneSchema/Networking/BPC_RuneSchemaRegistryBridge.BPC_RuneSchemaRegistryBridge_C:ClientRuneSchemaNotification"
+local max_bytes, incoming_budget, outgoing_budget = 1048576, 4194304, 4194304
 local function token(s) return type(s)=="string" and #s>0 and #s<=193 and s:match("^[%w_.:%-]+$")~=nil end
-local function crc(s)
-    local v=0xffffffff
-    for i=1,#s do v=v~s:byte(i);for _=1,8 do v=(v>>1)~((-(v&1))&0xedb88320) end end
-    return (~v)&0xffffffff
-end
+local crc_table={}
+for i=0,255 do local v=i;for _=1,8 do v=(v>>1)~((-(v&1))&0xedb88320) end;crc_table[i]=v end
+local function crc_update(v,s) for i=1,#s do v=(v>>8)~crc_table[(v~s:byte(i))&255] end;return v end
+local function crc(s) return (~crc_update(0xffffffff,s))&0xffffffff end
 local function hex(s) return (s:gsub(".",function(c)return string.format("%02x",c:byte())end)) end
 local function unhex(s) assert(#s<=2048 and #s%2==0 and not s:find("[^0-9a-f]"),"invalid chunk");return (s:gsub("..",function(v)return string.char(tonumber(v,16))end)) end
 local function packet(m,part,sender)
@@ -25,7 +25,7 @@ local function receive(text)
     assert(token(channel) and token(sender) and code,"invalid relay identity")
     local route=routes[channel];if not route then return end
     local version,seq,part,total,bytes,sum=number("version"),number("sequence"),number("part"),number("total"),number("bytes"),number("crc")
-    assert(number("v")==1 and version==route.version and seq>0 and bytes>0 and bytes<=65536 and total==(bytes+1023)//1024 and part<total and sum<=0xffffffff,"invalid relay bounds")
+    assert(number("v")==1 and version==route.version and seq>0 and bytes>0 and bytes<=max_bytes and total==(bytes+1023)//1024 and part<total and sum<=0xffffffff,"invalid relay bounds")
     local chunk=unhex(code);assert(#chunk==math.min(1024,bytes-part*1024),"invalid chunk size")
     local canonical=string.format('{"bytes":%d,"channel":"%s","crc":%u,"hex":"%s","part":%d,"sender":"%s","sequence":%d,"total":%d,"v":1,"version":%d}',bytes,channel,sum,code,part,sender,seq,total,version)
     assert(text==canonical,"noncanonical relay packet")
@@ -34,13 +34,14 @@ local function receive(text)
     if a and part==0 and seq>a.sequence then forget(key);a=nil end
     if not a then
         local count=0;for _ in pairs(pending) do count=count+1 end
-        assert(part==0 and count<256 and reserved+bytes<=2097152,"relay receive capacity exceeded")
-        a={bytes=bytes,sequence=seq,total=total,crc=sum,next=0,chunks={},deadline=os.time()+30};pending[key]=a;reserved=reserved+bytes
+        assert(part==0 and count<256 and reserved+bytes<=incoming_budget,"relay receive capacity exceeded")
+        local lifetime=bytes<=65536 and 30 or 30+(bytes+4095)//4096
+        a={bytes=bytes,sequence=seq,total=total,crc=sum,rolling=0xffffffff,next=0,chunks={},deadline=os.time()+lifetime};pending[key]=a;reserved=reserved+bytes
     end
     assert(a.sequence==seq and a.bytes==bytes and a.total==total and a.crc==sum and a.next==part,"interleaved/duplicate relay chunk")
-    a.chunks[#a.chunks+1]=chunk;a.next=a.next+1
+    a.chunks[#a.chunks+1]=chunk;a.rolling=crc_update(a.rolling,chunk);a.next=a.next+1
     if a.next==a.total then
-        local data=table.concat(a.chunks);forget(key);assert(crc(data)==sum,"relay checksum mismatch")
+        local data=table.concat(a.chunks);forget(key);assert(((~a.rolling)&0xffffffff)==sum,"relay checksum mismatch")
         local count=0;for _ in pairs(seen) do count=count+1 end;assert(seen[key] or count<4096,"relay replay table capacity exceeded")
         seen[key]=seq;route.callback(sender,data,seq)
     end
@@ -93,12 +94,12 @@ local function schedule()
 end
 function api.Open(channel,version,callback)
     assert(token(channel) and channel:match("^[%w_.%-]+:[%w_.%-]+$") and type(version)=="number" and math.type(version)=="integer" and version>=1 and version<=65535 and type(callback)=="function","invalid relay subscription")
-    local count=0;for _ in pairs(routes) do count=count+1 end;assert(routes[channel] or count<64,"too many relay channels")
+    local count=0;for _ in pairs(routes) do count=count+1 end;assert(routes[channel] or count<256,"too many relay channels")
     assert(not routes[channel] or routes[channel].version==version,"conflicting relay version")
     routes[channel]={version=version,callback=callback,subscribed=false};schedule();return api
 end
 function api.Send(channel,data)
-    assert(routes[channel] and type(data)=="string" and #data>0 and #data<=65536 and #outgoing<16 and queued+#data<=262144,"invalid/oversized relay send")
+    assert(routes[channel] and type(data)=="string" and #data>0 and #data<=max_bytes and #outgoing<16 and queued+#data<=outgoing_budget,"invalid/oversized relay send")
     sequence=sequence+1;queued=queued+#data;outgoing[#outgoing+1]={channel=channel,version=routes[channel].version,data=data,sequence=sequence,crc=crc(data),part=0};return sequence
 end
 function api.Resync(channel)

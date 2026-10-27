@@ -2,6 +2,7 @@
 #include "Core/HelpyUiAssets.h"
 #include "Core/HelpySplash.h"
 #include "Core/BaseCacheDownloads.h"
+#include "Core/CacheBundleIO.h"
 #include "Core/HelpySourceCache.h"
 #include "Runtime/HostServices.h"
 #include <windows.h>
@@ -12,11 +13,22 @@
 #include <iostream>
 int main(int argc,char** argv){try{
     if(argc!=3)throw std::runtime_error("Asset source and isolated destination required");
+    if(std::string_view(argv[1])=="--authoring-tools"){
+        const auto isolated=std::filesystem::absolute(argv[2]);std::filesystem::create_directories(isolated);
+        if(!SetEnvironmentVariableW(L"LOCALAPPDATA",isolated.c_str()))throw std::runtime_error("Cannot isolate authoring download");
+        if(!PS::HelpyDownloads::StartAuthorTools())throw std::runtime_error("Authoring download did not start");
+        const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(40);
+        while(PS::HelpyDownloads::Busy()&&std::chrono::steady_clock::now()<deadline){PS::HelpyDownloads::Poll();std::this_thread::sleep_for(std::chrono::milliseconds(20));}
+        const auto file=PS::HelpyDownloads::Current().AuthorTools;PS::HelpyDownloads::Shutdown();
+        if(file.empty())throw std::runtime_error(PS::HelpyDownloads::Current().Status);
+        std::cout<<file.string()<<'\n'<<PS::CacheBundleIO::Hash(PS::CacheBundleIO::Read(file,2*1024*1024))<<'\n';return 0;
+    }
     const std::filesystem::path source=argv[1],destination=argv[2];
     using namespace PS;
     const auto nativePack=nlohmann::json{{"Runtime","Steam"},{"GameVersion","same-build"},{"Locale","en-US"},{"Sources",{{"game",std::string(64,'a')},{"futuremajorversion",std::string(64,'b')}}}};
     const auto candidates=[&](const nlohmann::json& pack,const std::string& runtime,const std::string& version="same-build"){return BaseCacheDownloads::Candidates(nlohmann::json::array({pack}),{{"game","active"}},{},runtime,version,"en-US",true);};
     if(candidates(nativePack,"Dedicated server").size()!=1||candidates(nativePack,"Game Pass").size()!=1||candidates(nativePack,"Steam").size()!=1)throw std::runtime_error("Canonical native paths must allow cross-runtime download candidates and inactive official plugin subsets");
+    if(BaseCacheDownloads::Candidates(nlohmann::json::array({nativePack}),{}, {},"Steam","future-build","en-US",true).size()!=1)throw std::runtime_error("Cache download must work before live source discovery");
     if(candidates(nativePack,"Steam","different-build").size()!=1||!candidates(nativePack,"Unknown").empty())throw std::runtime_error("A different build may offer native artwork references; unknown runtimes must not select packs");
     auto currentPack=nativePack;currentPack["GameVersion"]="new-build";
     const auto ranked=BaseCacheDownloads::Candidates(nlohmann::json::array({nativePack,currentPack}),{{"game","active"}},{},"Steam","new-build","en-US",true);
@@ -52,6 +64,29 @@ int main(int argc,char** argv){try{
     if(std::filesystem::file_size(destination/"RuneSchema.png")!=std::filesystem::file_size(source/"RuneSchema.png"))throw std::runtime_error("Corrupt artwork was not repaired");
     bool rejected=false;try{HelpyDownloads::TestArtwork(source/"missing",destination/"rejected");}catch(...){rejected=true;}
     if(!rejected||std::filesystem::exists(destination/"rejected"/"ready"))throw std::runtime_error("Missing/corrupt download was promoted");
+    // Authoring archives are verified and committed without extracting/running their contents.
+    const auto tools=source.parent_path().parent_path()/"tools"/"authoring-tools",toolDestination=destination/"authoring";
+    const auto target=toolDestination/"RuneSchema-Authoring-Tools.zip";
+    HelpyDownloads::TestAuthorTools(tools,toolDestination);
+    const auto original=CacheBundleIO::Read(target,2*1024*1024);const auto toolStamp=std::filesystem::last_write_time(target);
+    HelpyDownloads::TestAuthorTools(tools,toolDestination);
+    if(std::filesystem::last_write_time(target)!=toolStamp)throw std::runtime_error("Verified authoring ZIP was rewritten");
+    HelpyDownloads::TestAuthorTools(tools,longDestination/"tools");
+    if(CacheBundleIO::Read(HelpySourceCache::NativePath(longDestination/"tools/RuneSchema-Authoring-Tools.zip"),2*1024*1024)!=original)throw std::runtime_error("Long authoring paths failed");
+    auto index=nlohmann::json::parse(CacheBundleIO::Read(tools/"index.json",16*1024));
+    const auto bad=destination/"bad-authoring";std::filesystem::create_directories(bad);
+    const auto saveIndex=[&](const nlohmann::json& value){std::ofstream f(bad/"index.json");f<<value.dump();};
+    const auto reject=[&](bool cancel=false){bool refused=false;try{HelpyDownloads::TestAuthorTools(bad,toolDestination,cancel);}catch(...){refused=true;}
+        if(!refused||CacheBundleIO::Read(target,2*1024*1024)!=original)throw std::runtime_error("Bad/cancelled authoring download changed the previous ZIP");};
+    auto invalid=index;invalid["File"]="../escape.zip";saveIndex(invalid);reject();
+    invalid=index;invalid["Bytes"]=uint64_t(3*1024*1024);saveIndex(invalid);reject();
+    // A different, verified new archive forces a fetch rather than reusing the old file.
+    auto newer=original;newer.back()^=1;index["SHA256"]=CacheBundleIO::Hash(newer);index["File"]=index["SHA256"].get<std::string>()+".zip";
+    const auto incoming=bad/index["File"].get<std::string>();
+    {std::ofstream f(incoming,std::ios::binary);f<<original;}saveIndex(index);reject();
+    {std::ofstream f(incoming,std::ios::binary);f<<newer;}reject(true);
+    HelpyDownloads::TestAuthorTools(tools,toolDestination);
+    if(std::filesystem::exists(toolDestination/"build-helpy-cache.sh"))throw std::runtime_error("Authoring ZIP was extracted automatically");
     // An already-running inspection must not undo an explicit Hide click.
     HelpyDownloads::Initialize();HelpyDownloads::DismissHint();
     while(HelpyDownloads::Busy()){HelpyDownloads::Poll();std::this_thread::yield();}

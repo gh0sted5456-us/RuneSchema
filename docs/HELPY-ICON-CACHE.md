@@ -11,7 +11,8 @@ can reuse native pictures as display references while current item data is
 discovered normally.
 
 Helpy stores captured item icons under
-`%LOCALAPPDATA%\RSDragonwilds\RuneSchema\core\HELPY\runtime\saved\cache\item-icons`.
+`%LOCALAPPDATA%\RSDragonwilds\RuneSchema\<platform>\cache\item-icons`
+(`steam`, `gamepass`, `epic` or `server`).
 Settings > Item Cache provides **Clean Icon Cache** and **Open cache folder**
 in both simple and advanced modes. The link opens Windows File Explorer for
 manual management. Close Helpy/the game before manually removing files; visible

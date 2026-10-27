@@ -1,3 +1,4 @@
+#include "Core/ProcessExitFuture.h"
 #include "Generator/HelpyStandaloneWindow.h"
 #include "Generator/HelpyImGuiTheme.h"
 #include "Generator/HelpyBackgrounds.h"
@@ -14,6 +15,7 @@
 #include "../../tests/AuthoringPreviewFixture.h"
 #endif
 #include "Generator/LazyCatalog.h"
+#include "Generator/HelpyCachedCatalog.h"
 #include "Generator/ItemGridPicker.h"
 #include "Generator/ToolRequest.h"
 #include "Core/HelpyPopupInput.h"
@@ -299,7 +301,7 @@ void RenderDiagnosticToasts(const HelpyImGuiTheme::Theme& t){
         const float footerHeight=display.Subtitle.empty()?0.0f:ImGui::CalcTextSize(display.Subtitle.c_str(),nullptr,false,wrapWidth).y;
         const float height=padY+headerHeight+t.Y(6.0f)+titleHeight+t.Y(6.0f)+detailHeight+
             (footerHeight?t.Y(5.0f)+footerHeight:0.0f)+t.Y(14.0f);
-        // The F2-open panel must not put a partial toast under the taskbar.
+        // The open Helpy panel must not put a partial toast under the taskbar.
         if(y+height>MainSurfacePosition.y+MainSurfaceSize.y-t.Y(10.0f))break;
         ImGui::SetNextWindowPos({right,y},ImGuiCond_Always,{1,0});
         ImGui::SetNextWindowSize({width,height},ImGuiCond_Always);
@@ -679,6 +681,7 @@ void RenderHome(const HelpyImGuiTheme::Theme& theme){
     if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Your account, characters and loadouts");
     ImGui::SetNextWindowSize({std::min(theme.X(440),ImGui::GetIO().DisplaySize.x-theme.X(24)),0},ImGuiCond_Appearing);
     ImGui::SetNextWindowSizeConstraints({0,0},{ImGui::GetIO().DisplaySize.x-theme.X(24),ImGui::GetIO().DisplaySize.y-theme.Y(24)});
+    HelpyImGuiTheme::CenterNextWindow();
     if(ImGui::BeginPopup("Home quick settings")){
         ImGui::SeparatorText("Quick settings");RuneSchemaSettingsPanel::QuickSettings();
 #if defined(HELPY_PREVIEW)
@@ -825,7 +828,7 @@ void RenderRuntimeBadge(const HelpyImGuiTheme::Theme& t,float logicalSize) {
         PS::HelpyImGuiTheme::BeginDetailsTooltip();ImGui::PushTextWrapPos(ImGui::GetCursorPosX()+t.X(360));
         HelpyImGuiTheme::DetailsTextUnformatted(HelpyEnvironment::Label());ImGui::PushStyleColor(ImGuiCol_Text,status);HelpyImGuiTheme::DetailsText("%s",ready?"Runtime connected":"Runtime unavailable");ImGui::PopStyleColor();ImGui::Separator();
         HelpyImGuiTheme::DetailsText("Session: %s",network.Session.c_str());HelpyImGuiTheme::DetailsTextUnformatted(network.Health.c_str());
-        HelpyImGuiTheme::DetailsTextUnformatted("Click for Runtime, Attributions and Legal");HelpyImGuiTheme::DetailsTextDisabled("F2  close / reopen");
+        HelpyImGuiTheme::DetailsTextUnformatted("Click for Runtime, Attributions and Legal");HelpyImGuiTheme::DetailsTextDisabled("%s",HelpySettings::HotkeyHint().c_str());
         ImGui::PopTextWrapPos();PS::HelpyImGuiTheme::EndDetailsTooltip();
     }
 }
@@ -1097,6 +1100,30 @@ HelpyImGuiTheme::Theme BuiltinColorPreset(int index) {
     return t;
 }
 
+void RenderAuthorToolsDownload(){
+    ImGui::SeparatorText("Authoring tools");
+    ImGui::TextWrapped("Download the cache builders and instructions. Drop your mod ZIP onto Build-Helpy-Cache.cmd for a progress-guided Windows build, or use the Bash script. Keep the target game closed.");
+    ImGui::BeginDisabled(HelpyDownloads::Busy());
+    if(HelpyImGuiTheme::SoftButton("Download authoring tools ZIP"))HelpyDownloads::StartAuthorTools();
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::AuthorToolsDownload=HelpyPreviewHooks::LastRect();
+#endif
+    ImGui::EndDisabled();
+    if(ImGui::GetContentRegionAvail().x>HelpyImGuiTheme::Current.X(420))ImGui::SameLine();
+    if(HelpyImGuiTheme::SoftButton("Open authoring-tools folder")){
+        const auto folder=HelpyDownloads::AuthorToolsFolder();std::error_code error;std::filesystem::create_directories(folder,error);
+        if(!error)ShellExecuteW(nullptr,L"open",folder.c_str(),nullptr,nullptr,SW_SHOWNORMAL);
+        else PushToast("Could not open the authoring-tools folder: "+error.message(),4);
+    }
+    ImGui::TextLinkOpenURL("Usage walkthrough","https://gh0sted5456-us.github.io/RuneSchema/modders/offline-helpy-cache/");
+    if(HelpyDownloads::Busy()){
+        ImGui::TextDisabled("Downloads: %u / %u",HelpyDownloads::Completed(),HelpyDownloads::Total());ImGui::SameLine();
+        if(ImGui::SmallButton("Cancel download"))HelpyDownloads::Cancel();
+    }
+    if(!HelpyDownloads::Current().Status.empty())ImGui::TextWrapped("%s",HelpyDownloads::Current().Status.c_str());
+    if(!HelpyDownloads::Current().AuthorTools.empty())ImGui::TextDisabled("Saved: RuneSchema-Authoring-Tools.zip");
+    ImGui::Spacing();
+}
 void RenderIconCacheSettings(bool advanced,bool expanded=false) {
     if(!expanded&&!ImGui::CollapsingHeader("Item cache"))return;
     CatalogProgressView::Render(SpawnToolsPanel::UiSnapshot);
@@ -1115,7 +1142,7 @@ void RenderIconCacheSettings(bool advanced,bool expanded=false) {
     if(advanced&&persistent){int megabytes=HelpyRuntimePreferences::IconCacheLimitMB.load();
         if(ImGui::InputInt("Cache limit (MB)",&megabytes,16,128)){HelpyRuntimePreferences::IconCacheLimitMB.store(std::clamp(megabytes,1,16384));HelpyImGuiTheme::SaveCurrent();}}
     ImGui::EndDisabled();
-    static ItemIconCache::DiskStats stats{};static std::future<ItemIconCache::DiskStats> statsWorker;static bool measured=false;static std::filesystem::path measuredFolder;
+    static ItemIconCache::DiskStats stats{};static PS::ProcessExitFuture<ItemIconCache::DiskStats> statsWorker;static bool measured=false;static std::filesystem::path measuredFolder;
     const auto folder=ItemIconCache::ActiveDiskFolder();if(folder!=measuredFolder){measured=false;stats={};}
     if(statsWorker.valid()&&statsWorker.wait_for(std::chrono::seconds(0))==std::future_status::ready){try{stats=statsWorker.get();measured=folder==measuredFolder;}catch(...){measured=false;}}
     if(measured)ImGui::Text("%.2f MB / %zu cached icons",static_cast<double>(stats.Bytes)/(1024.0*1024.0),stats.Files);else ImGui::TextDisabled(statsWorker.valid()?"Measuring cache usage…":"Cache usage not measured");
@@ -1187,7 +1214,7 @@ void RenderDiagnosticsSettings(const HelpyImGuiTheme::Theme& t) {
     changed|=ImGui::SliderInt("Maximum visible toasts",&theme.diagnosticToastLimit,1,10);
     ImGui::SetNextItemWidth(t.X(250));
     changed|=ImGui::SliderInt("Toast duration (seconds)",&theme.diagnosticToastDuration,2,15);
-    ImGui::TextWrapped("Repeated messages are grouped and overflowing notifications are summarized. F2-closed notifications remain click-through and do not steal game focus.");
+    ImGui::TextWrapped("Repeated messages are grouped and overflowing notifications are summarized. Notifications while Helpy is closed remain click-through and do not steal game focus.");
     if(ImGui::SmallButton("Reset notification defaults")){
         const HelpyImGuiTheme::Theme defaults{};
         theme.diagnosticToastsEnabled=defaults.diagnosticToastsEnabled;
@@ -1220,7 +1247,7 @@ void RenderDiagnosticsSettings(const HelpyImGuiTheme::Theme& t) {
     ImGui::TextWrapped("The oldest saved sessions are pruned when any limit is reached. Original RuneSchema logs and mute rules are not deleted.");
     if(!DiagnosticHistory.Error().empty())ImGui::TextColored(t.warning,"%s",DiagnosticHistory.Error().c_str());
     if(ImGui::SmallButton("Clear saved sessions"))ImGui::OpenPopup("Delete diagnostic history?");
-    if(ImGui::BeginPopupModal("Delete diagnostic history?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
+    if(HelpyImGuiTheme::BeginCenteredModal("Delete diagnostic history?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
         ImGui::TextWrapped("Delete previously saved diagnostic sessions? This does not delete RuneSchema.log or persistent mute rules.");
         if(ImGui::Button("Delete saved history")){DiagnosticHistory.ClearHistory();ImGui::CloseCurrentPopup();}
         ImGui::SameLine();if(ImGui::Button("Cancel"))ImGui::CloseCurrentPopup();
@@ -1340,7 +1367,7 @@ void RenderSettings(const HelpyImGuiTheme::Theme& t) {
             ImGui::SameLine();
             if(HelpyImGuiTheme::SoftButton("Delete"))ImGui::OpenPopup("Delete color preset?");
         }
-        if(ImGui::BeginPopupModal("Delete color preset?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
+        if(HelpyImGuiTheme::BeginCenteredModal("Delete color preset?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
             const auto custom=selectedPreset>=builtinCount?static_cast<size_t>(selectedPreset-builtinCount):userPresets.size();
             if(custom<userPresets.size())ImGui::TextWrapped("Delete custom color preset \"%s\"?",userPresets[custom].Name.c_str());
             if(HelpyImGuiTheme::SoftButton("Delete preset")&&custom<userPresets.size()) {
@@ -1457,11 +1484,11 @@ void RenderSettings(const HelpyImGuiTheme::Theme& t) {
     LiveLogPanel::RenderColors();
 
     ImGui::Dummy(ImVec2(1,t.Y(8.0f)));ImGui::SeparatorText("Theme file & reset");
-    if(HelpyImGuiTheme::SoftButton("Reload ui.jsonc (F5)")){HelpyImGuiTheme::RequestReload();pendingSave=false;}ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Open ui.jsonc")){const auto path=HelpyImGuiTheme::FilePath();ShellExecuteW(nullptr,L"open",path.c_str(),nullptr,path.parent_path().c_str(),SW_SHOWNORMAL);}ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Reset to RuneSchema defaults"))ImGui::OpenPopup("Reset RuneSchema UI?");
-    if(ImGui::BeginPopupModal("Reset RuneSchema UI?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {ImGui::TextWrapped("Restore all RSMK UI colors, typography, scaling, spacing, icon/card sizing, and icon cache limit to the shipped RuneSchema defaults?");if(HelpyImGuiTheme::SoftButton("Reset defaults")){HelpyImGuiTheme::ResetDefaults();ItemGridPicker::ResetViewPreference();SidebarWidthLogical=-1.0f;pendingSave=false;ImGui::CloseCurrentPopup();}ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Cancel"))ImGui::CloseCurrentPopup();ImGui::EndPopup();}
+    if(HelpyImGuiTheme::SoftButton("Reload ui.jsonc")){HelpyImGuiTheme::RequestReload();pendingSave=false;}ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Open ui.jsonc")){const auto path=HelpyImGuiTheme::FilePath();ShellExecuteW(nullptr,L"open",path.c_str(),nullptr,path.parent_path().c_str(),SW_SHOWNORMAL);}ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Reset to RuneSchema defaults"))ImGui::OpenPopup("Reset RuneSchema UI?");
+    if(HelpyImGuiTheme::BeginCenteredModal("Reset RuneSchema UI?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {ImGui::TextWrapped("Restore all RSMK UI colors, typography, scaling, spacing, icon/card sizing, and icon cache limit to the shipped RuneSchema defaults?");if(HelpyImGuiTheme::SoftButton("Reset defaults")){HelpyImGuiTheme::ResetDefaults();ItemGridPicker::ResetViewPreference();SidebarWidthLogical=-1.0f;pendingSave=false;ImGui::CloseCurrentPopup();}ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Cancel"))ImGui::CloseCurrentPopup();ImGui::EndPopup();}
     ImGui::TextWrapped("%s",HelpyImGuiTheme::Status.c_str());if(pendingSave&&!ImGui::IsAnyItemActive()){HelpyImGuiTheme::SaveCurrent();pendingSave=false;}
 
-    ImGui::Dummy(ImVec2(1,t.Y(12.0f)));ImGui::SeparatorText("Hotkeys");ImGui::Text("F2");ImGui::SameLine(t.X(70.0f));ImGui::TextUnformatted("Toggle RSMK");ImGui::Text("F5");ImGui::SameLine(t.X(70.0f));ImGui::TextUnformatted("Reload live skin");
+    ImGui::Dummy(ImVec2(1,t.Y(12.0f)));ImGui::SeparatorText("Hotkeys");ImGui::TextUnformatted(HelpySettings::HotkeyHint().c_str());ImGui::TextDisabled("Change it in Home > Quick settings.");
 }
 void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
     if(!HelpyNavigation::Available(CurrentPage,t.workspaces,HelpyEnvironment::Server())){
@@ -1660,6 +1687,7 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
                         ImGui::EndTabBar();
                     }}break;
                 case Page::Tools:
+                    RenderAuthorToolsDownload();
                     {auto selectedSection=CurrentTool;
 #if defined(HELPY_PREVIEW)
                     if(PreviewSelectSections)selectedSection=PreviewWantedTool;
@@ -1705,8 +1733,8 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
         const ImVec2 cartMax{MainSurfacePosition.x+MainSurfaceSize.x-cartPad,MainSurfacePosition.y+MainSurfaceSize.y-cartPad};
         ImGui::SetNextWindowSizeConstraints({std::min(t.X(240),cartMax.x-cartMin.x),std::min(t.Y(220),cartMax.y-cartMin.y)},
             {std::max(1.f,cartMax.x-cartMin.x),std::max(1.f,cartMax.y-cartMin.y)});
-        ImGui::SetNextWindowSize(ImVec2(t.X(480),t.Y(440)),ImGuiCond_FirstUseEver);
-        ImGui::SetNextWindowPos(ImVec2(MainSurfacePosition.x+std::max(0.0f,MainSurfaceSize.x-t.X(500)),MainSurfacePosition.y+t.Y(95)),ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(t.X(480),t.Y(540)),ImGuiCond_FirstUseEver);
+        HelpyImGuiTheme::CenterNextWindow();
         if(ImGui::Begin("Your cart",&SharedCartVisible,ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_NoSavedSettings)){
             const auto position=ImGui::GetWindowPos(),size=ImGui::GetWindowSize();
             const ImVec2 fitted{std::clamp(position.x,cartMin.x,std::max(cartMin.x,cartMax.x-size.x)),std::clamp(position.y,cartMin.y,std::max(cartMin.y,cartMax.y-size.y))};
@@ -1729,7 +1757,11 @@ bool HelpyStandaloneWindow::Start() {
 void HelpyStandaloneWindow::Toggle(){if(m_threadId)PostThreadMessageW(m_threadId,ToggleMessage,0,0);}
 void HelpyStandaloneWindow::PollHotkey(bool down){
     const auto foreground=GetForegroundWindow();
-    if(Hotkey.Poll(down)&&HelpyPopupInput::CanToggle(GameWindow(foreground),OwnsWindow(foreground)))Toggle();
+    if(!Hotkey.Poll(down))return;
+    const int key=HelpySettings::Hotkey.load();
+    const bool editing=ImGui::GetCurrentContext()&&ImGui::GetIO().WantTextInput&&(key<VK_F1||key>VK_F24);
+    const bool modified=(GetAsyncKeyState(VK_CONTROL)|GetAsyncKeyState(VK_MENU)|GetAsyncKeyState(VK_SHIFT)|GetAsyncKeyState(VK_LWIN)|GetAsyncKeyState(VK_RWIN))&0x8000;
+    if(HelpyPopupInput::CanToggle(GameWindow(foreground),OwnsWindow(foreground),editing,modified))Toggle();
 }
 void HelpyStandaloneWindow::ReloadTheme(){if(m_threadId)PostThreadMessageW(m_threadId,ReloadMessage,0,0);}
 void HelpyStandaloneWindow::Shutdown(){if(!m_thread.joinable())return;m_stop=true;HelpyIconPacks::Progress.Cancel=true;if(m_threadId)PostThreadMessageW(m_threadId,StopMessage,0,0);m_thread.join();ModsPanel::Shutdown();HelpyIconPacks::Shutdown();LiveLogPanel::Shutdown();m_threadId=0;m_ready=false;}
@@ -1743,6 +1775,9 @@ bool HelpyStandaloneWindow::OpenPopup() {
     if(m_cacheWindow&&HelpyIconPacks::Detached&&!HelpyTaskbar::Current.Contains(HelpyTaskbar::Window::IconCache))ShowWindow(m_cacheWindow,SW_SHOWNOACTIVATE);
     for(size_t i=0;i<m_workspaces.size();++i)if(m_workspaces[i].Window&&WorkspaceDetached(i)&&!HelpyTaskbar::Current.Contains(WorkspaceTask(i)))ShowWindow(m_workspaces[i].Window,SW_SHOWNOACTIVATE);
     SetForegroundWindow(m_hwnd);SetFocus(m_hwnd);
+#if !defined(HELPY_PREVIEW)
+    if(!LazyCatalog::LocalSubmit)HelpyCachedCatalog::Configure();
+#endif
     LazyCatalog::FirstOpen(SpawnToolRequests::CurrentGeneration());QueuePlayerRefresh(true);return true;
 }
 void HelpyStandaloneWindow::ClosePopup(){
@@ -1796,7 +1831,7 @@ void HelpyStandaloneWindow::ThreadMain() {
     LoadBrandTextures(m_device);
     ImGui::StyleColorsDark();ImGui_ImplWin32_Init(m_hwnd);ImGui_ImplDX11_Init(m_device,m_context);ShowWindow(m_hwnd,SW_HIDE);UpdateWindow(m_hwnd);
     m_publishedWindow=m_hwnd;
-    // A dedicated host has no UnrealWindow/F2 entry point. Expose a normal
+    // A dedicated host has no UnrealWindow/shortcut entry point. Expose a normal
     // taskbar window without taking focus from its launcher or console.
     if(HelpyEnvironment::Server()){
         CurrentPage=Page::DedicatedServer;
@@ -1826,15 +1861,14 @@ void HelpyStandaloneWindow::ThreadMain() {
         ShowWindow(m_hwnd,SW_SHOWNOACTIVATE);m_visible=true;
         LazyCatalog::FirstOpen(SpawnToolRequests::CurrentGeneration());
     }
-    MSG msg{};bool done=false,themeKeyDown=false;HelpyFramePacing pacing;
+    MSG msg{};bool done=false;int boundKey=HelpySettings::Hotkey.load();HelpyFramePacing pacing;
     while(!done&&!m_stop.load()) {
         // Hotkeys belong to Helpy's window thread. No engine tick callback,
         // viewport input hook, or UE4SS C++ ABI is needed by this plugin.
-        PollHotkey((GetAsyncKeyState(VK_F2)&0x8000)!=0);
-        const bool themeDown=(GetAsyncKeyState(VK_F5)&0x8000)!=0;
+        const int key=HelpySettings::Hotkey.load();const bool down=(GetAsyncKeyState(key)&0x8000)!=0;
+        // A key held while rebinding must be released before it can toggle.
+        if(key!=boundKey){Hotkey.Poll(down);boundKey=key;}else PollHotkey(down);
         const HWND foreground=GetForegroundWindow();
-        if(themeDown&&!themeKeyDown&&(OwnsWindow(foreground)||GameWindow(foreground)))HelpyImGuiTheme::RequestReload();
-        themeKeyDown=themeDown;
         while(PeekMessageW(&msg,nullptr,0,0,PM_REMOVE)) {
             if(msg.message==WM_QUIT){done=true;break;}
             if(msg.hwnd==nullptr&&msg.message==ToggleMessage) {
@@ -1843,8 +1877,9 @@ void HelpyStandaloneWindow::ThreadMain() {
             }
             if(msg.hwnd==nullptr&&msg.message==ReloadMessage){HelpyImGuiTheme::RequestReload();continue;}
             if(msg.hwnd==nullptr&&msg.message==StopMessage){done=true;break;}
-            if(msg.hwnd==m_hwnd&&msg.wParam==VK_F2&&(msg.message==WM_KEYDOWN||msg.message==WM_KEYUP)) {
-                if(msg.message==WM_KEYDOWN){if(Hotkey.Press())ClosePopup();}else Hotkey.Release();
+            const bool editing=io.WantTextInput&&(boundKey<VK_F1||boundKey>VK_F24);
+            if(OwnsWindow(msg.hwnd)&&msg.wParam==boundKey&&!editing&&(msg.message==WM_KEYDOWN||msg.message==WM_KEYUP)) {
+                PollHotkey(msg.message==WM_KEYDOWN);
                 continue;
             }
             TranslateMessage(&msg);DispatchMessageW(&msg);
@@ -1995,6 +2030,10 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
         }}seen=++revision;return true;};
     LazyCatalog::ConfigureRemote([&](nlohmann::json request){queries.push_back(std::move(request));return true;},[](int,uint64_t){});
     RuneSchemaSettingsPanel::Remote=[](const nlohmann::json& request,nlohmann::json& reply){
+        if(request.value("Action",std::string{})=="CrashDumpRead"||request.value("Action",std::string{})=="CrashDumpSave"){
+            static bool full=false;if(request.at("Action")=="CrashDumpSave")full=request.at("FullMemoryDump").get<bool>();
+            reply={{"Ok",true},{"ExpectedContents","preview-crash-settings"},{"FullMemoryDump",full},{"EnableDumping",true},{"RestartRequired",true},{"Status","Preview only; no UE4SS configuration was changed."}};return true;
+        }
         if(request.value("Action",std::string{})=="AdditionalLoggingRead"){
             reply={{"Ok",true},{"ExpectedContents","preview"},{"Active",false},{"Document",{{"enabled",false},{"filePaths",false},{"region",false},{"networkRates",false},{"savePaths",false},{"averageLatency",false}}}};return true;
         }
@@ -2012,8 +2051,8 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
         }
         if(request.value("Action",std::string{})!="SettingsRead")return false;
         reply={{"Ok",true},{"ExpectedContents","preview"},{"Path","Preview only / settings/settings.ini"},
-            {"Document",{{"advancedLogging",false},{"archiveLogs",false},{"autoUpdateMappings",true},{"authoringTools",true},{"persistence",{{"allowCorruptCharacterEntry",false},{"quests",true}}}}},
-            {"Editable",{{"/advancedLogging",false},{"/archiveLogs",false},{"/autoUpdateMappings",true},{"/authoringTools",true},{"/persistence/allowCorruptCharacterEntry",false},{"/persistence/quests",true}}},
+            {"Document",{{"helpyHotkey","F2"},{"advancedLogging",false},{"archiveLogs",false},{"autoUpdateMappings",true},{"authoringTools",true},{"persistence",{{"allowCorruptCharacterEntry",false},{"quests",true}}}}},
+            {"Editable",{{"/helpyHotkey","F2"},{"/advancedLogging",false},{"/archiveLogs",false},{"/autoUpdateMappings",true},{"/authoringTools",true},{"/persistence/allowCorruptCharacterEntry",false},{"/persistence/quests",true}}},
             {"BypassStatus","Disabled for this preview session"}};return true;
     };
     SpawnToolsPanel::SyncCartWorld();SpawnToolsPanel::SelectedPlayer="preview-player";
@@ -2164,7 +2203,10 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 BYTE glassOpacity=0;DWORD glassFlags=0;COLORREF glassKey=0;
                 if(!GetLayeredWindowAttributes(m_hwnd,&glassKey,&glassOpacity,&glassFlags)||glassOpacity!=static_cast<BYTE>(std::clamp(HelpyImGuiTheme::Current.windowOpacity,.6f,1.f)*255)||HelpyBackgrounds::Opaque())throw std::runtime_error("Clear glass must restore configured native transparency");
             }
-            for(const auto& [page,name]:pairs){CurrentPage=page;for(int i=0;i<4;++i)RenderFrame();PreviewCapture=output/(std::string(name)+".png");RenderFrame();PreviewCapture.clear();}
+            for(const auto& [page,name]:pairs){CurrentPage=page;for(int i=0;i<4;++i)RenderFrame();
+                if(page==Page::Tools){const auto button=HelpyPreviewHooks::AuthorToolsDownload;
+                    if(button.z<=button.x||button.x<0||button.y<0||button.z>width||button.w>height)throw std::runtime_error("Authoring-tools download control is missing or clipped");}
+                PreviewCapture=output/(std::string(name)+".png");RenderFrame();PreviewCapture.clear();}
             {
                 StructuredDiagnostic::Record record;
                 record.EventId="preview-e1";record.SessionId="preview";record.Timestamp="2026-10-23T12:30:00.000Z";
@@ -2196,6 +2238,9 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 for(int i=0;i<3;++i)RenderFrame();PreviewCapture=output/"diagnostics-report-review.png";RenderFrame();PreviewCapture.clear();
                 ImGui::ClosePopupsOverWindow(nullptr,false);DiagnosticsPanel::Current=DiagnosticsPanel::View::LiveLog;DiagnosticsPanel::RequestedTab=2;
                 for(int i=0;i<3;++i)RenderFrame();
+                LiveLogPanel::PreviewOptions=true;for(int i=0;i<3;++i)RenderFrame();
+                PreviewCapture=output/"diagnostics-crash-capture.png";RenderFrame();PreviewCapture.clear();
+                LiveLogPanel::PreviewOptions=false;ImGui::ClosePopupsOverWindow(nullptr,false);
             }
             {
                 using namespace ModsPanel;const auto oldSnapshot=Snapshot,oldRows=Rows;const auto oldStatus=Status;const auto oldHealth=Health;const auto oldRevision=HealthRevision;
@@ -2479,6 +2524,11 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 // receives clicks over its own player rows, not the map beneath.
                 Hooks::Mouse={Hooks::Map.x+(Hooks::Map.z-Hooks::Map.x)*.8f,Hooks::Map.y+(Hooks::Map.w-Hooks::Map.y)*.75f};
                 Hooks::RightDown=true;RenderFrame();Hooks::RightDown=false;for(int i=0;i<4;++i)RenderFrame();
+                if(!MapPanel::Data.Popup||Hooks::MapPopupWindow.x<0||Hooks::MapPopupWindow.y<0||Hooks::MapPopupWindow.z>width||Hooks::MapPopupWindow.w>height)
+                    throw std::runtime_error("Responsive map actions are missing or clipped");
+                if(std::abs((Hooks::MapOperationRow.x+Hooks::MapOperationRow.z)-(Hooks::MapOptionsBody.x+Hooks::MapOptionsBody.z))>3)
+                    throw std::runtime_error("Responsive map mode controls are not centered");
+                PreviewCapture=output/"map-options-responsive.png";RenderFrame();PreviewCapture.clear();
                 MapPanel::Data.Operation=1;MapPanel::Data.BuildingsWanted=true;MapPanel::Data.BuildingsOffset=0;for(int i=0;i<5;++i)RenderFrame();
                 click(Hooks::BuildingBrowse);
                 if(!MapPanel::Data.BuildingBrowserOpen||Hooks::BuildingUse.w>ImGui::GetIO().DisplaySize.y||Hooks::BuildingClose.z>ImGui::GetIO().DisplaySize.x)
@@ -2520,6 +2570,7 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 if(HelpyIconPacks::Chrome.Maximized||std::abs((originalWindow.z-originalWindow.x)-(restoredWindow.z-restoredWindow.x))>1)throw std::runtime_error("Restore did not retain the cache window size");
                 click(Hooks::WindowControls.at("Icon cache##rsmk-cache/minimize"));if(!HelpyTaskbar::Current.Contains(HelpyTaskbar::Window::IconCache))throw std::runtime_error("Title-bar minimize did not reach the Helpy taskbar");
                 click(Hooks::AuthoringButtons.at("Restore icon cache"));
+                if(!(Hooks::CacheImport.y<Hooks::CacheBuild.y&&Hooks::CacheBuild.y<Hooks::CacheExport.y))throw std::runtime_error("Cache controls must flow from import through optional build to export");
                 click(Hooks::CacheAdvanced);PreviewCapture=output/"icon-cache-advanced.png";RenderFrame();PreviewCapture.clear();
                 click(Hooks::CacheAdvanced);click(Hooks::CacheDetach);
                 if(!m_cacheWindow||!m_cacheTarget||!m_cacheSwapChain)throw std::runtime_error("Cache window failed to detach into a native resizable surface");
@@ -2714,6 +2765,39 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                         check(cart.Entries().size()==1&&cart.Payload()[0]["Count"]==(heading?8:4)&&!cart.Delivery(),"Reorder did not stage sent quantities without delivering");
                     }
                     ItemGridPicker::ClearSharedCart();mouse({-100,-100},false,3);
+                    check(items.size()>2,"Cart selection fixture needs three items");
+                    const auto secondPath=items[1].at("Path").get<std::string>(),thirdPath=items[2].at("Path").get<std::string>();
+                    for(int i=0;i<3;++i)check(cart.Add(items[i]),"Multi-select fixture could not stage items");
+                    SharedCartVisible=true;CurrentPage=Page::Map;mouse({-100,-100},false,3);
+                    for(const auto& entry:cart.Entries()){
+                        const auto card=Hooks::CartRects.at(entry.Path),select=Hooks::CartChecks.at(entry.Path),quantity=Hooks::CartQuantities.at(entry.Path);
+                        check(select.y>=card.w&&std::abs(select.y-quantity.y)<=1.f,"Cart selection must share the quantity row below its card");
+                        check(select.z<=quantity.x&&quantity.z<=card.z+1.f,"Cart quantity controls overlap or extend past their card");
+                    }
+                    const auto click=[&](const ImVec4& rect){const auto at=center(rect);mouse(at,false);mouse(at,true);mouse(at,false,3);};
+                    click(Hooks::CartRects.at(stagedPath));check(cart.Selection().size()==1,"Cart click did not select one item");
+                    Hooks::ControlDown=true;click(Hooks::CartRects.at(secondPath));Hooks::ControlDown=false;RenderFrame();
+                    check(cart.Selection().size()==2,"Ctrl+click did not extend cart selection");
+                    click(Hooks::CartChecks.at(stagedPath));check(cart.Selection().size()==1&&cart.Selection().contains(secondPath),"Checkbox did not toggle one selected item");
+                    click(Hooks::CartMoveUp);check(cart.Entries()[0].Path==secondPath,"Move Up did not reorder selected cart entry");
+                    click(Hooks::CartMoveDown);check(cart.Entries()[1].Path==secondPath,"Move Down did not reorder selected cart entry");
+                    PreviewCapture=output/"cart-multi-selection.png";RenderFrame();PreviewCapture.clear();
+                    click(Hooks::CartExport);check(ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId),"Visible Export did not open preset form");
+                    {const auto at=center(Hooks::PresetDialog),expected=ImGui::GetMainViewport()->GetWorkCenter();check(std::abs(at.x-expected.x)<2&&std::abs(at.y-expected.y)<2,"Export preset form is not centered");}
+                    PreviewCapture=output/"cart-export-preset.png";RenderFrame();PreviewCapture.clear();
+                    ImGui::ClosePopupToLevel(0,true);mouse({-100,-100},false,3);
+                    click(Hooks::CartImport);check(ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId),"Visible Import did not open preset picker");
+                    {const auto at=center(Hooks::PresetDialog),expected=ImGui::GetMainViewport()->GetWorkCenter();check(std::abs(at.x-expected.x)<2&&std::abs(at.y-expected.y)<2,"Import preset form is not centered");}
+                    PreviewCapture=output/"cart-import-presets.png";RenderFrame();PreviewCapture.clear();
+                    ImGui::ClosePopupToLevel(0,true);mouse({-100,-100},false,3);
+                    click(Hooks::CartRemoveSelected);check(cart.Entries().size()==2&&!cart.Selection().size(),"Remove selected did not retain unselected items");
+                    cart.SelectAll();check(cart.BeginDelivery(1001),"Selected reorder fixture did not start");
+                    cart.CompleteDelivery(1001,{{"GrantResults",nlohmann::json::array({{{"Item",stagedPath},{"Count",1},{"State","Confirmed"}},{{"Item",thirdPath},{"Count",1},{"State","Rejected"}}})}});
+                    mouse({-100,-100},false,3);click(Hooks::DeliveryChecks.at(stagedPath));
+                    check(cart.OutcomeSelection().size()==1,"Delivery checkbox did not select confirmed item");
+                    click(Hooks::ReorderSelected);check(cart.Entries().size()==1&&cart.Entries()[0].Path==stagedPath&&!cart.Delivery(),"Reorder selected did not stage only confirmed selection");
+                    PreviewCapture=output/"cart-reorder-selected.png";RenderFrame();PreviewCapture.clear();
+                    ItemGridPicker::ClearSharedCart();SharedCartVisible=false;CurrentPage=Page::Items;mouse({-100,-100},false,3);
                 }
                 const auto drag=[&](ImVec2 from,ImVec2 to,const char* kind=nullptr,const char* capture=nullptr){const auto savedOrder=HelpyNavigationOrder::Orders;mouse(from,false);mouse(from,true);mouse(ImVec2(from.x+12,from.y+12),true);mouse(to,true,3);
                     if(kind){check(DragFeedback::LastFrame==ImGui::GetFrameCount()&&DragFeedback::Kind==kind&&!DragFeedback::Label.empty(),"Held drag card did not identify the current payload");const auto card=DragFeedback::Card;check(card.z>card.x&&card.w>card.y,"Held drag card has no visible bounds");}
@@ -2903,6 +2987,8 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 check(std::abs((Hooks::MapPopupWindow.x+Hooks::MapPopupWindow.z)*.5f-mapPopupCenter.x)<1&&std::abs((Hooks::MapPopupWindow.y+Hooks::MapPopupWindow.w)*.5f-mapPopupCenter.y)<1,"Map action details must be centered in Helpy's viewport");
                 MapPanel::Data.Definition=definitions[16];MapPanel::Data.Kind=2;MapPanel::Data.Permanent=false;for(int i=0;i<3;++i)RenderFrame();
                 for(int i=0;i<20&&(MapPanel::Data.ProbePending||MapPanel::Data.ProbeWanted||!MapPanel::Data.Ground.value("GroundAvailable",false));++i)RenderFrame();
+                check(std::abs((Hooks::MapOperationRow.x+Hooks::MapOperationRow.z)-(Hooks::MapOptionsBody.x+Hooks::MapOptionsBody.z))<3,"Map operation controls are not centered");
+                check(std::abs(Hooks::MapSearchField.x-Hooks::MapOptionsBody.x)<2&&std::abs(Hooks::MapSearchField.z-Hooks::MapOptionsBody.z)<2,"Map search field does not fill the symmetric body");
                 PreviewCapture=output/"map-spawn-ready.png";RenderFrame();PreviewCapture.clear();
                 check(Hooks::MapSpawn.w<=height,"Map action footer escaped the viewport");
                 mouse(center(Hooks::MapSpawn),true);mouse(center(Hooks::MapSpawn),false);
@@ -3231,6 +3317,9 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
 #endif
 
 void HelpyStandaloneWindow::RenderFrame() {
+#if !defined(HELPY_PREVIEW)
+    if(!LazyCatalog::LocalSubmit)HelpyCachedCatalog::Configure();
+#endif
     HelpyDownloads::Initialize();
     HelpyMapCache::Initialize();HelpyMapCache::Poll();HelpyWikiIcons::Initialize();
     if(PendingWikiInitialAssets&&!HelpyMapCache::Busy()&&HelpyMapCache::Current().Data&&!HelpyWikiIcons::Busy()){
@@ -3238,6 +3327,12 @@ void HelpyStandaloneWindow::RenderFrame() {
     }
     if(HelpyDownloads::Poll()){ReleaseBrandTextures(false);LoadBrandTextures(m_device);}
     const bool packWasBusy=HelpyIconPacks::Busy();HelpyIconPacks::Poll();if(packWasBusy&&!HelpyIconPacks::Busy()&&HelpyIconPacks::CompletionNotify)PushToast(HelpyIconPacks::Status,5.0);
+    static uint64_t importedReferences=0;
+    if(importedReferences!=HelpyIconPacks::ReferencesRevision){
+        importedReferences=HelpyIconPacks::ReferencesRevision;
+        NativeJournalCache::NextBundle={};NativeJournalCache::BundleStamp.clear();
+        auto& items=LazyCatalog::For(0);items.Cache.clear();if(items.Started)LazyCatalog::Retry(0);
+    }
     static uint64_t uiGeneration=0;
     const auto generation=SpawnToolRequests::CurrentGeneration();
     if(generation!=uiGeneration){LazyCatalog::ResetForGeneration(generation);uiGeneration=generation;}
@@ -3261,8 +3356,8 @@ void HelpyStandaloneWindow::RenderFrame() {
     // Revalidate in place; do not blank the Item Bay during this handoff.
     static auto nextPreviewCheck=std::chrono::steady_clock::time_point{};
     auto& previewCatalog=LazyCatalog::For(0);const auto previewNow=std::chrono::steady_clock::now();
-    if(previewCatalog.CachePreview&&!previewCatalog.Pending&&!previewCatalog.Refreshing&&HelpySourceCache::Ready()&&!HelpySourceCache::Current.Provisional&&HelpySourceCache::Current.Authoritative&&previewNow>=nextPreviewCheck){
-        nextPreviewCheck=previewNow+std::chrono::seconds(2);previewCatalog.Cache.clear();LazyCatalog::Retry(0);
+    if(HelpyRuntimePreferences::PassiveRefresh.load()&&previewCatalog.CachePreview&&!previewCatalog.Pending&&!previewCatalog.Refreshing&&previewNow>=nextPreviewCheck){
+        nextPreviewCheck=previewNow+std::chrono::seconds(15);previewCatalog.Cache.clear();LazyCatalog::Retry(0);
     }
 #endif
     RuntimeConnectionPanel::Poll();
@@ -3300,7 +3395,7 @@ void HelpyStandaloneWindow::RenderFrame() {
         POINT cursor{};if(GetCursorPos(&cursor))frameIo.AddMousePosEvent(float(cursor.x)-bayCanvas.X,float(cursor.y)-bayCanvas.Y);
     }
 #if defined(HELPY_PREVIEW)
-    if(HelpyPreviewHooks::MouseEnabled){frameIo.ConfigInputTrickleEventQueue=false;frameIo.AddFocusEvent(true);frameIo.AddMousePosEvent(HelpyPreviewHooks::Mouse.x,HelpyPreviewHooks::Mouse.y);frameIo.AddMouseButtonEvent(0,HelpyPreviewHooks::MouseDown);frameIo.AddMouseButtonEvent(1,HelpyPreviewHooks::RightDown);}
+    if(HelpyPreviewHooks::MouseEnabled){frameIo.ConfigInputTrickleEventQueue=false;frameIo.AddFocusEvent(true);frameIo.AddMousePosEvent(HelpyPreviewHooks::Mouse.x,HelpyPreviewHooks::Mouse.y);frameIo.AddMouseButtonEvent(0,HelpyPreviewHooks::MouseDown);frameIo.AddMouseButtonEvent(1,HelpyPreviewHooks::RightDown);frameIo.AddKeyEvent(ImGuiMod_Ctrl,HelpyPreviewHooks::ControlDown);}
 #endif
     ImGui::NewFrame();HelpyWikiIcons::Poll();
     if(!RuneSchemaProfile::Initialized)RuneSchemaProfile::Load(HostServices::StateDirectory());
@@ -3450,8 +3545,8 @@ bool HelpyStandaloneWindow::SyncItemBay(){
     if(!m_bayWindow){
         RECT parent{};GetWindowRect(m_hwnd,&parent);MONITORINFO monitor{sizeof(monitor)};GetMonitorInfoW(MonitorFromWindow(m_hwnd,MONITOR_DEFAULTTONEAREST),&monitor);
         const int width=std::min(720,std::max(480,int(monitor.rcWork.right-monitor.rcWork.left))),height=std::min(700,std::max(360,int(monitor.rcWork.bottom-monitor.rcWork.top)));
-        const int x=std::clamp(int(parent.right+12),int(monitor.rcWork.left),std::max(int(monitor.rcWork.left),int(monitor.rcWork.right)-width));
-        const int y=std::clamp(int(parent.top),int(monitor.rcWork.top),std::max(int(monitor.rcWork.top),int(monitor.rcWork.bottom)-height));
+        const int x=std::clamp(int((parent.left+parent.right-width)/2),int(monitor.rcWork.left),std::max(int(monitor.rcWork.left),int(monitor.rcWork.right)-width));
+        const int y=std::clamp(int((parent.top+parent.bottom-height)/2),int(monitor.rcWork.top),std::max(int(monitor.rcWork.top),int(monitor.rcWork.bottom)-height));
         wchar_t windowClass[256]{};GetClassNameW(m_hwnd,windowClass,256);
         m_bayWindow=CreateWindowExW(WS_EX_TOOLWINDOW,windowClass,L"RSMK - Item Bay",WS_OVERLAPPEDWINDOW,x,y,width,height,m_hwnd,nullptr,m_module,this);
         if(m_bayWindow)DragAcceptFiles(m_bayWindow,TRUE);
@@ -3487,8 +3582,8 @@ bool HelpyStandaloneWindow::SyncIconCache(){
     if(!m_cacheWindow){
         RECT parent{};GetWindowRect(m_hwnd,&parent);MONITORINFO monitor{sizeof(monitor)};GetMonitorInfoW(MonitorFromWindow(m_hwnd,MONITOR_DEFAULTTONEAREST),&monitor);
         const int width=std::min(640,int(monitor.rcWork.right-monitor.rcWork.left)),height=std::min(520,int(monitor.rcWork.bottom-monitor.rcWork.top));
-        const int x=std::clamp(int(parent.left+32),int(monitor.rcWork.left),std::max(int(monitor.rcWork.left),int(monitor.rcWork.right)-width));
-        const int y=std::clamp(int(parent.top+32),int(monitor.rcWork.top),std::max(int(monitor.rcWork.top),int(monitor.rcWork.bottom)-height));
+        const int x=std::clamp(int((parent.left+parent.right-width)/2),int(monitor.rcWork.left),std::max(int(monitor.rcWork.left),int(monitor.rcWork.right)-width));
+        const int y=std::clamp(int((parent.top+parent.bottom-height)/2),int(monitor.rcWork.top),std::max(int(monitor.rcWork.top),int(monitor.rcWork.bottom)-height));
         wchar_t windowClass[256]{};GetClassNameW(m_hwnd,windowClass,256);
         m_cacheWindow=CreateWindowExW(WS_EX_TOOLWINDOW,windowClass,L"RSMK - Icon cache",WS_OVERLAPPEDWINDOW,x,y,width,height,m_hwnd,nullptr,m_module,this);
         if(m_cacheWindow)DragAcceptFiles(m_cacheWindow,TRUE);

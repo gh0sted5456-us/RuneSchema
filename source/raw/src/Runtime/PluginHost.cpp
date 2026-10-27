@@ -1,4 +1,5 @@
 #include "Runtime/PluginHost.h"
+#include "Core/MapPresentationCache.h"
 #include "Runtime/PluginCatalog.h"
 #include "Runtime/RuneSchemaPluginApi.h"
 #include "Runtime/MappingBackbone.h"
@@ -25,6 +26,7 @@
 #include "Core/CharacterEntryRecovery.h"
 #include "Runtime/QuickLoad.h"
 #include "Runtime/AdditionalLogging.h"
+#include "Core/CrashDumpConfiguration.h"
 #include "Runtime/ModManagerService.h"
 #include "Generator/HelpyRuntimePreferences.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
@@ -75,6 +77,12 @@ int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,ui
         }
         else if(action=="QuickLoadRead")result=QuickLoad::Read();
         else if(action=="AdditionalLoggingRead")result=AdditionalLogging::Read();
+        else if(action=="CrashDumpRead")result=CrashDumpConfiguration::Read(HostServices::ModDirectory().parent_path().parent_path());
+        else if(action=="CrashDumpSave"){
+            if(!size)return RS_PLUGIN_INVALID_ARGUMENT;
+            if(!response||capacity<RUNESCHEMA_PLUGIN_MAX_MESSAGE){*size=RUNESCHEMA_PLUGIN_MAX_MESSAGE;return RS_PLUGIN_BUFFER_TOO_SMALL;}
+            result=CrashDumpConfiguration::Save(HostServices::ModDirectory().parent_path().parent_path(),request);
+        }
         else if(action=="AdditionalLoggingSave"){
             if(!size)return RS_PLUGIN_INVALID_ARGUMENT;
             if(!response||capacity<RUNESCHEMA_PLUGIN_MAX_MESSAGE){*size=RUNESCHEMA_PLUGIN_MAX_MESSAGE;return RS_PLUGIN_BUFFER_TOO_SMALL;}
@@ -104,6 +112,7 @@ int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,ui
         else if(action=="IconCacheBuildStart"){HelpySourceCache::Requested=true;result={{"Accepted",!Storefront::IsDedicatedServer()&&IconCacheBuild::Start(request.value("Source",std::string{}))}};}
         else if(action=="IconCacheBuildCancel"){IconCacheBuild::Cancel();result={{"Accepted",true}};}
         else if(action=="IconCacheResetAccounting"){HelpyRuntimePreferences::IconCacheEpoch.fetch_add(1);result={{"Accepted",true}};}
+        else if(action=="CacheBundleImported"){AssetSearch::NotifyImportedCache();++MapPresentationCache::Revision;result={{"Accepted",true}};}
         else if(action=="AuthoringActivate")result=HelpyAuthoring::Bridge.Activate();
         else if(action=="AuthoringSubmit") {
             try {result=HelpyAuthoring::Bridge.Submit(request.at("Request"));}

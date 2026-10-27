@@ -22,6 +22,31 @@ Rejected or uncertain receipts are not reorderable; an inventory-review lock
 must be resolved first. Reorder is all-or-nothing within the normal 64-item /
 10000-per-item cart limits and refreshes validation for the staged items.
 
+## Selecting, arranging and sharing presets
+
+Click a cart card to select it. **Ctrl+click** adds or removes one card without
+clearing other selections; checkboxes beside each quantity do the same. **All** selects the full
+cart. **Up** and **Down** move the selection one position while preserving its
+order. **Remove selected** leaves the other entries untouched.
+
+**Give selected** sends only checked items to the chosen recipients.
+**Give all items** sends the full cart; it reads **Give items** when no selection
+is active. Both use the same delivery confirmation and
+inventory-review protections. Editing is locked during delivery.
+
+**Last delivery** has separate checkboxes and **Reorder selected**.
+Only confirmed deliveries can be selected. Reordering stages their actual sent
+quantities and never sends them automatically.
+
+The visible **Import...**, **Export...** and **Clear** buttons make presets
+accessible without More. Import lists the current profile's preset folder:
+select JSON/JSONC presets with checkboxes or Ctrl+click, then choose
+**Load selected presets**. **Open folder** lets you add shared preset files.
+Enable **Add to current cart** to merge them with staged items; leave it unchecked
+to replace the cart. Duplicate paths across presets combine quantities. Every
+file must validate and the combined result must fit the cart limits before
+anything changes. Export saves the full cart or only selected items.
+
 An unconfirmed result, timeout or world change stops the batch. Unconfirmed
 items stay staged; the UI shows delivery results and requires an explicit
 inventory-review acknowledgment before another delivery. It never retries a

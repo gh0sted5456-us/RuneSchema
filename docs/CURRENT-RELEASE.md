@@ -1,6 +1,7 @@
 # RuneSchema downloads and source updates
 
-The current source and downloadable DLL pair are **0.8.0.2**.
+The published download and maintained source use version **0.8.0.2**.
+Branch source also contains the October 27 maintenance changes listed below.
 [Read the changelog](CHANGELOG-0.8.0.2.md). This release includes the earlier
 0.8.0.1b source-only fixes as well as the current cache improvements.
 
@@ -22,6 +23,19 @@ The package uses one core DLL for Steam/Epic, Game Pass and servers, plus Helpy.
 [Previous release: 0.8.0.1](RELEASE-0.8.0.1.md)
 · [Historical changelog](CHANGELOG-0.8.0.0.md)
 · [Installation guide](INSTALLATION.md)
+
+## October 27 source update
+
+`main` and `experimental` include additional cache discovery/persistence fixes,
+cart selection and presets, map-cache export, bounded teleport ground probing,
+a configurable Helpy shortcut, diagnostic improvements and guarded server startup
+corrections. Read the [complete changelog since 0.8.0.1](CHANGELOG-0.8.0.2.md).
+
+These source updates retain version 0.8.0.2. They do not replace the October 25
+release ZIP or move its tag. Experimental registry-ID alignment remains disabled
+by default; source availability is not a default-enable or multiplayer readiness
+claim. The latest locally built maintenance DLL pair passed 248 core and 109
+Helpy tests. See the changelog for remaining live-game test boundaries.
 
 ## What changed
 

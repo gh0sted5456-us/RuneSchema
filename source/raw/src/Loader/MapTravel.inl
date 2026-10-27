@@ -4,6 +4,9 @@ namespace {
         PS::WeakObjectHandle World,Controller,Pawn,Anchor,Source,Service;
         PS::MapProjection::Projection Projection;PS::MapProjection::Point Point;
         PS::MapLanding::Position Landing;PS::MapTravel::Gate Gate;
+        PS::MapTravel::LandingProbe GroundProbe;
+        std::optional<double> TerrainReference;
+        std::vector<PS::WeakObjectHandle> TerrainIgnored;
         double Radius=0,HalfHeight=0,GroundZ=0;bool NearMarker=false;
         uint64_t Generation=0;std::chrono::steady_clock::time_point Next{},NextProgress{};
         std::string Phase;
@@ -15,6 +18,8 @@ namespace {
     void ToolMapTravelProgress(const char* phase,const char* status){
         if(!g_mapTravel)return;auto& job=*g_mapTravel;const auto now=std::chrono::steady_clock::now();
         if(job.Phase==phase&&now<job.NextProgress)return;
+        if(job.Phase!=phase)PS::ConsolidatedLog<LogLevel::Normal>(STR("[RuneSchema] [HELPY][MAP-TRAVEL] phase={} target=({:.0f},{:.0f}) elapsed_ms={}\n"),
+            PS::ToWideSafe(phase),job.Point.X,job.Point.Y,ToolMapTravelTime()-job.Gate.Began);
         job.Phase=phase;job.NextProgress=now+std::chrono::milliseconds(500);
         PS::SpawnToolRequests::Progress(status,{{"MapTravel",{{"Phase",phase},{"ElapsedSeconds",std::max<std::int64_t>(0,ToolMapTravelTime()-job.Gate.Began)/1000},
             {"Committed",job.Gate.Committed}}}});
@@ -33,6 +38,12 @@ namespace {
     }
     void ToolMapTravelFinish(const std::string& status,bool arrived=false){
         auto result=PS::SpawnToolRequests::Read();result["Status"]=status;
+        if(g_mapTravel){
+            if(arrived)PS::ConsolidatedLog<LogLevel::Normal>(STR("[RuneSchema] [HELPY][MAP-TRAVEL] arrived=true elapsed_ms={} status={}\n"),
+                ToolMapTravelTime()-g_mapTravel->Gate.Began,PS::ToWideSafe(status));
+            else PS::Log<LogLevel::Warning>(STR("[HELPY][MAP-TRAVEL] stopped committed={} elapsed_ms={} status={}\n"),
+                g_mapTravel->Gate.Committed,ToolMapTravelTime()-g_mapTravel->Gate.Began,PS::ToWideSafe(status));
+        }
         if(arrived&&g_mapTravel)if(auto* pawn=g_mapTravel->Pawn.Get();ToolMapTravelAlive(pawn)){
             const auto at=ActorHelper::GetActorLocation(static_cast<AActor*>(pawn));
             result["MapPoint"]={{"GroundAvailable",true},{"Location",{g_mapTravel->Landing.X,g_mapTravel->Landing.Y,g_mapTravel->GroundZ}}};
@@ -116,7 +127,8 @@ namespace {
     bool ToolMapTravelPump(UWorld* activeWorld){
         if(!g_mapTravel)return false;
         if(g_mapTravel->Generation!=PS::SpawnToolRequests::Generation.load()){ToolMapTravelReset();return false;}
-        const auto now=std::chrono::steady_clock::now();if(now<g_mapTravel->Next)return true;g_mapTravel->Next=now+std::chrono::milliseconds(100);
+        const auto now=std::chrono::steady_clock::now();if(now<g_mapTravel->Next)return true;
+        g_mapTravel->Next=now+std::chrono::milliseconds(g_mapTravel->Gate.Committed?100:20);
         try{
             auto& job=*g_mapTravel;auto* world=job.World.Get();auto* controller=job.Controller.Get();auto* pawnObject=job.Pawn.Get();auto* source=job.Source.Get();
             const bool valid=activeWorld&&world==activeWorld&&ToolMapTravelAlive(world)&&GetGameMode(activeWorld)&&ToolMapTravelAlive(controller)&&ToolMapTravelAlive(pawnObject)&&ToolMapTravelAlive(source)
@@ -136,31 +148,69 @@ namespace {
                     ToolMapTravelFinish(std::format("Teleported the selected player via native travel to X {:.0f}, Y {:.0f}, Z {:.0f}.",at.X(),at.Y(),at.Z()),true);
                 return true;
             }
-            if(step!=PS::MapTravel::Gate::Step::Probe){ToolMapTravelProgress("Preparing","Loading destination terrain...");return true;}
+            if(step!=PS::MapTravel::Gate::Step::Probe){job.GroundProbe={};job.TerrainReference.reset();job.TerrainIgnored.clear();ToolMapTravelProgress("Preparing","Loading destination terrain...");return true;}
             ToolMapTravelProgress("Checking ground","Checking safe landing and player clearance...");
+            bool groundContractFailed=false;
             try{
                 const auto candidates=PS::MapLanding::TravelCandidates(job.Point,job.NearMarker);
-                const auto candidate=candidates[job.Candidate++%candidates.size()];
-                std::map<std::pair<double,double>,double> heights;std::optional<double> reference;
-                // One footprint per tick: keep loading/cancel/UI responsive while searching nearby.
-                job.Landing=PS::MapLanding::ResolveNear(job.Projection,candidate,job.Radius,job.HalfHeight,false,[&](PS::MapProjection::Point sample,double top,double bottom){
-                    FVector hit{};std::string error;if(!UECustom::UKismetSystemLibrary::FindGroundSurface(activeWorld,FVector(sample.X,sample.Y,top),FVector(sample.X,sample.Y,bottom),{pawn},hit,error,reference))throw std::runtime_error(error.empty()?"No blocking ground surface":error);
-                    if(!reference)reference=hit.Z();
-                    heights[{sample.X,sample.Y}]=hit.Z();return PS::MapLanding::Position{hit.X(),hit.Y(),hit.Z()};
+                const auto candidate=candidates[job.Candidate%candidates.size()];
+                const auto deadline=std::chrono::steady_clock::now()+std::chrono::milliseconds(2);bool queried=false;
+                job.Landing=job.GroundProbe.Resolve(job.Projection,candidate,job.Radius,job.HalfHeight,[&](PS::MapProjection::Point sample,double top,double bottom,std::optional<double> reference){
+                    if(queried&&std::chrono::steady_clock::now()>=deadline)throw PS::MapTravel::LandingProbe::Yield{};
+                    queried=true;FVector hit{};std::string error;
+                    // Discover one terrain obstruction per slice, rather than
+                    // running up to sixteen full-height queries in one tick.
+                    if(!reference){
+                        if(!job.TerrainReference){
+                            std::vector<AActor*> ignored{pawn};
+                            for(const auto& handle:job.TerrainIgnored)if(auto* actor=handle.Get();ToolMapTravelAlive(actor)&&actor->IsA<AActor>())ignored.push_back(static_cast<AActor*>(actor));
+                            auto* landscape=ActorHelper::ResolveClass(TEXT("/Script/Landscape.LandscapeHeightfieldCollisionComponent"));
+                            if(!landscape){groundContractFailed=true;throw std::runtime_error("Terrain collision metadata is unavailable");}
+                            UObject* component=nullptr;
+                            const bool found=PS::Grounding::QuerySurface([&](bool complex){
+                                if(!error.empty())return false;
+                                return UECustom::UKismetSystemLibrary::LineTraceGround(activeWorld,FVector(sample.X,sample.Y,top),FVector(sample.X,sample.Y,bottom),ignored,hit,error,&component,complex);
+                            });
+                            if(!found){groundContractFailed=!error.empty();throw std::runtime_error(error.empty()?"No blocking terrain surface":error);}
+                            if(!ToolMapTravelAlive(component)||component->GetWorld()!=activeWorld){groundContractFailed=true;throw std::runtime_error("Terrain collision owner could not be verified");}
+                            if(component->IsA(landscape)){
+                                if(!std::isfinite(hit.X())||!std::isfinite(hit.Y())||!std::isfinite(hit.Z())||hit.Z()<bottom||hit.Z()>top||std::abs(hit.X()-sample.X)>1||std::abs(hit.Y()-sample.Y)>1){groundContractFailed=true;throw std::runtime_error("Terrain hit lies outside the destination column");}
+                                job.TerrainReference=hit.Z();
+                            }else{
+                                auto* actor=component->GetOuterPrivate();
+                                if(!ToolMapTravelAlive(actor)||!actor->IsA<AActor>()||actor->GetWorld()!=activeWorld||std::find(ignored.begin(),ignored.end(),actor)!=ignored.end()||job.TerrainIgnored.size()>=16){groundContractFailed=true;throw std::runtime_error("Destination terrain search could not advance safely");}
+                                job.TerrainIgnored.push_back(PS::WeakObject(actor));throw PS::MapTravel::LandingProbe::Yield{};
+                            }
+                        }
+                        reference=job.TerrainReference;
+                        if(std::chrono::steady_clock::now()>=deadline)throw PS::MapTravel::LandingProbe::Yield{};
+                    }
+                    if(!UECustom::UKismetSystemLibrary::FindGroundSurface(activeWorld,FVector(sample.X,sample.Y,top),FVector(sample.X,sample.Y,bottom),{pawn},hit,error,reference)){
+                        groundContractFailed=!error.empty();throw std::runtime_error(error.empty()?"No blocking ground surface":error);
+                    }
+                    return PS::MapLanding::Position{hit.X(),hit.Y(),hit.Z()};
                 });
+                if(queried&&std::chrono::steady_clock::now()>=deadline)return true;
                 std::string clearanceError;
                 const bool blocked=UECustom::UKismetSystemLibrary::CapsuleBlocked(activeWorld,FVector(job.Landing.X,job.Landing.Y,job.Landing.Z),job.Radius,job.HalfHeight,{pawn},clearanceError);
-                if(!clearanceError.empty())throw std::runtime_error(clearanceError);
+                if(!clearanceError.empty()){groundContractFailed=true;throw std::runtime_error(clearanceError);}
                 if(blocked)throw std::runtime_error("Player clearance blocked; checking nearby ground");
-                job.GroundZ=heights.at({job.Landing.X,job.Landing.Y});
-            }catch(const std::exception& error){job.LastGroundError=error.what();return true;}
+                job.GroundZ=job.GroundProbe.Hits[0].Z;
+            }catch(const PS::MapTravel::LandingProbe::Yield&){return true;}
+            catch(const std::exception& error){
+                if(groundContractFailed)throw;
+                job.LastGroundError=error.what();job.GroundProbe={};job.TerrainReference.reset();job.TerrainIgnored.clear();job.Candidate++;
+                job.Next=std::chrono::steady_clock::now()+std::chrono::milliseconds(100);return true;
+            }
             PS::SpawnToolRequests::Progress("Ground verified; starting native travel...",{{"MapPoint",{{"GroundAvailable",true},{"Location",{job.Landing.X,job.Landing.Y,job.GroundZ}}}}});
             if(ToolMapTravelTeleporting(pawn)){ToolMapTravelFinish("Another native journey started while preparing this destination; no additional teleport issued.");return true;}
             ActorHelper::FunctionCall rotation(pawn,TEXT("/Script/Engine.Actor:K2_GetActorRotation"));rotation.Invoke();const auto facing=rotation.Result<FRotator>();
             auto* service=job.Service.Get();if(!ToolMapTravelAlive(service))throw std::runtime_error("Native teleport service changed before departure");
             ActorHelper::FunctionCall teleport(service,ToolMapTravelContract(service));
+            // This destination is already activated and collision-checked; a
+            // second loading overlay can conceal native travel failures.
             teleport.Arg(TEXT("PlayerCharacter"),pawn).JsonArg(TEXT("TeleportParams"),{{"LocationName","None"},{"TargetLocation",{{"X",job.Landing.X},{"Y",job.Landing.Y},{"Z",job.Landing.Z}}},
-                {"TargetRotation",{{"Pitch",facing.GetPitch()},{"Yaw",facing.GetYaw()},{"Roll",facing.GetRoll()}}},{"bShowLoadingScreen",true},{"bNoCheck",false},{"bIsATest",false},{"TeleportationType","Teleport"},
+                {"TargetRotation",{{"Pitch",facing.GetPitch()},{"Yaw",facing.GetYaw()},{"Roll",facing.GetRoll()}}},{"bShowLoadingScreen",false},{"bNoCheck",false},{"bIsATest",false},{"TeleportationType","Teleport"},
                 {"bVFXOnTeleportStart",true},{"bVFXOnTeleportEnd",true},{"bDropAnyLoadoutExclusiveEquipment",false}});
             if(!job.Gate.Commit(ToolMapTravelTime()))throw std::runtime_error("Map travel preparation expired before departure");
             // The unbound dynamic result delegate is a valid zero-initialized

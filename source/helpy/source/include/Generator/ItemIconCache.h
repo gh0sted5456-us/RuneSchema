@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/ProcessExitFuture.h"
 
 #include "Generator/ToolRequest.h"
 #include "Core/HelpySourceCache.h"
@@ -35,7 +36,7 @@ namespace detail {
     constexpr std::size_t MaxQueued=32;
     constexpr std::size_t MaxResidentTextures=256;
     constexpr int ProtectRecentFrames=8;
-    struct DiskRead {std::string Icon,Source;std::filesystem::path File;uint64_t Epoch=0;int Width=0,Height=0;std::vector<unsigned char> Pixels;bool Valid=false;};
+    struct DiskRead {std::string Icon,Source;std::filesystem::path File;uint64_t Epoch=0;int Width=0,Height=0;std::vector<unsigned char> Pixels;bool Valid=false,Presentation=false;};
     struct CacheState {
         std::unordered_map<std::string,ImTextureData*> Textures;
         std::unordered_map<std::string,std::string> TextureSourceKeys;
@@ -48,7 +49,7 @@ namespace detail {
         std::uint64_t Generation=0;
         int CacheMode=-1;
         std::chrono::steady_clock::time_point NextSubmit{};
-        std::future<DiskRead> DiskWorker;
+        PS::ProcessExitFuture<DiskRead> DiskWorker;
         std::deque<DiskRead> DiskQueue;
         std::unordered_set<std::string> DiskQueued;
         std::string DiskActive;
@@ -105,36 +106,36 @@ namespace detail {
     }
     inline bool InstallPixels(DiskRead& result) {
         const auto& iconPath=result.Icon;const auto& file=result.File;
-        if(!HelpySourceCache::Ready())return false;auto& state=State();if(state.Textures.contains(iconPath))return true;
-        const auto expected=DiskFile(iconPath);if(expected.empty()||file.lexically_normal()!=expected.lexically_normal())return false;
-        if(!result.Valid||result.Epoch!=state.DiskEpoch||result.Source!=HelpySourceCache::Fingerprint(iconPath))return false;
+        if(!result.Presentation&&!HelpySourceCache::Ready())return false;auto& state=State();if(state.Textures.contains(iconPath))return true;
+        const auto expected=DiskFile(iconPath);if(!result.Presentation&&(expected.empty()||file.lexically_normal()!=expected.lexically_normal()))return false;
+        if(!result.Valid||result.Epoch!=state.DiskEpoch||(!result.Presentation&&result.Source!=HelpySourceCache::Fingerprint(iconPath)))return false;
         ReapRetired(state);
         if(state.Textures.size()>=MaxResidentTextures&&!EvictOne(state,iconPath)){HelpyIconTrace::Event("ui-install-fail",iconPath,"reason='resident-busy'");return false;}
         const auto width=result.Width,height=result.Height;const auto& pixels=result.Pixels;
         if(!BackendSupportsTextures()){HelpyIconTrace::Event("ui-install-fail",iconPath,"reason='no-imgui-context'");return false;}
         auto* texture=IM_NEW(ImTextureData)();texture->Create(ImTextureFormat_RGBA32,width,height);std::memcpy(texture->GetPixels(),pixels.data(),pixels.size());
         texture->UseColors=true;texture->RefCount=1;texture->SetStatus(ImTextureStatus_WantCreate);ImGui::RegisterUserTexture(texture);state.Textures.emplace(iconPath,texture);
-        state.TextureSourceKeys[iconPath]=HelpySourceCache::Fingerprint(iconPath);
+        state.TextureSourceKeys[iconPath]=result.Presentation?"presentation":HelpySourceCache::Fingerprint(iconPath);
         state.RequestSourceKeys.erase(iconPath);
         HelpyIconTrace::Event("ui-install",iconPath,"file='"+file.string()+"' size="+std::to_string(width)+"x"+std::to_string(height));
         HelpyIconTrace::Event("gpu-count",iconPath,"resident="+std::to_string(state.Textures.size())+" retired="+std::to_string(state.RetiredTextures.size()));return true;
     }
     inline bool Install(const std::string& iconPath,const std::filesystem::path& file) {
         auto& state=State();const auto expected=DiskFile(iconPath);
-        if(expected.empty()||file.lexically_normal()!=expected.lexically_normal())return false;
+        if(!file.empty()&&(expected.empty()||file.lexically_normal()!=expected.lexically_normal()))return false;
         if(state.Textures.contains(iconPath)||state.DiskQueued.contains(iconPath)||state.DiskActive==iconPath)return true;
         if(state.DiskQueue.size()>=128)return false;
         state.DiskQueue.push_back({iconPath,HelpySourceCache::Fingerprint(iconPath),file,state.DiskEpoch});state.DiskQueued.insert(iconPath);return true;
     }
     inline bool TryInstallDisk(const std::string& iconPath) {
-        if(!HelpySourceCache::Ready())return false;auto& state=State();if(state.Textures.contains(iconPath))return true;
+        auto& state=State();if(state.Textures.contains(iconPath))return true;
         if(!state.DiskChecked.contains(iconPath))Install(iconPath,DiskFile(iconPath));
         return false;
     }
     inline void PollDisk(CacheState& state){
         if(state.DiskWorker.valid()&&state.DiskWorker.wait_for(std::chrono::seconds(0))==std::future_status::ready){
             auto result=state.DiskWorker.get();state.DiskActive.clear();
-            if(result.Epoch==state.DiskEpoch&&result.Source==HelpySourceCache::Fingerprint(result.Icon)){
+            if(result.Epoch==state.DiskEpoch&&(result.Presentation||result.Source==HelpySourceCache::Fingerprint(result.Icon))){
                 state.DiskChecked.insert(result.Icon);
                 if(result.Valid&&!InstallPixels(result))state.DiskChecked.erase(result.Icon);
                 if(state.Textures.contains(result.Icon)){state.Queued.erase(result.Icon);std::erase(state.High,result.Icon);std::erase(state.Normal,result.Icon);}
@@ -145,9 +146,15 @@ namespace detail {
             const auto wanted=state.WantedFrame.find(request.Icon);
             if(request.Epoch!=state.DiskEpoch||wanted==state.WantedFrame.end()||ImGui::GetFrameCount()-wanted->second>1)continue;
             state.DiskActive=request.Icon;
-            state.DiskWorker=std::async(std::launch::async,[result=std::move(request)]()mutable{
-                try{HelpyIconPack::Safe(result.File);result.Valid=ReadThumbnail(result.File,result.Width,result.Height,result.Pixels);
+            const auto cache=HelpySourceCache::Directory(false);const bool persistent=HelpyRuntimePreferences::IconCacheLimitMB.load()>0;
+            state.DiskWorker=std::async(std::launch::async,[result=std::move(request),cache,persistent]()mutable{
+                try{if(!result.File.empty()){HelpyIconPack::Safe(result.File);result.Valid=ReadThumbnail(result.File,result.Width,result.Height,result.Pixels);}
                     if(result.Valid){HelpyIconPack::Index(result.File,result.Icon);std::error_code ec;std::filesystem::last_write_time(result.File,std::filesystem::file_time_type::clock::now(),ec);}
+                    else if(persistent){const auto file=HelpyPresentationCache::IconFile(cache,result.Icon);if(!file.empty()){
+                        const auto bytes=HelpyIconPack::Read(file,16+256*256*4);HelpyIconPack::Pixels(bytes);
+                        if(HelpyIconPack::Hash(bytes)!=file.stem().string())throw std::runtime_error("[RS-CACHE-004] Cached picture checksum mismatch.");
+                        result.File=file;result.Presentation=true;result.Valid=ReadThumbnail(file,result.Width,result.Height,result.Pixels);
+                    }}
                 }catch(...){result.Valid=false;}return result;
             });
         }
@@ -212,7 +219,7 @@ inline void InvalidateSource(bool preserveUnchanged=false){
     for(auto it=state.Textures.begin();it!=state.Textures.end();){
         const auto fingerprint=HelpySourceCache::Fingerprint(it->first);
         const auto saved=state.TextureSourceKeys.find(it->first);
-        if(preserveUnchanged&&!fingerprint.empty()&&saved!=state.TextureSourceKeys.end()&&saved->second==fingerprint){++it;continue;}
+        if(preserveUnchanged&&saved!=state.TextureSourceKeys.end()&&(saved->second=="presentation"||(!fingerprint.empty()&&saved->second==fingerprint))){++it;continue;}
         if(auto* texture=it->second){texture->SetStatus(ImTextureStatus_WantDestroy);state.RetiredTextures.push_back(texture);}
         state.TextureSourceKeys.erase(it->first);state.ReadyTraced.erase(it->first);it=state.Textures.erase(it);
     }

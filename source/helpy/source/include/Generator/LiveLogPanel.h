@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/ProcessExitFuture.h"
 #include "Core/LiveLog.h"
 #include "Core/DiagnosticLegacyIntake.h"
 #include "Core/StructuredDiagnosticRegistry.h"
@@ -18,7 +19,7 @@ namespace PS::LiveLogPanel {
 struct StreamState {
     LiveLog::History History;
     LiveLog::Cursor Cursor;
-    std::future<LiveLog::Batch> Worker;
+    PS::ProcessExitFuture<LiveLog::Batch> Worker;
     std::chrono::steady_clock::time_point NextRead{};
     std::string Status,ReadError,Scope;
     std::filesystem::path File,Override;
@@ -36,10 +37,11 @@ inline std::array<StreamState,4> Streams;
 // Retain the preview fixture's RuneSchema stream entry points.
 inline LiveLog::History& History=Streams[0].History;
 inline std::uint64_t& Selected=Streams[0].Selected;
-inline std::future<std::string> ExportWorker;
+inline PS::ProcessExitFuture<std::string> ExportWorker;
 inline size_t ExportStream=0;
 inline bool Preview=false;
 inline bool PreviewUE4SS=false;
+inline bool PreviewOptions=false;
 inline int PreviewStream=-1;
 inline std::function<void(const LiveLog::Entry&)> OnEntry;
 inline std::function<void(const LiveLog::Entry&)> OnBackfillEntry;
@@ -261,6 +263,28 @@ inline void RenderStream(size_t index){
         }ImGui::EndChild();
     }
 }
+inline void RenderCrashDumpOptions(){
+    static nlohmann::json snapshot;static std::string status;static bool error=false;
+    const auto read=[&](){nlohmann::json result;
+        if(RuneSchemaSettingsPanel::Remote&&RuneSchemaSettingsPanel::Remote({{"Action","CrashDumpRead"}},result)&&result.is_object()&&result.value("Ok",false)){snapshot=std::move(result);error=false;status.clear();}
+        else{error=true;status=result.is_object()?result.value("Status",std::string("Crash capture settings require a matching RuneSchema core.")):"Crash capture settings are unavailable.";}
+    };
+    if(snapshot.is_null()&&!error)read();
+    ImGui::SeparatorText("Crash capture");
+    bool full=snapshot.is_object()&&snapshot.value("FullMemoryDump",false)&&snapshot.value("EnableDumping",true);
+    ImGui::BeginDisabled(!snapshot.is_object()||error);
+    if(ImGui::Checkbox("Full-memory crash dumps (next launch)",&full)){
+        nlohmann::json result;
+        if(RuneSchemaSettingsPanel::Remote&&RuneSchemaSettingsPanel::Remote({{"Action","CrashDumpSave"},{"FullMemoryDump",full},{"ExpectedContents",snapshot.at("ExpectedContents")}},result)&&result.is_object()&&result.value("Ok",false)){
+            snapshot=std::move(result);error=false;status=snapshot.value("Status",std::string{});
+        }else{error=true;status=result.is_object()?result.value("Status",std::string("Change unconfirmed. Reload before retrying.")):"Change unconfirmed. Reload before retrying.";}
+    }
+    ImGui::EndDisabled();
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX()+ImGui::GetFontSize()*28);
+    ImGui::TextWrapped("Includes process memory, may contain private data and can create multiple GB files. Dumps stay local. Turn off after capturing the problem; restart the game to apply.");
+    if(!status.empty())ImGui::TextWrapped("%s",status.c_str());ImGui::PopTextWrapPos();
+    if(HelpyImGuiTheme::SoftButton("Reload crash capture settings"))read();
+}
 inline void Render(){
     static nlohmann::json options=nlohmann::json::object();static std::string optionStatus;static bool optionError=false;static double nextOptionsRead=0;
     const auto hint=[](const std::string& text){if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)){PS::HelpyImGuiTheme::BeginDetailsTooltip();ImGui::PushTextWrapPos(ImGui::GetFontSize()*28);ImGui::TextUnformatted(text.c_str());ImGui::PopTextWrapPos();PS::HelpyImGuiTheme::EndDetailsTooltip();}};
@@ -278,6 +302,7 @@ inline void Render(){
     hint("Optional context in RuneSchema.log only. Off by default. Select individual fields in Options; saved changes apply on the next sampler tick. Full local paths can reveal personal folder names. Turning this off does not erase existing entries or redact paths already present in ordinary native/mod messages.");
     ImGui::EndDisabled();ImGui::SameLine();
     if(HelpyImGuiTheme::SoftButton("Options##additional-logging"))ImGui::OpenPopup("Additional logging options");
+    if(Preview&&PreviewOptions)ImGui::OpenPopup("Additional logging options");
     if(ImGui::BeginPopup("Additional logging options")){
         const auto option=[&](const char* label,const char* key,const char* description){bool selected=!options.empty()&&options.at("Document").value(key,false);
             ImGui::BeginDisabled(options.empty()||optionError||!RuneSchemaSettingsPanel::Patch().empty());if(ImGui::Checkbox(label,&selected))saveOption(key,selected);hint(description);ImGui::EndDisabled();};
@@ -288,6 +313,7 @@ inline void Render(){
         option("World average network latency","averageLatency","Mean native player ping in a verified multiplayer world, with observed/total sample counts. Zero/invalid samples are excluded. Client-replicated ping can be stale; unavailable data is never reported as zero latency.");
         if(HelpyImGuiTheme::SoftButton("Reload logging options"))readOptions();
         if(!optionStatus.empty()){ImGui::TextDisabled(optionError?"Change needs attention — hover for details.":"Saved — hover for details.");hint(optionStatus);}
+        RenderCrashDumpOptions();
         ImGui::EndPopup();
     }
     if(optionError){ImGui::TextColored(HelpyImGuiTheme::Current.warning,"Logging options need attention. Hover for details.");hint(optionStatus);}

@@ -39,6 +39,7 @@ public:
     // Receives the validated, merged mod-owned registry contract directly
     // from the registry loader. No runtime manifest file is involved.
     void SetRegistrySnapshot(std::string snapshot);
+    std::map<std::string, std::string> RegistryOwnerFingerprints() const;
     ~RegistryBridge() { Stop(); }
 
     // Authority-only transport entry points for captured presentation events.
@@ -177,6 +178,7 @@ private:
     std::map<std::string,std::string> m_sessionRegistryOwners;
     std::map<std::string,std::string> m_sessionNetworkOwners;
     std::string m_sessionAuthorityFingerprint;
+    std::string m_sessionComparisonFingerprint;
     std::string m_activationEnvelope;
     std::string m_persistentStateEnvelope;
     uint32_t m_registryRevision = 0;
@@ -185,7 +187,7 @@ private:
     int64_t m_outboundRevision = 0;
     int64_t m_activeRequestRevision = 0;
     std::string m_activeRequestCorrelation;
-    struct RequestWindow {std::chrono::steady_clock::time_point Started{};uint32_t Count=0;int64_t Revision=0;};
+    struct RequestWindow {std::chrono::steady_clock::time_point Started{};uint32_t Count=0;int64_t Revision=0;bool RegistryRejected=false;};
     std::unordered_map<std::string,RequestWindow> m_requestWindows;
     struct PresentationRoute {
         std::string PluginId;

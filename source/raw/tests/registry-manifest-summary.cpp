@@ -22,4 +22,18 @@ int main()
     const auto exact=Negotiate(Owners(local),Owners(local));
     if(!exact.Exact() || exact.Matched.size()!=2)
         throw std::runtime_error("Exact session negotiation was not accepted");
+    const Fingerprints lanes{{"items","id-ordered-fingerprint"}};
+    const auto check=[](bool value){if(!value)throw std::runtime_error("Registry parity verification failed");};
+    check(Compatibility(exact,exact,true,true,lanes,lanes)=="verified");
+    check(Compatibility(session,exact,true,true,lanes,lanes)=="different");
+    check(Compatibility(exact,session,true,true,lanes,lanes)=="different");
+    check(Compatibility(exact,exact,true,true,lanes,{{"items","different-order"}})=="different");
+    check(Compatibility(exact,exact,true,false,{},lanes)=="unverified");
+    check(Compatibility(exact,exact,false,true,lanes,lanes)=="unverified");
+    const auto extras=Negotiate({{"shared","same"},{"local-ui","extra"}},{{"shared","same"}});
+    check(!extras.Exact()&&extras.SharedMatch());
+    check(Compatibility(extras,exact,true,true,lanes,lanes)=="verified");
+    check(Compatibility(extras,exact,true,true,{{"items","includes-client-extras"}},lanes,true)=="verified");
+    check(Compatibility(extras,exact,true,true,{{"items","includes-client-extras"}},lanes,false)=="different");
+    check(Compatibility(session,exact,true,true,lanes,lanes,true)=="different");
 }

@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/ProcessExitFuture.h"
 #include "Core/RuneSchemaProfile.h"
 #include "Generator/ToolRequest.h"
 #include "Runtime/HelpySettings.h"
@@ -23,6 +24,9 @@
 #include <cctype>
 #include <random>
 #include <vector>
+#include <set>
+#include <future>
+#include <optional>
 #include <imgui.h>
 #include <imgui_internal.h>
 namespace PS::SpawnToolsPanel {
@@ -135,52 +139,96 @@ inline void RefreshKitMetadata() {
     if(SpawnToolRequests::TrySubmit({{"Action","InspectKitItems"},{"_RequestId",id},{"Items",std::move(paths)},{"_Source","HelpyStandalone"}}))KitPending=id;
 }
 inline void RenderKitLibrary() {
-    static std::vector<std::string> files;static std::string selected,error;
-    static nlohmann::json preview;static char exportName[81]{};static bool asJsonc=true,replace=false;
+    static std::vector<std::string> files;static std::set<std::string> selected;
+    static std::string error;static nlohmann::json preview;static char exportName[81]{};
+    static bool asJsonc=true,replace=false,append=false,selectedOnly=false,pendingAppend=false;
+    static PS::ProcessExitFuture<std::vector<nlohmann::json>> reading;static std::optional<std::vector<nlohmann::json>> loaded;
+    static std::filesystem::path pendingDirectory;
+    auto& cart=ItemGridPicker::SharedCart;const auto& theme=HelpyImGuiTheme::Current;
     const auto directory=RuneSchemaProfile::Ready?RuneSchemaProfile::Data("loadouts"):HostServices::RuntimeDirectory()/"Helpy"/"kits";
     const auto refresh=[&]{try{files=HelpyKitFiles::List(directory);error.clear();}catch(const std::exception& e){files.clear();error=e.what();}};
-    ImGui::BeginDisabled(ItemGridPicker::SharedCart.Delivery()!=0);
-    if(ImGui::SmallButton("Import kit")){selected.clear();preview=nullptr;refresh();ImGui::OpenPopup("Import RSMK kit");}
-    ImGui::SameLine();ImGui::BeginDisabled(ItemGridPicker::SharedCart.Entries().empty());
-    if(ImGui::SmallButton("Export kit")){error.clear();replace=false;ImGui::OpenPopup("Export RSMK kit");}
+    if(reading.valid()&&reading.wait_for(std::chrono::seconds(0))==std::future_status::ready)try{
+        auto documents=reading.get();if(ImGui::IsPopupOpen("Import presets"))loaded=std::move(documents);
+    }catch(const std::exception& e){error=e.what();}
+    ImGui::BeginDisabled(cart.Delivery()!=0||reading.valid());
+    if(HelpyImGuiTheme::SoftButton("Import...")){selected.clear();preview=nullptr;loaded.reset();refresh();ImGui::OpenPopup("Import presets");}
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::CartImport=HelpyPreviewHooks::LastRect();
+#endif
+    ImGui::SameLine();ImGui::BeginDisabled(cart.Entries().empty());
+    if(HelpyImGuiTheme::SoftButton("Export...")){error.clear();replace=false;selectedOnly=!cart.Selection().empty();ImGui::OpenPopup("Export preset");}
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::CartExport=HelpyPreviewHooks::LastRect();
+#endif
+    ImGui::EndDisabled();ImGui::SameLine();ImGui::BeginDisabled(cart.Entries().empty());
+    if(HelpyImGuiTheme::SoftButton("Clear"))ItemGridPicker::ClearSharedCart();
     ImGui::EndDisabled();ImGui::EndDisabled();
-    if(ImGui::BeginPopupModal("Import RSMK kit",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::TextWrapped("Import replaces the staged cart only. It does not give items, equip anything or unlock content.");
-        ImGui::TextWrapped("Kit folder: %s",directory.string().c_str());
-        if(HelpyImGuiTheme::SoftButton("Refresh kits")){preview=nullptr;selected.clear();refresh();}
-        if(ImGui::BeginChild("##kit-files",ImVec2(HelpyImGuiTheme::Current.X(480),HelpyImGuiTheme::Current.Y(150)),true)) {
-            if(files.empty())ImGui::TextWrapped("No kits found. Export a kit, or copy a shared .json/.jsonc kit into this folder.");
-            for(const auto& file:files)if(ImGui::Selectable(file.c_str(),selected==file)) {
-                selected=file;preview=nullptr;try{preview=HelpyKitFiles::Read(directory,file);error.clear();}catch(const std::exception& e){error=e.what();}
+    const auto area=ImGui::GetMainViewport()->WorkSize;
+    ImGui::SetNextWindowSize({std::min(theme.X(520),area.x-theme.X(24)),std::min(theme.Y(500),area.y-theme.Y(24))},ImGuiCond_Appearing);
+    if(HelpyImGuiTheme::BeginCenteredModal("Import presets",nullptr,0)) {
+#if defined(HELPY_PREVIEW)
+        const auto pos=ImGui::GetWindowPos(),size=ImGui::GetWindowSize();HelpyPreviewHooks::PresetDialog={pos.x,pos.y,pos.x+size.x,pos.y+size.y};
+#endif
+        ImGui::TextWrapped("Select presets with checkboxes or Ctrl+click. Matching item quantities are combined.");
+        ImGui::TextWrapped("Preset folder: %s",directory.string().c_str());
+        ImGui::BeginDisabled(reading.valid());
+        if(HelpyImGuiTheme::SoftButton("Refresh")){preview=nullptr;selected.clear();refresh();}
+        ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Select all"))selected=std::set<std::string>(files.begin(),files.end());
+        ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Select none"))selected.clear();
+        ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Open folder"))try{
+            HelpyKitFiles::NoRedirect(directory);std::filesystem::create_directories(directory);
+            if(reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr,L"open",directory.c_str(),nullptr,nullptr,SW_SHOWNORMAL))<=32)throw std::runtime_error("The preset folder could not be opened");
+        }catch(const std::exception& e){error=e.what();}
+        if(ImGui::BeginChild("##kit-files",ImVec2(0,theme.Y(180)),true)) {
+            if(files.empty())ImGui::TextWrapped("No presets found. Export one, or place shared .json/.jsonc presets in this folder.");
+            for(const auto& file:files){
+                ImGui::PushID(file.c_str());bool checked=selected.contains(file);
+                if(ImGui::Checkbox("##pick",&checked)){if(checked)selected.insert(file);else selected.erase(file);}
+                ImGui::SameLine();if(ImGui::Selectable(file.c_str(),selected.contains(file))){
+                    if(!ImGui::GetIO().KeyCtrl)selected.clear();
+                    if(ImGui::GetIO().KeyCtrl&&selected.contains(file))selected.erase(file);else selected.insert(file);
+                    preview=nullptr;try{preview=HelpyKitFiles::Read(directory,file);error.clear();}catch(const std::exception& e){error=e.what();}
+                }ImGui::PopID();
             }
         }ImGui::EndChild();
-        if(preview.is_object())ImGui::Text("%s: %zu item types",preview.value("Name",selected).c_str(),preview.at("Items").size());
-        if(!error.empty())ImGui::TextWrapped("%s",error.c_str());
-        ImGui::BeginDisabled(!preview.is_object()||ItemGridPicker::SharedCart.Delivery()!=0);
-        if(HelpyImGuiTheme::SoftButton("Load into cart"))try {
-            // Re-read at confirmation: do not stage a stale preview after the file changed.
-            const auto document=HelpyKitFiles::Read(directory,selected);
-            ItemGridPicker::SharedCart.ImportKit(document,[](const std::string& path){
-                if(UiSnapshot.contains("Items")&&UiSnapshot["Items"].is_array())for(const auto& row:UiSnapshot["Items"])
-                    if(row.is_object()&&row.value("Path",std::string{})==path)return row;
+        ImGui::Text("%zu presets selected",selected.size());
+        if(preview.is_object())ImGui::TextWrapped("Last preview: %s (%zu item types)",preview.value("Name",std::string{}).c_str(),preview.at("Items").size());
+        ImGui::Checkbox("Add to current cart",&append);
+        ImGui::TextWrapped(append?"Adds to staged items. Delivery still requires Give items.":"Replaces staged items. Delivery still requires Give items.");
+        ImGui::BeginDisabled(selected.empty()||cart.Delivery()!=0);
+        if(HelpyImGuiTheme::SoftButton("Load selected presets")){
+            pendingDirectory=directory;pendingAppend=append;error.clear();
+            reading=std::async(std::launch::async,[folder=directory,names=selected]{
+                std::vector<nlohmann::json> result;for(const auto& file:names)result.push_back(HelpyKitFiles::Read(folder,file));return result;
+            });
+        }ImGui::EndDisabled();ImGui::EndDisabled();
+        if(reading.valid())ImGui::TextDisabled("Reading selected presets...");
+        if(loaded)try{
+            auto documents=std::move(*loaded);loaded.reset();if(directory!=pendingDirectory)throw std::runtime_error("Profile changed; select the presets again");
+            cart.ImportKits(documents,pendingAppend,[](const std::string& path){
+                if(UiSnapshot.contains("Items")&&UiSnapshot["Items"].is_array())for(const auto& row:UiSnapshot["Items"])if(row.is_object()&&row.value("Path",std::string{})==path)return row;
                 return nlohmann::json::object();
             });
-            ItemGridPicker::CartStatus="Kit loaded into cart. Review quantities, choose recipients, then Give items. Missing content is checked at delivery.";
-            RefreshKitMetadata();
-            error.clear();ImGui::CloseCurrentPopup();
+            ItemGridPicker::CartStatus="Presets loaded. Review quantities and recipients, then choose Give items.";RefreshKitMetadata();error.clear();ImGui::CloseCurrentPopup();
         }catch(const std::exception& e){error=e.what();}
-        ImGui::EndDisabled();ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Cancel"))ImGui::CloseCurrentPopup();ImGui::EndPopup();
-    }
-    if(ImGui::BeginPopupModal("Export RSMK kit",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::TextWrapped("Save the current item paths and quantities as a shareable kit. Player, delivery and equip actions are not stored.");
-        ImGui::TextWrapped("Kit folder: %s",directory.string().c_str());
-        ImGui::SetNextItemWidth(HelpyImGuiTheme::Current.X(350));if(ImGui::InputText("Kit name",exportName,sizeof(exportName)))replace=false;
-        ImGui::Checkbox("JSONC (includes comments)",&asJsonc);ImGui::Checkbox("Replace existing kit (preserve backup)",&replace);
         if(!error.empty())ImGui::TextWrapped("%s",error.c_str());
-        ImGui::BeginDisabled(!HelpyKitFiles::FileName(exportName)||ItemGridPicker::SharedCart.Entries().empty()||ItemGridPicker::SharedCart.Delivery()!=0);
-        if(HelpyImGuiTheme::SoftButton("Save kit"))try {
-            const auto file=HelpyKitFiles::Write(directory,exportName,asJsonc,ItemGridPicker::SharedCart,replace);
-            ItemGridPicker::CartStatus="Kit exported: "+file.string();error.clear();ImGui::CloseCurrentPopup();
+        ImGui::BeginDisabled(reading.valid());if(HelpyImGuiTheme::SoftButton("Cancel"))ImGui::CloseCurrentPopup();ImGui::EndDisabled();ImGui::EndPopup();
+    }
+    ImGui::SetNextWindowSize({std::min(theme.X(520),area.x-theme.X(24)),std::min(theme.Y(330),area.y-theme.Y(24))},ImGuiCond_Appearing);
+    if(HelpyImGuiTheme::BeginCenteredModal("Export preset",nullptr,0)) {
+#if defined(HELPY_PREVIEW)
+        const auto pos=ImGui::GetWindowPos(),size=ImGui::GetWindowSize();HelpyPreviewHooks::PresetDialog={pos.x,pos.y,pos.x+size.x,pos.y+size.y};
+#endif
+        ImGui::TextWrapped("Save item paths and quantities. Player, delivery and equip actions are not stored.");
+        ImGui::TextWrapped("Preset folder: %s",directory.string().c_str());
+        ImGui::SetNextItemWidth(theme.X(350));if(ImGui::InputText("Preset name",exportName,sizeof(exportName)))replace=false;
+        ImGui::BeginDisabled(cart.Selection().empty());ImGui::Checkbox("Selected cart items only",&selectedOnly);ImGui::EndDisabled();
+        ImGui::Checkbox("JSONC (includes comments)",&asJsonc);ImGui::Checkbox("Replace existing preset (preserve backup)",&replace);
+        if(!error.empty())ImGui::TextWrapped("%s",error.c_str());
+        ImGui::BeginDisabled(!HelpyKitFiles::FileName(exportName)||cart.Entries().empty()||cart.Delivery()!=0||(selectedOnly&&cart.Selection().empty()));
+        if(HelpyImGuiTheme::SoftButton("Save preset"))try{
+            const auto file=HelpyKitFiles::Write(directory,exportName,asJsonc,cart,replace,selectedOnly);
+            ItemGridPicker::CartStatus="Preset exported: "+file.string();error.clear();ImGui::CloseCurrentPopup();
         }catch(const std::exception& e){error=e.what();}
         ImGui::EndDisabled();ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Cancel"))ImGui::CloseCurrentPopup();ImGui::EndPopup();
     }
@@ -294,11 +342,11 @@ inline void RenderCartDock(ImVec2 size,const std::function<void()>& recipient) {
     const auto& theme=HelpyImGuiTheme::Current;
     auto& cart=ItemGridPicker::SharedCart;
     const bool empty=cart.Entries().empty(),delivering=cart.Delivery()!=0;
-    const auto deliver=[&](int mode){
+    const auto deliver=[&](int mode,bool selectedOnly=false){
         const auto recipients=EffectiveCartRecipients();if(recipients.empty()||!SpawnToolRequests::IsAvailable()||delivering||empty||CartNeedsReview)return;
-        auto items=cart.Payload(mode);if(items.empty())return;
+        auto items=cart.Payload(mode,selectedOnly);if(items.empty())return;
         const auto request=++CartSequence;
-        try{CartBatch.Begin(items,recipients,equipOnReceipt);if(!cart.BeginDelivery(request,mode))return;
+        try{CartBatch.Begin(items,recipients,equipOnReceipt);if(!cart.BeginDelivery(request,mode,selectedOnly))return;
             if(SpawnToolRequests::IsWaiting())ItemGridPicker::CartStatus="Delivery queued. Waiting for the current operation; no second click is needed.";
             else if(!SubmitNextCartRecipient(request)){cart.CancelDelivery();ItemGridPicker::CartStatus="Delivery was not submitted; cart retained.";}
         }catch(const std::exception& error){cart.CancelDelivery();ItemGridPicker::CartStatus=error.what();}
@@ -324,7 +372,6 @@ inline void RenderCartDock(ImVec2 size,const std::function<void()>& recipient) {
         ImGui::SameLine(std::max(ImGui::GetCursorPosX(),ImGui::GetWindowContentRegionMax().x-theme.X(58)));
         if(ImGui::SmallButton("More"))ImGui::OpenPopup("##cart-more");
         if(ImGui::BeginPopup("##cart-more")){
-            if(ImGui::BeginMenu("Saved loadouts")){RenderKitLibrary();ImGui::EndMenu();}
             if(ImGui::MenuItem("Clear cart",nullptr,false,!empty&&!delivering))ItemGridPicker::ClearSharedCart();
             ImGui::Separator();
             const bool ready=!EffectiveCartRecipients().empty()&&SpawnToolRequests::IsAvailable()&&!delivering&&!empty&&!CartNeedsReview;
@@ -333,11 +380,40 @@ inline void RenderCartDock(ImVec2 size,const std::function<void()>& recipient) {
             if(ImGui::MenuItem("Give full stacks",nullptr,false,ready))deliver(3);
             ImGui::EndPopup();
         }
+        RenderKitLibrary();
+        ImGui::BeginDisabled(delivering||cart.Entries().empty());
+        bool all=!cart.Entries().empty()&&cart.Selection().size()==cart.Entries().size();
+        const bool mixed=!all&&!cart.Selection().empty();
+        if(mixed)ImGui::PushItemFlag(ImGuiItemFlags_MixedValue,true);
+        if(ImGui::Checkbox("All##cart-select-all",&all))cart.SelectAll(all);
+        if(mixed)ImGui::PopItemFlag();
+        if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Select or clear all cart items. Ctrl+click cards to change individual selections.");
+#if defined(HELPY_PREVIEW)
+        HelpyPreviewHooks::CartSelectAll=HelpyPreviewHooks::LastRect();
+#endif
+        ImGui::SameLine();ImGui::TextDisabled("%zu selected",cart.Selection().size());
+        ImGui::EndDisabled();
+        if(!cart.Selection().empty()){
+            ImGui::BeginDisabled(delivering);
+            if(ImGui::SmallButton("Up"))cart.MoveSelected(-1);
+#if defined(HELPY_PREVIEW)
+            HelpyPreviewHooks::CartMoveUp=HelpyPreviewHooks::LastRect();
+#endif
+            ImGui::SameLine();if(ImGui::SmallButton("Down"))cart.MoveSelected(1);
+#if defined(HELPY_PREVIEW)
+            HelpyPreviewHooks::CartMoveDown=HelpyPreviewHooks::LastRect();
+#endif
+            ImGui::SameLine();if(ImGui::SmallButton("Remove selected"))cart.RemoveSelected();
+#if defined(HELPY_PREVIEW)
+            HelpyPreviewHooks::CartRemoveSelected=HelpyPreviewHooks::LastRect();
+#endif
+            ImGui::EndDisabled();
+        }
         ImGui::Separator();
         std::string removePath;
         const auto recipientCount=EffectiveCartRecipients().size();
         const float recipientHeight=recipientCount?ImGui::GetTextLineHeightWithSpacing()*float(std::min<size_t>(recipientCount,3)+(recipientCount>1?1:0)):0.0f;
-        const float footer=theme.Y((ItemGridPicker::CartStatus.empty()?146.0f:190.0f)+(CartNeedsReview?90.0f:0.0f))+recipientHeight;
+        const float footer=theme.Y((ItemGridPicker::CartStatus.empty()?146.0f:190.0f)+(CartNeedsReview?90.0f:0.0f))+recipientHeight+(cart.Selection().empty()?0.f:ImGui::GetFrameHeightWithSpacing());
         const float listHeight=std::max(theme.Y(12.0f),ImGui::GetContentRegionAvail().y-footer);
         if(ImGui::BeginChild("##cart-items",ImVec2(0,listHeight),false)){
             if(empty&&cart.Outcomes().empty()){ImGui::Spacing();ImGui::TextWrapped("Drag items here");ImGui::TextDisabled("or right-click an item.");}
@@ -347,8 +423,14 @@ inline void RenderCartDock(ImVec2 size,const std::function<void()>& recipient) {
             const int columns=ItemBayLayout::Columns(available,std::max(theme.X(130),theme.X(theme.gridMinCardWidth)),gap,ItemBayLayout::DefaultColumns);
             const float cardWidth=std::max(1.f,(available-gap*(columns-1))/columns);
             const float cardHeight=theme.Y(std::max(96.f,theme.gridCardHeight));
-            const float buttonWidth=std::max(1.f,std::min(theme.X(22),(cardWidth-gap*2)/3));
-            const bool wrapControls=cardWidth<theme.X(108);
+            const float buttonWidth=std::max(theme.X(22),ImGui::GetFrameHeight());
+            const float quantityMin=ImGui::CalcTextSize("10000").x+ImGui::GetStyle().FramePadding.x*2;
+            const float fullSelectWidth=ImGui::GetFrameHeight()+ImGui::GetStyle().ItemInnerSpacing.x+ImGui::CalcTextSize("Select").x;
+            const bool compactSelect=cardWidth<fullSelectWidth+quantityMin+gap;
+            const float selectWidth=compactSelect?ImGui::GetFrameHeight():fullSelectWidth;
+            const bool wrapControls=cardWidth<selectWidth+quantityMin+buttonWidth*3+gap*4;
+            const float quantityWidth=std::max(1.f,cardWidth-selectWidth-gap-(wrapControls?0.f:buttonWidth*3+gap*3));
+            const float actionWidth=wrapControls?std::max(1.f,(cardWidth-gap*2)/3):buttonWidth;
             const float controlsHeight=ImGui::GetFrameHeight()*(wrapControls?2.f:1.f)+ImGui::GetStyle().ItemSpacing.y*(wrapControls?2.f:1.f);
             const float rowHeight=cardHeight+controlsHeight+ImGui::GetStyle().ItemSpacing.y;
             ImGui::BeginDisabled(delivering);
@@ -358,11 +440,11 @@ inline void RenderCartDock(ImVec2 size,const std::function<void()>& recipient) {
                 const auto& entry=entries[index];const auto name=ItemPresentation::Name(entry.Row);
                 if(column)ImGui::SameLine();ImGui::BeginGroup();ImGui::PushID(entry.Path.c_str());
                 const auto cardMin=ImGui::GetCursorScreenPos();const ImVec2 cardMax(cardMin.x+cardWidth,cardMin.y+cardHeight);
-                ImGui::InvisibleButton("##cart-slot",{cardWidth,cardHeight});
+                if(ImGui::InvisibleButton("##cart-slot",{cardWidth,cardHeight}))cart.Select(entry.Path,ImGui::GetIO().KeyCtrl);
 #if defined(HELPY_PREVIEW)
                 HelpyPreviewHooks::CartRects[entry.Path]=HelpyPreviewHooks::LastRect();
 #endif
-                ItemGridPicker::DrawPlacard(entry.Row,cardMin,cardMax,false,ImGui::IsItemHovered(),theme.X(20));
+                ItemGridPicker::DrawPlacard(entry.Row,cardMin,cardMax,cart.Selection().contains(entry.Path),ImGui::IsItemHovered(),theme.X(20));
                 const auto* check=cart.Validation(entry.Path);
                 const bool checkHovered=check&&DrawCartCheck({cardMin.x,cardMax.y},check->Valid?"Confirmed":"Rejected",check->Message);
                 if(ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID|ImGuiDragDropFlags_SourceNoPreviewTooltip)){
@@ -370,13 +452,26 @@ inline void RenderCartDock(ImVec2 size,const std::function<void()>& recipient) {
                 }
                 if(ImGui::BeginPopupContextItem("##cart-actions")){if(ImGui::MenuItem("Remove from cart"))removePath=entry.Path;ImGui::EndPopup();}
                 if(!checkHovered&&HelpyImGuiTheme::TooltipReady("cart:"+entry.Path,ImGui::IsItemHovered()))ItemGridPicker::VerboseTooltip(entry.Row,name,entry.Path,false,true);
-                int quantity=entry.Quantity;ImGui::SetNextItemWidth(wrapControls?cardWidth:std::max(1.f,cardWidth-buttonWidth*3-gap*3));
+                bool selected=cart.Selection().contains(entry.Path);
+                if(ImGui::Checkbox(compactSelect?"###cart-item":"Select###cart-item",&selected))cart.Select(entry.Path,true);
+#if defined(HELPY_PREVIEW)
+                HelpyPreviewHooks::CartChecks[entry.Path]=HelpyPreviewHooks::LastRect();
+#endif
+                if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Select this item for bulk actions. Ctrl+click its card to add or remove it from the selection.");
+                ImGui::SameLine();int quantity=entry.Quantity;ImGui::SetNextItemWidth(quantityWidth);
                 if(ImGui::InputInt("##quantity",&quantity,0,0))cart.SetQuantity(entry.Path,quantity);
+#if defined(HELPY_PREVIEW)
+                HelpyPreviewHooks::CartQuantities[entry.Path]=HelpyPreviewHooks::LastRect();
+#endif
                 if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("Quantity per selected player");
                 if(!wrapControls)ImGui::SameLine();
-                if(ImGui::Button("-",{buttonWidth,0}))cart.SetQuantity(entry.Path,quantity-1);
-                ImGui::SameLine();if(ImGui::Button("+",{buttonWidth,0}))cart.SetQuantity(entry.Path,quantity+1);
-                ImGui::SameLine();if(ImGui::Button("X",{buttonWidth,0}))removePath=entry.Path;
+                ImGui::BeginDisabled(quantity<=1);
+                if(ImGui::Button("-",{actionWidth,0}))cart.SetQuantity(entry.Path,quantity-1);
+                ImGui::EndDisabled();if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))HelpyImGuiTheme::Tooltip(quantity<=1?"Minimum quantity: 1":"Decrease quantity");
+                ImGui::SameLine();ImGui::BeginDisabled(quantity>=10000);
+                if(ImGui::Button("+",{actionWidth,0}))cart.SetQuantity(entry.Path,quantity+1);
+                ImGui::EndDisabled();if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))HelpyImGuiTheme::Tooltip(quantity>=10000?"Maximum quantity: 10000":"Increase quantity");
+                ImGui::SameLine();if(ImGui::Button("X",{actionWidth,0}))removePath=entry.Path;
                 if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("Remove from cart");
                 ImGui::PopID();ImGui::EndGroup();
             }
@@ -398,11 +493,30 @@ inline void RenderCartDock(ImVec2 size,const std::function<void()>& recipient) {
 #endif
                     ImGui::EndPopup();
                 }
+                ImGui::BeginDisabled(delivering||CartNeedsReview);
+                bool allOutcomes=!cart.OutcomeSelection().empty()&&cart.OutcomeSelection().size()==static_cast<size_t>(std::count_if(cart.Outcomes().begin(),cart.Outcomes().end(),[](const auto& o){return o.State=="Confirmed";}));
+                if(ImGui::Checkbox("All confirmed",&allOutcomes))cart.SelectAllOutcomes(allOutcomes);
+                ImGui::BeginDisabled(cart.OutcomeSelection().empty());
+                if(HelpyImGuiTheme::SoftButton("Reorder selected")){
+                    ItemGridPicker::CartStatus=cart.ReorderSelected()?"Selected delivery items added to cart. Review quantities and recipients before giving.":"Selected items could not fit in the cart; no quantities changed.";
+                }
+#if defined(HELPY_PREVIEW)
+                HelpyPreviewHooks::ReorderSelected=HelpyPreviewHooks::LastRect();
+#endif
+                ImGui::EndDisabled();ImGui::EndDisabled();
                 size_t outcomeIndex=0;for(const auto& outcome:cart.Outcomes()){
                     if(outcomeIndex++%columns)ImGui::SameLine();ImGui::BeginGroup();
                     ImGui::PushID(outcome.Item.Path.c_str());
+                    ImGui::BeginDisabled(delivering||CartNeedsReview||outcome.State!="Confirmed");
+                    bool selected=cart.OutcomeSelection().contains(outcome.Item.Path);
+                    if(ImGui::Checkbox("Select##delivery-item",&selected))cart.SelectOutcome(outcome.Item.Path,true);
+#if defined(HELPY_PREVIEW)
+                    HelpyPreviewHooks::DeliveryChecks[outcome.Item.Path]=HelpyPreviewHooks::LastRect();
+#endif
                     const auto start=ImGui::GetCursorScreenPos();
-                    ImGui::InvisibleButton("##last-delivery-item",{cardWidth,cardHeight});ItemGridPicker::DrawPlacard(outcome.Item.Row,start,{start.x+cardWidth,start.y+cardHeight},false,ImGui::IsItemHovered(),theme.X(20));
+                    if(ImGui::InvisibleButton("##last-delivery-item",{cardWidth,cardHeight}))cart.SelectOutcome(outcome.Item.Path,ImGui::GetIO().KeyCtrl);
+                    ItemGridPicker::DrawPlacard(outcome.Item.Row,start,{start.x+cardWidth,start.y+cardHeight},cart.OutcomeSelection().contains(outcome.Item.Path),ImGui::IsItemHovered(),theme.X(20));
+                    ImGui::EndDisabled();
 #if defined(HELPY_PREVIEW)
                     HelpyPreviewHooks::DeliveryRects[outcome.Item.Path]=HelpyPreviewHooks::LastRect();
 #endif
@@ -424,8 +538,9 @@ inline void RenderCartDock(ImVec2 size,const std::function<void()>& recipient) {
         ImGui::BeginDisabled(delivering);ImGui::Checkbox("Equip on receipt",&equipOnReceipt);ImGui::EndDisabled();
         if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("Opt-in native equipment transfer. One new equipment instance per item type; empty slots only. Non-equipment stays in inventory. Equip errors never repeat delivery.");
         ImGui::BeginDisabled(EffectiveCartRecipients().empty()||!SpawnToolRequests::IsAvailable()||delivering||empty||CartNeedsReview);
+        if(!cart.Selection().empty()&&HelpyImGuiTheme::SoftButton("Give selected",ImVec2(-1,0)))deliver(0,true);
         ImGui::PushStyleColor(ImGuiCol_Button,theme.accent);ImGui::PushStyleColor(ImGuiCol_ButtonHovered,theme.accentHover);ImGui::PushStyleColor(ImGuiCol_ButtonActive,theme.accentActive);ImGui::PushStyleColor(ImGuiCol_Text,theme.onAccent);
-        if(HelpyImGuiTheme::SoftButton(delivering?"Giving items...":"Give items",ImVec2(-1,0)))deliver(0);
+        if(HelpyImGuiTheme::SoftButton(delivering?"Giving items...":cart.Selection().empty()?"Give items":"Give all items",ImVec2(-1,0)))deliver(0);
 #if defined(HELPY_PREVIEW)
         HelpyPreviewHooks::Give=HelpyPreviewHooks::LastRect();
 #endif

@@ -1,4 +1,5 @@
 #include "Core/HelpyIconPack.h"
+#include "Core/CacheBundleItems.h"
 #include "Runtime/HelpyDownloads.h"
 #include "Runtime/HelpyPaths.h"
 #include <iostream>
@@ -39,9 +40,26 @@ int main(int argc,char** argv){try{
     const auto records=CacheBundleStore::Read(cache,root,snapshot,CacheBundleStore::Locale());
     const auto second=HelpyIconPack::Import(file,root,cache,snapshot,256ull*1024*1024,progress,policy);
     if(second.Imported||second.RecordsImported)throw std::runtime_error("Repeated import was not idempotent");
+    size_t immediateRows=0,reopenedRows=0;
+    const auto browse=[&](const HelpySourceCache::Snapshot& sources){
+        CacheBundleItems::Store reader;const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+        for(;;){if(auto page=reader.Lookup(cache,root,sources,CacheBundleStore::Locale(),"","",28)){
+                auto rows=page->at("Rows");reader.Shutdown();return rows;
+            }
+            if(std::chrono::steady_clock::now()>deadline)throw std::runtime_error("Imported references were not immediately readable");
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    };
+    if(std::any_of(records.begin(),records.end(),[](const auto& row){return row.at("Kind")=="items";})){
+        immediateRows=browse(snapshot).size();auto saved=snapshot;saved.Provisional=true;
+        const auto rows=browse(saved);reopenedRows=rows.size();
+        for(const auto& row:rows)if(row.value("CacheSourceVerified",false)||row.value("ObservedCurrent",false))throw std::runtime_error("Saved references falsely claimed live verification");
+        if(!immediateRows||immediateRows!=reopenedRows)throw std::runtime_error("Reopened cache lost its imported item page");
+    }
     const nlohmann::json receipt={{"BundleSHA256",bundleDigest},{"ImportedIcons",first.Imported},{"UnchangedIcons",first.Unchanged},{"ImportedRecords",first.RecordsImported},
         {"ReadableRecords",records.size()},{"Skipped",first.Skipped},{"RepeatUnchangedIcons",second.Unchanged},{"RepeatNewRecords",second.RecordsImported},
-        {"Message",first.Message},{"ManagedStagingRemoved",HelpyDownloads::ReleaseImportedPack(file)}};
+        {"Message",first.Message},{"ImmediateItemRows",immediateRows},{"ReopenedItemRows",reopenedRows},{"NativeObjectReadsForBrowse",0},
+        {"ManagedStagingRemoved",HelpyDownloads::ReleaseImportedPack(file)}};
     std::ofstream(output/"receipt.json")<<receipt.dump(2);std::cout<<receipt.dump(2)<<'\n';
     HelpyDownloads::Shutdown();return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';PS::HelpyDownloads::Shutdown();return 1;}}

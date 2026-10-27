@@ -1,92 +1,46 @@
 # RuneSchema
 
-Runtime schema and data-editing framework for **RuneScape: Dragonwilds**.
+A runtime modding framework for **RuneScape: Dragonwilds**.
 
-**Current source and download: RuneSchema and Helpy 0.8.0.2**, October 25, 2026.
-Both DLLs are rebuilt from the tagged source, compressed and packaged together.
-Read the [changelog](docs/CHANGELOG-0.8.0.2.md) and
-[package/defaults/verification](docs/RELEASE-0.8.0.2.md).
-This includes the earlier 0.8.0.1b source fixes and the independent cache feed.
+RuneSchema connects JSON/JSONC definitions and cooked PAK content to supported
+game systems. **Helpy**, its companion desktop interface, provides item browsing,
+a staging cart, mod management, map tools and diagnostics.
 
-[Download the full runtime](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.0.2).
-The source is published on `main` and `experimental`; `0.8.0.2` identifies the
-release source. The ZIP is locally built and verified, not a hosted CI artifact.
-Historical releases and tags remain available.
+**[Documentation website](https://gh0sted5456-us.github.io/RuneSchema/)** ·
+**[Downloads](https://github.com/gh0sted5456-us/RuneSchema/releases/latest)** ·
+**[Report a bug](https://github.com/gh0sted5456-us/RuneSchema/issues/new/choose)**
 
-Helpy opens in its own window with F2; the old Canvas experiment is retired.
-The item browser is above a staging cart: drag an item down, or right-click
-and choose **Add to cart**, then confirm a grant to the selected player.
-Drag a cart item back into the browser or use its context menu to remove it.
-Registry, networking, and Helpy remain included plugins in one package,
-with their own manifests and lifecycle.
+## Get started
 
-> **Documentation Website:** https://gh0sted5456-us.github.io/RuneSchema/
+| I want to… | Guide |
+| --- | --- |
+| Install RuneSchema and use Helpy | [Player guide](https://gh0sted5456-us.github.io/RuneSchema/users/) and [installation](https://gh0sted5456-us.github.io/RuneSchema/INSTALLATION/) |
+| Create or adapt a mod | [Creator guides and worked examples](https://gh0sted5456-us.github.io/RuneSchema/modders/) |
+| Run a dedicated server | [Server guides](https://gh0sted5456-us.github.io/RuneSchema/servers/) |
+| Understand a warning or error | [Troubleshooting](https://gh0sted5456-us.github.io/RuneSchema/TROUBLESHOOTING/) and [diagnostic codes](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/) |
+| Check what changed | [Downloads and source-update status](https://gh0sted5456-us.github.io/RuneSchema/CURRENT-RELEASE/) |
 
-[Open the RuneSchema documentation →](https://gh0sted5456-us.github.io/RuneSchema/)
+The website contains requirements, configuration, compatibility notes, authoring
+walkthroughs and the API/reference guides. Use the **Releases** download for an
+installable package; branch source can contain changes newer than that package.
 
-Learn with [FModel export to mod](docs/modders/fmodel-to-mod.md),
-[bigger chests](docs/modders/bigger-chests.md), [inventory pages](docs/modders/bigger-inventory.md),
-[creature drops](docs/modders/creature-drops.md), [cooked-item patches](docs/modders/cooked-item-patches.md)
-and [item clones](docs/modders/item-clones.md). The
-[$Append and targeted-patching guide](docs/modders/append-and-targeted-patches.md)
-explains the different operations, with [matching example files](docs/examples/Walkthroughs/README.md).
+## Source and contributions
 
-## Downloads
+`main` contains the maintained source and documentation. `experimental` receives
+integration updates; experimental features retain their documented opt-in rules.
 
-The repository is source-first. RuneSchema ships one lean compiled package
-containing the core DLL, Lua runtime, plugin DLLs/content, default
-settings and consolidated legal notice. Build reports and authoring examples
-belong in the repository/docs, not in the install ZIP. Storefront UE4SS hosts
-and build dependencies remain separate:
-
-https://github.com/gh0sted5456-us/RuneSchema/releases
-
-The RuneSchema runtime detects Steam/Epic and Game Pass/WinGDK
-automatically. UE4SS storefront packages are distributed separately so users
-do not repeatedly download the same runtime with every RuneSchema source
-snapshot.
-
-Generated mappings live in platform-specific AppData caches. The cleaned
-runtime ZIP excludes loose UI artwork; optional artwork remains downloadable.
-Its supplied settings enable detailed logging and automatic Helpy opening;
-see the release notes before replacing an established configuration.
-
-## Building
-
-### Native menu console commands
-
-In a loaded world, use `rs inventory open`, `rs inventory close`, or
-`rs inventory toggle` in the game's console. The same actions work with
-`spellbook`, `map`, `journal`, `skills`, `settings`, `buildmenu`, and `menu`
-(pause). Omitting the action means `open`; `runeschema` aliases `rs`.
-`rs help` lists the commands. These requests use the game's input router,
-retain its pause/interaction guards, and never select Exit or change save data.
-The console closes first using a configured native console key; the menu request
-runs after command return. `rs closeconsole` only closes the console.
-Dedicated servers have no local menus. Queued requests and results appear in RuneSchema.log.
-
-### Compile
-
-Run `Build RuneSchema.bat` from the repository root.
-
-The builder downloads the small pinned build-dependency bundle on first use,
-verifies its SHA-256 hash, and caches it under `.cache/`. CMake/UE4SS source
-dependencies continue to be fetched by the normal build process. Generated
-build output is written to `dist/` and is not source-controlled.
-
-Authoring, loader, Unreal + RuneSchema, compatibility, API, and release
-documentation is maintained on the public documentation site above.
+See [Contributing](CONTRIBUTING.md) for source contributions. For bug reports,
+include the RuneSchema version, game platform, reproduction steps and relevant
+diagnostic codes. Review logs before sharing them.
 
 ## Community and license
 
-RuneSchema is developed and maintained by the **RSDW Modding Community**.
-Credited members: **Jonesing4Space, NuLLZz, Snorkles, and CHP**.
-Published under **gh0sted5456-us**. See [community credits](AUTHORS.md).
+Developed and maintained by the **RSDW Modding Community**. See
+[community credits](AUTHORS.md).
 
-Copyright (c) 2026 RSDW Modding Community. Original software and documentation
-owned by, or licensed with authority by, the community are available under the
-[MIT License](LICENSE). See [license scope](LICENSING.md) and
-[third-party notices](THIRD_PARTY_NOTICES.md) for component-specific terms.
+Copyright (c) 2026 RSDW Modding Community. Covered original code and documentation
+are available under the [MIT License](LICENSE). See [license scope](LICENSING.md)
+and [third-party notices](THIRD_PARTY_NOTICES.md).
 
 PalSchema foundation by Okaetsu. UE4SS and other dependencies retain their
 original copyright and license notices.

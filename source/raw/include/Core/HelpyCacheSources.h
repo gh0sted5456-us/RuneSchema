@@ -27,6 +27,7 @@ inline std::string Source(std::string_view path) {
 }
 struct Plan {
     std::map<std::string,std::string> DisplayNames;
+    std::map<std::string,std::string> Versions;
     bool Authoritative=false,Complete=true;
     std::uint64_t Revision=0;
     std::map<std::string,std::set<std::string>> Owners;
@@ -41,13 +42,15 @@ struct Plan {
 };
 inline std::mutex Mutex;
 inline Plan Current;
-inline void SetDisplayName(const std::string& owner,const std::string& label) noexcept {try{
+inline void SetDisplayName(const std::string& owner,const std::string& label,const std::string& version={}) noexcept {try{
     if(owner.empty()||owner.size()>128||owner.find("..")!=owner.npos||owner=="."||owner.find_first_of("/\\\r\n\t:")!=owner.npos||label.empty()||label.size()>256
         ||std::any_of(owner.begin(),owner.end(),[](unsigned char c){return c<32||c==127;})
         ||std::any_of(label.begin(),label.end(),[](unsigned char c){return c<32||c==127;}))return;
     std::lock_guard lock(Mutex);const auto key=Lower(owner);
     if(Current.DisplayNames.size()>=512&&!Current.DisplayNames.contains(key))return;
     if(Current.DisplayNames[key]!=label){Current.DisplayNames[key]=label;++Current.Revision;}
+    if(!version.empty()&&version.size()<=128&&version.find_first_of("\r\n\t")==version.npos
+        &&std::none_of(version.begin(),version.end(),[](unsigned char c){return c<32||c==127;})&&Current.Versions[key]!=version){Current.Versions[key]=version;++Current.Revision;}
 }catch(...) {}}
 inline std::shared_ptr<Plan::AssetOwnerMap> CurrentAssetOwners=std::make_shared<Plan::AssetOwnerMap>();
 inline std::string AssetKey(const std::string& path){

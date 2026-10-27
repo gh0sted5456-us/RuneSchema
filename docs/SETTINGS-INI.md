@@ -14,6 +14,7 @@ existing settings are preserved during an update.
 advancedLogging = false
 archiveLogs = false
 authoringTools = true
+helpyHotkey = "F2"
 
 [loaders]
 quests = true
@@ -33,6 +34,33 @@ such as `[loaders]`. Deeper objects use dotted sections. Use `true`/`false`,
 ordinary numbers, quoted strings and JSON arrays. Plain words are also accepted
 for string settings. Semicolon and hash introduce comments outside quoted
 strings. Missing keys keep their built-in defaults; unknown keys are preserved.
+
+## Helpy shortcut
+
+Open **Home > Quick settings** to set the **Helpy shortcut**, reset it to F2,
+or choose whether Helpy opens at startup. The shortcut saves to this
+installation's `settings/settings.ini` with a backup and applies immediately.
+All shortcut hints use the selected key. **Reload theme** is a button in Quick
+settings; there is no separate F5 theme shortcut.
+
+For manual changes with the game closed:
+
+```ini
+[RuneSchema]
+helpyHotkey = "F3"
+```
+
+Restart the game after editing the file manually. Supported single keys are
+F1–F24, A–Z, 0–9, Insert, Home, End, PageUp, PageDown, Pause and ScrollLock.
+Names are case-insensitive; unknown names fall back to F2. Modifier combinations
+and mouse buttons are not supported. Choose a key that does not conflict with
+game controls or other mods. Letters and navigation keys keep working inside
+Helpy text fields rather than closing the window while you type.
+
+The shortcut opens Helpy while this game's window is focused and closes it
+while one of its own windows is focused. It does not toggle another runtime's
+Helpy or change a connected server's shortcut. Other RuneSchema settings still
+require a restart.
 
 ## Game mappings and writable state {#game-mappings-and-writable-state}
 
@@ -175,6 +203,29 @@ Character/world choices appear only for Quick Launch. Hover controls for details
 Manual slot-name entry, refresh/reload and less-common switches are under **Advanced**.
 
 ## Additional Logging Information
+
+### Full-memory crash capture
+
+**Diagnostics → Live Log → Options → Crash capture** includes **Full-memory crash
+dumps (next launch)**. This is independent of Additional Logging Information.
+It edits only this runtime's `ue4ss/UE4SS-settings.ini`, preserving its other
+settings and comments and creating a backup before saving:
+
+```ini
+[CrashDump]
+EnableDumping = 1
+FullMemoryDump = 1
+```
+
+Restart Dragonwilds to apply the change. Full dumps include process memory and
+can be several GB; simultaneous worker failures can create more than one file.
+They stay in UE4SS's local crash-dump directory and are not uploaded by Helpy.
+Review them before sharing because process memory can contain private data.
+Turn the option off and restart after collecting the failure. Turning it off
+restores small-dump mode without deleting existing dumps or disabling ordinary
+crash capture. A conflicting settings edit requires reloading before saving.
+
+### Optional log context
 
 Diagnostics → Live Log offers an opt-in **Additional Logging Information** toggle and an
 **Options** popover. The master switch and every field default to off:

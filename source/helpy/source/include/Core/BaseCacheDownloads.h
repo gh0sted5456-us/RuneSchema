@@ -12,7 +12,7 @@ inline bool Runtime(const std::string& value){return value=="Steam"||value=="Ste
 inline std::vector<nlohmann::json> Candidates(const nlohmann::json& packs,const std::map<std::string,std::string>& active,
     const std::set<std::string>& nativePlugins,const std::string& runtime,const std::string& version,const std::string& locale,bool bundle){
     std::vector<std::pair<int,nlohmann::json>> ranked;
-    if(!Runtime(runtime)||!active.contains("game"))return {};
+    if(!Runtime(runtime))return {};
     const std::set<std::string> knownNative{"game","engine","agility","dowdunreach","fishing","futuremajorversion","scornedwilderness","umbralsands"};
     for(const auto& pack:packs){
         if(!pack.is_object()||pack.value("GameVersion",std::string{}).empty()||!Runtime(pack.value("Runtime",std::string{})))continue;

@@ -5,6 +5,7 @@
 #include "Core/AlphabeticalItemCatalog.h"
 #include "Core/PersistentItemCatalog.h"
 #include "Core/CacheBundleItems.h"
+#include "Core/LearnedItemCatalog.h"
 #include "Core/ItemCatalogFilter.h"
 #include "Core/LoadoutEligibility.h"
 #include "Generator/ToolRequest.h"
@@ -50,6 +51,7 @@
 #include <initializer_list>
 #include <set>
 #include <chrono>
+#include <atomic>
 #include <sstream>
 #include <vector>
 #include <unordered_map>
@@ -513,6 +515,21 @@ std::string PresentationName(UObject* object){
             const auto text=to_string(PropertyHelper::GetTextAsString(*field->ContainerPtrToValuePtr<FText>(object)));if(!text.empty()&&text.size()<=1024)return text;
         }}return {};
 }
+namespace {
+LearnedItemCatalog::Store LearnedItems;
+const std::vector<F2Catalog::Candidate>& ContainerItemMetadata(){
+    static std::string key;static std::vector<F2Catalog::Candidate> items;
+    const auto& snapshot=HelpySourceCache::Current;
+    const auto current=snapshot.CatalogKey+(snapshot.Authoritative&&!snapshot.Provisional?":live":":waiting");
+    if(key!=current){
+        items.clear();
+        if(snapshot.Authoritative&&!snapshot.Provisional&&snapshot.ContainerAssets)
+            for(const auto& [package,owners]:*snapshot.ContainerAssets)if(!owners.empty())
+                if(auto candidate=F2Catalog::MountedItemPackage(package))items.push_back(std::move(*candidate));
+        key=current;
+    }return items;
+}
+}
 json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,std::uint64_t startSeed,bool randomOrder,
     const std::string& fieldSet,std::size_t scanBudget,std::uint64_t timeBudgetMicros,bool classIndex) {
     if(limit<1||limit>128)throw std::runtime_error("Catalog window limit must be 1..128 rows.");
@@ -537,7 +554,7 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
     // A verified content census change may reflect a newly mounted package.
     // Re-query live ItemData metadata once for that scope, not on every poll or
     // thumbnail update. This observes mounts; it does not mount/re-register them.
-    const auto metadataScope=json::array({generation,HelpySourceCache::PublishedCatalogKey()}).dump();
+    const auto metadataScope=json::array({generation,HelpySourceCache::PublishedCatalogKey(),HelpySourceCache::Current.Authoritative,HelpySourceCache::Current.Provisional}).dump();
     if(!mountedReady||mountedScope!=metadataScope) {
         if(mountedScope!=metadataScope){mountedReady=false;mountedItems.clear();}
         bool classMetadataReady=false;
@@ -560,6 +577,10 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
             }
             mountedItems=std::move(discovered);mountedScope=metadataScope;mountedReady=true;
         }
+        // A populated native registry may still omit an enabled mod's packages.
+        std::unordered_set<std::string> known;for(const auto& record:mountedItems)known.insert(F2Catalog::Lower(record.path));
+        for(const auto& candidate:ContainerItemMetadata())if(known.insert(F2Catalog::Lower(candidate.path)).second)
+            mountedItems.push_back({candidate.path,candidate.name,{}});
     }
     const auto priorityPaths=AssetProvenance::LivePaths();
     const std::unordered_set<std::string> prioritySet(priorityPaths.begin(),priorityPaths.end());
@@ -629,20 +650,32 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
         auto entry=fieldSet=="Detail"||segment==0?DescribeItemWithSource(object,&source):DescribeItemBasic(object,path,name,internal,tags,broadCategory);
         if(entry.is_object()){entry["StableId"]=HelpyStableId(path);entry["Category"]=broadCategory;entry.update(ItemSource::Fields(source));rows.push_back(std::move(entry));}
     }
+    if(!queryTokens.empty()&&!rows.empty())LearnedItems.Observe(HelpySourceCache::Directory(false),HelpySourceCache::Current,CacheBundleStore::Locale(),rows);
     return {{"Rows",std::move(rows)},{"NextOffset",visited},{"Start",start},{"HasMore",visited<total},
         {"Scanned",scanned},{"BudgetExhausted",visited<total&&scanned>=scanBudget},{"FieldSet",fieldSet},{"MountedMetadataReady",mountedReady}};
 }
 
-namespace {PersistentItemCatalog::Store ItemManifest;PagedItemCatalog::Store ItemPages,ItemPreviewPages;CacheBundleItems::Store BundleItems;bool ItemRefreshPending=false,ItemRefreshPumping=false;}
-void ShutdownItemCatalog() noexcept {ItemRefreshPending=false;BundleItems.Shutdown();ItemPreviewPages.Shutdown();ItemPages.Shutdown();ItemManifest.Shutdown();}
+namespace {PersistentItemCatalog::Store ItemManifest;PagedItemCatalog::Store ItemPages,ItemPreviewPages;CacheBundleItems::Store BundleItems;std::atomic<bool> ImportedCacheChanged=false;bool ItemRefreshPending=false,ItemRefreshPumping=false;HelpyBrowsePolicy::Policy BrowsePolicy;}
+HelpyBrowsePolicy::Policy ItemBrowsePolicy() noexcept {return BrowsePolicy;}
+void NotifyImportedCache() noexcept {ImportedCacheChanged.store(true);}
+void ShutdownItemCatalog() noexcept {ItemRefreshPending=false;LearnedItems.Shutdown();BundleItems.Shutdown();ItemPreviewPages.Shutdown();ItemPages.Shutdown();ItemManifest.Shutdown();}
 void PumpItemCatalog(){
-    if(!ItemRefreshPending)return;
+    LearnedItems.Flush();
+    if(!ItemRefreshPending||!BrowsePolicy.PassiveRefresh)return;
+    static auto next=std::chrono::steady_clock::time_point{};const auto now=std::chrono::steady_clock::now();
+    if(now<next)return;next=now+std::chrono::milliseconds(50);
     ItemRefreshPumping=true;
     struct ResetPump{~ResetPump(){ItemRefreshPumping=false;}} reset;
-    try{(void)AlphabeticalItemWindow("","",1,"BasicRow");}catch(...){ItemRefreshPending=false;}
+    try{(void)AlphabeticalItemWindow("","",1,"BasicRow",BrowsePolicy);}catch(...){ItemRefreshPending=false;}
 }
-json AlphabeticalItemWindow(const std::string& query,const std::string& cursor,std::size_t limit,const std::string& fieldSet){
+json AlphabeticalItemWindow(const std::string& query,const std::string& cursor,std::size_t limit,const std::string& fieldSet,HelpyBrowsePolicy::Policy policy){
     if(fieldSet!="BasicRow"&&fieldSet!="Detail")throw std::runtime_error("Unsupported item catalog field projection.");
+    if(!ItemRefreshPumping&&fieldSet=="BasicRow"){
+        static bool reported=false;
+        if(!reported||BrowsePolicy!=policy){CodedLog<LogLevel::Normal>(Diagnostics::Id::CacheLoadPolicy,STR("Helpy item browsing: {} first; passive refresh {}.\n"),policy.CacheFirst?STR("cache"):STR("game"),policy.PassiveRefresh?STR("enabled"):STR("disabled"));reported=true;}
+        BrowsePolicy=policy;
+    }
+    if(ImportedCacheChanged.exchange(false))BundleItems.Invalidate();
     // Two consumers must not evict each other's in-progress source snapshot.
     static auto basicCache=std::make_unique<AlphabeticalItemCatalog::Cache>();
     static AlphabeticalItemCatalog::Cache detailCache;static std::string basicScope;
@@ -650,15 +683,17 @@ json AlphabeticalItemWindow(const std::string& query,const std::string& cursor,s
     // exact live path list invalidates this index without chasing transient
     // UObject counts (which change constantly while a menu is open).
     const ItemCatalogFilter::Query filter(query);
-    const auto paths=AssetProvenance::LivePaths();
+    auto paths=AssetProvenance::LivePaths();
+    for(const auto& candidate:ContainerItemMetadata())paths.push_back(candidate.path);
+    std::sort(paths.begin(),paths.end());paths.erase(std::unique(paths.begin(),paths.end()),paths.end());
     const auto published=HelpySourceCache::ForClient();
     const auto pageProviders=HelpySourceCache::NativePluginRoots();
     const auto fingerprint=fieldSet=="BasicRow"?published.value("CatalogKey",std::string{}):HelpySourceCache::PublishedFingerprint();
-    const auto scope=json::array({SpawnToolRequests::Generation.load(),fingerprint,paths,fieldSet}).dump();
+    const auto scope=json::array({SpawnToolRequests::Generation.load(),fingerprint,paths,fieldSet,policy.CacheFirst}).dump();
     static FocusedItemQuery::Misses cacheMisses;
     wchar_t localeName[LOCALE_NAME_MAX_LENGTH]{};GetUserDefaultLocaleName(localeName,LOCALE_NAME_MAX_LENGTH);
     const auto language=to_string(RC::StringType(localeName));
-    const auto manifest=HelpySourceCache::Directory(false).parent_path()/"item-catalogues"/(HelpySourceCache::Hex(HelpySourceCache::Hash(HostServices::ModDirectory().generic_string()))+".json");
+    const auto manifest=HelpySourceCache::Directory(false).parent_path()/"item-catalogues"/"native-items.json";
     std::optional<json> bundled;
     if(fieldSet=="BasicRow"&&!ItemRefreshPumping)bundled=BundleItems.Lookup(HelpySourceCache::Directory(false),HostServices::ModDirectory(),HelpySourceCache::Current,language,query,cursor,limit);
     const auto awaitingBundle=[&](){return json{{"Rows",json::array()},{"HasMore",true},{"NextCursor",cursor},{"AlphabeticalReady",false},{"PopulationStage","filtering-cache"},{"Coverage","Searching imported references on a file worker; existing results remain visible"}};};
@@ -670,9 +705,19 @@ json AlphabeticalItemWindow(const std::string& query,const std::string& cursor,s
             row.update(ItemSource::Fields(source));
         }return page;
     };
+    const auto bundlePage=[&](bool checking){
+        static std::string lastFallback;
+        const auto fallbackScope=std::to_string(SpawnToolRequests::Generation.load())+fingerprint;
+        if(!policy.CacheFirst&&lastFallback!=fallbackScope){CodedLog<LogLevel::Normal>(Diagnostics::Id::CacheFallback,STR("Helpy is displaying cached references while the requested live item page is unavailable. Gameplay still requires live validation.\n"));lastFallback=fallbackScope;}
+        auto page=std::move(*bundled);checking=checking||published.value("CheckingChanges",false);
+        page["CachePreview"]=checking;page["CheckingChanges"]=checking;
+        if(!checking)page["PopulationStage"]="cached-items";
+        return decorateSaved(std::move(page));
+    };
+    if(fieldSet=="BasicRow"&&policy.CacheFirst&&!policy.PassiveRefresh&&bundled){ItemRefreshPending=false;return bundlePage(false);}
     if(fieldSet=="BasicRow"&&(!published.value("Ready",false)||!published.value("Authoritative",false))){
         ItemRefreshPending=false;
-        if(bundled)return decorateSaved(std::move(*bundled));
+        if(bundled)return bundlePage(true);
         if(auto page=ItemPreviewPages.Preview(manifest,language,query,cursor,limit,pageProviders))return decorateSaved(std::move(*page));
         return {{"Rows",json::array()},{"HasMore",true},{"NextCursor",cursor},{"AlphabeticalReady",false},{"PopulationStage","checking-cache"},{"Coverage","No compatible saved presentation cache; waiting for mounted content verification"}};
     }
@@ -695,12 +740,12 @@ json AlphabeticalItemWindow(const std::string& query,const std::string& cursor,s
         if(!published.value("Ready",false)||!published.value("Authoritative",false))return {{"Rows",json::array()},{"HasMore",true},{"NextCursor","W:"+std::to_string(++waiting)},{"AlphabeticalReady",false},{"PopulationStage","checking-cache"},{"Coverage","Waiting for mounted content verification"}};
         diskScope=PersistentItemCatalog::DiskScope(published,paths,language);
         const auto legacyScope=json::array({"item-browse-v1",published.value("Key",std::string{}),paths,language}).dump();
-        if(auto page=ItemPages.Lookup(manifest,diskScope,query,cursor,limit,false,{},pageProviders)){
-            if(page->value("AlphabeticalReady",false))ItemRefreshPending=false;
+        if(policy.CacheFirst)if(auto page=ItemPages.Lookup(manifest,diskScope,query,cursor,limit,false,{},pageProviders)){
+            ItemRefreshPending=!page->value("AlphabeticalReady",false)&&policy.PassiveRefresh;
             // A verified read is still asynchronous. Keep the old presentation
             // page visible while the strict scope check runs on its worker.
             if(!ItemRefreshPumping&&!page->value("AlphabeticalReady",false))
-                if(bundled)return decorateSaved(std::move(*bundled));
+                if(bundled)return bundlePage(true);
             if(!ItemRefreshPumping&&!page->value("AlphabeticalReady",false))
                 if(auto preview=ItemPreviewPages.Preview(manifest,language,query,cursor,limit,pageProviders))return decorateSaved(std::move(*preview));
             (*page)["CheckingChanges"]=published.value("CheckingChanges",false);
@@ -713,12 +758,13 @@ json AlphabeticalItemWindow(const std::string& query,const std::string& cursor,s
             };
             for(auto& row:(*page)["Rows"])repair(row);
             if((*page).value("AlphabeticalReady",false))ItemManifest.Repair(manifest,diskScope,repair,json(pageProviders).dump());
-            if(bundled)return decorateSaved(std::move(*bundled));
+            if(bundled)return bundlePage(!page->value("AlphabeticalReady",false));
             if(!ItemRefreshPumping&&(*page)["Rows"].empty()&&!query.empty()&&BundleItems.Awaiting())return awaitingBundle();
             if(cacheMisses.NeedsLive(scope,query,*page)){auto live=focused(0);live["Reset"]=true;return live;}return *page;
         }
-        if(!ItemManifest.Restore(manifest,diskScope,basicCache,legacyScope)){
-            if(bundled)return decorateSaved(std::move(*bundled));
+        if(policy.CacheFirst&&!ItemManifest.Restore(manifest,diskScope,basicCache,legacyScope)){
+            ItemRefreshPending=policy.PassiveRefresh;
+            if(bundled)return bundlePage(true);
             if(!ItemRefreshPumping)if(auto preview=ItemPreviewPages.Preview(manifest,language,query,cursor,limit,pageProviders))return decorateSaved(std::move(*preview));
             return {{"Rows",json::array()},{"HasMore",true},{"NextCursor","W:"+std::to_string(++waiting)},{"AlphabeticalReady",false},{"PopulationStage","reading-catalogue"},{"Coverage","Reading saved item manifest"}};
         }
@@ -726,7 +772,7 @@ json AlphabeticalItemWindow(const std::string& query,const std::string& cursor,s
     auto& cache=fieldSet=="Detail"?detailCache:*basicCache;
     if(fieldSet=="Detail")cache.Scope(scope);
     auto result=cache.ReadRecovering(json::array({query,fieldSet}).dump(),cursor,limit,[&](size_t offset){
-        return ItemWindow({},offset,128,0,false,fieldSet,4096,1800,true);
+        return ItemWindow({},offset,128,0,false,fieldSet,ItemRefreshPumping?512:4096,ItemRefreshPumping?500:1800,true);
     },filter);
     if(fieldSet=="BasicRow"){
         ItemRefreshPending=!cache.Ready();ItemManifest.Persist(manifest,diskScope,cache);
@@ -734,7 +780,7 @@ json AlphabeticalItemWindow(const std::string& query,const std::string& cursor,s
         // into a blank discovery screen. Continue bounded native slices on
         // idle game-thread ticks, then replace this presentation in place.
         if(ItemRefreshPending&&!ItemRefreshPumping)
-            if(bundled)return decorateSaved(std::move(*bundled));
+            if(bundled)return bundlePage(true);
         if(ItemRefreshPending&&!ItemRefreshPumping)
             if(auto preview=ItemPreviewPages.Preview(manifest,language,query,cursor,limit,pageProviders)){
                 (*preview)["Coverage"]="Saved presentation cache; mounted content changed. Refreshing the catalogue in bounded background slices; gameplay actions remain live-validated.";
@@ -744,7 +790,7 @@ json AlphabeticalItemWindow(const std::string& query,const std::string& cursor,s
     result["PopulationStage"]=cache.Ready()?"items-ready":"discovering-items";
     result["CheckingChanges"]=published.value("CheckingChanges",false);
     if(fieldSet=="BasicRow"&&!cache.Ready()&&!ItemPages.Failure.empty())result["Coverage"]="Saved catalogue not reusable: "+ItemPages.Failure+". Rebuilding presentation data; gameplay remains live-validated.";
-    if(bundled)return decorateSaved(std::move(*bundled));
+    if(bundled&&policy.UseBundle(cache.Ready(),result["Rows"].empty()))return bundlePage(!cache.Ready());
     if(fieldSet=="BasicRow"&&!ItemRefreshPumping&&result["Rows"].empty()&&!query.empty()&&BundleItems.Awaiting())return awaitingBundle();
     if(fieldSet=="BasicRow"&&cacheMisses.NeedsLive(scope,query,result)){auto live=focused(0);live["Reset"]=true;return live;}
     return result;
