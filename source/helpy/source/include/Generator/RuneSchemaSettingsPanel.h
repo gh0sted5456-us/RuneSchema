@@ -3,6 +3,7 @@
 #include "Runtime/HelpySettings.h"
 #include "Generator/LazyCatalog.h"
 #include "Core/HelpyEnvironment.h"
+#include "Core/HelpyPreviewHooks.h"
 #include <nlohmann/json.hpp>
 #include <functional>
 #include <map>
@@ -30,7 +31,7 @@ inline void Accept(const json& result){Snapshot=result;Draft=result.at("Document
 inline void Load(){
     json result;if(!Remote||!Remote({{"Action","SettingsRead"}},result)){Status="RuneSchema settings service is unavailable. Update the matching core and RSMK together.";return;}
     if(!result.value("Ok",false)){Status=result.value("Status",std::string("Could not read settings.ini."));return;}
-    Accept(result);Status="The Helpy shortcut applies immediately. Other changes are saved for the next launch.";
+    Accept(result);Status="The Helpy shortcut applies immediately. Cleanup follows its activation choice; other startup changes require a restart.";
 }
 inline json Patch(){json result=json::object();if(!Loaded)return result;
     for(const auto& [path,type]:Snapshot.at("Editable").items()){
@@ -50,7 +51,8 @@ inline void SaveQuick(const std::string& path,const json& value){
     json result;if(!Remote||!Remote({{"Action","SettingsSave"},{"ExpectedContents",Snapshot.at("ExpectedContents")},{"Patch",{{path,value}}}},result)){
         Status="Save was not confirmed; reload settings before retrying.";return;}
     if(!result.value("Ok",false)){Status=result.value("Status",std::string("Setting was not saved."));return;}
-    Accept(result);QuickToggleError=false;Status=path=="/helpyHotkey"?"Saved. "+HelpySettings::HotkeyHint()+"; active now.":"Saved for the next game launch. The running session has not changed.";
+    Accept(result);QuickToggleError=false;Status=path=="/helpyHotkey"?"Saved. "+HelpySettings::HotkeyHint()+"; active now.":
+        (path=="/persistence/blanketCleanup"||path=="/persistence/cleanupOnWorldEntry")?result.value("Status",std::string("Saved. Cleanup follows its activation choice.")):"Saved for the next game launch. The running session has not changed.";
 }
 inline void QuickToggle(const char* label,const char* path,bool risky=false){
     const auto pointer=json::json_pointer(path);if(!Snapshot.at("Editable").contains(path)||!Snapshot.at("Document").contains(pointer))return;
@@ -104,8 +106,42 @@ inline void QuickSettings(){
     if(!hotkeyStatus.empty())ImGui::TextWrapped("%s",hotkeyStatus.c_str());
     if(HelpyImGuiTheme::SoftButton("Reload theme"))HelpyImGuiTheme::RequestReload();
     hint("Reload the current theme from disk. This does not reload mods or game content.");
-    CachePreferences();
-    if(ImGui::TreeNode("Game launch & saves")){
+    if(ImGui::TreeNode("Content & cache")){CachePreferences();ImGui::TreePop();}
+    const bool performanceOpen=ImGui::TreeNode("Performance");
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::AuthoringButtons["Quick performance"]=HelpyPreviewHooks::LastRect();
+#endif
+    if(performanceOpen){
+        auto& theme=HelpyImGuiTheme::Current;
+        bool save=ImGui::Checkbox("Show FPS in Helpy's window",&theme.showFps);
+        hint("Shows engine tick FPS and Helpy's own rendered FPS in the window frame. The counter reads cached game timing only while visible; it does not scan game objects. Dedicated servers show server tick rate.");
+        save|=ImGui::Checkbox("Show game FPS in game",&theme.showGameFps);
+#if defined(HELPY_PREVIEW)
+        HelpyPreviewHooks::AuthoringButtons["Game FPS overlay"]=HelpyPreviewHooks::LastRect();
+#endif
+        hint("A small counter over the game in windowed/borderless mode. Hiding it stops its timing requests and drawing. Helpy's window can stay closed.");
+        ImGui::SetNextItemWidth(HelpyImGuiTheme::Current.X(150));
+        if(ImGui::BeginCombo("FPS shortcut",theme.fpsHotkey.c_str())){
+            for(const auto& binding:HelpyShortcut::Choices){
+                ImGui::BeginDisabled(binding.Key==HelpySettings::Hotkey.load());
+                if(ImGui::Selectable(binding.Name.data(),binding.Name==theme.fpsHotkey)){theme.fpsHotkey=binding.Name;save=true;}
+                ImGui::EndDisabled();
+            }ImGui::EndCombo();
+        }
+        hint("Toggle the in-game counter while Dragonwilds or Helpy has focus. F10 by default. Choose a different key from Helpy's own shortcut; function keys avoid typing conflicts.");
+        if(const auto* binding=HelpyShortcut::Find(theme.fpsHotkey);binding&&binding->Key==HelpySettings::Hotkey.load())ImGui::TextWrapped("Choose a different FPS shortcut from Helpy's own key.");
+        ImGui::SetNextItemWidth(HelpyImGuiTheme::Current.X(150));
+        ImGui::SliderInt("Helpy FPS limit",&theme.helpyFpsLimit,15,60,"%d",ImGuiSliderFlags_AlwaysClamp);
+        save|=ImGui::IsItemDeactivatedAfterEdit();
+        hint("Limits Helpy rendering only. Default 30; unfocused Helpy is limited to 10 FPS and hidden/minimized windows stop rendering. The game frame-rate limit is unchanged.");
+        int interval=theme.fpsRefreshMs<=500?0:theme.fpsRefreshMs<=1000?1:2;
+        const char* intervals[]{"0.5 seconds","1 second","2 seconds"};
+        ImGui::SetNextItemWidth(HelpyImGuiTheme::Current.X(150));
+        if(ImGui::Combo("Counter refresh",&interval,intervals,3)){theme.fpsRefreshMs=interval==0?500:interval==1?1000:2000;save=true;}
+        if(save)HelpyImGuiTheme::SaveCurrent();
+        ImGui::TreePop();
+    }
+    if(ImGui::TreeNodeEx("Game launch & saves",ImGuiTreeNodeFlags_DefaultOpen)){
         static json quick=json::object();static char character[257]{},world[257]{};static int mode=1;static bool dirty=false,unconfirmed=false;static std::string message;
         static bool saved=false;static int choicePolls=0;static double nextChoicePoll=0,retryRead=0;
         const auto load=[&](bool discard){json result;if(!Remote||!Remote({{"Action","QuickLoadRead"}},result)||!result.is_object()||!result.value("Ok",false)){message=result.is_object()?result.value("Status",std::string("Quick Launch service unavailable; use a matching core build.")):"Quick Launch service unavailable; use a matching core build.";return;}
@@ -150,6 +186,22 @@ inline void QuickSettings(){
         if(unconfirmed||quick.empty()){ImGui::TextColored(HelpyImGuiTheme::Current.error,"Launch settings need attention. Hover for details.");hint(message);}
         else if(saved){ImGui::TextDisabled("Saved for next launch");hint(message);}
         ImGui::Separator();
+        if(Loaded){
+            QuickToggle("Blanket save cleanup (fallback)","/persistence/blanketCleanup");
+            hint("Enabled: use the original broad cleanup across supported local saves at a safe entry boundary. Disabled: limit cleanup to the character/world being loaded. Preview/selection alone does not authorize cleanup. This choice stays saved until changed; backups remain mandatory.");
+        const bool savedBlanket=Snapshot.at("Document").at("persistence").value("blanketCleanup",false);
+            const bool atEntry=Snapshot.at("Document").at("persistence").value("cleanupOnWorldEntry",false);
+            if(Snapshot.at("Editable").contains("/persistence/cleanupOnWorldEntry")){
+                int apply=atEntry?0:1;
+                const char* choices[]{"Next character/world entry","Next game launch"};
+                ImGui::BeginDisabled(!Patch().empty());ImGui::SetNextItemWidth(HelpyImGuiTheme::Current.X(250));
+                if(ImGui::Combo("Apply cleanup changes",&apply,choices,2))SaveQuick("/persistence/cleanupOnWorldEntry",apply==0);
+                ImGui::EndDisabled();
+                hint("Next entry reads the saved policy at a native load boundary. Next game launch retains the current session's applied policy until restart. Changing this control never starts a background sweep.");
+            }
+            ImGui::TextDisabled("%s",savedBlanket
+                ?"Saved scope: blanket fallback":"Saved scope: selected character/world");
+        }
         if(Loaded){QuickToggle("Save Bypass","/persistence/allowCorruptCharacterEntry",true);
             hint("Checked: use bypass by default. Unchecked: Normal, Quick Launch and dedicated servers use relaxed native loading first, then fallback only after native rejection. Native loading runs once. Does not repair unreadable data; keep backups and disable any standalone bypass. Next launch only.\n\nCurrent session: "+Snapshot.value("BypassStatus",std::string("Not reported")));}
         ImGui::TextDisabled("Backup-first save pruning");
@@ -177,7 +229,7 @@ inline void QuickSettings(){
     }
 }
 inline void Field(const std::string& key,json& value,const std::string& path){
-    ImGui::PushID(path.c_str());const auto label=Label(key);bool changed=false;
+    ImGui::PushID(path.c_str());const auto label=path=="/persistence/cleanupOnWorldEntry"?std::string("Apply cleanup changes at next world entry"):Label(key);bool changed=false;
     if(value.is_boolean()){bool v=value.get<bool>();if(ImGui::Checkbox(label.c_str(),&v)){value=v;changed=true;}}
     else if(value.is_number_integer()||value.is_number_unsigned()){
         int64_t v=value.get<int64_t>();ImGui::SetNextItemWidth(180);if(ImGui::InputScalar(label.c_str(),ImGuiDataType_S64,&v)){value=v;changed=true;}
@@ -202,6 +254,8 @@ inline void Field(const std::string& key,json& value,const std::string& path){
         ImGui::TextWrapped("Current session: %s",Snapshot.value("BypassStatus",std::string("Not reported")).c_str());
     }
     if(path=="/defaultRecovery/enabled")ImGui::TextWrapped("Default recovery is separate from the validation bypass. Enabling bypass does not enable progress restoration.");
+    if(path=="/persistence/blanketCleanup")ImGui::TextWrapped("Fallback across supported local saves. Off selects only the character/world being loaded. Neither choice authorizes preview cleanup. The setting persists until changed; verified backups remain mandatory.");
+    if(path=="/persistence/cleanupOnWorldEntry")ImGui::TextWrapped("On: apply the saved cleanup policy at the next character/world entry. Off: retain the current session policy until the next game launch. This does not start a background scan.");
     if(path=="/archiveLogs")ImGui::TextWrapped("Starts a fresh continuous RuneSchema.log at launch. Keep the previous run in logs/ with a UTC date-time filename. Restart required. Archives are not automatically deleted; UE4SS.log is unchanged.");
     ImGui::PopID();
 }
@@ -209,7 +263,7 @@ inline void Render(){
     if(!Loaded&&Status.empty())Load();
     if(Loaded)Dirty=!Patch().empty();
     ImGui::TextUnformatted("RuneSchema configuration");
-    ImGui::TextWrapped("Edit this installation's settings.ini. Saves create a backup. The Helpy shortcut applies immediately; other changes require a restart. These settings do not change a connected remote server.");
+    ImGui::TextWrapped("Edit this installation's settings.ini. Saves create a backup. The Helpy shortcut applies immediately; cleanup follows its activation choice. Other startup changes require a restart. These settings do not change a connected remote server.");
     if(HelpyImGuiTheme::SoftButton(Dirty?"Discard / reload":"Reload from disk"))Load();
     bool invalid=false;for(const auto& [path,error]:ArrayErrors)invalid|=error;
     ImGui::SameLine();ImGui::BeginDisabled(!Loaded||!Dirty||invalid);

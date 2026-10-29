@@ -15,6 +15,7 @@
 #include "Runtime/UE4SSCompatibility.h"
 #include "Unreal/Hooks.hpp"
 #include "Mod/CppUserModBase.hpp"
+#include "LuaMadeSimple/LuaMadeSimple.hpp"
 #include "Runtime/HostServices.h"
 #include "Generator/JsonSchemaGenerator.h"
 #include "Generator/InspectionTools.h"
@@ -266,6 +267,10 @@ public:
         try {
             for(const auto& diagnostic:PS::UE4SSPackageIntegration::Prepare(std::filesystem::path(PS::HostServices::WorkingDirectory())))
                 PS::Log<LogLevel::Warning>(STR("[UE4SS-PACKAGES] {}\n"),PS::ToWideSafe(diagnostic.c_str()));
+            const auto root=PS::HostServices::ModDirectory();
+            const auto discovery=PS::ConfigFiles::Read(root/"scripts"/"package-discovery.lua",128*1024);
+            m_packageDiscoveryBootstrap="local install=(function()\n"+discovery+"\nend)();install("
+                +nlohmann::json(RC::to_string(root.generic_wstring())).dump()+")";
         }catch(const std::exception& error){
             (void)PS::LogStructuredFallback<LogLevel::Warning>(
                 PS::StructuredDiagnosticB3D::Report("RS-CORE-030","Warning","Partial",
@@ -501,6 +506,9 @@ public:
             ImGui::TextWrapped("Turn the last option off to keep startup component-default registration but prevent RuneSchema from changing combat components that already exist in the first gameplay world.");
             ImGui::EndDisabled();
             ImGui::SeparatorText("Progress persistence");
+            ImGui::Checkbox("Blanket save cleanup (fallback)", &settings.persistence.blanketCleanup);
+            ImGui::Checkbox("Apply cleanup changes at next world entry", &settings.persistence.cleanupOnWorldEntry);
+            ImGui::TextWrapped("Blanket cleanup uses the original broad pass at a safe load boundary; off limits cleanup to the selected character/world. Activation on reads the saved choice at the next world entry; off retains the session policy until restart. Save these choices below. Preview alone never authorizes cleanup. Both modes require verified backups.");
             ImGui::Checkbox("Save RuneSchema character customization", &settings.persistence.characterCustomization);
             ImGui::TextWrapped("Off by default. Character option and data-table loaders remain active, but automatic /players appearance assignments do not rewrite CustomizationSaveData.");
             ImGui::Checkbox("Save Bypass by default (restart required)", &settings.persistence.allowCorruptCharacterEntry);
@@ -509,9 +517,7 @@ public:
             ImGui::Checkbox("Save RuneSchema quest progress", &settings.persistence.quests);
             ImGui::TextWrapped("On by default. Off leaves quest definitions available to other loaders but blocks RuneSchema quest actions because native quest progress is save-backed.");
             ImGui::SeparatorText("World save cleanup");
-            ImGui::Checkbox("Back up worlds before building cleanup (restart required)",
-                &settings.worldSaveCleanup.backupBeforePrune);
-            ImGui::TextWrapped("On by default for Steam, Game Pass, and dedicated servers. Turning it off saves space but removes RuneSchema's automatic pre-cleanup copy. Live-registry checks remain mandatory either way.");
+            ImGui::TextWrapped("A verified backup is required before building cleanup in either mode. The legacy backupBeforePrune setting cannot disable this protection.");
             ImGui::SeparatorText("Default baseline recovery");
             ImGui::Checkbox("Enable baseline recovery (restart required)", &settings.defaultRecovery.enabled);
             ImGui::TextWrapped("Off by default. When enabled, RuneSchema fills only missing or invalid selected fields after live-registry orphan pruning. Healthy live values and later progress always win.");
@@ -820,6 +826,20 @@ public:
         ImGui::EndChild(); // SettingsViewport
     }
 
+    void InstallPackageDiscovery(RC::StringViewType modName,RC::LuaMadeSimple::Lua& lua) {
+        if(m_startupFailed.load(std::memory_order_acquire)||m_packageDiscoveryBootstrap.empty())return;
+        try {lua.execute_string(m_packageDiscoveryBootstrap);}
+        catch(const std::exception& error) {
+            PS::Log<LogLevel::Warning>(STR("[UE4SS-PACKAGES][DISCOVERY][DEFERRED] {}: {}. Native discovery retained.\n"),
+                modName,PS::ToWideSafe(error.what()));
+        }
+    }
+    void on_lua_start(RC::StringViewType name,RC::LuaMadeSimple::Lua&,RC::LuaMadeSimple::Lua& main,
+            RC::LuaMadeSimple::Lua&,RC::LuaMadeSimple::Lua*) override {InstallPackageDiscovery(name,main);}
+    // Older stock hosts call the vector overload; installation is idempotent on hosts calling both.
+    void on_lua_start(RC::StringViewType name,RC::LuaMadeSimple::Lua&,RC::LuaMadeSimple::Lua& main,
+            RC::LuaMadeSimple::Lua&,std::vector<RC::LuaMadeSimple::Lua*>&) override {InstallPackageDiscovery(name,main);}
+
     auto on_unreal_init() -> void override
     {
         if (m_startupFailed.load(std::memory_order_acquire)) return;
@@ -919,6 +939,7 @@ private:
     std::string m_schemaExportName;
     std::atomic<bool> m_unrealReady = false;
     std::atomic<bool> m_startupFailed = false;
+    std::string m_packageDiscoveryBootstrap;
     Hook::GlobalCallbackId m_apiExportCallbackId = Hook::ERROR_ID;
         Hook::GlobalCallbackId m_toolsWorldCallbackId = Hook::ERROR_ID;
 };

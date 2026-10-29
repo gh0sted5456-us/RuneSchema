@@ -315,6 +315,7 @@ void DragonWildsRegistryLoader::LoadCookedRegistries() {
             STR("Cooked registry Asset Registry metadata is unavailable; conventional enabled-mod declarations will still be checked.\n"));
     }
     std::set<std::string> handled,failedOwners,unindexedOwners;
+    std::vector<std::pair<std::string,std::string>> pendingShards;
     const auto owners=PS::MountedModRegistryOwners::Snapshot();
     const std::set<std::string> enabledOwners(owners.begin(),owners.end());
     const auto readAsset=[&](UObject* object,const std::string& path,const std::string& expectedOwner)->PS::CookedRegistryShards::Asset {
@@ -337,12 +338,12 @@ void DragonWildsRegistryLoader::LoadCookedRegistries() {
         };
         auto document=read(TEXT("RuneSchemaRegistryJson"));if(document.empty())document=read(TEXT("RegistryJson"));if(document.empty())throw std::runtime_error("asset requires a RuneSchemaRegistryJson or RegistryJson string property");
         auto owner=read(TEXT("RegistryOwner"));if(owner.empty()) {
-            if(!expectedOwner.empty())throw std::runtime_error("conventional cooked registry asset requires an explicit RegistryOwner");
+            if(!expectedOwner.empty())throw std::runtime_error("cooked registry asset requires an explicit RegistryOwner");
             if(path.size()>2&&path[0]=='/') {const auto slash=path.find('/',1);owner=path.substr(1,slash==std::string::npos?slash:slash-1);}
             if(owner=="Game")throw std::runtime_error("assets under /Game require an explicit RegistryOwner string");
         }
         if(!Identifier(owner)||owner=="RuneSchema"||owner=="FModel")throw std::runtime_error("cooked RegistryOwner is invalid or reserved");
-        if(!expectedOwner.empty()&&owner!=expectedOwner)throw std::runtime_error("conventional cooked registry owner does not match its enabled mod folder");
+        if(!expectedOwner.empty()&&owner!=expectedOwner)throw std::runtime_error("cooked registry owner does not match its enabled mod folder");
         return {owner,PS::CookedRegistryShards::ParseJson(document),document.size()};
     };
     const auto reject=[&](const std::string& path,const std::exception& error,const std::string& owner) {
@@ -384,7 +385,7 @@ void DragonWildsRegistryLoader::LoadCookedRegistries() {
                 PS::ToWideSafe(group.Owner.c_str()),group.Paths.size(),group.References,group.Bytes,PS::ToWideSafe(path.c_str()));
         }else{
             if(PS::CookedRegistryShards::ReservedShardPath(path)||(root.Document.is_object()&&root.Document.contains("RegistryShard")))
-                throw std::runtime_error("RegistryShard assets can only be enrolled through an enabled conventional root index");
+                throw std::runtime_error("RegistryShard assets can only be enrolled through an enabled root index");
             LoadDocument(root.Document,root.Owner,"pak:"+path);
         }
         PS::Log<RC::LogLevel::Normal>(STR("Registry: discovered cooked registry asset '{}' owned by '{}'.\n"),PS::ToWideSafe(path.c_str()),PS::ToWideSafe(root.Owner.c_str()));
@@ -392,30 +393,45 @@ void DragonWildsRegistryLoader::LoadCookedRegistries() {
     std::size_t conventional=0;
     // Conventional roots run first, independent of Asset Registry enumeration.
     for(const auto& owner:PS::MountedModRegistryOwners::Snapshot()) {
-        const auto name="DA_RuneSchemaRegistry_"+owner;
+      for(const auto* prefix:{"DA_RuneSchemaRegistry_","DA_Registry_"}){
+        const auto name=std::string(prefix)+owner;
         const auto path="/Game/Mods/"+owner+"/Registry/"+name+"."+name;
         if(handled.contains(PS::CookedRegistryShards::Fold(path)))continue;
         try {auto* object=ActorHelper::ResolveObject(PS::ToWideSafe(path.c_str()));
             if(!object)continue;
             consume(object,path,owner);++conventional;}
         catch(const std::exception& error){failedOwners.insert(owner);reject(path,error,owner);}
+      }
     }
+    std::size_t candidates=0;
     if(metadataReady)for(auto& asset:assets) {
-        const auto name=RC::to_string(asset.AssetName().ToString());if(!name.starts_with("DA_RuneSchemaRegistry")&&!name.starts_with("RSREG_"))continue;
+        const auto name=RC::to_string(asset.AssetName().ToString());
         const auto package=RC::to_string(asset.PackageName().ToString()),path=package+"."+name;
+        const bool legacy=name.starts_with("DA_RuneSchemaRegistry")||name.starts_with("RSREG_");
+        const auto folderOwner=PS::CookedRegistryShards::RegistryFolderOwner(path);
+        if(!legacy&&folderOwner.empty())continue;
+        const auto ownerKey=PS::CookedRegistryShards::Fold(folderOwner);
+        const auto enabled=folderOwner.empty()?owners.end():std::find_if(owners.begin(),owners.end(),[&](const auto& value){return PS::CookedRegistryShards::Fold(value)==ownerKey;});
+        if(!folderOwner.empty()&&enabled==owners.end())continue;
+        if(!legacy&&enabled==owners.end())continue;
         if(handled.contains(PS::CookedRegistryShards::Fold(path)))continue;
+        if(++candidates>4096){reject(path,std::runtime_error("Cooked registry discovery exceeds 4096 candidate assets"),folderOwner);break;}
         if(PS::CookedRegistryShards::ReservedShardPath(path)){
-            const auto ownerKey=PS::CookedRegistryShards::Fold(path.substr(11,path.find('/',11)-11));
-            const auto enabled=std::find_if(owners.begin(),owners.end(),[&](const auto& value){return PS::CookedRegistryShards::Fold(value)==ownerKey;});
-            // A child must never partially enroll if its root failed or is
-            // missing. Report once per enabled owner, not once per shard.
-            if(enabled!=owners.end()&&!failedOwners.contains(*enabled)&&unindexedOwners.insert(*enabled).second)
-                reject(path,std::runtime_error("Unindexed registry shards were not enrolled; a complete conventional root is required"),*enabled);
+            if(enabled!=owners.end())pendingShards.emplace_back(path,*enabled);
             continue;
         }
-        try {consume(ActorHelper::ResolveObject(PS::ToWideSafe(path.c_str())),path,{});}
+        try {auto* object=ActorHelper::ResolveObject(PS::ToWideSafe(path.c_str()));
+            if(!object)continue;
+            if(!legacy&&!name.starts_with("DA_Registry_")&&!CastField<FStrProperty>(PropertyHelper::GetPropertyByName(object->GetClassPrivate(),TEXT("RuneSchemaRegistryJson")))
+                &&!CastField<FStrProperty>(PropertyHelper::GetPropertyByName(object->GetClassPrivate(),TEXT("RegistryJson"))))continue;
+            consume(object,path,enabled==owners.end()?std::string{}:*enabled);}
         catch(const std::exception& error){const auto begin=std::string("/Game/Mods/").size();const auto end=path.find('/',begin);const auto owner=path.starts_with("/Game/Mods/")&&end!=path.npos?path.substr(begin,end-begin):std::string{};reject(path,error,owner);}
     }
+    // Metadata can list children before an aliased root; diagnose only after
+    // every root has had an opportunity to enroll its complete transaction.
+    for(const auto& [path,owner]:pendingShards)if(!handled.contains(PS::CookedRegistryShards::Fold(path))
+        &&!failedOwners.contains(owner)&&unindexedOwners.insert(owner).second)
+        reject(path,std::runtime_error("Unindexed registry shards were not enrolled; a complete enabled root is required"),owner);
     if(conventional)PS::Log<RC::LogLevel::Normal>(STR("Registry: directly loaded {} conventional cooked declaration{} missing from Asset Registry metadata.\n"),conventional,conventional==1?TEXT(""):TEXT("s"));
 }
 

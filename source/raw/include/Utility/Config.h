@@ -99,6 +99,10 @@ namespace PS {
     };
 
     struct PersistenceSettings {
+        // Clean only the selected save at world entry; blanket cleanup is opt-in.
+        bool blanketCleanup = false;
+        // False keeps the launch-time policy; true reads it at the next world entry.
+        bool cleanupOnWorldEntry = false;
         // Automatic /players appearance assignments stay read-only while
         // false. Character option/table loaders remain active.
         bool characterCustomization = false;

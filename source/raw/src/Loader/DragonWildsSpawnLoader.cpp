@@ -2,6 +2,7 @@
 #include "Core/CatalogWindowProgress.h"
 #include "Core/IconCaptureSchedule.h"
 #include "Runtime/SlowWork.h"
+#include "Runtime/GameFrameRate.h"
 #include "Core/WorkSlice.h"
 #include "Core/SpawnFootprint.h"
 #include "Core/MapTravel.h"
@@ -2736,6 +2737,7 @@ namespace DragonWilds {
 
         m_spawnTickCallbackId = Hook::RegisterEngineTickPostCallback(
             [this](Hook::TCallbackIterationData<void>&, UEngine*, float deltaSeconds, bool) {
+                PS::GameFrameRate::Tick();
                 PS::WorkSlice helpyWork;
                 if(m_inventoryMarks)PS::SlowWork::Measure("helpy.marks",[&]{m_inventoryMarks->Tick();});
                 if(m_markRelay)m_markRelay->Tick(m_readyWorld,PS::SpawnToolRequests::Generation.load(),[this](UObject* controller){return GetPlayerCharacterGuid(controller);},ForwardHelpyAuthority);

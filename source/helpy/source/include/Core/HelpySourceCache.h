@@ -25,6 +25,7 @@
 namespace PS::HelpySourceCache {
 struct Snapshot {
     std::map<std::string,std::string> DisplayNames;
+    std::map<std::string,std::string> Versions;
     std::string Key,CatalogKey;std::set<std::string> Files,NativePlugins;
     std::string FileKey;uint64_t IconBase=0;
     std::map<std::string,uint64_t> OwnerHashes;
@@ -44,7 +45,7 @@ inline std::string Hex(uint64_t value){char text[17]{};std::snprintf(text,sizeof
 inline Snapshot Replan(Snapshot result,const HelpyCacheSources::Plan& plan){
     if(result.FileKey.empty()||result.ContentRevision!=plan.ContentRevision||result.Authoritative!=plan.Authoritative)
         throw std::runtime_error("Source content requires fresh discovery");
-    result.PlanRevision=plan.Revision;result.Complete=plan.Complete;result.DisplayNames=plan.DisplayNames;
+    result.PlanRevision=plan.Revision;result.Complete=plan.Complete;result.DisplayNames=plan.DisplayNames;result.Versions=plan.Versions;
     result.AssetOwners=plan.AssetOwners;result.DeclaredOwners=plan.DeclaredOwners;
     for(const auto& [group,owners]:plan.Owners)result.Owners[group].insert(owners.begin(),owners.end());
     result.SourceKeys.clear();uint64_t hash=std::stoull(result.FileKey,nullptr,16);
@@ -231,7 +232,7 @@ inline nlohmann::json ForClient(){Requested=true;std::lock_guard lock(PublishedM
     result["CheckingChanges"]=checking;return result;}
 inline nlohmann::json Document(const Snapshot& value){return {{"Version",4},{"Ready",!value.Provisional&&value.Complete&&!value.Key.empty()&&(!value.Authoritative||!value.SourceKeys.empty())},{"Provisional",value.Provisional},
     {"Authoritative",value.Authoritative},{"PlanRevision",value.PlanRevision},{"ContentRevision",value.ContentRevision},{"Key",value.Key},{"CatalogKey",value.CatalogKey},{"Sources",value.SourceKeys},{"Owners",value.Owners},{"DeclaredOwners",value.DeclaredOwners},{"NativePlugins",value.NativePlugins},
-    {"Discovery","ContainerDirectoryIndex"},{"Containers",value.Containers},{"ModNames",value.DisplayNames}};}
+    {"Discovery","ContainerDirectoryIndex"},{"Containers",value.Containers},{"ModNames",value.DisplayNames},{"ModVersions",value.Versions},{"UpdateAware",true}};}
 inline bool AcceptRemote(const nlohmann::json& value){
     if(!value.is_object()||!value.value("Ready",false))return false;
     if(value.value("Version",0)!=4||!value.value("Authoritative",false))throw std::runtime_error("Icon source manifest requires a matching RuneSchema core");
@@ -268,6 +269,14 @@ inline bool AcceptRemote(const nlohmann::json& value){
             next.DisplayNames.emplace(HelpyCacheSources::Lower(owner),label.get<std::string>());
         }
     }
+    if(value.contains("ModVersions")){
+        if(!value["ModVersions"].is_object()||value["ModVersions"].size()>512)throw std::runtime_error("Invalid mod version hints");
+        for(const auto& [owner,version]:value["ModVersions"].items()){
+            if(!ContentSource::Valid(ContentSource::Mod(owner))||!version.is_string()||version.get_ref<const std::string&>().empty()||version.get_ref<const std::string&>().size()>128
+                ||std::any_of(version.get_ref<const std::string&>().begin(),version.get_ref<const std::string&>().end(),[](unsigned char c){return c<32||c==127;}))throw std::runtime_error("Invalid mod version hint");
+            next.Versions.emplace(HelpyCacheSources::Lower(owner),version.get<std::string>());
+        }
+    }
     if(value.contains("Containers")){
         const auto& containers=value.at("Containers");
         if(!containers.is_object()||containers.size()>4096)throw std::runtime_error("Invalid container discovery manifest");
@@ -282,7 +291,7 @@ inline bool AcceptRemote(const nlohmann::json& value){
         }
         next.Containers=containers;
     }
-    if(next.Key==Current.Key&&next.NativePlugins==Current.NativePlugins&&next.DeclaredOwners==Current.DeclaredOwners&&next.DisplayNames==Current.DisplayNames){
+    if(next.Key==Current.Key&&next.NativePlugins==Current.NativePlugins&&next.DeclaredOwners==Current.DeclaredOwners&&next.DisplayNames==Current.DisplayNames&&next.Versions==Current.Versions){
         Current.PlanRevision=next.PlanRevision;Current.ContentRevision=next.ContentRevision;Current.Containers=std::move(next.Containers);return false;
     }
     bool removed=false;for(const auto& [group,key]:Current.SourceKeys)if(!next.SourceKeys.contains(group)){removed=true;break;}
@@ -290,6 +299,12 @@ inline bool AcceptRemote(const nlohmann::json& value){
     Current=std::move(next);++Revision;if(removed)RemovalRevision=Revision;if(invalidate)CatalogInvalidationRevision=Revision;return true;
 }
 inline std::filesystem::path Directory(bool liveOnly);
+// Compare/free duplicate trees on the discovery worker, retaining the published
+// immutable index so an unchanged refresh cannot retire it on the game/UI thread.
+inline void ReuseUnchangedIndex(std::shared_ptr<const HelpyCacheSources::Plan::AssetOwnerMap>& index,
+    const std::shared_ptr<const HelpyCacheSources::Plan::AssetOwnerMap>& previous){
+    if(index&&previous&&*index==*previous)index=previous;
+}
 inline void Persist(const Snapshot& value) noexcept {
     try {if(!value.Authoritative||!value.Complete||value.Provisional)return;const auto folder=Directory(false);std::filesystem::create_directories(folder);
         const auto target=folder/"sources.json",temporary=folder/("sources-"+std::to_string(GetCurrentProcessId())+".tmp");
@@ -320,11 +335,11 @@ inline bool Poll(const std::filesystem::path& root){
     }catch(const std::exception& error){Error=error.what();return false;}}
     const auto plan=HelpyCacheSources::Snapshot();
     if(Worker.valid()&&Worker.wait_for(std::chrono::seconds(0))==std::future_status::ready){try{
-        auto result=Worker.get();if(result.PlanRevision!=plan.Revision){
+        auto result=Worker.get();if(result.Versions!=plan.Versions){Next={};return false;}if(result.PlanRevision!=plan.Revision){
             if(result.ContentRevision!=plan.ContentRevision||result.FileKey.empty()){Next={};return false;}
             result=Replan(std::move(result),plan);
         }
-        if(result.Key!=Current.Key||Current.Provisional){bool removed=false;for(const auto& path:Current.Files)if(!result.Files.contains(path)){removed=true;break;}
+        if(result.Key!=Current.Key||Current.Provisional||result.Versions!=Current.Versions){bool removed=false;for(const auto& path:Current.Files)if(!result.Files.contains(path)){removed=true;break;}
             const bool invalidate=InvalidatesCatalog(Current,result);
             Current=std::move(result);++Revision;if(removed)RemovalRevision=Revision;if(invalidate)CatalogInvalidationRevision=Revision;changed=true;}
         else Current=std::move(result); // A metadata-only revision still completes live source verification.
@@ -332,11 +347,14 @@ inline bool Poll(const std::filesystem::path& root){
         {std::lock_guard lock(PublishedMutex);Published=Document(Current);PublishedAuthoredAssets=Current.AuthoredAssets;PublishedContainerAssets=Current.ContainerAssets;PublishedContainerFiles=Current.ContainerFiles;}
     }catch(const std::exception& error){Error=error.what();}if(RefreshingFiles||!Error.empty())Next=now+std::chrono::seconds(Error.empty()?60:5);}
     if(!Worker.valid()&&(now>=Next||InspectingRevision!=plan.Revision)){
-        const bool reuse=Error.empty()&&now<Next&&!Current.FileKey.empty()&&Current.ContentRevision==plan.ContentRevision&&Current.Authoritative==plan.Authoritative;
+        const bool reuse=Error.empty()&&now<Next&&!Current.FileKey.empty()&&Current.ContentRevision==plan.ContentRevision&&Current.Authoritative==plan.Authoritative&&Current.Versions==plan.Versions;
         RefreshingFiles=!reuse;
         InspectingRevision=plan.Revision;
         if(reuse)Worker=std::async(std::launch::async,[snapshot=Current,plan]{auto value=Replan(std::move(snapshot),plan);Persist(value);return value;});
-        else Worker=std::async(std::launch::async,[root,plan]{auto value=Inspect(root,plan);Persist(value);return value;});}return changed;
+        else Worker=std::async(std::launch::async,[root,plan,authored=Current.AuthoredAssets,assets=Current.ContainerAssets,files=Current.ContainerFiles]{
+            auto value=Inspect(root,plan);
+            ReuseUnchangedIndex(value.AuthoredAssets,authored);ReuseUnchangedIndex(value.ContainerAssets,assets);ReuseUnchangedIndex(value.ContainerFiles,files);
+            Persist(value);return value;});}return changed;
 }
 inline bool Ready(){return Current.Complete&&!Current.Key.empty()&&Error.empty()&&(!Current.Authoritative||!Current.SourceKeys.empty());}
 // Call after the UI thread stops, before unloading the DLL. A std::async

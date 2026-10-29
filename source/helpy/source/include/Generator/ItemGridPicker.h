@@ -100,7 +100,7 @@ inline void CardScaleControl(){
 #endif
 }
 inline void IconCacheControl(bool catalogueBusy){
-    if(ImGui::SmallButton("Icon cache..."))HelpyIconPacks::Open=true;
+    if(ImGui::SmallButton("Cache..."))HelpyIconPacks::Open=true;
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::IconCache=HelpyPreviewHooks::LastRect();
 #endif
@@ -533,13 +533,18 @@ inline void PopulationProgress(const LazyCatalog::State& lazy,const std::set<std
         if(view.Busy&&!lazy.Rows.empty()&&lazy.LastError.empty())HelpyLoadingIndicator::Draw({slot.x+size*.5f,slot.y+size*.5f},size*.34f,theme,view.Label,progressDetail);
     }
 }
+inline void SelectFamily(State& state,std::string family){
+    state.FamilyKey=std::move(family);state.PendingFamilyKey.clear();state.Query.clear();state.SearchInput.clear();
+    state.ActiveCategory="All";state.FavoritesOnly=false;state.PersonalTag.clear();
+    state.PageIndex=0;state.ResetScroll=true;state.CatalogRevision=0;state.Matches.clear();
+}
 inline Result Render(const char* id,const json& catalog,char* filter,size_t filterCapacity,char* selected,size_t selectedCapacity,State& state,uint64_t revision,bool allowMulti=true,bool quickActions=false,bool fillSpace=false,bool uniformCards=false,bool showControls=true,float fixedViewport=0,const LazyCatalog::State* localCatalog=nullptr) {
     ItemDetails::Poll();Result out;std::set<std::string> visibleIcons;ImGui::PushID(id);LoadViewPreference(state);SyncLegacySelection(state,selected);
     if(state.PersonalRevision!=HelpyPersonalization::Revision.load()){state.PersonalRevision=HelpyPersonalization::Revision.load();state.CatalogRevision=0;state.Matches.clear();state.PageIndex=0;state.ResetScroll=true;}
     if(!filter||!filterCapacity||!selected||!selectedCapacity){ImGui::TextDisabled("Item picker buffer unavailable.");ImGui::PopID();return out;}
     if(!state.PendingFamilyKey.empty()){
-        state.FamilyKey=std::move(state.PendingFamilyKey);state.PendingFamilyKey.clear();state.Query.clear();state.SearchInput.clear();filter[0]=0;
-        state.ActiveCategory="All";if(!localCatalog)HelpyImGuiTheme::Current.itemCategory="All";state.PageIndex=0;state.ResetScroll=true;state.CatalogRevision=0;state.Matches.clear();
+        SelectFamily(state,std::move(state.PendingFamilyKey));filter[0]=0;
+        if(!localCatalog)HelpyImGuiTheme::Current.itemCategory="All";
         if(!localCatalog)LazyCatalog::Search(0,BackendQuery(state));
     }
     const auto sourcePreference=ItemSource::Decode(HelpyImGuiTheme::Current.itemSource);
@@ -606,8 +611,13 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
     PopulationProgress(LazyCatalog::For(0),state.VisibleProgressIcons,true);
     if(!state.FamilyKey.empty()){
         auto label=state.FamilyKey;std::replace(label.begin(),label.end(),'_',' ');for(size_t i=0;i<label.size();++i)if(i==0||label[i-1]==' ')label[i]=static_cast<char>(std::toupper(static_cast<unsigned char>(label[i])));
-        ImGui::TextWrapped("Family: %s",label.c_str());ImGui::SameLine();
-        if(ImGui::SmallButton("Clear family")){state.FamilyKey.clear();state.PageIndex=0;state.ResetScroll=true;state.CatalogRevision=0;state.Matches.clear();LazyCatalog::Search(0,BackendQuery(state));}
+        if(ImGui::BeginTable("##family-filter",2,ImGuiTableFlags_SizingStretchProp)){
+            ImGui::TableSetupColumn("Family",ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("Clear",ImGuiTableColumnFlags_WidthFixed,ImGui::CalcTextSize("Clear family").x+ImGui::GetStyle().FramePadding.x*2);
+            ImGui::TableNextColumn();ImGui::TextWrapped("Family: %s",label.c_str());ImGui::TableNextColumn();
+            if(ImGui::SmallButton("Clear family")){state.FamilyKey.clear();state.PageIndex=0;state.ResetScroll=true;state.CatalogRevision=0;state.Matches.clear();if(!localCatalog)LazyCatalog::Search(0,BackendQuery(state));}
+            ImGui::EndTable();
+        }
     }
     }
     if(!localCatalog&&LazyCatalog::For(0).Started&&LazyCatalog::For(0).Query!=BackendQuery(state)){LazyCatalog::Search(0,BackendQuery(state));state.Matches.clear();state.CatalogRevision=0;}

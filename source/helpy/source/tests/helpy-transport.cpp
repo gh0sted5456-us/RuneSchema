@@ -62,6 +62,8 @@ int32_t RS_PLUGIN_CALL HostCall(const char*,const char* service,const char* inpu
 int main(){
     {
         auto preferences=PS::HelpyImGuiTheme::Theme{};preferences.runtimeTimeUnit=3;preferences.backgroundFile="Scene.png";preferences.backgroundStrength=.2f;
+        preferences.showFps=true;preferences.helpyFpsLimit=45;preferences.fpsRefreshMs=500;
+        preferences.showGameFps=true;preferences.fpsHotkey="F11";
         preferences.diagnosticToastsEnabled=false;preferences.diagnosticToastLimit=2;preferences.diagnosticHistoryDays=7;preferences.diagnosticSplitRatio=.6f;preferences.diagnosticDeveloperMode=true;
         PS::HelpyRuntimePreferences::CacheFirst=false;PS::HelpyRuntimePreferences::PassiveRefresh=false;
         const auto document=PS::HelpyImGuiTheme::DocumentFrom(preferences,200);
@@ -70,11 +72,23 @@ int main(){
         const auto roundTrip=PS::HelpyBrowsePolicy::Read(document["cache"]);assert(!roundTrip.CacheFirst&&!roundTrip.PassiveRefresh);
         PS::HelpyRuntimePreferences::CacheFirst=true;PS::HelpyRuntimePreferences::PassiveRefresh=true;
         assert(document["runtime"]["timeUnit"]==3&&document["background"]["file"]=="Scene.png"&&document["background"]["strength"].get<float>()==.2f);
+        assert(document["runtime"]["showFps"]==true&&document["runtime"]["helpyFpsLimit"]==45&&document["runtime"]["fpsRefreshMs"]==500);
+        assert(document["runtime"]["showGameFps"]==true&&document["runtime"]["fpsHotkey"]=="F11");
+        const auto defaults=PS::HelpyImGuiTheme::DefaultDocument()["runtime"];
+        assert(defaults["showFps"]==false&&defaults["helpyFpsLimit"]==30&&defaults["fpsRefreshMs"]==1000);
+        assert(defaults["showGameFps"]==false&&defaults["fpsHotkey"]=="F10");
         assert(!document["notifications"]["enabled"].get<bool>()&&document["notifications"]["visibleLimit"]==2&&document["diagnosticHistory"]["ageDays"]==7);
         assert(document["diagnosticPresentation"]["splitRatio"].get<float>()==.6f&&document["diagnosticPresentation"]["developerMode"].get<bool>());
         assert(PS::HelpyImGuiTheme::DefaultDocument()["runtime"]["timeUnit"]==0&&PS::HelpyImGuiTheme::DefaultDocument()["background"]["file"]=="");
     }
     PS::HelpyEnvironment::Configure({{"DedicatedServer",true}});
+    {
+        PS::ItemGridPicker::State picker;picker.Query="helm";picker.SearchInput="helm";picker.ActiveCategory="Armor";
+        picker.FavoritesOnly=true;picker.PersonalTag="favorites";picker.SourceProvider="mods/dye";picker.PageIndex=4;
+        PS::ItemGridPicker::SelectFamily(picker,"hard_leather_dyed_black_mirror_trim");
+        assert(picker.Query.empty()&&picker.SearchInput.empty()&&!picker.FavoritesOnly&&picker.PersonalTag.empty());
+        assert(picker.ActiveCategory=="All"&&picker.PageIndex==0&&picker.SourceProvider=="mods/dye"&&picker.ResetScroll);
+    }
     RuneSchemaHostApi host{};host.CallService=HostCall;State state{&host};ConfigureTransport(&state);
     {json reply;assert(CallCore(&state,{{"Action","CrashDumpRead"}},reply)&&reply.at("ExpectedContents").get<std::string>().size()==10000&&CrashOptionReads==2);}
     {json manifest;assert(PS::HelpySourceCache::RemoteSnapshot(manifest)&&manifest.at("Padding").get<std::string>().size()==20000&&IconManifestReads==2);

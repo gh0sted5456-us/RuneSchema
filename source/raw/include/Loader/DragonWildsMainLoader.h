@@ -72,6 +72,8 @@ namespace DragonWilds {
         void SetupGameInstanceInitLoadersOnce();
 
         void SetupWorldBuildingCleanup();
+        void SetupSelectedWorldBuildingCleanup();
+        void PrepareWorldSaveCleanup(std::wstring_view slot,bool clientLoadingListen,bool beforeWorldRead);
 
         void HookDatatableSerialize();
 
@@ -110,9 +112,14 @@ namespace DragonWilds {
         std::function<void(std::string)> m_fatalStartupHandler;
         RC::Unreal::Hook::GlobalCallbackId m_coreStartupCallbackId = RC::Unreal::Hook::ERROR_ID;
         RC::Unreal::Hook::GlobalCallbackId m_dedicatedServerReadyCallbackId = RC::Unreal::Hook::ERROR_ID;
-        RC::Unreal::Hook::GlobalCallbackId m_worldCleanupRetryId = RC::Unreal::Hook::ERROR_ID;
-        RC::Unreal::Hook::GlobalCallbackId m_worldCleanupBoundaryId = RC::Unreal::Hook::ERROR_ID;
-        std::shared_ptr<PS::WorldCleanupPolicy::MenuWindow> m_worldCleanupWindow;
+        RC::Unreal::UFunction* m_selectedWorldLoadFunction = nullptr;
+        int32_t m_selectedWorldLoadHookId = 0;
+        int32_t m_selectedWorldLoadPostHookId = 0;
+        RC::Unreal::Hook::GlobalCallbackId m_cleanupLoadMapPreId = RC::Unreal::Hook::ERROR_ID;
+        RC::Unreal::Hook::GlobalCallbackId m_cleanupLoadMapPostId = RC::Unreal::Hook::ERROR_ID;
+        std::uint32_t m_cleanupThread = 0;
+        bool m_sessionBlanketCleanup = false;
+        bool m_cleanupPrepared = false;
         std::vector<RC::StringType> m_orderedMods;
 
         static inline std::vector<std::function<void(RC::Unreal::UDataTable*)>> DatatableSerializeCallbacks;

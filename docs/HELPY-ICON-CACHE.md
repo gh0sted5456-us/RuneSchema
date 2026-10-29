@@ -13,14 +13,15 @@ discovered normally.
 Helpy stores captured item icons under
 `%LOCALAPPDATA%\RSDragonwilds\RuneSchema\<platform>\cache\item-icons`
 (`steam`, `gamepass`, `epic` or `server`).
-Settings > Item Cache provides **Clean Icon Cache** and **Open cache folder**
+Tools > Utilities > Item Cache provides **Clean Icon Cache** and **Open cache folder**
 in both simple and advanced modes. The link opens Windows File Explorer for
 manual management. Close Helpy/the game before manually removing files; visible
 icons can otherwise be captured again while browsing. Cache cleanup does not
 remove mods, settings, saves, recipes or journal progress.
 
-**Dump / export cached icons** saves the compatible captured cache as a portable
-`.rsmk-icons` file; **Import icon cache** restores matching pictures. An export
+The Item Bay's **Cache...** button opens **Content cache**. **Export current cache...**
+saves a `.rsmk-cache` bundle; **Import cache...** also accepts legacy `.rsmk-icons`
+files for matching pictures. An export
 does not capture every texture in the game. Normal browsing tries the compatible
 local disk thumbnail before submitting a native capture request. Missing or
 invalid thumbnails fall back to the game's capture pipeline and are saved for
@@ -142,7 +143,7 @@ prove that a mod's content registered successfully.
 
 ## Optional shared icon packs
 
-Settings > Icon cache has **Import icon pack** and **Export icon pack**. Players
+The **Content cache** window has **Import cache...** and **Export current cache...**. Players
 can also drop one `.rsmk-icons` file onto the Helpy window or detached Item Bay.
 Unpack ZIP downloads first. Keep icon persistence enabled; the configured disk
 limit still applies. An import that would exceed that limit asks you to increase

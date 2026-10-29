@@ -2,8 +2,18 @@
 #include <stdexcept>
 int main(){
     using namespace PS;
+    const auto check=[](bool value){if(!value)throw std::runtime_error("Cache handoff or polling regression");};
+    {
+        using namespace HelpyIconPacks;unsigned reads=0;
+        Open=false;BuildState={{"Active",false}};PendingBuildExport.clear();NextBuildRead={};
+        RemoteBuild=[&](const auto&,auto& reply){++reads;reply={{"Active",false}};return true;};
+        for(int i=0;i<50;++i)PollBuild();check(reads==0);
+        Open=true;PollBuild();check(reads==1);PollBuild();check(reads==1);
+        Open=false;PollBuild();Open=true;PollBuild();check(reads==2);
+        Open=false;BuildState={{"Active",true}};NextBuildRead={};PollBuild();check(reads==3);
+        PollBuild();check(reads==3);RemoteBuild={};
+    }
     HelpyPaths::Configure(std::filesystem::temp_directory_path()/"handoff-fixture"/"plugins"/"Helpy");
-    const auto check=[](bool value){if(!value)throw std::runtime_error("Pending download was lost before import could start");};
     HelpyIconPacks::PendingDownload="download.rsmk-cache";
     HelpyIconPacks::BuildState={{"Active",true}};
     HelpyIconPacks::Poll();check(!HelpyIconPacks::PendingDownload.empty());

@@ -115,11 +115,38 @@ mod folder named `Bard`, that is:
 
 `ModFolder` may contain only letters, numbers, and underscores and is capped at
 64 characters for this fallback. The cooked asset must set `RegistryOwner` to
-that exact folder name. RuneSchema directly loads only this one bounded path
+that exact folder name. RuneSchema directly checks this path and the alias
+`/Game/Mods/<ModFolder>/Registry/DA_Registry_<ModFolder>.DA_Registry_<ModFolder>`
 for each enabled mod in the resolved load order. Missing paths are ignored;
 owner mismatches are rejected. The declaration may still reference gameplay
 assets under a different permanent namespace, which preserves existing save
 and object paths.
+
+With Asset Registry metadata available, a supported declaration in an enabled
+mod's `/Game/Mods/<ModFolder>/Registry/` directory may use a different asset name,
+including `DA_Registry_<Anything>`. Its reflected registry JSON contract and
+explicit `RegistryOwner` determine enrollment. An ordinary asset without that
+contract is skipped. Discovery remains bounded to 4096 candidate declarations;
+this does not introduce a per-frame scan.
+
+Shard roots may use the same aliases. Children stay under the owner's
+`Registry/Shards/` directory, but names such as `RSREG_Ritualist_Items` or
+`Recipes` no longer have to spell the internal owner `Conjurer`. Package/object
+names must match and use letters, digits or underscores. Folder ownership and
+each child's `RegistryOwner` must still match; malformed, duplicate, conflicting,
+cyclic/nested or oversized groups remain rejected as one transaction.
+
+Loose declarations use the existing module-relative `registry/` folder:
+
+```text
+RuneSchema/mods/MyMod/registry/declarations.jsonc
+```
+
+The filename is arbitrary, and `Registry/` is accepted case-insensitively. Put
+the supported `SchemaVersion`, `Entries`, `NativeRegistries` and/or
+`LoaderDefinitions` document there. Ownership comes from the enabled enclosing
+module; `RegistryOwner` is a cooked asset property, not a new loose JSON field.
+Loose files and cooked declarations retain their normal conflict checks.
 
 ## Authoring files and runtime files
 
@@ -134,7 +161,7 @@ RuneSchema distributes the bridge in two forms:
 
 Do not put the uncooked asset into the installed game, and do not import the
 cooked runtime files into an Unreal project. A mod should inherit from the
-authoring copy, then cook only its uniquely named `DA_RuneSchemaRegistry_*`
+authoring copy, then cook only its uniquely named `DA_RuneSchemaRegistry_*` or `DA_Registry_*`
 instance into the mod's own PAK.
 
 ## Example bridge declaration

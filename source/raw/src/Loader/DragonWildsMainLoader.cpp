@@ -12,6 +12,7 @@
 #include <cctype>
 #include <algorithm>
 #include <fstream>
+#include <format>
 #include <filesystem>
 #include <chrono>
 #include <cstdint>
@@ -33,6 +34,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <Windows.h>
+#include <Unreal/FWorldContext.hpp>
 #include "Unreal/Engine/UDataTable.hpp"
 #include "Core/PersistenceDiagnosticLedger.h"
 #include "Core/MountedModRegistryOwners.h"
@@ -40,12 +42,15 @@
 #include "Core/RegistryEnrollment.h"
 #include "Unreal/Hooks.hpp"
 #include "Utility/Config.h"
+#include "Utility/ConfigStore.h"
 #include "Utility/Logging.h"
 #include "Utility/StartupTrace.h"
 #include "Utility/StructuredDiagnosticB3D.h"
 #include "Utility/InlineHook.h"
+#include "Utility/NativeFunctionHook.h"
 #include "Utility/ModFolderLayout.h"
 #include "SDK/Helper/Memory.h"
+#include "SDK/Helper/ActorHelper.h"
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/Helper/ReflectedContract.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
@@ -278,6 +283,8 @@ namespace {
         if (!fs::is_regular_file(target) || fs::is_symlink(fs::symlink_status(target))
             || target.extension() != L".sav")
             throw std::runtime_error("world save candidate is not a regular .sav file");
+        if(fs::file_size(target)>PS::WorldCleanupPolicy::MaximumPayloadBytes)
+            throw std::runtime_error("world save exceeds cleanup size limit");
         std::ifstream input(target, std::ios::binary);
         if (!input) throw std::runtime_error("world save could not be read");
         Preflight::Bytes original(std::istreambuf_iterator<char>{input},
@@ -291,7 +298,7 @@ namespace {
             return;
         }
         // Fail if another writer touched the world after it was read. This
-        // startup pass runs before a world is selected or loaded.
+        // pass runs before the game reads this world save.
         std::ifstream recheck(target, std::ios::binary);
         const Preflight::Bytes current(std::istreambuf_iterator<char>{recheck},
             std::istreambuf_iterator<char>{});
@@ -430,15 +437,8 @@ namespace {
             "[PERSISTENCE-PRUNER][BUILDINGS][DEFERRED] Save locked at registry initialization; bounded menu retry armed.\n"));
     }
 
-    void RunAllLocalWorldBuildingPreflights(DragonWilds::DragonWildsBuildingModLoader* buildingLoader,
-        const std::shared_ptr<PS::WorldCleanupPolicy::MenuWindow>& window = {})
+    fs::path LocalWorldSaveDirectory()
     {
-        if (!PS::Storefront::IsDedicatedServer()
-            && PS::Storefront::Current() != PS::Storefront::Kind::SteamEpic) {
-            PS::Log<LogLevel::Verbose>(STR(
-                "[PERSISTENCE-PRUNER][BUILDINGS][PROVIDER-DEFERRED] Direct world files are not available through this save provider.\n"));
-            return;
-        }
         fs::path saves;
         if (PS::Storefront::IsDedicatedServer()) {
             const auto& executable = PS::Storefront::CurrentDetection().Executable;
@@ -457,6 +457,40 @@ namespace {
             saves = fs::path(std::wstring(appData, length))
                 / L"RSDragonwilds" / L"Saved" / L"SaveGames";
         }
+        return saves;
+    }
+
+    void RunSelectedLocalWorldBuildingPreflight(DragonWilds::DragonWildsBuildingModLoader* buildingLoader,
+        std::wstring_view slot,bool clientLoadingListen)
+    {
+        if(!PS::WorldCleanupPolicy::LocalSlotEligible(slot,clientLoadingListen))return;
+        const auto saves=LocalWorldSaveDirectory();
+        if(!fs::exists(saves))return;
+        if(!fs::is_directory(saves)||fs::is_symlink(fs::symlink_status(saves)))
+            throw std::runtime_error("world save directory is not a regular directory");
+        const auto target=saves/(std::wstring(slot)+L".sav");
+        if(!fs::exists(target))return; // A new world has no payload to clean.
+        if(!buildingLoader)throw std::runtime_error("building loader is unavailable for selected-world cleanup");
+        const auto live=ReadValidatedLiveBuildingIds(buildingLoader->CleanupExpectations());
+        auto window=std::make_shared<PS::WorldCleanupPolicy::MenuWindow>();
+        struct CloseBeforeNativeLoad {
+            std::shared_ptr<PS::WorldCleanupPolicy::MenuWindow> Window;
+            ~CloseBeforeNativeLoad(){Window->Close();}
+        } close{window};
+        // A locked file must never be replaced later, after native loading starts.
+        RunLocalWorldBuildingPreflight(target,live,window);
+    }
+
+    void RunAllLocalWorldBuildingPreflights(DragonWilds::DragonWildsBuildingModLoader* buildingLoader,
+        const std::shared_ptr<PS::WorldCleanupPolicy::MenuWindow>& window = {})
+    {
+        if (!PS::Storefront::IsDedicatedServer()
+            && PS::Storefront::Current() != PS::Storefront::Kind::SteamEpic) {
+            PS::Log<LogLevel::Verbose>(STR(
+                "[PERSISTENCE-PRUNER][BUILDINGS][PROVIDER-DEFERRED] Direct world files are not available through this save provider.\n"));
+            return;
+        }
+        const auto saves=LocalWorldSaveDirectory();
         static std::unordered_set<std::wstring> announcedSources;
         if(announcedSources.insert(saves.wstring()).second)
             PS::ConsolidatedLog<RC::LogLevel::Normal>(STR(
@@ -518,6 +552,8 @@ namespace {
     DragonWilds::DragonWildsBuildingModLoader* NativeWorldBuildingLoader = nullptr;
     thread_local std::wstring ActiveSpudLoadSlot;
     bool NativeSpudLoadSlotReady = false;
+    std::function<void(std::wstring_view,bool)> PrepareNativeWorldCleanup;
+    std::function<void()> FinishNativeWorldCleanup;
 
     bool ProbeMemoryAccess(const void* address, std::size_t bytes,bool writable)
     {
@@ -561,6 +597,36 @@ namespace {
             return L"<unavailable>";
         if (string.Data[string.Count - 1] != L'\0') return L"<unavailable>";
         return std::wstring(string.Data, static_cast<std::size_t>(string.Count - 1));
+    }
+
+    struct NativeSelectedCharacter {std::wstring Name;std::string Guid;};
+    NativeSelectedCharacter ReadNativeSelectedCharacter()
+    {
+        using Call=DragonWilds::ActorHelper::FunctionCall;
+        auto* type=UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+            nullptr,nullptr,TEXT("/Script/Dominion.DominionPlayerControllerBase"));
+        if(!type)throw std::runtime_error("Native character controller is unavailable");
+        TArray<UObject*> controllers;
+        UECustom::UObjectGlobals::GetObjectsOfClass(type,controllers,true);
+        if(controllers.Num()<0||controllers.Num()>16)throw std::runtime_error("Local character controller set is ambiguous");
+        NativeSelectedCharacter selected;
+        for(auto* controller:controllers) {
+            if(!controller||controller->HasAnyFlags(static_cast<EObjectFlags>(
+                RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed))||!controller->GetWorld())continue;
+            Call local(controller,TEXT("/Script/Engine.Controller:IsLocalController"));local.Invoke();
+            if(!local.Result<bool>())continue;
+            if(!selected.Name.empty())throw std::runtime_error("Multiple local character controllers are active");
+            Call name(controller,TEXT("/Script/Dominion.DominionPlayerControllerBase:GetCharacterName"));name.Invoke();
+            FString value;name.MoveResult(&value,sizeof(value));
+            selected.Name=ReadProbeFString(&value);
+            Call guid(controller,TEXT("/Script/Dominion.DominionPlayerControllerBase:GetCharacterGuid"));guid.Invoke();
+            uint32 lanes[4]{};guid.MoveResult(lanes,sizeof(lanes));
+            if(!PS::WorldCleanupPolicy::LocalSlotEligible(selected.Name,false)
+                ||!(lanes[0]|lanes[1]|lanes[2]|lanes[3]))throw std::runtime_error("Native selected character name/GUID is unavailable");
+            selected.Guid=std::format("{:08X}{:08X}{:08X}{:08X}",lanes[0],lanes[1],lanes[2],lanes[3]);
+        }
+        if(selected.Name.empty())throw std::runtime_error("No local character selection was verified");
+        return selected;
     }
 
     fs::path BackupWorldBuildingPayload(const std::wstring& slot,
@@ -610,7 +676,9 @@ namespace {
         const auto slot = ReadProbeFString(slotName);
         struct RestoreSlot {std::wstring Previous;~RestoreSlot(){ActiveSpudLoadSlot=std::move(Previous);}};
         RestoreSlot restore{std::exchange(ActiveSpudLoadSlot, slot)};
+        if(PrepareNativeWorldCleanup)PrepareNativeWorldCleanup(slot,clientLoadingListen!=0);
         NativeSpudLoadGameProbe.call<void>(subsystem, slotName, clientLoadingListen);
+        if(FinishNativeWorldCleanup)FinishNativeWorldCleanup();
     }
 
     void InstallNativeSpudLoadGameProbe()
@@ -861,9 +929,13 @@ namespace DragonWilds {
     {
         // Stop the watcher before destroying its consumers.
         PS::StartupTrace::Mark("shutdown begin");
-        if(m_worldCleanupWindow)m_worldCleanupWindow->Close();
-        if(m_worldCleanupRetryId!=Hook::ERROR_ID)Hook::UnregisterCallback(m_worldCleanupRetryId);
-        if(m_worldCleanupBoundaryId!=Hook::ERROR_ID)Hook::UnregisterCallback(m_worldCleanupBoundaryId);
+        if(m_selectedWorldLoadFunction&&m_selectedWorldLoadHookId)
+            m_selectedWorldLoadFunction->UnregisterHook(m_selectedWorldLoadHookId);
+        if(m_selectedWorldLoadFunction&&m_selectedWorldLoadPostHookId)
+            m_selectedWorldLoadFunction->UnregisterHook(m_selectedWorldLoadPostHookId);
+        if(m_cleanupLoadMapPreId!=Hook::ERROR_ID)Hook::UnregisterCallback(m_cleanupLoadMapPreId);
+        if(m_cleanupLoadMapPostId!=Hook::ERROR_ID)Hook::UnregisterCallback(m_cleanupLoadMapPostId);
+        PrepareNativeWorldCleanup={};FinishNativeWorldCleanup={};NativeWorldBuildingLoader=nullptr;
         m_fileWatcher.reset();
         m_logicPakBridge.Stop();
         DatatableSerialize_Hook = {};
@@ -1091,66 +1163,116 @@ namespace DragonWilds {
 
     void DragonWildsMainLoader::SetupWorldBuildingCleanup()
     {
-        if(PS::Storefront::IsDedicatedServer()) {
-            try {RunAllLocalWorldBuildingPreflights(m_buildingLoader);}
+        const auto& cleanup=PS::PSConfig::Get()->GetSettings().persistence;
+        m_sessionBlanketCleanup=cleanup.blanketCleanup;m_cleanupThread=GetCurrentThreadId();
+        PrepareNativeWorldCleanup=[this](std::wstring_view slot,bool listen){
+            if(GetCurrentThreadId()!=m_cleanupThread)return;
+            m_cleanupPrepared=false;PrepareWorldSaveCleanup(slot,listen,true);
+        };
+        FinishNativeWorldCleanup=[this]{if(GetCurrentThreadId()==m_cleanupThread)m_cleanupPrepared=false;};
+        if(PS::Storefront::Current()!=PS::Storefront::Kind::GamePass) {
+            try {SetupSelectedWorldBuildingCleanup();}
             catch(const std::exception& error) {
-                PS::Log<LogLevel::Warning>(STR("[SAVE-CLEANUP][BUILDINGS][SKIPPED] World cleanup unavailable: {}.\n"),PS::ToWideSafe(error.what()));
+                PS::CodedLog<LogLevel::Warning>(PS::Diagnostics::Id::WorldCleanupHookUnavailable,STR(
+                    "[SAVE-CLEANUP][ENTRY-HOOK][UNAVAILABLE] Selected-world hook unavailable: {}. No blanket sweep was substituted.\n"),PS::ToWideSafe(error.what()));
             }
-            return;
         }
-        if(PS::Storefront::Current()!=PS::Storefront::Kind::SteamEpic)return;
-        m_worldCleanupWindow=std::make_shared<PS::WorldCleanupPolicy::MenuWindow>();
-        Hook::FCallbackOptions boundaryOptions{};
-        boundaryOptions.OwnerModName=TEXT("RuneSchema");
-        boundaryOptions.HookName=TEXT("WorldCleanupWriteBoundary");
-        m_worldCleanupBoundaryId=Hook::RegisterInitGameStatePreCallback(
-            [window=m_worldCleanupWindow](Hook::TCallbackIterationData<void>&,AGameModeBase* mode) {
-                if(!mode||!mode->GetWorld())return;
-                const auto name=mode->GetWorld()->GetName();
-                if(name.find(TEXT("FrontEnd"))!=RC::StringType::npos
-                    ||name.find(TEXT("MainMenu"))!=RC::StringType::npos)return;
-                // Never replace world files after gameplay initialization begins.
-                window->Close();
-            },boundaryOptions);
-        struct Pending {
-            std::chrono::steady_clock::time_point Next{};
-            std::string Reason;
-        };
-        auto pending=std::make_shared<Pending>();
-        const auto attempt=[this,pending]() {
-            try {RunAllLocalWorldBuildingPreflights(m_buildingLoader,m_worldCleanupWindow);return true;}
-            catch(const std::exception& error){pending->Reason=error.what();return false;}
-        };
-        if(attempt()) {
-            // Without the cancellation boundary an outstanding locked-file retry
-            // cannot be certified as a menu-only write. Synchronous checks stand.
-            if(m_worldCleanupBoundaryId==Hook::ERROR_ID)m_worldCleanupWindow->Close();
-            return;
-        }
-        if(m_worldCleanupBoundaryId==Hook::ERROR_ID) {
-            m_worldCleanupWindow->Close();
-            PS::Log<LogLevel::Warning>(STR("[SAVE-CLEANUP][BUILDINGS][SKIPPED] Menu retry boundary unavailable: {}. Saves unchanged.\n"),PS::ToWideSafe(pending->Reason));
-            return;
-        }
-        pending->Next=std::chrono::steady_clock::now()+std::chrono::milliseconds(500);
-        Hook::FCallbackOptions retryOptions{};
-        retryOptions.OwnerModName=TEXT("RuneSchema");
-        retryOptions.HookName=TEXT("WorldCleanupRegistryRetry");
-        m_worldCleanupRetryId=Hook::RegisterEngineTickPostCallback(
-            [this,pending,attempt](Hook::TCallbackIterationData<void>& iteration,UEngine*,float,bool) {
-                const auto now=std::chrono::steady_clock::now();
-                if(!m_worldCleanupWindow->MayWrite(now)) {
-                    PS::Log<LogLevel::Warning>(STR("[SAVE-CLEANUP][BUILDINGS][SKIPPED] Startup write window closed before building registries became ready: {}. Saves unchanged.\n"),PS::ToWideSafe(pending->Reason));
-                    m_worldCleanupRetryId=Hook::ERROR_ID;iteration.RemoveSelf();return;
+        Hook::FCallbackOptions loadOptions{};loadOptions.OwnerModName=TEXT("RuneSchema");loadOptions.HookName=TEXT("SaveCleanupEntryPolicy");
+        m_cleanupLoadMapPreId=Hook::RegisterLoadMapPreCallback(
+            [this](auto&,UEngine*,FWorldContext&,FURL url,UPendingNetGame* pending,FString&) {
+                if(GetCurrentThreadId()!=m_cleanupThread)return;
+                const auto map=ReadProbeFString(&url.Map);
+                if(!PS::WorldCleanupPolicy::NativeGameplayMap(map)){m_cleanupPrepared=false;return;}
+                // Direct joins/new worlds may have no local SPUD file-read boundary.
+                // Character cleanup can still run; an already-read world file is not replaced.
+                if(!m_cleanupPrepared)PrepareWorldSaveCleanup({},pending!=nullptr,false);
+            },loadOptions);
+        loadOptions.HookName=TEXT("SaveCleanupEntryPolicyFinished");
+        m_cleanupLoadMapPostId=Hook::RegisterLoadMapPostCallback(
+            [this](auto&,auto*,FWorldContext&,auto&&...){if(GetCurrentThreadId()==m_cleanupThread)m_cleanupPrepared=false;},loadOptions);
+        if(m_cleanupLoadMapPreId==Hook::ERROR_ID||m_cleanupLoadMapPostId==Hook::ERROR_ID)
+            PS::CodedLog<LogLevel::Warning>(PS::Diagnostics::Id::WorldCleanupHookUnavailable,STR(
+                "[SAVE-CLEANUP][ENTRY-HOOK][PARTIAL] Map entry callbacks are unavailable; only verified native load boundaries can apply cleanup.\n"));
+        PS::Log<LogLevel::Normal>(STR(
+            "[SAVE-CLEANUP][ENTRY-SCOPED] Startup folder sweeps disabled. Blanket fallback={} | policy changes at {}.\n"),
+            cleanup.blanketCleanup,cleanup.cleanupOnWorldEntry?TEXT("next world entry"):TEXT("next game launch"));
+    }
+
+    void DragonWildsMainLoader::SetupSelectedWorldBuildingCleanup()
+    {
+        auto* function=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(
+            nullptr,nullptr,TEXT("/Script/SPUD.SpudSubsystem:LoadGame"));
+        DragonWilds::ReflectedContract::Frame(function);
+        auto* slot=CastField<FStrProperty>(function->FindProperty(FName(TEXT("SlotName"),FNAME_Find)));
+        auto* listen=CastField<FBoolProperty>(function->FindProperty(FName(TEXT("bClientLoadingListen"),FNAME_Find)));
+        if(!DragonWilds::ReflectedContract::Input(slot,function)||slot->GetElementSize()!=sizeof(FString)
+            ||!DragonWilds::ReflectedContract::Input(listen,function))
+            throw std::runtime_error("native world-load parameters are unavailable");
+        const auto id=PS::RegisterNativePreHook(function,
+            [this,slot,listen,thread=GetCurrentThreadId()](UnrealScriptFunctionCallableContext& context,void*) {
+                auto* parameters=context.TheStack.Locals();
+                if(GetCurrentThreadId()!=thread||!context.Context||!parameters)return;
+                try {
+                    const auto value=slot->GetPropertyValue(slot->ContainerPtrToValuePtr<void>(parameters));
+                    const auto name=ReadProbeFString(&value);
+                    const auto networkLoad=listen->GetPropertyValue(listen->ContainerPtrToValuePtr<void>(parameters));
+                    m_cleanupPrepared=false;PrepareWorldSaveCleanup(name,networkLoad,true);
+                }catch(const std::exception& error) {
+                    PS::CodedLog<LogLevel::Warning>(PS::Diagnostics::Id::WorldCleanupRepairFailed,STR(
+                        "[SAVE-CLEANUP][ENTRY][SKIPPED] Native entry preflight could not complete: {}. Check the per-file cleanup and backup diagnostics.\n"),PS::ToWideSafe(error.what()));
                 }
-                if(now<pending->Next)return;
-                pending->Next=now+std::chrono::milliseconds(500);
-                if(attempt()){m_worldCleanupRetryId=Hook::ERROR_ID;iteration.RemoveSelf();}
-            },retryOptions);
-        if(m_worldCleanupRetryId==Hook::ERROR_ID) {
-            m_worldCleanupWindow->Close();
-            PS::Log<LogLevel::Warning>(STR("[SAVE-CLEANUP][BUILDINGS][SKIPPED] Building-registry retry could not start: {}. Saves unchanged.\n"),PS::ToWideSafe(pending->Reason));
-        } else PS::Log<LogLevel::Verbose>(STR("[SAVE-CLEANUP][BUILDINGS][DEFERRED] Awaiting building registries; bounded menu retry armed.\n"));
+            });
+        if(!id)throw std::runtime_error("native world-load pre-hook could not be registered");
+        m_selectedWorldLoadFunction=function;m_selectedWorldLoadHookId=id;
+        m_selectedWorldLoadPostHookId=PS::RegisterNativePostHook(function,
+            [this,thread=GetCurrentThreadId()](auto&,void*){if(GetCurrentThreadId()==thread)m_cleanupPrepared=false;});
+        PS::Log<LogLevel::Normal>(STR(
+            "[SAVE-CLEANUP][ON-DEMAND][READY] Selected-world preflight attached to native LoadGame; character preflight and backups remain active.\n"));
+    }
+
+    void DragonWildsMainLoader::PrepareWorldSaveCleanup(std::wstring_view slot,bool clientLoadingListen,bool beforeWorldRead)
+    {
+        if(GetCurrentThreadId()!=m_cleanupThread||m_cleanupPrepared)return;
+        m_cleanupPrepared=true;
+        if(beforeWorldRead&&!clientLoadingListen&&!PS::WorldCleanupPolicy::LocalSlotEligible(slot,false)) {
+            PS::CodedLog<LogLevel::Warning>(PS::Diagnostics::Id::WorldCleanupContractUnsafe,STR(
+                "[SAVE-CLEANUP][ENTRY][UNIDENTIFIED] Native slot could not be verified; no folder sweep or world replacement was authorized.\n"));
+            return;
+        }
+        bool blanket=false;
+        try {
+            const auto directory=PS::HostServices::SettingsDirectory();
+            const auto ini=directory/"settings.ini";
+            const auto pending=PS::SettingsStore::Parse(fs::exists(ini)?ini:directory/"settings.jsonc",fs::exists(ini));
+            blanket=PS::WorldCleanupPolicy::BlanketAtEntry(m_sessionBlanketCleanup,
+                pending.Settings.persistence.blanketCleanup,pending.Settings.persistence.cleanupOnWorldEntry);
+            m_sessionBlanketCleanup=blanket;
+        }catch(const std::exception& error) {
+            PS::Log<LogLevel::Warning>(STR("[SAVE-CLEANUP][POLICY][DEFERRED] Cleanup settings could not be verified: {}. No blanket sweep was authorized.\n"),PS::ToWideSafe(error.what()));
+        }
+        try {
+            if(blanket)m_dataRegistrar.CleanLocalCharacterSaves();
+            else if(!PS::Storefront::IsDedicatedServer()
+                &&PS::Storefront::CurrentNativeLane()!=PS::Storefront::NativeLane::GamePassNative) {
+                const auto selected=ReadNativeSelectedCharacter();
+                m_dataRegistrar.CleanLocalCharacterSaves(selected.Name,selected.Guid);
+            }
+        }catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[SAVE-CLEANUP][CHARACTERS][SKIPPED] Character cleanup incomplete: {}. No broader scope was substituted; native loading continues.\n"),PS::ToWideSafe(error.what()));}
+        if(clientLoadingListen)return;
+        if(!beforeWorldRead) {
+            PS::Log<LogLevel::Verbose>(STR("[SAVE-CLEANUP][BUILDINGS][PROVIDER-DEFERRED] No verified local slot read was observed; world files were not replaced after native loading started.\n"));
+            return;
+        }
+        auto window=std::make_shared<PS::WorldCleanupPolicy::MenuWindow>();
+        struct CloseBeforeRead {std::shared_ptr<PS::WorldCleanupPolicy::MenuWindow> Window;~CloseBeforeRead(){Window->Close();}}close{window};
+        try {
+            if(blanket)RunAllLocalWorldBuildingPreflights(m_buildingLoader,window);
+            else if(PS::Storefront::Current()!=PS::Storefront::Kind::GamePass)
+                RunSelectedLocalWorldBuildingPreflight(m_buildingLoader,slot,clientLoadingListen);
+        }catch(const std::exception& error) {
+            PS::CodedLog<LogLevel::Warning>(PS::Diagnostics::Id::WorldCleanupRepairFailed,STR(
+                "[SAVE-CLEANUP][ENTRY][SKIPPED] World preflight incomplete: {}. Native loading continues.\n"),PS::ToWideSafe(error.what()));
+        }
     }
 
     void DragonWildsMainLoader::SetupGameInstanceInitLoaders()

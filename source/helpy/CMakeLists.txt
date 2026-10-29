@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 # Framework and bundled Helpy share this release version.
-project(Helpy VERSION 0.8.0.2 LANGUAGES CXX RC)
+project(Helpy VERSION 0.8.0.3 LANGUAGES CXX RC)
 if(NOT WIN32 OR NOT MSVC)
   message(FATAL_ERROR "Helpy requires the Windows x64 MSVC toolchain")
 endif()
@@ -190,6 +190,14 @@ add_test(NAME helpy-source-cache-parity COMMAND "${CMAKE_COMMAND}" -E compare_fi
   "${CMAKE_CURRENT_SOURCE_DIR}/../raw/include/Core/HelpySourceCache.h")
 add_executable(helpy-popup-input source/tests/helpy-popup-input.cpp)
 add_test(NAME helpy-popup-input COMMAND helpy-popup-input "${CMAKE_CURRENT_SOURCE_DIR}/source/src/Generator/HelpyStandaloneWindow.cpp")
+add_executable(helpy-performance source/tests/helpy-performance.cpp)
+add_test(NAME helpy-performance COMMAND helpy-performance)
+add_executable(helpy-fps-overlay source/tests/helpy-fps-overlay.cpp)
+target_link_libraries(helpy-fps-overlay PRIVATE helpy_imgui)
+add_test(NAME helpy-fps-overlay COMMAND helpy-fps-overlay)
+add_test(NAME frame-rate-parity COMMAND "${CMAKE_COMMAND}" -E compare_files
+  "${CMAKE_CURRENT_SOURCE_DIR}/source/include/Core/FrameRate.h"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../raw/include/Core/FrameRate.h")
 add_executable(helpy-navigation source/tests/helpy-navigation.cpp)
 add_test(NAME helpy-navigation COMMAND helpy-navigation)
 add_executable(navigation-order source/tests/navigation-order.cpp source/src/Core/ConfigFiles.cpp)

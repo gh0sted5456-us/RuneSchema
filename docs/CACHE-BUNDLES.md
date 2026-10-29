@@ -16,10 +16,8 @@ mod definitions.
 
 ## Use an existing cache immediately
 
-!!! note "Next maintenance build"
-    The loading-order and passive-update controls below are in the next
-    maintenance build. The original published 0.8.0.2 ZIP retains its existing
-    cache-loading behavior; this documentation update does not replace its DLLs.
+The loading-order and passive-update controls below are included in
+**0.8.0.3**. Existing caches and preferences remain usable when updating.
 
 Open **Home > Quick settings > Content & cache** to choose how the item
 catalogue loads. These preferences are saved in Helpy's `ui.jsonc` and apply
@@ -75,7 +73,7 @@ For manual configuration, use this object inside `ui.jsonc`:
 The other supported `loadOrder` is `gameFirst`. Existing configurations that
 omit the new fields retain Cache first with passive updates enabled.
 
-1. Open **Icon cache** and choose **Download base-game cache**, or **Import** a local bundle.
+1. Open **Content cache** and choose **Download base-game cache**, or **Import** a local bundle.
 2. Watch download byte progress, checksum validation, and relationship assignment.
    Import does not wait for a mounted-content census, character or world.
 3. Items, names, known IDs and pictures are saved in the **current platform's
@@ -256,7 +254,7 @@ Useful diagnostics include [RS-CACHE-002](ERROR-CODES.md#rs-cache-002)
 
 ## Include a source banner
 
-1. Open Helpy's **Icon cache** and choose one registered source. Do not select
+1. Open Helpy's **Content cache** and choose one registered source. Do not select
    **All registered sources** when attaching a source-specific banner.
 2. Drop an image onto **Source artwork**, or click the drop area to browse.
    Prefer a 1280 × 720 PNG/JPEG (16:9). Inputs are limited to 20 MiB and
@@ -313,9 +311,29 @@ alignment. Both indexed game versions have a map-bearing download for clients
 and dedicated servers. Use the refreshed **0.8.0.2 build from October 27, 2026**
 or newer; earlier readers cannot import the map payload.
 
+Helpy's **Download Initial Assets** action also includes this map. In
+**Settings → Updates & runtime → Helpy data and artwork**, select UI artwork,
+the world map, and/or map filters, then choose **Update selected**. **Update all**
+requests every group. Your selections are saved in the normal AppData UI
+settings. Map imports reuse the existing cache-bundle validator and install only
+the image plus alignment; no server plugin, PAK or graphics capture is required.
+
+The map uses a small, updateable GitHub manifest with an immutable SHA-256
+bundle filename. An already installed image/alignment pair is verified and
+reused, so subsequent launches need no download. Online checks happen through
+these explicit actions, not a timed poll. Cancelling or rejecting an update keeps
+the last usable map. Manual map-filter refresh is separate from automatic
+refresh after a confirmed game patch.
+
+RSDW Archive publishes raw exported map textures and `.usmap` authoring schemas.
+The verified RuneSchema feed currently supplies the paired map/alignment data;
+an upstream texture alone does not establish world coordinates. Offline
+authoring tools continue to obtain RSDW schemas separately and never install
+them into a running game through these asset controls.
+
 To add the map to a server:
 
-1. Open the server's Helpy and choose **Icon cache → Download base-game cache**.
+1. Open the server's Helpy and choose **Content cache → Download base-game cache**.
    The download includes item references, pictures and the map. Wait for import
    to finish; the map is stored in that platform's AppData cache.
 2. Open **World → Map**. The background can load from the downloaded cache;
@@ -325,7 +343,7 @@ To add the map to a server:
 
 If you only need the map, download the
 [map-only cache](https://raw.githubusercontent.com/gh0sted5456-us/RuneSchema/main/resources/cache-bundles/7c58b7fbf46709e71f490759a620273eb1aaca2406fa66282016519697c8856b.rsmk-cache)
-(16 MiB), then use **Icon cache → Import** on the server. It contains no item
+(16 MiB), then use **Content cache → Import** on the server. It contains no item
 records, so your existing item cache stays in place. The
 [map download manifest](https://raw.githubusercontent.com/gh0sted5456-us/RuneSchema/main/resources/cache-bundles/world-map.json)
 provides the filename, byte count and SHA-256 for checking the download.
@@ -357,6 +375,30 @@ Map snapshots can use cached alignment to display the known Ashenfall world when
 the server's native map background is unavailable. That display fallback does not
 replace native projection or ground checks used for teleporting or placement.
 Static resource/quest reference filters keep their separate map-cache workflow.
+
+## Update-aware mod caches
+
+Helpy keeps using cached items and pictures while it verifies installed content.
+The mod version read from `ID.txt` during normal module startup is an extra update
+hint; existing legacy metadata precedence is preserved.
+
+- A different version from the saved source manifest queues one background file
+  and container verification. Repeated notices for the same version coalesce.
+- The version label does not change item ownership, authorize gameplay, clear the
+  cache or force pictures to be captured again. Actual source fingerprints still
+  decide whether cached content needs updating.
+- A version change arriving during verification makes that result outdated;
+  Helpy checks the latest version before publishing a new source contract.
+- Unchanged ownership indexes are retained, with duplicate comparisons and
+  cleanup on the existing file worker rather than the game/UI thread.
+- This uses startup metadata and the existing source-refresh schedule. It adds
+  no per-frame `ID.txt` reads, directory watcher or network polling. Directly
+  editing `ID.txt` during a running session is picked up at the next module
+  startup, just like the mod's newly installed PAKs.
+
+Keep the internal ModID stable and update `Version` when publishing a mod. A
+missing version remains supported, and an unchanged version is never proof that
+the PAKs match. Existing file and source checks still apply.
 
 ## Export the cache you already have
 

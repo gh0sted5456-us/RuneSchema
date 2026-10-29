@@ -189,6 +189,8 @@ nav:
       - Ask RuneSchema: ASK-RUNESCHEMA.md
       - Licensing: LICENSING.md
   - Updates:
+      - Release 0.8.0.3: RELEASE-0.8.0.3.md
+      - 0.8.0.3 changelog: CHANGELOG-0.8.0.3.md
       - Release 0.8.0.2: RELEASE-0.8.0.2.md
       - 0.8.0.2 changelog: CHANGELOG-0.8.0.2.md
       - 0.8.0.1b quick bug fixes: CHANGELOG-0.8.0.1b.md

@@ -1,10 +1,10 @@
 {
   "SchemaVersion": 1,
   "Id": "RuneSchema.Helpy",
-  "Version": "0.8.0.2",
-  "BuiltForRuneSchema": "0.8.0.2",
+  "Version": "0.8.0.3",
+  "BuiltForRuneSchema": "0.8.0.3",
   "EntryPoint": "RuneSchema.Helpy.dll",
-  "ConsoleMessage": "Desktop RSMK is ready. F2 opens/closes its separate window; F5 reloads its skin.",
+  "ConsoleMessage": "Helpy is ready. Configure its shortcut, in-game FPS counter and theme reload in Home > Quick settings.",
   "Capabilities": [
     "helpy.navigation",
     "helpy.item-lab",
@@ -14,5 +14,5 @@
     "authoring.export"
   ],
   "MountPaks": false,
-  "Name": "RSMK (RuneSchema Modding Kit)"
+  "Name": "RuneSchema Helpy"
 }

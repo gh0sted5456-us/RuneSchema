@@ -37,6 +37,7 @@
 #include "Utility/StructuredDiagnosticB3C.h"
 #include "Utility/Config.h"
 #include "Core/ConfigFiles.h"
+#include "Core/CharacterSaveEditor.h"
 #include "Core/CookedPakRegistryManifest.h"
 #include "Core/CookedEnumContract.h"
 #include "Core/HelpyCacheSources.h"
@@ -50,6 +51,7 @@
 #include "Loader/QuestNativeRegistry.h"
 #include "Core/RegistryProvenance.h"
 #include "Core/SaveCleanup.h"
+#include "Core/WorldCleanupPolicy.h"
 #include "Core/LoadProtectionNotice.h"
 #include "Core/SaveRegistrySnapshot.h"
 #include "Core/HelpySourceCache.h"
@@ -468,9 +470,29 @@ namespace DragonWilds {
     static bool IsCharacterJsonLoadFunction(UFunction* function)
     {
         if (!function) return false;
-        static const FName playerState(TEXT("ProcessPlayerStateLoad"),FNAME_Add),persistentResult(TEXT("OnPersistentStoreLoadPlayerResult"),FNAME_Add),jsonState(TEXT("LoadStateFromJson"),FNAME_Add);
+        static const FName playerState(TEXT("ProcessPlayerStateLoad"),FNAME_Add),persistentResult(TEXT("OnPersistentStoreLoadPlayerResult"),FNAME_Add),jsonState(TEXT("LoadStateFromJson"),FNAME_Add),diskResult(TEXT("Server_ReceiveLoadFromDisk"),FNAME_Add);
         const auto name = function->GetFName();
+        if(name==diskResult) {
+            static auto* native=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(
+                nullptr,nullptr,TEXT("/Script/Dominion.DominionPlayerControllerBase:Server_ReceiveLoadFromDisk"));
+            return native&&function==native;
+        }
         return name==playerState||name==persistentResult||name==jsonState;
+    }
+
+    static bool IsGameplayCharacterLoadContext(UObject* context)
+    {
+        auto* world=context?context->GetWorld():nullptr;
+        if(!world||world->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed|RF_FinishDestroyed)))return false;
+        auto* field=CastField<FObjectPropertyBase>(PropertyHelper::GetPropertyByName(world->GetClassPrivate(),TEXT("GameState")));
+        if(!DragonWilds::ReflectedContract::Fits(field,world->GetClassPrivate()->GetPropertiesSize())
+            ||field->GetElementSize()!=sizeof(UObject*))return false;
+        auto* state=field->GetObjectPropertyValue(field->ContainerPtrToValuePtr<void>(world));
+        static auto* gameplayClass=UECustom::UObjectGlobals::StaticFindObject<UClass*>(
+            nullptr,nullptr,TEXT("/Script/Engine.GameStateBase"));
+        const bool gameplay=gameplayClass&&state&&state->IsA(gameplayClass)&&state->GetWorld()==world
+            &&!state->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed));
+        return PS::WorldCleanupPolicy::CharacterEntryEligible(gameplay,world->GetName());
     }
 
     static bool IsCombatComponentReadyFunction(UFunction* function)
@@ -551,9 +573,10 @@ namespace DragonWilds {
         PS::StartupTrace::Mark("data registrar confirmation complete");
         EquipmentWearableBridge::ReportDiagnostics();
         PS::NetworkIdentityState::FinishStartupBatch();
-        CleanLocalCharacterSavesOnce();
+        PS::Log<LogLevel::Normal>(STR(
+            "[SAVE-CLEANUP][ENTRY-SCOPED] Character cleanup waits for world entry; preview/selection does not authorize cleanup.\n"));
         const auto cleaned=std::chrono::steady_clock::now();
-        PS::StartupTrace::Mark("data registrar cleanup complete");
+        PS::StartupTrace::Mark("data registrar cleanup deferred to world entry");
         const auto milliseconds=[](auto start,auto end){return std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count();};
         PS::Log<LogLevel::Normal>(STR(
             "[PERF][REGISTRY] discovery_ms={} registration_ms={} confirmation_ms={} cleanup_ms={} total_ms={}; required startup work only, not total game loading.\n"),
@@ -563,14 +586,18 @@ namespace DragonWilds {
             "[REGISTRY][LIFECYCLE][SEALED] Startup registration completed once for this game execution; world transitions are read-only.\n"));
     }
 
-    void DragonWildsDataRegistrar::CleanLocalCharacterSavesOnce()
+    void DragonWildsDataRegistrar::CleanLocalCharacterSaves(std::wstring_view selectedName,std::string_view expectedGuid)
     {
-        m_startupSaveCleanupAttempted = true;
+        if(PS::Storefront::IsDedicatedServer()) {
+            PS::Log<LogLevel::Normal>(STR(
+                "[SAVE-CLEANUP][PROVIDER-DEFERRED] Server character cleanup uses incoming player payloads, not local client character files.\n"));
+            return;
+        }
         if (PS::Storefront::CurrentNativeLane()
             == PS::Storefront::NativeLane::GamePassNative)
         {
             PS::Log<LogLevel::Normal>(STR(
-                "[PERSISTENCE-PRUNER][STARTUP][PROVIDER-DEFERRED] Xbox WGS character files were not edited directly.\n"));
+                "[PERSISTENCE-PRUNER][ENTRY][PROVIDER-DEFERRED] Xbox WGS character files were not edited directly.\n"));
             return;
         }
 
@@ -578,7 +605,7 @@ namespace DragonWilds {
         if (!registry || !registry->AnyCleanable())
         {
             PS::Log<LogLevel::Warning>(STR(
-                "[PERSISTENCE-PRUNER][STARTUP][UNCHANGED] Cleanup skipped: complete stable item and recipe registries were unavailable; no character file was modified. Non-blocking: native loading continues.\n"));
+                "[PERSISTENCE-PRUNER][ENTRY][UNCHANGED] Cleanup skipped: complete stable item and recipe registries were unavailable; no character file was modified. Non-blocking: native loading continues.\n"));
             return;
         }
 
@@ -588,57 +615,65 @@ namespace DragonWilds {
         std::uintmax_t bytes = 0;
         const auto directory = LocalCharacterSaveDirectory();
         if (!std::filesystem::is_directory(directory)) return;
-        for (const auto& entry : std::filesystem::directory_iterator(directory))
+        std::vector<std::filesystem::path> candidates;
+        if(!selectedName.empty()||!expectedGuid.empty()) {
+            if(!PS::WorldCleanupPolicy::LocalSlotEligible(selectedName,false)
+                ||PS::CharacterSaveEditor::Guid(std::string(expectedGuid)).empty())
+                throw std::runtime_error("Selected character name/GUID was not verified");
+            const auto target=directory/(std::wstring(selectedName)+L".json");
+            if(!std::filesystem::exists(target))return;
+            if(std::filesystem::is_symlink(target)||!std::filesystem::is_regular_file(target))
+                throw std::runtime_error("Selected character is not a regular save file");
+            candidates.push_back(target);
+        }else for(const auto& entry:std::filesystem::directory_iterator(directory)) {
+            if(entry.is_regular_file()&&!entry.is_symlink()&&entry.path().extension()==L".json")
+                candidates.push_back(entry.path());
+            if(candidates.size()>64)throw std::runtime_error("Character save directory exceeds cleanup limits");
+        }
+        for (const auto& path : candidates)
         {
-            if (!entry.is_regular_file() || entry.path().extension() != L".json")
-                continue;
-            if (++scanned > 64 || (bytes += entry.file_size()) > 64 * 1024 * 1024)
+            if (++scanned > 64 || (bytes += std::filesystem::file_size(path)) > 64 * 1024 * 1024)
                 throw std::runtime_error(
-                    "Character save directory exceeds safe startup cleanup limits");
+                    "Character save directory exceeds safe entry cleanup limits");
             try
             {
                 const auto original = PS::ConfigFiles::Read(
-                    entry.path(), CharacterSaveLimit);
+                    path, CharacterSaveLimit);
                 const auto decoded = DecodeCharacterText(original);
                 const auto source = nlohmann::json::parse(
                     decoded.Utf8, nullptr, true, true);
                 if (PS::SaveCleanup::ClassifyCharacterDocument(source)
                     != PS::SaveCleanup::CharacterDocumentKind::Gameplay)
                     continue;
-                // This pass runs during GameInstance startup, before the
-                // InitGameState pre-callback can register transient
-                // RuneSchema quest assets (including the hidden per-mod
-                // dialogue state quest).  Item and recipe registries are
-                // already complete here, but treating the early native quest
-                // or journal view as complete can purge a valid RuneSchema
-                // PersistenceID before character hydration.  Those two
-                // categories are therefore validated only by the reflected
-                // character-load preflight after all live registrations have
-                // settled.
+                if(!expectedGuid.empty()&&PS::CharacterSaveEditor::Identity(source)
+                    !=PS::CharacterSaveEditor::Guid(std::string(expectedGuid)))
+                    throw std::runtime_error("Selected character GUID differs from the save file");
+                // Entry still precedes world-dependent quest registration;
+                // those adapters validate quests/journals after world readiness.
                 auto startupRegistry = *registry;
                 startupRegistry.QuestsComplete = false;
                 startupRegistry.JournalsComplete = false;
                 auto plan = PS::SaveCleanup::PlanAvailable(source,startupRegistry);
-                for(const auto& skipped:plan.Skipped)PS::Log<LogLevel::Verbose>(STR("[PERSISTENCE-PRUNER][STARTUP][SECTION-SKIPPED] {}: {}. Other sections continue.\n"),
+                for(const auto& skipped:plan.Skipped)PS::Log<LogLevel::Verbose>(STR("[PERSISTENCE-PRUNER][ENTRY][SECTION-SKIPPED] {}: {}. Other sections continue.\n"),
                     PS::ToWideSafe(skipped.at("Section").get<std::string>()),PS::ToWideSafe(skipped.at("Reason").get<std::string>()));
                 if (plan.Removed.empty()) continue;
-                ReplaceCharacterSave(entry.path(), original, plan.Save,
+                ReplaceCharacterSave(path, original, plan.Save,
                     decoded.Utf16Le);
                 if(source.contains("meta_data")&&source["meta_data"].is_object())PS::LoadProtectionNotice::Record(source["meta_data"].value("char_guid",std::string{}),plan.Removed.size(),0,false);
                 ++changed;
                 removed += plan.Removed.size();
                 for (const auto& row : plan.Removed)
                     PS::Log<LogLevel::Verbose>(STR(
-                        "[PERSISTENCE-PRUNER][STARTUP][ORPHAN-REMOVED] {} '{}' from '{}'.\n"),
+                        "[PERSISTENCE-PRUNER][ENTRY][ORPHAN-REMOVED] {} '{}' from '{}'.\n"),
                         PS::ToWideSafe(row.value("Kind", std::string("Unknown")).c_str()),
                         PS::ToWideSafe(row.value("Id", std::string("<unknown>")).c_str()),
-                        entry.path().filename().wstring());
+                        path.filename().wstring());
             }
             catch (const std::exception& error)
             {
                 PS::Log<LogLevel::Error>(STR(
-                    "[PERSISTENCE-PRUNER][STARTUP][UNCHANGED] '{}' was not modified: {}.\n"),
-                    entry.path().filename().wstring(),
+                    "[PERSISTENCE-PRUNER][ENTRY][UNCHANGED] '{}' was not modified: {}.\n"),
+                    path.filename().wstring(),
                     PS::ToWideSafe(error.what()));
             }
         }
@@ -648,7 +683,7 @@ namespace DragonWilds {
                 removed, changed);
         else
             PS::Log<LogLevel::Verbose>(STR(
-                "[PERSISTENCE-PRUNER][STARTUP][CHECKED] {} character save(s) checked; every applicable persistence ID resolved.\n"),
+                "[PERSISTENCE-PRUNER][ENTRY][CHECKED] {} character save(s) checked; every applicable persistence ID resolved.\n"),
                 scanned);
     }
 
@@ -1217,6 +1252,19 @@ namespace DragonWilds {
         UObject* context, UFunction* function, void* parameters)
     {
         if(GetCurrentThreadId()==m_registrationThread)PS::NativePersistenceRecovery::EnsureSessionPolicy(context);
+        // Preview hydration can carry full gameplay JSON; payload shape alone is not an entry permission.
+        if(GetCurrentThreadId()!=m_registrationThread||!IsGameplayCharacterLoadContext(context)) {
+            if(GetCurrentThreadId()==m_registrationThread&&PS::PSConfig::Get()->GetSettings().advancedLogging) {
+                static unsigned reports=0;
+                if(reports<16) {
+                    ++reports;
+                    auto* world=context?context->GetWorld():nullptr;
+                    PS::Log<LogLevel::Verbose>(STR("[PERSISTENCE-PRUNER][CONTEXT-DEFERRED] function='{}' context='{}' world='{}'; preview/unverified context did not authorize character cleanup.\n"),
+                        function->GetPathName(),context?context->GetClassPrivate()->GetPathName():TEXT("<unavailable>"),world?world->GetName():TEXT("<unavailable>"));
+                }
+            }
+            return;
+        }
         // This is targeted, idempotent preparation of already-declared quests,
         // not another RegisterAll()/asset scan. Run it before payload inspection
         // even if the load event precedes InitGameState's ready notification.

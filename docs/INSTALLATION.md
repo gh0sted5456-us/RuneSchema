@@ -18,11 +18,11 @@ You need:
 
 Close the game before replacing RuneSchema, UE4SS, or any PAK files.
 
-Choose the [0.8.0.2 release package](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.0.2/RuneSchema-0.8.0.2.zip)
-and read its [defaults and verification](RELEASE-0.8.0.2.md).
+Choose the [0.8.0.3 release package](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.0.3/RuneSchema-0.8.0.3.zip)
+and read its [defaults and verification](RELEASE-0.8.0.3.md).
 There is one `RuneSchema-<version>.zip` per release, with the registry and
 networking bridges and Helpy included. No separate Core or Universal choice is
-needed. Older `e`/`m` suffixes are historical. The published 0.8.0.2 download
+needed. Older `e`/`m` suffixes are historical. The published 0.8.0.3 download
 includes the earlier 0.8.0.1b source-only fixes. Check
 [downloads and source updates](CURRENT-RELEASE.md) before choosing.
 
@@ -171,7 +171,7 @@ the same as a failed start.
 If RuneSchema cannot start at all, the log should state the reason. Fix that
 first before judging whether an individual mod worked.
 
-For the current published ZIP, both RuneSchema and Helpy should report `0.8.0.2`.
+For the current published ZIP, both RuneSchema and Helpy should report `0.8.0.3`.
 Compare against the version of the package you installed.
 If the versions are mixed or unexpectedly old, check
 for an old DLL in the active UE4SS installation before troubleshooting the mod.

@@ -29,6 +29,9 @@ int main()
     fs::create_directories(valid/"Assets");
     {std::ofstream(valid/"notes.txt")<<"ignored";}
     assert(LooksLikeRuneSchemaMod(valid));
+    const auto registryOnly=root/"RegistryOnly";fs::create_directories(registryOnly/"Registry");
+    {std::ofstream(registryOnly/"Registry"/"declarations.jsonc")<<"{\"SchemaVersion\":1,\"Entries\":[]}";}
+    assert(LooksLikeRuneSchemaMod(registryOnly)&&ResolveLoaderDirectory(registryOnly,"registry")->filename()=="Registry");
 
     const auto luaOnly=root/"LuaOnlyRuneSchemaMod";
     fs::create_directories(luaOnly/"ue4ss"/"scripts");

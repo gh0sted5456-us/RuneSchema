@@ -5,6 +5,73 @@ saved content against the game’s current registered lists. Folder changes alon
 do not mark an item as missing, and this check works without a separate history
 file.
 
+## Choose when cleanup runs
+
+Open **Home → Quick settings → Game launch & saves**. Quick Settings opens as
+a centered, scrollable panel with a Close button.
+
+- **Blanket save cleanup (fallback)** enables the original broad pass across
+  supported local saves at a verified load boundary. It stays saved until you
+  switch it off. Xbox WGS containers are never swept or rewritten as ordinary
+  local files; dedicated servers do not sweep a local client's character folder.
+- The default, with Blanket off, cleans **only the character/world being loaded**.
+  Selecting or previewing a character does not authorize cleanup in either mode.
+  Local character-file cleanup reads the selected name and GUID from the game's
+  native controller at world entry and verifies that GUID against the file. The
+  incoming-payload adapter requires a verified gameplay-world context. Local
+  world files require a verified native slot before they are
+  read; a network client cannot clean a local world on behalf of the server.
+  Game Pass retains its provider-backed world payload hook.
+
+**Apply cleanup changes** offers **Next character/world entry** or **Next game
+launch**. The first reads your saved choice at a safe entry boundary. The second
+retains the current session's applied policy until restart. Changing either
+control does not start a background sweep. Launch mode and Save Bypass remain
+separate. For selected-save cleanup applied at the next world entry, use
+`RuneSchema/settings/settings.ini`:
+
+```ini
+[persistence]
+blanketCleanup = false
+cleanupOnWorldEntry = true
+```
+
+Set `blanketCleanup` to `true` for the fallback. Set `cleanupOnWorldEntry` to
+`false` to apply saved changes after restarting instead; this is the default
+activation timing. Selected-save cleanup is the standard for new settings and
+for existing configurations without an explicit scope. An existing saved
+Blanket choice is preserved. An unavailable hook or unverified context
+does not authorize a broader sweep or a late world-file replacement.
+
+In Steam testing with copies of modded saves, entry removed 271 records from
+one selected character, verified its original backup, and left the other copied
+saves unchanged. Re-entry made no further cleanup changes. Game Pass and
+dedicated-server joins still need separate live validation.
+
+A missing mod can leave the menu preview without its armor. RuneSchema's
+preview guard does not write a cleaned character back from that view.
+This does not prevent Dragonwilds or another mod from saving its own changes.
+Keep a whole-save backup before entering with content disabled: both cleanup
+modes still remove supported unresolved records once their cleanup boundary is
+reached, and neither mode automatically restores removed progress.
+
+## Optional Mod Menu settings page
+
+[Maxxfilth's Mod Menu](https://www.nexusmods.com/runescapedragonwilds/mods/548)
+can edit the core quick settings through RuneSchema's own `modmenu.json`.
+It uses the same `settings/settings.ini` as Helpy and does not need a Lua
+polling helper. Mod Menu remains optional and its files are not patched.
+
+The page includes cleanup scope and activation, Save Bypass, Helpy's shortcut,
+mapping updates and logging. Startup-only controls say they require a restart;
+Helpy's shortcut can still be rebound immediately from Helpy. Cache, layout and
+FPS preferences remain in Helpy. This page changes only your local installation.
+
+The descriptor uses Mod Menu's literal-assignment reader to preserve quoted INI
+strings and unrelated sections. RuneSchema seeds missing settings exposed on that page during startup through
+its existing validated settings writer, with an original-file backup. Settings
+are never executed as Lua. Mod Menu 1.1 or newer is required for this page.
+
 ## What happens during character loading
 
 1. Enabled RuneSchema mods and PAK files load.
@@ -27,7 +94,7 @@ Unfamiliar rows/sections appear in skipped-section diagnostics, with repeated
 row warnings grouped per section. Unknown fields remain untouched; this does
 not claim to decode future save formats or repair unsupported world/SPUD data.
 
-The JSON check occurs at the first character-load point for that game launch.
+The JSON check runs at each eligible character-load boundary.
 A separate post-hydration check handles RuneSchema-owned orphan quests whose
 native state becomes available later. Active or unfinished status does not
 protect an incomplete quest whose identity is absent from a complete registry.

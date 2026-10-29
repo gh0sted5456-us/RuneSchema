@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "id": "RuneSchema",
+  "name": "RuneSchema",
+  "version": "0.8.0.3",
+  "minModMenu": "1.1.0",
+  "description": "Core quick settings shared with Helpy through RuneSchema/settings/settings.ini. Cleanup follows its activation choice. Helpy cache, layout and FPS preferences remain in Helpy.",
+  "runsOn": "yours",
+  "config": { "file": "settings/settings.ini", "format": "lua" },
+  "settings": [
+    { "type": "header", "label": "Save cleanup" },
+    { "key": "blanketCleanup", "type": "toggle", "label": "Blanket save cleanup (fallback)", "default": false, "tooltip": "On: the original broad cleanup across supported local saves at a safe load boundary. Off: selected character/world only. Preview alone never authorizes cleanup. Verified backups are mandatory." },
+    { "key": "cleanupOnWorldEntry", "type": "toggle", "label": "Apply cleanup changes at next world entry", "default": false, "tooltip": "On: read the saved cleanup choice at the next character/world entry. Off: retain this session's applied policy until restarting Dragonwilds. Changing a setting does not start a background sweep." },
+    { "key": "allowCorruptCharacterEntry", "type": "toggle", "label": "Save Bypass by default", "default": false, "restart": true, "tooltip": "On: prefer bypass. Off: relaxed native loading followed by fallback after native rejection. Keep backups and disable any standalone bypass. This does not repair damaged data." },
+    { "type": "header", "label": "Helpy shortcut" },
+    { "key": "helpyHotkey", "type": "choice", "label": "Helpy shortcut", "options": ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12"], "default": "F2", "restart": true, "tooltip": "Mod Menu edits the same shortcut as Helpy. Restart after changing it here, or use Helpy's Quick Settings for immediate rebinding. Avoid keys already used by the game or another mod." },
+    { "type": "header", "label": "Startup and diagnostics", "collapsed": true },
+    { "key": "autoUpdateMappings", "type": "toggle", "label": "Automatic reflection mapping updates", "default": true, "restart": true },
+    { "key": "advancedLogging", "type": "toggle", "label": "Detailed RuneSchema logging", "default": false, "restart": true },
+    { "key": "archiveLogs", "type": "toggle", "label": "Archive RuneSchema logs", "default": false, "restart": true }
+  ]
+}

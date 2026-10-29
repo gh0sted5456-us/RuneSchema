@@ -24,6 +24,22 @@ static P::Bytes World(bool stations) {
 }
 static void Policies() {
     using namespace PS::WorldCleanupPolicy;
+    Need(!BlanketAtEntry(false,true,false),"next-launch choice changed this session");
+    Need(BlanketAtEntry(false,true,true),"next-entry choice was not applied");
+    Need(BlanketAtEntry(true,false,false),"active blanket mode was not retained until restart");
+    Need(!BlanketAtEntry(true,false,true),"blanket mode could not be disabled at the next entry");
+    Need(LocalSlotEligible(L"World #2; New",false),"ordinary selected world rejected");
+    Need(LocalSlotEligible(L"DYE",false),"selected world rejected");
+    for(const auto* slot:{L"",L"<unavailable>",L"../Other",L"..\\Other",L"C:\\Other",L"/Other",L"\\\\server\\share",L"EnhancedInputUserSettings",L"World.",L"World ",L"World\nOther"})
+        Need(!LocalSlotEligible(slot,false),"unsafe selected slot accepted");
+    Need(!LocalSlotEligible(L"DYE",true),"network client can edit a local world");
+    Need(CharacterEntryEligible(true,L"L_Gameplay"),"gameplay entry rejected");
+    Need(!CharacterEntryEligible(false,L"L_Gameplay"),"unverified gameplay context accepted");
+    for(const auto* world:{L"",L"<unavailable>",L"L_FrontEnd",L"L_MainMenu",L"CharacterPreview",L"CharacterSelection"})
+        Need(!CharacterEntryEligible(true,world),"preview/selection can authorize pruning");
+    Need(NativeGameplayMap(L"/Game/Maps/World/L_World"),"native world entry rejected");
+    Need(!NativeGameplayMap(L"/Game/Maps/UI/L_FrontEnd")&&!NativeGameplayMap(L"<unavailable>")
+        &&!NativeGameplayMap(L"/Game/UnknownMap"),"unverified map can authorize a blanket pass");
     const auto maximum=std::numeric_limits<std::int64_t>::max();
     Need(ArchiveEligible(L"DYE",0,0,maximum,1024),"unlimited native archive rejected");
     Need(ArchiveEligible(L"DYE",0,0,1024,1024),"finite exact-size native archive rejected");

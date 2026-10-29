@@ -7,6 +7,7 @@
 #include "Core/ConfigFiles.h"
 #include "Utility/ConfigCodec.h"
 #include "Utility/ConfigStore.h"
+#include "Core/RuneSchemaSettingsEditor.h"
 #include "Runtime/HostServices.h"
 #include <nlohmann/json.hpp>
 
@@ -114,6 +115,12 @@ namespace PS {
             m_preserveOriginal=false;
             DiagnosticLog::Initialize(m_settings.archiveLogs);
             StructuredDiagnostics::Initialize();
+            if(fs::exists(GetSettingsPath().parent_path()/"modmenu.json")) {
+                const auto prepared=RuneSchemaSettingsEditor::PrepareModMenuFields(GetSettingsPath());
+                if(!prepared.value("Ok",false))PS::Log<RC::LogLevel::Warning>(STR(
+                    "[SETTINGS][MOD-MENU][DEFERRED] Controls could not be prepared: {}. Existing settings retained.\n"),
+                    RC::to_generic_string(prepared.value("Status",std::string("settings unavailable"))));
+            }
             PS::Log<RC::LogLevel::Normal>(STR("{}\n"),RC::to_generic_string(m_status));
         } catch (const std::exception& error) {
             // Invalid configuration must not discard the earlier diagnostic log.

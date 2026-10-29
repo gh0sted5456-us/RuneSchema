@@ -33,15 +33,33 @@ inline bool ReservedShardPath(const std::string& path){
     const auto end=folded.find('/',prefix.size());
     return end!=std::string::npos&&folded.substr(end).starts_with("/registry/shards/");
 }
+inline std::string RegistryFolderOwner(const std::string& path){
+    const auto folded=Fold(path);constexpr std::string_view prefix="/game/mods/";
+    if(!folded.starts_with(prefix))return {};
+    const auto end=folded.find('/',prefix.size());
+    if(end==std::string::npos||!folded.substr(end).starts_with("/registry/"))return {};
+    const auto owner=path.substr(prefix.size(),end-prefix.size());
+    return MountedModRegistryOwners::ConventionalName(owner)?owner:std::string{};
+}
+inline void ValidateRootPath(const std::string& path,const std::string& owner){
+    const auto prefix="/Game/Mods/"+owner+"/Registry/";
+    Require(MountedModRegistryOwners::ConventionalName(owner)&&Fold(path).starts_with(Fold(prefix))&&path.size()<=1024,
+        "root path must stay in the owning Registry folder");
+    const auto suffix=path.substr(prefix.size());const auto dot=suffix.find('.');
+    Require(dot!=std::string::npos&&dot>0&&suffix.substr(0,dot)==suffix.substr(dot+1),"root package and object names must match");
+    const auto name=suffix.substr(0,dot);
+    Require(name.size()<=128&&std::all_of(name.begin(),name.end(),[](unsigned char c){return c<128&&(std::isalnum(c)||c=='_');}),
+        "root name must use only letters, digits and underscores");
+}
 inline void ValidateChildPath(const std::string& path,const std::string& owner){
     const auto prefix="/Game/Mods/"+owner+"/Registry/Shards/";
-    Require(path.starts_with(prefix)&&path.size()<=1024,"child path must stay in the owning Registry/Shards folder");
+    Require(Fold(path).starts_with(Fold(prefix))&&path.size()<=1024,"child path must stay in the owning Registry/Shards folder");
     const auto suffix=path.substr(prefix.size());const auto dot=suffix.find('.');
     Require(dot!=std::string::npos&&dot>0&&suffix.substr(0,dot)==suffix.substr(dot+1),"child package and object names must match");
-    const auto name=suffix.substr(0,dot),stem="RSREG_"+owner+"_";
-    Require(name.starts_with(stem)&&name.size()>stem.size()&&name.size()<=128
+    const auto name=suffix.substr(0,dot);
+    Require(!name.empty()&&name.size()<=128
         &&std::all_of(name.begin(),name.end(),[](unsigned char c){return c<128&&(std::isalnum(c)||c=='_');}),
-        "child name must be RSREG_<Owner>_<Id> using only letters, digits and underscores");
+        "child name must use only letters, digits and underscores; ownership comes from its folder and RegistryOwner");
 }
 inline Json ParseJson(const std::string& text){
     Require(!text.empty()&&text.size()<=MaxDocumentBytes,"document is empty or exceeds the 512 KiB UTF-8 limit (bytes="
@@ -75,7 +93,7 @@ inline std::size_t References(const CookedPakRegistryManifest::Manifest& manifes
     return count;
 }
 inline Group Resolve(const std::string& rootPath,const Asset& root,const std::function<Asset(const std::string&)>& load){
-    Require(rootPath==RootPath(root.Owner),"a shard index must use the owner's conventional root path");
+    ValidateRootPath(rootPath,root.Owner);
     Envelope(root.Document,false);
     Require(root.Document.contains("RegistryShards")&&root.Document.at("RegistryShards").is_array()
         &&!root.Document.at("RegistryShards").empty()&&root.Document.at("RegistryShards").size()<=MaxShards,

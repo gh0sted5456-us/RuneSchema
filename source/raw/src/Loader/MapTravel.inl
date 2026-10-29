@@ -128,6 +128,7 @@ namespace {
         if(!g_mapTravel)return false;
         if(g_mapTravel->Generation!=PS::SpawnToolRequests::Generation.load()){ToolMapTravelReset();return false;}
         const auto now=std::chrono::steady_clock::now();if(now<g_mapTravel->Next)return true;
+        static PS::SlowWork::Meter timing;PS::SlowWork::Scope scope(timing,"helpy.map.travel");
         g_mapTravel->Next=now+std::chrono::milliseconds(g_mapTravel->Gate.Committed?100:20);
         try{
             auto& job=*g_mapTravel;auto* world=job.World.Get();auto* controller=job.Controller.Get();auto* pawnObject=job.Pawn.Get();auto* source=job.Source.Get();

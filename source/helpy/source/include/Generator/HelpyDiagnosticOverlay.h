@@ -23,6 +23,7 @@ class HelpyDiagnosticOverlay {
     HWND m_game{};HMONITOR m_monitor{};UINT m_dpi=96;
     std::chrono::steady_clock::time_point m_nextUpdate{};
     std::vector<DiagnosticToastFeed::Notice> m_cards;
+    std::string m_fps;
     HelpyImGuiTheme::Theme m_theme{};
     float m_scale=1.0f;
     int m_width=390,m_gap=8;
@@ -48,7 +49,7 @@ class HelpyDiagnosticOverlay {
         return result;
     }
     int StackHeight() const {
-        int total=0;
+        int total=m_fps.empty()?0:Spacing(32)+(m_layouts.empty()?0:m_gap);
         for(size_t i=0;i<m_layouts.size();++i)total+=m_layouts[i].Height+(i?m_gap:0);
         return total;
     }
@@ -146,13 +147,19 @@ class HelpyDiagnosticOverlay {
     void Paint(HDC dc,RECT bounds){
         const HBRUSH clear=CreateSolidBrush(ColorKey);
         FillRect(dc,&bounds,clear);DeleteObject(clear);
-        if(m_cards.empty())return;
+        if(m_cards.empty()&&m_fps.empty())return;
         SetBkMode(dc,TRANSPARENT);
         const Fonts fonts(m_theme,m_scale);
         const COLORREF bg=Color(m_theme.panelAlt),baseBorder=Color(m_theme.border),secondary=Color(m_theme.textDisabled),mainText=Color(m_theme.text);
         const int radius=std::clamp(static_cast<int>(std::lround(m_theme.childRounding*m_scale)),5,28);
         const int stripeWidth=std::max(3,Spacing(4));
         int top=0;
+        if(!m_fps.empty()){
+            const int height=Spacing(32);RECT box{0,0,m_width,height};
+            const auto brush=CreateSolidBrush(bg);FillRect(dc,&box,brush);DeleteObject(brush);
+            Text(dc,fonts.Heading,mainText,Wide(m_fps),box,DT_CENTER|DT_VCENTER|DT_SINGLELINE);
+            top=height+m_gap;
+        }
         for(size_t n=0;n<m_cards.size()&&n<m_layouts.size();++n){
             const auto& card=m_cards[n];const auto& layout=m_layouts[n];
             const auto formatted=DiagnosticToastPresentation::Format(card);
@@ -220,11 +227,13 @@ class HelpyDiagnosticOverlay {
 public:
     void Hide(){if(m_window&&m_showing)ShowWindow(m_window,SW_HIDE);m_showing=false;}
     void Close(){if(m_window){DestroyWindow(m_window);m_window=nullptr;}if(m_registered){UnregisterClassW(ClassName,m_module);m_registered=false;}m_showing=false;m_game=nullptr;m_monitor=nullptr;m_nextUpdate={};}
-    void Update(HINSTANCE module,HWND game,const DiagnosticToastFeed::Feed& feed,const HelpyImGuiTheme::Theme& theme,bool show){
-        if(!show||!game||!IsWindow(game)||feed.Empty()){Hide();return;}
-        const auto now=std::chrono::steady_clock::now();if(now<m_nextUpdate)return;
-        m_nextUpdate=now+std::chrono::milliseconds(100);
+    void Update(HINSTANCE module,HWND game,const DiagnosticToastFeed::Feed& feed,const HelpyImGuiTheme::Theme& theme,bool show,std::string_view fps={}){
+        if(!show||!game||!IsWindow(game)||(feed.Empty()&&fps.empty())){Hide();return;}
+        const bool fpsChanged=m_fps!=fps;
+        const auto now=std::chrono::steady_clock::now();if(m_showing&&now<m_nextUpdate&&!fpsChanged&&m_cards.size()==feed.Visible().size())return;
+        m_nextUpdate=now+std::chrono::milliseconds(feed.Empty()?std::clamp(theme.fpsRefreshMs,500,2000):100);
         if(!Ensure(module))return;
+        m_fps=fps;
         bool cardsChanged=m_cards.size()!=feed.Visible().size();
         if(!cardsChanged){size_t i=0;for(const auto& item:feed.Visible()){
             const auto& prior=m_cards[i++];
@@ -254,7 +263,7 @@ public:
         const int oldWidth=m_width;
         const int availableWidth=HelpyOverlayGeometry::AvailableWidth(bounds,margin);
         if(availableWidth<180){Hide();return;}
-        m_width=std::min(static_cast<int>(std::lround(400*m_scale)),availableWidth);
+        m_width=std::min(static_cast<int>(std::lround((m_cards.empty()?160:400)*m_scale)),availableWidth);
         const int maxHeight=HelpyOverlayGeometry::MaxHeight(bounds,margin);
         const bool resized=oldWidth!=m_width||std::abs(priorScale-m_scale)>0.001f||priorFont!=m_theme.fontScale||
             priorDensity!=m_theme.density||priorFamily!=m_theme.fontFamily;
@@ -301,7 +310,7 @@ public:
         const bool frameChanged=!windowWasVisible||old.left!=x||old.top!=y||static_cast<int>(old.right-old.left)!=m_width||static_cast<int>(old.bottom-old.top)!=actualHeight;
         if(frameChanged)SetWindowPos(m_window,HWND_TOPMOST,x,y,m_width,actualHeight,SWP_NOACTIVATE|SWP_SHOWWINDOW);
         m_showing=true;
-        if(cardsChanged||resized||frameChanged||themeChanged){
+        if(cardsChanged||fpsChanged||resized||frameChanged||themeChanged){
             InvalidateRect(m_window,nullptr,FALSE);UpdateWindow(m_window);
         }
     }

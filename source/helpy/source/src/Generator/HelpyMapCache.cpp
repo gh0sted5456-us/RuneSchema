@@ -58,7 +58,8 @@ Result Install(const std::filesystem::path& folder,const std::string& build,cons
     return {std::move(data),build,"Map filter cache ready. Kept until a confirmed installed game update."};
 }
 bool Download(){
-    if(Worker.valid())return false;const auto build=Installed();Cancelled=false;AttemptedBuild=build;
+    static Clock::time_point nextAttempt{};const auto now=Clock::now();
+    if(Worker.valid()||now<nextAttempt)return false;nextAttempt=now+std::chrono::seconds(10);const auto build=Installed();Cancelled=false;AttemptedBuild=build;
     try{const auto folder=Folder();State.Status="Downloading map markers; validating source, coordinates and limits...";Worker=std::async(std::launch::async,[folder,build]{return Install(folder,build,Fetch());});return true;}
     catch(...){State.Status="Cannot start map download; existing map cache retained.";return false;}
 }
@@ -81,8 +82,8 @@ void Initialize(){
 }
 bool RefreshEligible(){return State.Ready&&MapFilters::NeedsUpdate(static_cast<bool>(State.Data),State.CachedBuild,Installed(),true);}
 bool StartInitial(){if(!State.Ready||Busy())return false;if(State.Data)return Refresh();return Download();}
-bool Refresh(){
-    if(!RefreshEligible()){State.Status=State.Data?"Cached filters retained: no confirmed installed game update.":"Use Download Initial Assets to obtain map filters.";return false;}return Download();
+bool Refresh(bool manual){
+    if(!manual&&!RefreshEligible()){State.Status=State.Data?"Cached filters retained: no confirmed installed game update.":"Use Download Initial Assets to obtain map filters.";return false;}return Download();
 }
 void SaveFilters(){++State.Revision;Dirty=true;SaveAt=Clock::now()+std::chrono::milliseconds(300);}
 void Cancel()noexcept{Cancelled=true;}

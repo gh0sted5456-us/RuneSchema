@@ -291,7 +291,7 @@ inline void PlacePopup(){
     const auto& theme=HelpyImGuiTheme::Current;
     if(!ImGui::IsPopupOpen("##map-place")){Data.Popup=false;return;}
     const auto* viewport=ImGui::GetMainViewport();const auto display=viewport->WorkSize;
-    const ImVec2 size{std::min(theme.X(400),display.x-theme.X(24)),std::min(theme.Y(650),display.y-theme.Y(24))};
+    const ImVec2 size{std::min(theme.X(400),display.x-theme.X(24)),std::min(theme.Y(Data.Operation==2?400:650),display.y-theme.Y(24))};
     // Fill-width children cannot be measured by an auto-fit parent. Pin both
     // axes for the lifetime of this popup instead of shrinking one frame at a time.
     ImGui::SetNextWindowSize(size,ImGuiCond_Always);
@@ -301,7 +301,7 @@ inline void PlacePopup(){
     HelpyPreviewHooks::MapPopupWindow={ImGui::GetWindowPos().x,ImGui::GetWindowPos().y,ImGui::GetWindowPos().x+size.x,ImGui::GetWindowPos().y+size.y};
 #endif
     ImGui::PushStyleVar(ImGuiStyleVar_SeparatorTextAlign,{.5f,.5f});
-    ImGui::BeginChild("##map-options-body",{0,std::max(t.Y(60),ImGui::GetContentRegionAvail().y-t.Y(110))},false);
+    ImGui::BeginChild("##map-options-body",{0,std::max(t.Y(60),ImGui::GetContentRegionAvail().y-t.Y(Data.Operation==2?80:110))},false);
 #if defined(HELPY_PREVIEW)
     {const auto a=ImGui::GetCursorScreenPos();HelpyPreviewHooks::MapOptionsBody={a.x,a.y,a.x+ImGui::GetContentRegionAvail().x,a.y};}
 #endif

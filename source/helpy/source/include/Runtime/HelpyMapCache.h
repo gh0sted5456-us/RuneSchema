@@ -10,7 +10,7 @@ void Poll();
 bool Busy();
 bool StartInitial(); // Explicit initial-assets opt-in.
 bool RefreshEligible();
-bool Refresh(); // No fetch for an unchanged/unconfirmed installed build.
+bool Refresh(bool manual=false); // Automatic checks require a confirmed build change.
 void Cancel()noexcept;
 void SaveFilters();
 void Shutdown()noexcept;

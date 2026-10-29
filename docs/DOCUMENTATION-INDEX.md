@@ -55,8 +55,8 @@ For new cooked features and other loader families:
 ## Reference and distribution
 
 - [Every loader folder and its purpose](LOADER-WALKTHROUGHS.md)
-- [Current 0.8.0.2 package and verification](RELEASE-0.8.0.2.md)
-- [0.8.0.2 changelog](CHANGELOG-0.8.0.2.md), including the earlier [0.8.0.1b fixes](CHANGELOG-0.8.0.1b.md).
+- [Current 0.8.0.3 package and verification](RELEASE-0.8.0.3.md)
+- [0.8.0.3 changelog](CHANGELOG-0.8.0.3.md), including the earlier [0.8.0.1b fixes](CHANGELOG-0.8.0.1b.md).
 - [0.8.0.1 implemented and removed changes, line by line](CHANGELOG-0.8.0.1.md)
 - [0.8.0.1 package and verification](RELEASE-0.8.0.1.md)
 - [Field schemas](SCHEMAS.md)

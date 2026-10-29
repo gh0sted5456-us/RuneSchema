@@ -22,6 +22,19 @@ int main(){
     std::vector<std::string> visited;
     const auto load=[&](const std::string& path){visited.push_back(path);return assets.at(path);};
     const auto group=Resolve(rootPath,root,load);
+    {
+        const auto alias="/Game/Mods/Dye/Registry/DA_Registry_Ritualist.DA_Registry_Ritualist";
+        const auto renamed="/Game/Mods/Dye/Registry/Shards/RSREG_Ritualist_Items.RSREG_Ritualist_Items";
+        const auto plain="/Game/Mods/Dye/Registry/Shards/Recipes.Recipes";
+        auto compatible=root;compatible.Document["RegistryShards"]={renamed,plain};
+        const auto expanded=Resolve(alias,compatible,[&](const std::string& path){return Make(Payload(path==renamed?recipeA:recipeB));});
+        Check(expanded.Owner=="Dye"&&expanded.References==2&&expanded.Paths.front()==alias);
+        Check(RegistryFolderOwner(alias)=="Dye"&&RegistryFolderOwner("/Game/Elsewhere/Registry/DA_Registry_Main.DA_Registry_Main").empty());
+        Reject([&]{Resolve("/Game/Mods/Other/Registry/DA_Registry_Main.DA_Registry_Main",compatible,load);});
+        Reject([&]{Resolve(alias,compatible,[&](const std::string&){return Make(Payload(recipeA),"Ritualist");});});
+        Reject([&]{Resolve("/Game/Mods/Dye/Registry/../DA_Registry_Main.DA_Registry_Main",compatible,load);});
+        Reject([&]{Resolve("/Game/Mods/Dye/Registry/Shards/Root.Root",compatible,load);});
+    }
     Check(visited==std::vector<std::string>({a,b})&&group.Paths.size()==3&&group.Manifests.size()==2&&group.References==2);
     {auto artwork=assets;artwork[a].Document["NativeRegistries"]["CacheAssets"]={"/Example/Icons/T_Original.T_Original"};
         artwork[a].Bytes=artwork[a].Document.dump().size();

@@ -51,9 +51,20 @@ paths. Discovery does not rewrite or prune them. Native mods still need a
 compatible UE4SS SDK and game version; bundling cannot make an incompatible or
 unsafe DLL safe. Host errors are reported per package, not described as success.
 
-Third-party tools that scan only immediate `UE4SS/Mods` folders may need to add
-nested-package discovery. Preserving `modmenu.json` does not automatically
-extend ModMenu's own filesystem scan.
+RuneSchema uses the stock Lua-start callback to expose enabled Lua packages as
+additional entries in `IterateGameDirectories()` under the current runtime's
+`Mods` table. Each entry is the complete original directory node, including its
+scripts, config, metadata and asset folders. Its absolute paths still point to
+the nested package. This lets Mod Menu discover a package such as
+`Bootylicious/ue4ss/MorphSliders` without patching Mod Menu or moving its files.
+
+This adds no polling or extra recursive disk scan. Native entries and return
+values remain intact; existing sibling names win, and disabled parents and
+unsupported native/hybrid packages are not presented. Restart after updating
+RuneSchema so its Lua-start integration can run before the settings scan.
+Tools that bypass the directory API and only enumerate physical top-level
+folders still need their own nested-package support. An unavailable native
+directory listing is passed through unchanged, including Mod Menu's fallback.
 
 ## Legacy Lua companions
 

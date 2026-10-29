@@ -9,7 +9,7 @@ $ErrorActionPreference = 'Stop'
 if ($ManagedUE4SSHost) {
     throw 'Custom UE4SS hosts are retired. RuneSchema must run on an unmodified UE4SS.dll; build a framework-only package instead.'
 }
-$Version = '0.8.0.2'
+$Version = '0.8.0.3'
 $BuildRoot = [IO.Path]::GetFullPath($PSScriptRoot)
 if (-not (Test-Path -LiteralPath (Join-Path $BuildRoot 'source\raw\CMakeLists.txt') -PathType Leaf)) {
     $BuildRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -576,6 +576,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         if (Test-Path -LiteralPath $sourceSettingsFile -PathType Leaf) {
             Copy-Item -LiteralPath $sourceSettingsFile -Destination (Join-Path $payload 'settings\settings.ini') -Force
         }
+        Copy-Item -LiteralPath (Join-Path $RawSource 'modmenu.json') -Destination (Join-Path $payload 'modmenu.json') -Force
         $defaultsReadme = Join-Path $SourceRoot 'settings\defaults\README.md'
         if (Test-Path -LiteralPath $defaultsReadme -PathType Leaf) {
             Copy-Item -LiteralPath $defaultsReadme -Destination (Join-Path $payload 'settings\defaults\README.md') -Force
@@ -592,6 +593,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         New-Item -ItemType Directory -Path (Join-Path $payload 'scripts') -Force | Out-Null
         Copy-Item -LiteralPath $luaBootstrap -Destination (Join-Path $payload 'scripts\main.lua') -Force
         Copy-Item -LiteralPath (Join-Path $SourceRoot 'ue4ss\scripts\packages-loader.lua') -Destination (Join-Path $payload 'scripts\packages-loader.lua') -Force
+        Copy-Item -LiteralPath (Join-Path $SourceRoot 'ue4ss\scripts\package-discovery.lua') -Destination (Join-Path $payload 'scripts\package-discovery.lua') -Force
         Copy-Item -LiteralPath (Join-Path $SourceRoot 'ue4ss\scripts\mapping-loader.lua') -Destination (Join-Path $payload 'scripts\mapping-loader.lua') -Force
         Copy-Item -LiteralPath (Join-Path $SourceRoot 'ue4ss\scripts\mod-data-relay.lua') -Destination (Join-Path $payload 'scripts\mod-data-relay.lua') -Force
         $logicModsHelper = Join-Path $SourceRoot 'ue4ss\scripts\logicmods-register.lua'
@@ -789,6 +791,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
     New-Item -ItemType Directory -Path (Join-Path $pluginRoot 'RuneSchema') -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $package.FullName 'RuneSchema\dlls') -Destination (Join-Path $pluginRoot 'RuneSchema\dlls') -Recurse
     Copy-Item -LiteralPath (Join-Path $package.FullName 'RuneSchema\plugins') -Destination (Join-Path $pluginRoot 'RuneSchema\plugins') -Recurse
+    Copy-Item -LiteralPath (Join-Path $package.FullName 'RuneSchema\modmenu.json') -Destination (Join-Path $pluginRoot 'RuneSchema\modmenu.json')
     Write-Host "`n$Version build complete: $DistRoot" -ForegroundColor Green
     Write-Host 'UE4SS storefront packages are distributed separately from RuneSchema build output.' -ForegroundColor DarkGray
 } catch {

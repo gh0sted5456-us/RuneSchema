@@ -1,4 +1,4 @@
-# RSMK 0.8.0.2 integration
+# RSMK 0.8.0.3 integration
 
 Home > Quick settings exposes **Open Helpy at startup** directly, outside
 Advanced. Turning it off keeps the desktop closed until F2 on the next launch;
@@ -26,13 +26,13 @@ longer shifts the suggested references for older uncoded messages.
   checks, and explicit delivery/export confirmations remain independent of
   navigation. Detached Map, Recipes, Item Bay and inventory surfaces still work.
 
-The matching DLL is included in the October 25, 2026 0.8.0.2 release.
+The matching DLL is included in the October 28, 2026 0.8.0.3 release.
 See the repository's release notes for the exact archive and
 test scope; publication is not live gameplay/performance certification.
 
 ## Runtime and content integration
 
-RuneSchema and RSMK share version `0.8.0.2`, including their manifests and
+RuneSchema and RSMK share version `0.8.0.3`, including their manifests and
 Windows DLL metadata. Info (next to Credits and Legal) contains framework,
 game and UE4SS versions; the centered footer keeps only the runtime badge,
 readiness dot and F2 hint. Steam/Epic replaces the old Steam/GOG label.

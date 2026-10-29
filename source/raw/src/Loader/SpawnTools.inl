@@ -429,6 +429,7 @@ void DragonWildsSpawnLoader::PumpSpawnTools(PS::WorkSlice& work) {
     // A coalesced read-only hint from Helpy's existing Read service. Never owns
     // or completes the mutation mailbox, even during a grant or travel action.
     if(m_readyWorld&&IsWorldStillLoaded(m_readyWorld)&&PS::SpawnToolRequests::TakePlayerRoles())try {
+        static PS::SlowWork::Meter timing;PS::SlowWork::Scope scope(timing,"helpy.players.roles");
         const auto networkRole=PS::Network::Detect(m_readyWorld).Mode;
         PS::NetworkStatus::Current.Publish(networkRole,PS::SpawnToolRequests::Generation.load());
         if(networkRole==PS::Network::Role::Client) {
@@ -462,6 +463,7 @@ void DragonWildsSpawnLoader::PumpSpawnTools(PS::WorkSlice& work) {
     const auto groundNow=std::chrono::steady_clock::now();
     if(!PS::SpawnToolRequests::IsWaiting()&&groundNow>=nextMapGround){
         if(auto query=PS::SpawnToolRequests::TakeMapGround()){
+            static PS::SlowWork::Meter timing;PS::SlowWork::Scope scope(timing,"helpy.map.ground");
             nextMapGround=groundNow+std::chrono::milliseconds(150);
             const auto generation=PS::SpawnToolRequests::Generation.load();
             if(query->value("Generation",uint64_t{})==generation&&m_readyWorld){
@@ -578,9 +580,9 @@ void DragonWildsSpawnLoader::PumpSpawnTools(PS::WorkSlice& work) {
     // retain their independent world, player and authority checks.
     if(work.MayStart()&&!PS::SpawnToolRequests::Waiting.load()) {
         if(PS::HelpyQueryService::HasPending()) {
-            work.Started();PS::HelpyQueryService::PumpOne(false,runCatalogWindow);
-        }else if(g_quickCatalogIndex.active)g_quickCatalogIndex.Tick(work);
-        else {work.Started();PS::AssetSearch::PumpItemCatalog();}
+            work.Started();PS::SlowWork::Measure("helpy.catalog.query",[&]{PS::HelpyQueryService::PumpOne(false,runCatalogWindow);});
+        }else if(g_quickCatalogIndex.active)PS::SlowWork::Measure("helpy.catalog.index",[&]{g_quickCatalogIndex.Tick(work);});
+        else {work.Started();PS::SlowWork::Measure("helpy.catalog.passive",[&]{PS::AssetSearch::PumpItemCatalog();});}
     }
     auto request=PS::SpawnToolRequests::Take();if(!request)return;
     const bool f2Spawn=request->value("_Source",std::string{}).starts_with("Helpy")&&request->value("Action",std::string{})=="Spawn";
@@ -588,6 +590,9 @@ void DragonWildsSpawnLoader::PumpSpawnTools(PS::WorkSlice& work) {
     const char* spawnStage="recipient selection";
     try {
         const auto action=request->at("Action").get<std::string>();
+        static PS::SlowWork::Meter requestTiming[3];
+        const int timingSlot=action=="MapSnapshot"?0:action=="QuickPlayers"?1:2;
+        PS::SlowWork::Scope requestScope(requestTiming[timingSlot],timingSlot==0?"helpy.request.map":timingSlot==1?"helpy.request.players":"helpy.request.other");
         if(action=="CancelCatalogIndex") {
             g_quickCatalogIndex.Stop("Full scan cancelled; discovered entries retained.");
             auto result=PS::SpawnToolRequests::Read();result["Status"]="Full scan cancelled; discovered entries retained.";
@@ -780,9 +785,9 @@ void DragonWildsSpawnLoader::PumpSpawnTools(PS::WorkSlice& work) {
         if(action=="MapSnapshot"){
             auto result=PS::SpawnToolRequests::Read();
             try{
-                auto& map=result["MapSnapshot"];map=PS::HelpyMapRuntime::Snapshot(m_readyWorld,players);map["CanBuildAndTeleport"]=GetGameMode(m_readyWorld)!=nullptr;
+                auto& map=result["MapSnapshot"];map=PS::SlowWork::Measure("helpy.map.snapshot",[&]{return PS::HelpyMapRuntime::Snapshot(m_readyWorld,players);});map["CanBuildAndTeleport"]=GetGameMode(m_readyWorld)!=nullptr;
                 map["PartyTravelVersion"]=2;
-                bool scanning=false;auto markers=ToolMapNativeMarkers(m_readyWorld,scanning,*request,map["Players"]);std::unordered_map<std::string,size_t> identities;
+                bool scanning=false;auto markers=PS::SlowWork::Measure("helpy.map.markers",[&]{return ToolMapNativeMarkers(m_readyWorld,scanning,*request,map["Players"]);});std::unordered_map<std::string,size_t> identities;
                 for(size_t i=0;i<markers.size();++i)identities[markers[i].at("Path").get<std::string>()]=i;
                 const auto append=[&](nlohmann::json row){if(row.is_null())return;const auto key=row.at("Path").get<std::string>();if(auto it=identities.find(key);it!=identities.end()){
                     const auto& previous=markers[it->second];if(previous.contains("ResourceObservation")&&!row.contains("ResourceObservation"))row["ResourceObservation"]=previous["ResourceObservation"];

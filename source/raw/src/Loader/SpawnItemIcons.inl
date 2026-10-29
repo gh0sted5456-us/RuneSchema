@@ -1,5 +1,5 @@
 void DragonWildsSpawnLoader::PumpItemIcons(PS::WorkSlice& work) {
-    if(PS::HelpySourceCache::Requested.load()&&PS::HelpySourceCache::Poll(PS::HostServices::ModDirectory())){
+    if(PS::HelpySourceCache::Requested.load()&&PS::SlowWork::Measure("helpy.sources.publish",[&]{return PS::HelpySourceCache::Poll(PS::HostServices::ModDirectory());})){
         const auto& sources=PS::HelpySourceCache::Current;size_t indexed=0,metadata=0,unavailable=0;
         for(const auto& [file,entry]:sources.Containers.items()){
             if(entry.value("Status",std::string{})=="Indexed")++indexed;

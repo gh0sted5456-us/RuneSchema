@@ -45,6 +45,7 @@ int main(int argc, char** argv) {
     Require(lua,"RUNESCHEMA_UE4SS_PACKAGE_SESSION");
     Require(lua,"packages-loader.lua");
     Require(build,"scripts\\packages-loader.lua");
+    Require(build,"scripts\\package-discovery.lua");
     Require(build,"ManagedUE4SSHost");
     const auto helper=Read(std::filesystem::path(argv[1]).parent_path()/"packages-loader.lua");
     Require(helper,"Stale package manifest refused");
@@ -53,6 +54,12 @@ int main(int argc, char** argv) {
     Require(helper,"only Lua add-ons are supported");
     Forbid(helper,"matching UE4SS host required");
     Forbid(helper,"package.cpath");
+    const auto discovery=Read(std::filesystem::path(argv[1]).parent_path()/"package-discovery.lua");
+    Require(discovery,"# Session\\t");
+    Require(discovery,"entry.Name] = node");
+    Require(discovery,"table.pack(original(...))");
+    Forbid(discovery,"LoopAsync");
+    Forbid(discovery,"io.popen");
 
     const auto sourceRoot=std::filesystem::path(argv[1]).parent_path().parent_path().parent_path();
     const auto integration=Read(sourceRoot/"raw/include/Runtime/UE4SSPackageIntegration.h");

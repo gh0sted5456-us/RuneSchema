@@ -6,6 +6,7 @@
 #include "Core/HelpyBranding.h"
 #include "Core/BaseCacheDownloads.h"
 #include "Core/HelpySourceCache.h"
+#include "Core/MapPresentationCache.h"
 #include <windows.h>
 #include <winhttp.h>
 #include <bcrypt.h>
@@ -112,6 +113,25 @@ Result InstallArtwork(const std::filesystem::path& folder,const Fetcher& fetch){
     Commit(folder/"ready",Bytes{'1'});return {true,false,true,"UI artwork ready. Saved locally for future launches.",{},true};
 }
 bool Hex(const std::string& text,size_t size){return text.size()==size&&text.find_first_not_of("0123456789abcdef")==text.npos;}
+Result DownloadWorldMap(const std::filesystem::path& cache,const std::filesystem::path& downloads,const Fetcher& fetch){
+    Count=2;Done=0;const auto bytes=fetch("cache-bundles/world-map.json",16*1024);
+    const auto index=nlohmann::json::parse(bytes,[](int depth,nlohmann::json::parse_event_t,nlohmann::json&){if(depth>12)throw std::runtime_error("[RS-DL-002] Map manifest nesting exceeds its limit.");return true;});
+    if(!index.is_object()||index.value("Format",0)!=1||index.value("Kind",std::string{})!="RuneSchemaWorldMapCache")throw std::runtime_error("[RS-DL-002] Invalid world-map download manifest.");
+    const auto digest=index.value("SHA256",std::string{}),name=index.value("File",std::string{});const auto size=index.value("Bytes",uint64_t{});
+    if(!Hex(digest,64)||name!=digest+".rsmk-cache"||size<20||size>24ull*1024*1024)throw std::runtime_error("[RS-DL-002] Invalid world-map download bounds.");
+    const auto metadata=MapPresentationCache::Metadata(index.at("WorldMap"));++Done;
+    try{const auto current=MapPresentationCache::Reference(cache);
+        if(!current.empty()&&MapPresentationCache::Metadata(current)==metadata){(void)MapPresentationCache::Bytes(cache,current);++Done;
+            return {false,false,false,"World map is already current; local artwork and alignment reused."};}
+    }catch(...){} // A damaged local copy can be replaced by a verified download.
+    const auto target=downloads/name;
+    if(!Verified(target,static_cast<size_t>(size),digest)){
+        const auto pack=fetch("cache-bundles/"+name,static_cast<size_t>(size));
+        if(pack.size()!=size||Hash(pack)!=digest)throw std::runtime_error("[RS-CACHE-004] World-map cache checksum mismatch.");
+        if(Cancelled)throw std::runtime_error("Map download cancelled; existing map retained.");Commit(target,pack);
+    }
+    ++Done;return {false,false,false,"World map downloaded; validating and installing artwork with its alignment...",target};
+}
 Result InstallAuthorTools(const std::filesystem::path& folder,const Fetcher& fetch){
     Count=2;Done=0;
     const auto bytes=fetch("tools/authoring-tools/index.json",16*1024);
@@ -167,10 +187,19 @@ void Initialize(){
     });}catch(...){State.NeedsArtwork=true;State.Status="Artwork inspection unavailable; offline mode is active.";}
 }
 bool StartArtwork(){
+    return StartAssets(true,false);
+}
+bool StartAssets(bool artwork,bool worldMap){
+    if(!artwork&&!worldMap)return false;
     if(Busy()||std::chrono::steady_clock::now()<NextAttempt)return false;NextAttempt=std::chrono::steady_clock::now()+std::chrono::seconds(10);Cancelled=false;
-    State.Status="Downloading optional UI artwork from GitHub...";
-    try{const auto folder=Folder();Worker=std::async(std::launch::async,[folder]{return InstallArtwork(folder,Fetch);});return true;}
-    catch(...){State.Status="Could not start artwork download; offline mode remains available.";return false;}
+    State.Status="Updating selected Helpy dependencies...";
+    try{const auto folder=Folder(),cache=HostServices::CacheDirectory()/"item-icons",downloads=HostServices::CacheDirectory()/"downloads";
+        Worker=std::async(std::launch::async,[folder,cache,downloads,artwork,worldMap]{Result result;std::string status;
+            if(artwork)try{result=InstallArtwork(folder,Fetch);status=result.Status;}catch(const std::exception& error){status="UI artwork: "+std::string(error.what());}
+            if(worldMap)try{auto map=DownloadWorldMap(cache,downloads,Fetch);result.Pack=std::move(map.Pack);if(!status.empty())status+="\n";status+=map.Status;}
+                catch(const std::exception& error){if(!status.empty())status+="\n";status+="World map: "+std::string(error.what());}
+            result.Status=std::move(status);return result;});return true;}
+    catch(...){State.Status="Could not start dependency download; existing files are retained.";return false;}
 }
 std::filesystem::path AuthorToolsFolder(){return HostServices::ExportsDirectory()/"authoring-tools";}
 bool StartAuthorTools(){
@@ -210,6 +239,9 @@ void Shutdown()noexcept{Cancelled=true;if(Worker.valid())try{(void)Worker.get();
 #if defined(HELPY_ASSET_TEST)
 void TestArtwork(const std::filesystem::path& source,const std::filesystem::path& destination){
     Cancelled=false;(void)InstallArtwork(destination,[&](const std::string& name,size_t size){return Read(source/std::filesystem::path(name).filename(),size);});
+}
+std::filesystem::path TestWorldMap(const std::filesystem::path& source,const std::filesystem::path& cache,const std::filesystem::path& downloads){
+    Cancelled=false;return DownloadWorldMap(cache,downloads,[&](const std::string& name,size_t size){return Read(source/std::filesystem::path(name).filename(),size);}).Pack;
 }
 void TestAuthorTools(const std::filesystem::path& source,const std::filesystem::path& destination,bool cancelBeforeCommit){
     Cancelled=false;(void)InstallAuthorTools(destination,[&](const std::string& name,size_t size){

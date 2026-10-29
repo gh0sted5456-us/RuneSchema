@@ -15,6 +15,7 @@ uint64_t BytesTotal();
 void CacheApplied(const std::string& status);
 void Initialize(); // One filesystem-only check; never starts a network request.
 bool StartArtwork(); // Explicit user action only.
+bool StartAssets(bool artwork,bool worldMap); // Selected data/artwork groups; no startup polling.
 bool StartAuthorTools(); // Downloads an inert ZIP; never extracts or runs it.
 std::filesystem::path AuthorToolsFolder();
 bool StartBaseCache(const std::map<std::string,std::string>& sources,const std::set<std::string>& nativePlugins,const std::string& runtime,const std::string& gameVersion);
@@ -26,6 +27,7 @@ void Cancel() noexcept;
 void Shutdown() noexcept;
 #if defined(HELPY_ASSET_TEST)
 void TestArtwork(const std::filesystem::path& source,const std::filesystem::path& destination);
+std::filesystem::path TestWorldMap(const std::filesystem::path& source,const std::filesystem::path& cache,const std::filesystem::path& downloads);
 void TestAuthorTools(const std::filesystem::path& source,const std::filesystem::path& destination,bool cancelBeforeCommit=false);
 #endif
 }

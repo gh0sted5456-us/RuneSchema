@@ -1,3 +1,5 @@
+> Historical release. See [0.8.0.3](RELEASE-0.8.0.3.md) for the current download.
+
 # RuneSchema and Helpy 0.8.0.2
 
 **Refreshed October 27, 2026.** This replaces the October 25 download with the

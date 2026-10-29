@@ -16,6 +16,41 @@ int main(int argc,char** argv){
         &&registrar.find("NativePersistencePolicy::Release")==registrar.npos,
         "native load audit must match its payload without restoring the session loading policy");
     const auto beforeLoad=registrar.find("void DragonWildsDataRegistrar::ScrubCharacterJsonBeforeLoad");
+    const auto scopedGate=registrar.find("!IsGameplayCharacterLoadContext(context)",beforeLoad);
+    need(registrar.find("/Script/Dominion.DominionPlayerControllerBase:Server_ReceiveLoadFromDisk")!=registrar.npos
+        &&registrar.find("name==diskResult")<registrar.find("return native&&function==native"),
+        "native disk-load RPC must reach preflight through its exact function identity");
+    need(scopedGate!=registrar.npos
+        &&scopedGate<registrar.find("m_pruner.PruneBeforeCharacterLoad",beforeLoad)
+        &&registrar.find("WorldCleanupPolicy::CharacterEntryEligible")!=registrar.npos,
+        "on-demand preview/selection must return before any character cleanup or recovery");
+    const auto initialize=registrar.find("void DragonWildsDataRegistrar::Initialize()");
+    const auto folderSweep=registrar.find("void DragonWildsDataRegistrar::CleanLocalCharacterSaves");
+    need(registrar.substr(initialize,folderSweep-initialize).find("CleanLocalCharacterSaves();")==registrar.npos,
+        "startup/preview must not walk the character folder");
+    need(mainLoader.find("ReadNativeSelectedCharacter()")!=mainLoader.npos
+        &&mainLoader.find("GetCharacterGuid")!=mainLoader.npos
+        &&mainLoader.find("CleanLocalCharacterSaves(selected.Name,selected.Guid)")!=mainLoader.npos
+        &&registrar.find("Selected character GUID differs from the save file")!=registrar.npos
+        &&registrar.find("directory/(std::wstring(selectedName)+L\".json\")")!=registrar.npos,
+        "selected-file cleanup must use the native selected name and match the character GUID before replacement");
+    const auto selectedWorld=mainLoader.find("void RunSelectedLocalWorldBuildingPreflight");
+    const auto blanketWorld=mainLoader.find("void RunAllLocalWorldBuildingPreflights",selectedWorld);
+    const auto selectedSource=mainLoader.substr(selectedWorld,blanketWorld-selectedWorld);
+    need(selectedWorld!=mainLoader.npos&&blanketWorld!=mainLoader.npos
+        &&selectedSource.find("directory_iterator")==selectedSource.npos
+        &&selectedSource.find("LocalSlotEligible")!=selectedSource.npos
+        &&selectedSource.find("Window->Close()")!=selectedSource.npos
+        &&selectedSource.find("RunLocalWorldBuildingPreflight(target,live,window)")!=selectedSource.npos,
+        "selected-world cleanup must visit exactly one safe slot and prevent late writes");
+    const auto worldSetup=mainLoader.find("void DragonWildsMainLoader::SetupWorldBuildingCleanup");
+    const auto worldSetupEnd=mainLoader.find("void DragonWildsMainLoader::SetupSelectedWorldBuildingCleanup",worldSetup);
+    need(mainLoader.substr(worldSetup,worldSetupEnd-worldSetup).find("RunAllLocalWorldBuildingPreflights(m_buildingLoader")==mainLoader.npos
+        &&mainLoader.find("No blanket sweep was substituted")!=mainLoader.npos
+        &&mainLoader.find("m_selectedWorldLoadFunction->UnregisterHook")!=mainLoader.npos
+        &&mainLoader.find("SettingsStore::Parse")!=mainLoader.npos
+        &&mainLoader.find("WorldCleanupPolicy::BlanketAtEntry")!=mainLoader.npos,
+        "on-demand world cleanup must stay isolated from the blanket fallback and release its hook");
     need(pruner.find("if(prepared)*prepared=false;")!=pruner.npos
         &&pruner.find("jsonProperty->SetPropertyValue(jsonAddress, value);")<pruner.find("if(prepared)CharacterLoadAudit::Prepared();")
         &&pruner.find("if(prepared)*prepared=true;")!=pruner.npos,
@@ -39,7 +74,7 @@ int main(int argc,char** argv){
     need(fallbackHook!=mainLoader.npos && fallbackPhase!=mainLoader.npos
         && fallbackRemoval!=mainLoader.npos && fallbackPhase<fallbackRemoval,
         "game-thread core fallback can retire before item registration and save pruning start");
-    need(registrar.find("CleanLocalCharacterSavesOnce")!=registrar.npos
+    need(registrar.find("CleanLocalCharacterSaves")!=registrar.npos
         && registrar.find("ConfigFiles::Write(path, encoded)")!=registrar.npos
         && registrar.find("BackupCharacterSave(path, original)")!=registrar.npos
         && registrar.find("failed post-write verification")!=registrar.npos,
@@ -60,12 +95,11 @@ int main(int argc,char** argv){
         "one or more persistent identity registries are absent");
     const auto firstCapture=registrar.find("RegisterAll();");
     const auto secondCapture=registrar.find("RegisterAll();",firstCapture+1);
-    const auto startupCleanup=registrar.find("CleanLocalCharacterSavesOnce();",
-        secondCapture);
     need(firstCapture!=registrar.npos && secondCapture!=registrar.npos
-        && startupCleanup!=registrar.npos && firstCapture<secondCapture
-        && secondCapture<startupCleanup,
-        "startup file cleanup is not gated by two stable registry captures");
+        &&firstCapture<secondCapture
+        &&mainLoader.find("m_dataRegistrar.CleanLocalCharacterSaves();")!=mainLoader.npos
+        &&registrar.find("data registrar cleanup deferred to world entry")!=registrar.npos,
+        "registry captures must remain sealed before the entry-scoped blanket pass");
     need(registrar.find("GamePassNative")!=registrar.npos
         && registrar.find("PROVIDER-DEFERRED")!=registrar.npos,
         "startup cleaner can rewrite Xbox WGS provider storage");

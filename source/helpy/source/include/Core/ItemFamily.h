@@ -19,9 +19,22 @@ inline std::string Key(std::string_view name){
         if(std::isupper(c)&&i&&std::islower(static_cast<unsigned char>(name[i-1])))words+=' ';
         words+=std::isalnum(c)?static_cast<char>(std::tolower(c)):' ';
     }
-    static const std::set<std::string> slots{"helm","helmet","hood","coif","hat","mask","cap","chestplate","platebody","cuirass","hauberk","body","chest","robe","robes","legs","legplates","platelegs","greaves","leggings","tassets","skirt","boots","shoes","gloves","gauntlets","bracers","vambraces","pauldrons","shoulders"};
-    std::istringstream input(words);std::string word,key;bool slot=false;
-    while(input>>word){if(slots.contains(word)){slot=true;continue;}if(word=="item"||word=="armor"||word=="armour")continue;if(!key.empty())key+='_';key+=word;}
+    static const std::set<std::string> slots{"helm","helmet","hood","coif","cowl","hat","mask","cap","chestplate","chestpiece","platebody","cuirass","hauberk","body","chest","tunic","coat","robe","robes","legs","legplates","platelegs","greaves","leggings","chaps","tassets","skirt","boots","shoes","gloves","gauntlets","bracers","vambraces","pauldrons","shoulders"};
+    std::istringstream input(words);std::string word,key;bool slot=false,robe=false;
+    while(input>>word){
+        const bool robePart=robe&&(word=="top"||word=="bottom");robe=word=="robe"||word=="robes";
+        if(robePart)continue;
+        if(slots.contains(word)){
+            slot=true;
+            if(word=="helm"||word=="helmet"){
+                if(key.ends_with("_med"))key.resize(key.size()-4);
+                else if(key.ends_with("_full"))key.resize(key.size()-5);
+                else if(key=="med"||key=="full")key.clear();
+            }
+            continue;
+        }
+        if(word=="item"||word=="armor"||word=="armour")continue;if(!key.empty())key+='_';key+=word;
+    }
     return slot&&key.size()>=3?key:std::string{};
 }
 inline bool Matches(const std::string& filter,std::string_view name){return filter.empty()||Key(name)==filter;}

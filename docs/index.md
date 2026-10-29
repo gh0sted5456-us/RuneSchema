@@ -15,20 +15,20 @@ hide:
   <p>A shared runtime for Dragonwilds mods. Install content, create something new, or bring your community together.</p>
   <div class="rs-actions">
     <a class="md-button md-button--primary" href="INSTALLATION/">Get started <span aria-hidden="true">→</span></a>
-    <a class="rs-text-link" href="CURRENT-RELEASE/">Current release · 0.8.0.2</a>
+    <a class="rs-text-link" href="CURRENT-RELEASE/">Current release · 0.8.0.3</a>
     <a class="rs-text-link" href="MOD-HOSTS-AND-GETTING-STARTED/">What is RuneSchema? <span aria-hidden="true">↗</span></a>
   </div>
 </section>
 
 <aside class="rs-release" aria-label="Current release">
   <span class="rs-release__tag">Current download</span>
-  <p><strong>0.8.0.2</strong> brings RuneSchema and Helpy together in one download, with improved caching, cart controls, a configurable shortcut and optional cache-authoring tools.</p>
-  <a href="RELEASE-0.8.0.2/">Release notes and verification <span aria-hidden="true">→</span></a>
+  <p><strong>0.8.0.3</strong> adds selected-save cleanup, nested Lua discovery for Mod Menu, improved item families and optional FPS controls.</p>
+  <a href="RELEASE-0.8.0.3/">Release notes and verification <span aria-hidden="true">→</span></a>
 </aside>
 
-<p>Looking for the latest improvements? The <a href="CHANGELOG-0.8.0.2/">changelog</a>
-includes the October 27 maintenance refresh, with better cache discovery, cart controls
-and a configurable Helpy shortcut. Check <a href="CURRENT-RELEASE/">download and source status</a>
+<p>Looking for the latest improvements? The <a href="CHANGELOG-0.8.0.3/">changelog</a>
+includes the October 28 update, with safer cleanup timing, Mod Menu integration
+and Helpy refinements. Check <a href="CURRENT-RELEASE/">download and source status</a>
 to see which changes are in the release package.</p>
 
 <h2 class="rs-section-heading">Choose your path</h2>

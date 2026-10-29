@@ -103,6 +103,20 @@ int main(){try{
     auto stoneReference=references[0];stoneReference["Data"]={{"Path","/Game/Items/ITEM_Stone.ITEM_Stone"},{"Name","Stone"},{"Category","Building"},{"Tags","Item.BuildingResource ItemFilter.Material.Mineral"}};
     const auto stonePage=CacheBundleItems::Page(Json::array({stoneReference}),"__helpycat:resources stone","",40);
     assert(stonePage["Rows"].size()==1&&stonePage["Rows"][0]["Category"]=="Resources");
+    {
+        Json set=Json::array();int id=0;
+        for(const auto* name:{"Hard Leather Body (Dyed Black, Mirror Trim)","Hard Leather Chaps (Dyed Black, Mirror Trim)","Hard Leather Cowl (Dyed Black, Mirror Trim)","Hard Leather Cowl (Dyed Blue, Mirror Trim)","Hard Leather Chaps (Dyed Black, Gold Trim)"}){
+            auto reference=references[0];reference["Data"]={{"Path","/ExampleMount/Items/Armor"+std::to_string(++id)},{"Name",name},{"Category","Armor"}};set.push_back(std::move(reference));
+        }
+        const CacheBundleItems::Index armor(set);
+        const auto query="__helpyfamily:"+ItemFamily::Key("Hard Leather Body (Dyed Black, Mirror Trim)");
+        const auto first=armor.Page(query,"",2),last=armor.Page(query,first.at("NextCursor"),2);
+        assert(first.at("Rows").size()==2&&first.at("HasMore")==true);
+        assert(last.at("Rows").size()==1&&last.at("HasMore")==false);
+        assert(first.at("Rows")[0].at("Name")=="Hard Leather Body (Dyed Black, Mirror Trim)");
+        assert(first.at("Rows")[1].at("Name")=="Hard Leather Chaps (Dyed Black, Mirror Trim)");
+        assert(last.at("Rows")[0].at("Name")=="Hard Leather Cowl (Dyed Black, Mirror Trim)");
+    }
     const auto bundle=fixture/"Example.rsmk-cache";HelpyIconPack::Progress progress;
     const auto exported=HelpyIconPack::Export(bundle,root,cache,snapshot,progress,{},Json::object(),Json::array({original,journal}));
     assert(exported.Exported==0&&exported.RecordsExported==2);

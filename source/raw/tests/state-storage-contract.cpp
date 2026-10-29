@@ -68,7 +68,7 @@ int main(int argc, char** argv)
     Check(playerRules.find("IsValidAppearanceReference") != std::string::npos
         && playerRules.find("ReadDefaultPlayerAppearance") != std::string::npos,
         "appearance is replaced only after validation fails");
-    Check(registrar.find("CleanLocalCharacterSavesOnce") != std::string::npos
+    Check(registrar.find("CleanLocalCharacterSaves") != std::string::npos
         && registrar.find("BackupCharacterSave") != std::string::npos
         && registrar.find("ConfigFiles::Write(path, encoded)") != std::string::npos
         && registrar.find("GamePassNative") != std::string::npos

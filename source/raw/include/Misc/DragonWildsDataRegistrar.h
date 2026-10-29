@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <filesystem>
 #include <functional>
 #include <set>
@@ -26,6 +27,7 @@ namespace DragonWilds {
     public:
         void Initialize();
         bool IsInitialized() const { return m_initialized; }
+        void CleanLocalCharacterSaves(std::wstring_view selectedName={},std::string_view expectedGuid={});
         nlohmann::json NetworkIdentityManifest() const;
         void ApplyNetworkIdentityOrder(const PS::NetworkIdentitySync::Permutations& order);
         void SetCharacterRegistryPreparation(std::function<void(RC::Unreal::UObject*)> prepare)
@@ -80,7 +82,6 @@ namespace DragonWilds {
         bool m_initialized = false;
         bool m_preflightingCharacterJson = false;
         bool m_registrySummaryReported = false;
-        bool m_startupSaveCleanupAttempted = false;
         bool m_additionalWeaponsReadyReported = false;
         bool m_additionalWeaponsIncompleteReported = false;
         bool m_rangedEquipmentReported = false;
@@ -107,7 +108,6 @@ namespace DragonWilds {
         void InstallHooks();
         void RegisterAll();
         void BootstrapCombatRegistries(RC::Unreal::UWorld* world = nullptr);
-        void CleanLocalCharacterSavesOnce();
         bool RegisterMissing(RC::Unreal::UClass* dataClass,
             RC::Unreal::UObject* subsystem,
             RC::Unreal::UClass* excludedClass = nullptr,

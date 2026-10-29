@@ -81,5 +81,5 @@ int main()try{
         assert(rejected&&PS::CacheBundleIO::Read(provider,B::MaximumBytes)==bytes);
         rejected=false;try{B::Provider(backups,{},guid);}catch(...){rejected=true;}assert(rejected);
     }
-    std::filesystem::remove_all(directory);
+    std::filesystem::remove_all(PS::CacheBundleIO::NativePath(directory));
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}

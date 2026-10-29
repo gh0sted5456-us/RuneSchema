@@ -1,6 +1,7 @@
 #include "Core/HelpySourceCache.h"
 #include <cassert>
 #include <iostream>
+#include <thread>
 #undef assert
 #define assert(value) ((value)?static_cast<void>(0):throw std::runtime_error(#value))
 struct CacheProviderManifest {
@@ -24,6 +25,20 @@ int main(int argc,char** argv)try{namespace fs=std::filesystem;using namespace P
             {"FullDiscoveryUs",std::chrono::duration_cast<std::chrono::microseconds>(inspected-start).count()},
             {"MetadataReuseMeanUs",std::chrono::duration_cast<std::chrono::microseconds>(replanned-inspected).count()/20},
             {"Iterations",20},{"MatchingKeysAndSharedIndexes",true}}.dump()<<'\n';return 0;}
+    {
+        using Index=PS::HelpyCacheSources::Plan::AssetOwnerMap;
+        const std::shared_ptr<const Index> published=std::make_shared<Index>(Index{{"/game/item",{"mods/first"}}});
+        std::thread::id freedOn;
+        std::shared_ptr<const Index> duplicate(new Index(*published),[&](const Index* value){freedOn=std::this_thread::get_id();delete value;});
+        auto job=std::async(std::launch::async,[index=std::move(duplicate),published]()mutable{ReuseUnchangedIndex(index,published);return index;});
+        assert(job.get()==published&&freedOn!=std::thread::id{}&&freedOn!=std::this_thread::get_id());
+        for(const Index changed:{Index{{"/game/item",{"mods/second"}}},Index{},Index{{"/game/item",{"mods/first"}},{"/game/new",{"mods/first"}}}}){
+            std::shared_ptr<const Index> next=std::make_shared<Index>(changed);const auto identity=next;
+            ReuseUnchangedIndex(next,published);assert(next==identity&&*next==changed);
+        }
+        std::shared_ptr<const Index> missing;ReuseUnchangedIndex(missing,published);assert(!missing);
+        auto present=published;ReuseUnchangedIndex(present,{});assert(present==published);
+    }
     const auto base=fs::temp_directory_path()/("helpy-source-"+std::to_string(GetCurrentProcessId()));
     const auto root=base/"Binaries"/"WinGDK"/"ue4ss"/"Mods"/"RuneSchema";
     fs::create_directories(root/"mods"/"Custom"/"assets");const auto file=root/"mods"/"Custom"/"assets"/"item.jsonc";
@@ -217,6 +232,9 @@ int main(int argc,char** argv)try{namespace fs=std::filesystem;using namespace P
     // periodic filesystem check. Content changes still require full discovery.
     {PS::HelpyCacheSources::Seal();const auto planBefore=PS::HelpyCacheSources::Snapshot();
         Current=Inspect(scoped,planBefore);InspectingRevision=planBefore.Revision;Error.clear();
+        const auto authored=Current.AuthoredAssets,assets=Current.ContainerAssets,files=Current.ContainerFiles;
+        const auto sourceKey=Current.Key;Next={};Poll(scoped);assert(Worker.valid()&&RefreshingFiles);Worker.wait();Poll(scoped);
+        assert(Current.Key==sourceKey&&Current.AuthoredAssets==authored&&Current.ContainerAssets==assets&&Current.ContainerFiles==files);
         Next=std::chrono::steady_clock::now()+std::chrono::seconds(30);const auto deadline=Next;
         PS::HelpyCacheSources::SetDisplayName("First","A new label");const auto planAfter=PS::HelpyCacheSources::Snapshot();
         assert(planAfter.Revision!=planBefore.Revision&&planAfter.ContentRevision==planBefore.ContentRevision);
@@ -242,6 +260,32 @@ int main(int argc,char** argv)try{namespace fs=std::filesystem;using namespace P
         const auto provisionalRevision=Revision;census.set_value(live);
         assert(Poll(scoped)&&!Current.Provisional&&Revision>provisionalRevision);
         assert(Document(Current).at("Ready").get<bool>());Shutdown();
+    }
+    // Version hints request one fresh file census without changing the cached
+    // content identity or discarding presentation while that census is pending.
+    {
+        PS::HelpyCacheSources::SetDisplayName("First","First mod","1");
+        const auto initialPlan=PS::HelpyCacheSources::Snapshot();Current=Inspect(scoped,initialPlan);
+        {std::lock_guard lock(PublishedMutex);Published=Document(Current);}
+        const auto keys=Current.SourceKeys,cachedVersions=Current.Versions;const auto invalidation=CatalogInvalidationRevision;
+        InspectingRevision=initialPlan.Revision;Next=std::chrono::steady_clock::now()+std::chrono::seconds(30);Error.clear();
+        PS::HelpyCacheSources::SetDisplayName("First","First mod","2");Poll(scoped);
+        assert(Worker.valid()&&RefreshingFiles&&Current.Versions==cachedVersions);
+        assert(Ready()&&ForClient().value("Ready",false)&&ForClient().value("CheckingChanges",false));
+        const auto pendingRevision=PS::HelpyCacheSources::Snapshot().Revision;
+        PS::HelpyCacheSources::SetDisplayName("First","First mod","2");assert(PS::HelpyCacheSources::Snapshot().Revision==pendingRevision);
+        Worker.wait();assert(Poll(scoped));assert(!Worker.valid()&&Current.Versions.at("first")=="2"&&Current.SourceKeys==keys);
+        assert(CatalogInvalidationRevision==invalidation&&!ForClient().value("CheckingChanges",true));
+        Poll(scoped);assert(!Worker.valid());
+        auto document=Document(Current);assert(document.at("UpdateAware").get<bool>()&&document.at("ModVersions").at("first")=="2");
+        for(const nlohmann::json invalid:{nlohmann::json{{"first",123}},nlohmann::json{{"../escape","3"}},nlohmann::json{{"first","bad\nversion"}},nlohmann::json{{"first",std::string(129,'v')}}}){
+            auto bad=document;bad["ModVersions"]=invalid;bool rejected=false;try{AcceptRemote(bad);}catch(...){rejected=true;}assert(rejected);
+        }
+        auto legacy=document;legacy.erase("ModVersions");legacy.erase("UpdateAware");Current={};assert(AcceptRemote(legacy));
+        assert(Current.Versions.empty());assert(AcceptRemote(document)&&Current.Versions.at("first")=="2");
+        PS::HelpyCacheSources::SetDisplayName("First","First mod","3");Poll(scoped);Worker.wait();
+        PS::HelpyCacheSources::SetDisplayName("First","First mod","4");assert(!Poll(scoped));assert(Current.Versions.at("first")=="2");
+        Poll(scoped);assert(Worker.valid()&&RefreshingFiles);Worker.wait();assert(Poll(scoped)&&Current.Versions.at("first")=="4");Shutdown();
     }
     fs::remove_all(NativePath(base));
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}

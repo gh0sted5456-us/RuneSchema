@@ -18,6 +18,7 @@
 #include "Runtime/SteamBuild.h"
 #include "Runtime/UE4SSCompatibility.h"
 #include "Runtime/NetworkStatus.h"
+#include "Runtime/GameFrameRate.h"
 #include "Core/HelpySourceCache.h"
 #include "Core/HelpyCacheOwnership.h"
 #include "Core/IconCacheBuild.h"
@@ -66,6 +67,7 @@ int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,ui
             {"RuneSchemaVersion",BuildInfo::Version},{"GameVersion",ExecutableVersion::Current()},
             {"UE4SS",UE4SSCompatibility::Snapshot()},{"Steam",SteamBuild::Snapshot()},{"UpdateChecksAvailable",true}};
         else if(action=="StartupStats")result=StartupTrace::Snapshot();
+        else if(action=="FrameRate")result={{"Available",GameFrameRate::Available()},{"Fps",GameFrameRate::Fps.load()}};
         else if(action=="NetworkStatus"){
             SpawnToolRequests::RequestPlayerRoles();
             result=NetworkStatus::Current.Snapshot(SpawnToolRequests::Generation.load(),SpawnToolRequests::Available.load(),SpawnToolRequests::Waiting.load());

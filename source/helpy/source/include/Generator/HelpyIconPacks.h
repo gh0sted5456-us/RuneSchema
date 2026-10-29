@@ -41,10 +41,15 @@ inline std::filesystem::path PendingBuildExport;
 inline std::filesystem::path PendingDownload;
 inline std::string PendingBuildSource;
 inline std::chrono::steady_clock::time_point NextBuildRead{};
+inline bool BuildWasVisible=false;
 inline bool Building(){return BuildState.value("Active",false);}
 inline void PollBuild(){
-    if(!RemoteBuild||std::chrono::steady_clock::now()<NextBuildRead)return;
-    NextBuildRead=std::chrono::steady_clock::now()+std::chrono::milliseconds(500);
+    const bool visible=Open&&!HelpyTaskbar::Current.Contains(HelpyTaskbar::Window::IconCache);
+    const bool opened=visible&&!BuildWasVisible;BuildWasVisible=visible;
+    const bool active=Building()||!PendingBuildExport.empty();
+    if(!RemoteBuild||(!visible&&!active))return;
+    const auto now=std::chrono::steady_clock::now();if(!opened&&now<NextBuildRead)return;
+    NextBuildRead=now+std::chrono::milliseconds(active?500:2000);
     nlohmann::json reply;if(RemoteBuild({{"Action","IconCacheBuildRead"}},reply)&&reply.is_object())BuildState=std::move(reply);
 }
 inline bool Busy(){return Worker.valid();}
@@ -130,6 +135,8 @@ inline void Render(bool catalogueBusy=false){
         if(ImGui::Selectable("All sources",SelectedSource.empty()))SelectedSource.clear();for(const auto& source:choices)if(ImGui::Selectable(source.c_str(),SelectedSource==source))SelectedSource=source;ImGui::EndCombo();}
     ImGui::EndDisabled();
     if(!HelpySourceCache::Ready())ImGui::TextDisabled("Cached content is available while the game checks mounted sources.");
+    ImGui::TextDisabled("Update-aware cache");
+    if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("Mod versions loaded from ID.txt queue one background source verification when changed. Existing cached content stays available. Version labels are hints; content fingerprints still determine whether data needs updating. No extra file polling is added.");
     ImGui::SeparatorText("1. Add cached content");
     ImGui::BeginDisabled(Busy()||Building()||HelpyDownloads::Busy()||HelpyRuntimePreferences::IconCacheLimitMB.load()<=0);
     if(ImGui::Button("Download base-game cache"))HelpyDownloads::StartBaseCache(HelpySourceCache::Current.SourceKeys,HelpySourceCache::Current.NativePlugins,HelpyEnvironment::Label(),HelpyEnvironment::GameVersion);
@@ -248,7 +255,7 @@ inline void Render(bool catalogueBusy=false){
     }
 }
 inline void RenderWindowContents(bool catalogueBusy=false){
-    ImGui::TextUnformatted("Icon cache");ImGui::SameLine();
+    ImGui::TextUnformatted("Content cache");ImGui::SameLine();
     if(ImGui::SmallButton(Detached?"Dock back":"Detach window"))Detached=!Detached;
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::CacheDetach=HelpyPreviewHooks::LastRect();
@@ -263,6 +270,6 @@ inline void RenderDockedWindow(bool catalogueBusy=false){
     ImGui::PushStyleColor(ImGuiCol_TitleBg,theme.navigation);ImGui::PushStyleColor(ImGuiCol_TitleBgActive,theme.navigationActive);
     ImGui::SetNextWindowSize({std::min(theme.X(610),ImGui::GetIO().DisplaySize.x-theme.X(32)),std::min(theme.Y(480),ImGui::GetIO().DisplaySize.y-theme.Y(32))},ImGuiCond_Appearing);
     HelpyWindowChrome::Prepare(Chrome);
-    if(ImGui::Begin("Icon cache##rsmk-cache",&Open,ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoCollapse)){HelpyBackgrounds::DrawWindow();HelpyWindowChrome::Render(Chrome,HelpyTaskbar::Window::IconCache);RenderWindowContents(catalogueBusy);}ImGui::End();ImGui::PopStyleColor(2);
+    if(ImGui::Begin("Content cache##rsmk-cache",&Open,ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoCollapse)){HelpyBackgrounds::DrawWindow();HelpyWindowChrome::Render(Chrome,HelpyTaskbar::Window::IconCache);RenderWindowContents(catalogueBusy);}ImGui::End();ImGui::PopStyleColor(2);
 }
 }

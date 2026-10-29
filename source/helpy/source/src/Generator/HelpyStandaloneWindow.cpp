@@ -10,6 +10,7 @@
 #include "Generator/BugReportPanel.h"
 #include "Generator/ItemPreviewPanel.h"
 #include "Generator/RuneSchemaSettingsPanel.h"
+#include "Generator/HelpyPerformance.h"
 #include "Generator/RuntimeDetailsPanel.h"
 #if defined(HELPY_PREVIEW)
 #include "../../tests/AuthoringPreviewFixture.h"
@@ -88,7 +89,7 @@ bool& WorkspaceDetached(size_t index){return index==4?PlayerInventoryPanel::Deta
 HelpyTaskbar::Window WorkspaceTask(size_t index){return std::array{HelpyTaskbar::Window::Map,HelpyTaskbar::Window::Recipes,HelpyTaskbar::Window::Runtime,HelpyTaskbar::Window::Party,HelpyTaskbar::Window::Inventory}.at(index);}
 const char* WorkspaceTitle(size_t index){return std::array{"Map","Recipes","Runtime details","Party","Inventory inspector"}.at(index);}
 const char* WorkspaceImGuiId(size_t index){return std::array{"##DetachedMap","##DetachedRecipes","##DetachedRuntime","##DetachedParty","##DetachedInventory"}.at(index);}
-const wchar_t* WorkspaceCaption(size_t index){return std::array{L"RSMK - Map",L"RSMK - Recipes",L"RSMK - Runtime details",L"RSMK - Party",L"RSMK - Inventory inspector"}.at(index);}
+const wchar_t* WorkspaceCaption(size_t index){return std::array{L"Helpy - Map",L"Helpy - Recipes",L"Helpy - Runtime details",L"Helpy - Party",L"Helpy - Inventory inspector"}.at(index);}
 DesktopBayLayout::Rect WorkspaceRect(size_t index,const DesktopBayLayout::Canvas& canvas){return index==0?canvas.Map:index==1?canvas.Recipes:index==2?canvas.Runtime:index==3?canvas.Party:canvas.Inventory;}
 bool SharedCartVisible=false;
 ImVec2 MainSurfacePosition{},MainSurfaceSize{};
@@ -679,13 +680,22 @@ void RenderHome(const HelpyImGuiTheme::Theme& theme){
     HelpyPreviewHooks::Navigation["Profile"]=HelpyPreviewHooks::LastRect();
 #endif
     if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Your account, characters and loadouts");
-    ImGui::SetNextWindowSize({std::min(theme.X(440),ImGui::GetIO().DisplaySize.x-theme.X(24)),0},ImGuiCond_Appearing);
+    ImGui::SetNextWindowSize({std::min(theme.X(600),ImGui::GetIO().DisplaySize.x-theme.X(24)),std::min(theme.Y(650),ImGui::GetIO().DisplaySize.y-theme.Y(24))},ImGuiCond_Appearing);
     ImGui::SetNextWindowSizeConstraints({0,0},{ImGui::GetIO().DisplaySize.x-theme.X(24),ImGui::GetIO().DisplaySize.y-theme.Y(24)});
     HelpyImGuiTheme::CenterNextWindow();
-    if(ImGui::BeginPopup("Home quick settings")){
-        ImGui::SeparatorText("Quick settings");RuneSchemaSettingsPanel::QuickSettings();
+    bool quickSettingsOpen=true;
+    if(HelpyImGuiTheme::BeginCenteredModal("Home quick settings",&quickSettingsOpen,ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoSavedSettings)){
+        ImGui::SeparatorText("Quick settings");
+        if(ImGui::BeginChild("Quick settings sections",{0,-ImGui::GetFrameHeightWithSpacing()-theme.Y(8)},ImGuiChildFlags_None,ImGuiWindowFlags_AlwaysUseWindowPadding))
+            RuneSchemaSettingsPanel::QuickSettings();
+        ImGui::EndChild();
 #if defined(HELPY_PREVIEW)
         PreviewHomeQuickPopup=HelpyPreviewHooks::WindowRect();
+#endif
+        ImGui::Separator();
+        if(HelpyImGuiTheme::SoftButton("Close",{ImGui::GetContentRegionAvail().x,0}))ImGui::CloseCurrentPopup();
+#if defined(HELPY_PREVIEW)
+        HelpyPreviewHooks::AuthoringButtons["Close quick settings"]=HelpyPreviewHooks::LastRect();
 #endif
         ImGui::EndPopup();
     }
@@ -834,13 +844,16 @@ void RenderRuntimeBadge(const HelpyImGuiTheme::Theme& t,float logicalSize) {
 }
 
 bool PendingWikiInitialAssets=false;
-bool InitialAssetsBusy(){return HelpyDownloads::Busy()||HelpyMapCache::Busy()||HelpyWikiIcons::Busy()||!HelpyMapCache::Current().Ready;}
-void DownloadInitialAssets(){
+bool InitialAssetsBusy(){return HelpyDownloads::Busy()||HelpyIconPacks::Busy()||HelpyMapCache::Busy()||HelpyWikiIcons::Busy()||!HelpyMapCache::Current().Ready;}
+void DownloadInitialAssets(bool all=false){
     if(InitialAssetsBusy())return;
-    HelpyDownloads::StartArtwork();
-    if(!HelpyMapCache::Current().Data)HelpyMapCache::StartInitial();
-    else if(HelpyMapCache::RefreshEligible())HelpyMapCache::Refresh();
-    PendingWikiInitialAssets=true;
+    const auto& settings=HelpyImGuiTheme::Current;
+    HelpyDownloads::StartAssets(all||settings.updateArtwork,all||settings.updateWorldMap);
+    if(all||settings.updateMapFilters){
+        if(!HelpyMapCache::Current().Data)HelpyMapCache::StartInitial();
+        else HelpyMapCache::Refresh(true);
+        PendingWikiInitialAssets=true;
+    }
 }
 void RenderSplash(const HelpyImGuiTheme::Theme& theme){
     RenderInformationBar(theme,false);
@@ -927,7 +940,7 @@ void RenderSplash(const HelpyImGuiTheme::Theme& theme){
         HelpyPreviewHooks::ArtworkDownload=HelpyPreviewHooks::LastRect();
 #endif
         ImGui::EndDisabled();
-        if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))PS::HelpyImGuiTheme::Tooltip("Downloads UI PNGs from GitHub and licensed Wiki/Wildsforge map markers into RuneSchema AppData. Both splash logos are bundled. No game/player data is sent. Cached map filters refresh only after the runtime confirms an installed game build change; no timed online polls. Item icon caches are separate. Also in Settings > Updates & runtime > Initial assets.");
+        if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))PS::HelpyImGuiTheme::Tooltip("Downloads the selected UI artwork, world-map background/alignment and map filters into RuneSchema AppData. Verified files are reused. Choose groups in Settings > Updates & runtime. No game/player data is sent and no timed online polling is added.");
         if(centeredButton("Hide this prompt")){
             HelpyDownloads::DismissHint();
 #if defined(HELPY_PREVIEW)
@@ -1161,12 +1174,20 @@ void RenderIconCacheSettings(bool advanced,bool expanded=false) {
 void RenderUpdatesAndRuntime(const HelpyImGuiTheme::Theme& t) {
     using namespace RuneSchemaUpdateInfo;
     const auto& state=HelpyUpdates::Current();auto& theme=HelpyImGuiTheme::Current;
-    ImGui::SeparatorText("Initial assets");
+    ImGui::SeparatorText("Helpy data and artwork");
+    bool assetSettingsChanged=false;
+    assetSettingsChanged|=ImGui::Checkbox("UI artwork (GitHub)",&theme.updateArtwork);
+    assetSettingsChanged|=ImGui::Checkbox("World map and alignment (GitHub)",&theme.updateWorldMap);
+    assetSettingsChanged|=ImGui::Checkbox("Map filters and icons (Wiki / Wildsforge)",&theme.updateMapFilters);
+    if(assetSettingsChanged)HelpyImGuiTheme::SaveCurrent();
     ImGui::BeginDisabled(InitialAssetsBusy());
-    if(HelpyImGuiTheme::SoftButton("Download Initial Assets"))DownloadInitialAssets();
+    ImGui::BeginDisabled(!theme.updateArtwork&&!theme.updateWorldMap&&!theme.updateMapFilters);
+    if(HelpyImGuiTheme::SoftButton("Update selected"))DownloadInitialAssets();
+    ImGui::EndDisabled();ImGui::SameLine();
+    if(HelpyImGuiTheme::SoftButton("Update all"))DownloadInitialAssets(true);
     ImGui::EndDisabled();
-    if(HelpyDownloads::Busy()||HelpyMapCache::Busy()){ImGui::SameLine();if(ImGui::SmallButton("Cancel initial-assets download")){HelpyDownloads::Cancel();HelpyMapCache::Cancel();}}
-    ImGui::TextWrapped("Optional UI artwork from GitHub and map filters from Wiki/Wildsforge, cached in RuneSchema AppData. Both splash logos are bundled. Item icon caches are separate. Existing map filters are retained unless a local installed game build change is confirmed.");
+    if(HelpyDownloads::Busy()||HelpyMapCache::Busy()||HelpyWikiIcons::Busy()){ImGui::SameLine();if(ImGui::SmallButton("Cancel asset updates")){PendingWikiInitialAssets=false;HelpyDownloads::Cancel();HelpyMapCache::Cancel();HelpyWikiIcons::Cancel();}}
+    ImGui::TextWrapped("Choose one dependency or update them together. The world map includes validated coordinate alignment for clients and servers. Verified local files are reused; there are no timed online checks for these assets. Item caches remain separate.");
     auto& mapAssets=HelpyMapCache::Current();
     if(ImGui::Checkbox("Update map filters after confirmed game patches",&mapAssets.Filters.UpdateAfterGamePatch))HelpyMapCache::SaveFilters();
     if(!mapAssets.Status.empty())ImGui::TextWrapped("%s",mapAssets.Status.c_str());
@@ -1861,7 +1882,7 @@ void HelpyStandaloneWindow::ThreadMain() {
         ShowWindow(m_hwnd,SW_SHOWNOACTIVATE);m_visible=true;
         LazyCatalog::FirstOpen(SpawnToolRequests::CurrentGeneration());
     }
-    MSG msg{};bool done=false;int boundKey=HelpySettings::Hotkey.load();HelpyFramePacing pacing;
+    MSG msg{};bool done=false;int boundKey=HelpySettings::Hotkey.load(),fpsBoundKey=0;HelpyFramePacing pacing;HelpyPopupInput::HotkeyLatch fpsHotkey;
     while(!done&&!m_stop.load()) {
         // Hotkeys belong to Helpy's window thread. No engine tick callback,
         // viewport input hook, or UE4SS C++ ABI is needed by this plugin.
@@ -1869,6 +1890,16 @@ void HelpyStandaloneWindow::ThreadMain() {
         // A key held while rebinding must be released before it can toggle.
         if(key!=boundKey){Hotkey.Poll(down);boundKey=key;}else PollHotkey(down);
         const HWND foreground=GetForegroundWindow();
+        if(const auto* binding=HelpyShortcut::Find(HelpyImGuiTheme::Current.fpsHotkey)){
+            const bool fpsDown=(GetAsyncKeyState(binding->Key)&0x8000)!=0;
+            const bool rebound=fpsBoundKey!=binding->Key;fpsBoundKey=binding->Key;
+            const bool pressed=fpsHotkey.Poll(fpsDown);
+            const bool editing=io.WantTextInput&&(binding->Key<VK_F1||binding->Key>VK_F24);
+            const bool modified=(GetAsyncKeyState(VK_CONTROL)|GetAsyncKeyState(VK_MENU)|GetAsyncKeyState(VK_SHIFT)|GetAsyncKeyState(VK_LWIN)|GetAsyncKeyState(VK_RWIN))&0x8000;
+            if(!rebound&&pressed&&binding->Key!=key&&HelpyPopupInput::CanToggle(GameWindow(foreground),OwnsWindow(foreground),editing,modified)){
+                HelpyImGuiTheme::Current.showGameFps=!HelpyImGuiTheme::Current.showGameFps;HelpyImGuiTheme::SaveCurrent();
+            }
+        }
         while(PeekMessageW(&msg,nullptr,0,0,PM_REMOVE)) {
             if(msg.message==WM_QUIT){done=true;break;}
             if(msg.hwnd==nullptr&&msg.message==ToggleMessage) {
@@ -1889,10 +1920,17 @@ void HelpyStandaloneWindow::ThreadMain() {
         if(!m_visible.load())HelpyImGuiTheme::Poll();
         LiveLogPanel::Poll(0,diagnosticBackground);StructuredLogFeed::Poll(diagnosticBackground);
         DiagnosticFeed.Tick(DiagnosticOptions());DiagnosticHistory.Queue(DiagnosticStore);
-        DiagnosticOverlay.Update(m_module,GameWindow(foreground)?foreground:nullptr,DiagnosticFeed,HelpyImGuiTheme::Current,!m_visible.load()&&!HelpyEnvironment::Server());
+        const bool gameFocused=GameWindow(foreground)&&!HelpyEnvironment::Server();
+        const bool gameToasts=gameFocused&&(!m_visible.load()||IsIconic(m_hwnd));
+        const auto& performance=HelpyImGuiTheme::Current;
+        const bool needFps=(gameFocused&&performance.showGameFps)||(m_visible.load()&&!IsIconic(m_hwnd)&&performance.showFps);
+        HelpyPerformance::PollGame(needFps,performance.fpsRefreshMs,RuneSchemaSettingsPanel::Remote);
+        static const DiagnosticToastFeed::Feed noGameToasts;
+        DiagnosticOverlay.Update(m_module,gameFocused?foreground:nullptr,gameToasts?DiagnosticFeed:noGameToasts,performance,gameFocused,gameFocused&&performance.showGameFps?HelpyPerformance::GameLabel():std::string{});
         if(m_visible.load()&&std::chrono::steady_clock::now()>=NextPlayerRefresh)QueuePlayerRefresh(true);
-        if(pacing.Due(std::chrono::steady_clock::now(),m_visible.load()&&!IsIconic(m_hwnd),OwnsWindow(GetForegroundWindow())))RenderFrame();
-        MsgWaitForMultipleObjectsEx(0,nullptr,8,QS_ALLINPUT,MWMO_INPUTAVAILABLE);
+        const bool renderable=m_visible.load()&&!IsIconic(m_hwnd);
+        if(pacing.Due(std::chrono::steady_clock::now(),renderable,OwnsWindow(GetForegroundWindow()),HelpyImGuiTheme::Current.helpyFpsLimit))RenderFrame();
+        MsgWaitForMultipleObjectsEx(0,nullptr,pacing.WaitMs(std::chrono::steady_clock::now(),renderable),QS_ALLINPUT,MWMO_INPUTAVAILABLE);
     }
 }
 
@@ -2030,6 +2068,7 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
         }}seen=++revision;return true;};
     LazyCatalog::ConfigureRemote([&](nlohmann::json request){queries.push_back(std::move(request));return true;},[](int,uint64_t){});
     RuneSchemaSettingsPanel::Remote=[](const nlohmann::json& request,nlohmann::json& reply){
+        if(request.value("Action",std::string{})=="FrameRate"){reply={{"Available",true},{"Fps",60.0}};return true;}
         if(request.value("Action",std::string{})=="CrashDumpRead"||request.value("Action",std::string{})=="CrashDumpSave"){
             static bool full=false;if(request.at("Action")=="CrashDumpSave")full=request.at("FullMemoryDump").get<bool>();
             reply={{"Ok",true},{"ExpectedContents","preview-crash-settings"},{"FullMemoryDump",full},{"EnableDumping",true},{"RestartRequired",true},{"Status","Preview only; no UE4SS configuration was changed."}};return true;
@@ -2051,8 +2090,8 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
         }
         if(request.value("Action",std::string{})!="SettingsRead")return false;
         reply={{"Ok",true},{"ExpectedContents","preview"},{"Path","Preview only / settings/settings.ini"},
-            {"Document",{{"helpyHotkey","F2"},{"advancedLogging",false},{"archiveLogs",false},{"autoUpdateMappings",true},{"authoringTools",true},{"persistence",{{"allowCorruptCharacterEntry",false},{"quests",true}}}}},
-            {"Editable",{{"/helpyHotkey","F2"},{"/advancedLogging",false},{"/archiveLogs",false},{"/autoUpdateMappings",true},{"/authoringTools",true},{"/persistence/allowCorruptCharacterEntry",false},{"/persistence/quests",true}}},
+            {"Document",{{"helpyHotkey","F2"},{"advancedLogging",false},{"archiveLogs",false},{"autoUpdateMappings",true},{"authoringTools",true},{"persistence",{{"blanketCleanup",false},{"cleanupOnWorldEntry",false},{"allowCorruptCharacterEntry",false},{"quests",true}}}}},
+            {"Editable",{{"/helpyHotkey","F2"},{"/advancedLogging",false},{"/archiveLogs",false},{"/autoUpdateMappings",true},{"/authoringTools",true},{"/persistence/blanketCleanup",false},{"/persistence/cleanupOnWorldEntry",false},{"/persistence/allowCorruptCharacterEntry",false},{"/persistence/quests",true}}},
             {"BypassStatus","Disabled for this preview session"}};return true;
     };
     SpawnToolsPanel::SyncCartWorld();SpawnToolsPanel::SelectedPlayer="preview-player";
@@ -2515,10 +2554,21 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 if(PreviewHomeQuick.z-PreviewHomeQuick.x>HelpyImGuiTheme::Current.X(160)||std::abs((PreviewHomeQuick.x+Hooks::Navigation.at("Profile").z)*.5f-PreviewHomeCenter)>2)throw std::runtime_error("Quick settings and Profile must be compact and centered together");
                 if(!ImGui::IsPopupOpen("Home quick settings",ImGuiPopupFlags_AnyPopupId))throw std::runtime_error("Home quick settings did not open");
                 if(PreviewHomeQuickPopup.x<0||PreviewHomeQuickPopup.y<0||PreviewHomeQuickPopup.z>ImGui::GetIO().DisplaySize.x||PreviewHomeQuickPopup.w>ImGui::GetIO().DisplaySize.y)throw std::runtime_error("Quick settings escaped the viewport");
-                if(PreviewHomeQuickPopup.w-PreviewHomeQuickPopup.y>HelpyImGuiTheme::Current.Y(340))throw std::runtime_error("Default Quick settings must remain compact; use hovering details and closed Advanced options");
+                if(PreviewHomeQuickPopup.w-PreviewHomeQuickPopup.y<HelpyImGuiTheme::Current.Y(400))throw std::runtime_error("Quick settings must open as a usable scrollable panel");
                 PreviewCapture=output/"home-quick-settings.png";RenderFrame();PreviewCapture.clear();
-                // Dismiss the non-modal popover without changing any setting.
-                Hooks::Mouse={20,20};Hooks::MouseDown=true;RenderFrame();Hooks::MouseDown=false;for(int i=0;i<3;++i)RenderFrame();
+                click(Hooks::AuthoringButtons.at("Quick performance"));
+                const auto fpsBounds=Hooks::AuthoringButtons.at("Game FPS overlay");
+                if(fpsBounds.x<PreviewHomeQuickPopup.x||fpsBounds.z>PreviewHomeQuickPopup.z||fpsBounds.w>PreviewHomeQuickPopup.w)throw std::runtime_error("Performance controls escaped Quick settings");
+                const auto overlayBefore=HelpyImGuiTheme::Current.showGameFps;click(fpsBounds);
+                if(HelpyImGuiTheme::Current.showGameFps==overlayBefore)throw std::runtime_error("In-game FPS toggle did not apply");
+                PreviewCapture=output/"home-performance.png";RenderFrame();PreviewCapture.clear();
+                HelpyImGuiTheme::Current.showGameFps=overlayBefore;
+                click(Hooks::AuthoringButtons.at("Close quick settings"));
+                if(ImGui::IsPopupOpen("Home quick settings",ImGuiPopupFlags_AnyPopupId))throw std::runtime_error("Quick settings panel did not close");
+                HelpyImGuiTheme::Current.showFps=true;HelpyPerformance::Next={};
+                PreviewCapture=output/"helpy-fps.png";RenderFrame();PreviewCapture.clear();
+                if(HelpyPerformance::GameFps!=60.0)throw std::runtime_error("FPS counter did not read the cached game sample");
+                HelpyImGuiTheme::Current.showFps=false;
                 CurrentPage=Page::Map;for(int i=0;i<4;++i)RenderFrame();Hooks::MouseEnabled=true;
                 // Exercise uncovered map space: the party overlay intentionally
                 // receives clicks over its own player rows, not the map beneath.
@@ -2558,18 +2608,18 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 if(Hooks::IconCache.z<=Hooks::IconCache.x||Hooks::IconCache.w>height)throw std::runtime_error("Item Bay icon cache control is missing or clipped");
                 click(Hooks::IconCache);PreviewCapture=output/"item-bay-icon-cache.png";RenderFrame();PreviewCapture.clear();
                 if(!HelpyIconPacks::Open||HelpyIconPacks::Advanced)throw std::runtime_error("Cache window must open in its simple view");
-                const auto originalWindow=Hooks::WindowControls.at("Icon cache##rsmk-cache/window");
-                const auto minimize=Hooks::WindowControls.at("Icon cache##rsmk-cache/minimize"),maximize=Hooks::WindowControls.at("Icon cache##rsmk-cache/maximize");
+                const auto originalWindow=Hooks::WindowControls.at("Content cache##rsmk-cache/window");
+                const auto minimize=Hooks::WindowControls.at("Content cache##rsmk-cache/minimize"),maximize=Hooks::WindowControls.at("Content cache##rsmk-cache/maximize");
                 if(!(minimize.z<maximize.z&&maximize.z<Hooks::IconCacheClose.x&&std::abs(maximize.y-Hooks::IconCacheClose.y)<1))throw std::runtime_error("Window controls must sit beside the title-bar X");
                 click(maximize);if(!HelpyIconPacks::Chrome.Maximized)throw std::runtime_error("Docked cache maximize failed");
-                const auto maximizedWindow=Hooks::WindowControls.at("Icon cache##rsmk-cache/window");
+                const auto maximizedWindow=Hooks::WindowControls.at("Content cache##rsmk-cache/window");
                 if(maximizedWindow.z-maximizedWindow.x<MainSurfaceSize.x-18||maximizedWindow.w-maximizedWindow.y<MainSurfaceSize.y-18)throw std::runtime_error("Maximize did not fill the Helpy surface");
                 PreviewCapture=output/"icon-cache-maximized.png";RenderFrame();PreviewCapture.clear();
-                click(Hooks::WindowControls.at("Icon cache##rsmk-cache/maximize"));
-                const auto restoredWindow=Hooks::WindowControls.at("Icon cache##rsmk-cache/window");
+                click(Hooks::WindowControls.at("Content cache##rsmk-cache/maximize"));
+                const auto restoredWindow=Hooks::WindowControls.at("Content cache##rsmk-cache/window");
                 if(HelpyIconPacks::Chrome.Maximized||std::abs((originalWindow.z-originalWindow.x)-(restoredWindow.z-restoredWindow.x))>1)throw std::runtime_error("Restore did not retain the cache window size");
-                click(Hooks::WindowControls.at("Icon cache##rsmk-cache/minimize"));if(!HelpyTaskbar::Current.Contains(HelpyTaskbar::Window::IconCache))throw std::runtime_error("Title-bar minimize did not reach the Helpy taskbar");
-                click(Hooks::AuthoringButtons.at("Restore icon cache"));
+                click(Hooks::WindowControls.at("Content cache##rsmk-cache/minimize"));if(!HelpyTaskbar::Current.Contains(HelpyTaskbar::Window::IconCache))throw std::runtime_error("Title-bar minimize did not reach the Helpy taskbar");
+                click(Hooks::AuthoringButtons.at("Restore cache"));
                 if(!(Hooks::CacheImport.y<Hooks::CacheBuild.y&&Hooks::CacheBuild.y<Hooks::CacheExport.y))throw std::runtime_error("Cache controls must flow from import through optional build to export");
                 click(Hooks::CacheAdvanced);PreviewCapture=output/"icon-cache-advanced.png";RenderFrame();PreviewCapture.clear();
                 click(Hooks::CacheAdvanced);click(Hooks::CacheDetach);
@@ -3029,6 +3079,7 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 MapPanel::Data.Prefab=nlohmann::json::object();MapPanel::Data.PrefabName.clear();
                 mouse(center(Hooks::Map),false);Hooks::RightDown=true;RenderFrame();Hooks::RightDown=false;for(int i=0;i<5;++i)RenderFrame();
                 MapPanel::Data.Operation=2;for(int i=0;i<3;++i)RenderFrame();PreviewCapture=output/"map-teleport.png";RenderFrame();PreviewCapture.clear();
+                check(Hooks::MapPopupWindow.w-Hooks::MapPopupWindow.y<=HelpyImGuiTheme::Current.Y(410),"Teleport options retained the tall spawning layout");
                 mouse(center(Hooks::MapSpawn),true);mouse(center(Hooks::MapSpawn),false);
                 check(mapPlacement["Action"]=="MapTeleport"&&mapPlacement["Player"]=="preview-player"&&mapPlacement["TargetLocation"]["X"]==MapPanel::Data.Point.X,"Map teleport lost the named player or selected point");
                 const auto probesBeforeTravel=mapProbeCount;
@@ -3116,7 +3167,7 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 check(HelpyTaskbar::Current.Count()==2&&!IsWindowVisible(m_bayWindow)&&!IsWindowVisible(m_cacheWindow),"Detached minimize must hide to Helpy taskbar");
                 PreviewCapture=output/"helpy-taskbar.png";RenderFrame();PreviewCapture.clear();
                 mouse(center(Hooks::AuthoringButtons.at("Restore Item Bay")),false);mouse(center(Hooks::AuthoringButtons.at("Restore Item Bay")),true);mouse(center(Hooks::AuthoringButtons.at("Restore Item Bay")),false,3);
-                mouse(center(Hooks::AuthoringButtons.at("Restore icon cache")),false);mouse(center(Hooks::AuthoringButtons.at("Restore icon cache")),true);mouse(center(Hooks::AuthoringButtons.at("Restore icon cache")),false,3);
+                mouse(center(Hooks::AuthoringButtons.at("Restore cache")),false);mouse(center(Hooks::AuthoringButtons.at("Restore cache")),true);mouse(center(Hooks::AuthoringButtons.at("Restore cache")),false,3);
                 check(HelpyTaskbar::Current.Count()==0&&m_bayWindow==bayHandle&&m_cacheWindow==cacheHandle&&ItemGridPicker::Bay.Selected==selected,"Taskbar restore must preserve windows and item selection");
                 const auto point=MapPanel::Data.Point;const auto zoom=MapPanel::Data.Zoom;DetachedWorkspaces={true,true};RenderFrame();
                 check(m_workspaces[0].Window&&m_workspaces[1].Window&&m_workspaces[0].Target&&m_workspaces[1].Target,"Map and Recipes did not create independent native surfaces");
@@ -3365,6 +3416,7 @@ void HelpyStandaloneWindow::RenderFrame() {
         auto& io=ImGui::GetIO();ImGui_ImplDX11_InvalidateDeviceObjects();io.Fonts->Clear();LoadUiFontFamilies(io);SelectUiFontFamily(HelpyImGuiTheme::Current.fontFamily);io.FontDefault=UiRegularFont;
     }
     HelpyImGuiTheme::Poll();
+    HelpyPerformance::Poll(HelpyImGuiTheme::Current.showFps,HelpyImGuiTheme::Current.fpsRefreshMs,RuneSchemaSettingsPanel::Remote);
     HelpyBackgrounds::Pump();
     SourceBanners::Pump();
 #if !defined(HELPY_PREVIEW)
@@ -3418,6 +3470,11 @@ void HelpyStandaloneWindow::RenderFrame() {
             const ImVec2 at{framePosition.x+inset,framePosition.y+(NativeCaption.Height-icon)*.5f};
             DrawThemedLogo(ImGui::GetWindowDrawList(),at,{at.x+icon,at.y+icon},t);
             HelpyWindowChrome::RenderNativeCaption(NativeCaption,framePosition,t);
+            if(t.showFps){
+                const auto text=HelpyPerformance::Label(HelpyEnvironment::Server());const auto size=ImGui::CalcTextSize(text.c_str());
+                const float right=framePosition.x+NativeCaption.Controls.left-inset;
+                if(right-size.x>at.x+icon+inset)ImGui::GetWindowDrawList()->AddText({right-size.x,framePosition.y+(NativeCaption.Height-size.y)*.5f},ImGui::GetColorU32(t.textDisabled),text.c_str());
+            }
         }
         ImGui::SetCursorPosY(ImGui::GetCursorPosY()+float(NativeCaption.Height));
         HelpyImGuiTheme::Scope skin(t);ImFont* workspaceFont=(t.textBold&&UiBoldFont)?UiBoldFont:UiRegularFont;
@@ -3440,7 +3497,7 @@ void HelpyStandaloneWindow::RenderFrame() {
                 }
             };
             restore("Restore Item Bay",HelpyTaskbar::Window::ItemBay,m_bayWindow);
-            restore("Restore icon cache",HelpyTaskbar::Window::IconCache,m_cacheWindow);
+            restore("Restore cache",HelpyTaskbar::Window::IconCache,m_cacheWindow);
             restore("Restore Map",HelpyTaskbar::Window::Map,m_workspaces[0].Window);
             restore("Restore Recipes",HelpyTaskbar::Window::Recipes,m_workspaces[1].Window);
             restore("Restore Runtime",HelpyTaskbar::Window::Runtime,m_workspaces[2].Window);
@@ -3548,7 +3605,7 @@ bool HelpyStandaloneWindow::SyncItemBay(){
         const int x=std::clamp(int((parent.left+parent.right-width)/2),int(monitor.rcWork.left),std::max(int(monitor.rcWork.left),int(monitor.rcWork.right)-width));
         const int y=std::clamp(int((parent.top+parent.bottom-height)/2),int(monitor.rcWork.top),std::max(int(monitor.rcWork.top),int(monitor.rcWork.bottom)-height));
         wchar_t windowClass[256]{};GetClassNameW(m_hwnd,windowClass,256);
-        m_bayWindow=CreateWindowExW(WS_EX_TOOLWINDOW,windowClass,L"RSMK - Item Bay",WS_OVERLAPPEDWINDOW,x,y,width,height,m_hwnd,nullptr,m_module,this);
+        m_bayWindow=CreateWindowExW(WS_EX_TOOLWINDOW,windowClass,L"Helpy - Item Bay",WS_OVERLAPPEDWINDOW,x,y,width,height,m_hwnd,nullptr,m_module,this);
         if(m_bayWindow)DragAcceptFiles(m_bayWindow,TRUE);
         using Microsoft::WRL::ComPtr;ComPtr<IDXGIDevice> device;ComPtr<IDXGIAdapter> adapter;ComPtr<IDXGIFactory> factory;
         DXGI_SWAP_CHAIN_DESC description{};description.BufferCount=2;description.BufferDesc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -3585,7 +3642,7 @@ bool HelpyStandaloneWindow::SyncIconCache(){
         const int x=std::clamp(int((parent.left+parent.right-width)/2),int(monitor.rcWork.left),std::max(int(monitor.rcWork.left),int(monitor.rcWork.right)-width));
         const int y=std::clamp(int((parent.top+parent.bottom-height)/2),int(monitor.rcWork.top),std::max(int(monitor.rcWork.top),int(monitor.rcWork.bottom)-height));
         wchar_t windowClass[256]{};GetClassNameW(m_hwnd,windowClass,256);
-        m_cacheWindow=CreateWindowExW(WS_EX_TOOLWINDOW,windowClass,L"RSMK - Icon cache",WS_OVERLAPPEDWINDOW,x,y,width,height,m_hwnd,nullptr,m_module,this);
+        m_cacheWindow=CreateWindowExW(WS_EX_TOOLWINDOW,windowClass,L"Helpy - Content cache",WS_OVERLAPPEDWINDOW,x,y,width,height,m_hwnd,nullptr,m_module,this);
         if(m_cacheWindow)DragAcceptFiles(m_cacheWindow,TRUE);
         using Microsoft::WRL::ComPtr;ComPtr<IDXGIDevice> device;ComPtr<IDXGIAdapter> adapter;ComPtr<IDXGIFactory> factory;
         DXGI_SWAP_CHAIN_DESC description{};description.BufferCount=2;description.BufferDesc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;

@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/HelpyShortcut.h"
 #include "Core/RuneSchemaDataRoot.h"
 #include "imgui.h"
 #include "Core/ConfigFiles.h"
@@ -64,10 +65,15 @@ struct Theme {
     bool itemGridFitRows{true},itemShowPlaceholders{false};
     int itemPageSize{ItemPaging::DefaultSize};
     int runtimeTimeUnit{0}; // Automatic, ms, seconds, minutes.
+    int helpyFpsLimit{30},fpsRefreshMs{1000};
+    bool showFps{false};
+    bool showGameFps{false};
+    std::string fpsHotkey{"F10"};
     std::string backgroundFile;
     float backgroundStrength{.12f};
     bool dpiAware{true},autoReload{true},textBold{false},verboseTooltips{false},itemGridView{true},aiGridView{false},advancedMode{false};
     bool automaticUpdateChecks{true};
+    bool updateArtwork{true},updateWorldMap{true},updateMapFilters{true};
     int previewQuality{2}; // Economy 256px / Balanced 384px / Detail 512px.
     bool previewAnimate{false},previewDetails{false},scaleUsePortrait{true};
     std::string scaleReferenceIcon;
@@ -242,9 +248,9 @@ inline nlohmann::json DocumentFrom(const Theme& t,int iconCacheMB) {
         {"display",{{"dpiAware",t.dpiAware},{"userScale",t.userScale},{"fontScale",t.fontScale},{"density",t.density},{"fontFamily",t.fontFamily},{"textBold",t.textBold},{"verboseTooltips",t.verboseTooltips},{"tooltipDelay",t.tooltipDelay}}},
         {"views",{{"advancedMode",t.advancedMode},{"itemGrid",t.itemGridView},{"itemPageSize",t.itemPageSize},{"itemGridColumns",t.itemGridColumns},{"itemGridRows",t.itemGridRows},{"itemGridFitRows",t.itemGridFitRows},{"itemShowPlaceholders",t.itemShowPlaceholders},{"aiGrid",t.aiGridView},{"itemResultHeight",t.itemResultHeight},{"aiResultHeight",t.aiResultHeight},{"itemCategory",t.itemCategory},{"itemSource",t.itemSource},{"itemBayBrowseRatio",t.itemBayBrowseRatio},{"dockedBayHeight",t.dockedBayHeight},{"itemCartWidth",t.itemCartWidth}}},
         {"cache",{{"iconCacheMB",std::clamp(iconCacheMB,0,16384)},{"loadOrder",HelpyRuntimePreferences::CacheFirst.load()?"cacheFirst":"gameFirst"},{"passiveRefresh",HelpyRuntimePreferences::PassiveRefresh.load()}}},
-        {"updates",{{"automaticChecks",t.automaticUpdateChecks}}},
+        {"updates",{{"automaticChecks",t.automaticUpdateChecks},{"artwork",t.updateArtwork},{"worldMap",t.updateWorldMap},{"mapFilters",t.updateMapFilters}}},
         {"preview",{{"quality",t.previewQuality},{"animation",t.previewAnimate},{"details",t.previewDetails},{"scaleUsePortrait",t.scaleUsePortrait},{"scaleReferenceIcon",t.scaleReferenceIcon}}},
-        {"runtime",{{"timeUnit",t.runtimeTimeUnit}}},
+        {"runtime",{{"timeUnit",t.runtimeTimeUnit},{"helpyFpsLimit",t.helpyFpsLimit},{"showFps",t.showFps},{"fpsRefreshMs",t.fpsRefreshMs},{"showGameFps",t.showGameFps},{"fpsHotkey",t.fpsHotkey}}},
         {"background",{{"file",t.backgroundFile},{"strength",t.backgroundStrength}}},
         {"liveLog",{{"colorRules",LiveLog::WriteColors(t.logColors)}}},
         {"notifications",{{"enabled",t.diagnosticToastsEnabled},{"visibleLimit",t.diagnosticToastLimit},{"durationSeconds",t.diagnosticToastDuration}}},
@@ -310,6 +316,9 @@ inline void Reload(bool createIfMissing=true) {
         const auto cache=doc.value("cache",nlohmann::json::object());const auto browse=HelpyBrowsePolicy::Read(cache);
         const int cacheLimit=ReadInt(cache,"iconCacheMB",200,0,16384);
         next.automaticUpdateChecks=doc.value("updates",nlohmann::json::object()).value("automaticChecks",true);
+        next.updateArtwork=doc.value("updates",nlohmann::json::object()).value("artwork",true);
+        next.updateWorldMap=doc.value("updates",nlohmann::json::object()).value("worldMap",true);
+        next.updateMapFilters=doc.value("updates",nlohmann::json::object()).value("mapFilters",true);
         const auto notifications=doc.value("notifications",nlohmann::json::object());
         next.diagnosticToastsEnabled=notifications.value("enabled",true);
         next.diagnosticToastLimit=ReadInt(notifications,"visibleLimit",4,1,10);
@@ -337,6 +346,13 @@ inline void Reload(bool createIfMissing=true) {
         next.itemGridFitRows=views.value("itemGridFitRows",true);
         next.itemShowPlaceholders=views.value("itemShowPlaceholders",false);
         next.runtimeTimeUnit=ReadInt(doc.value("runtime",nlohmann::json::object()),"timeUnit",0,0,3);
+        const auto runtime=doc.value("runtime",nlohmann::json::object());
+        next.helpyFpsLimit=ReadInt(runtime,"helpyFpsLimit",30,15,60);
+        next.fpsRefreshMs=ReadInt(runtime,"fpsRefreshMs",1000,500,2000);
+        next.showFps=runtime.value("showFps",false);
+        next.showGameFps=runtime.value("showGameFps",false);
+        next.fpsHotkey=runtime.value("fpsHotkey",std::string("F10"));
+        if(const auto* key=HelpyShortcut::Find(next.fpsHotkey))next.fpsHotkey=key->Name;else next.fpsHotkey="F10";
         const auto background=doc.value("background",nlohmann::json::object());
         next.backgroundFile=background.value("file",std::string{});if(!BackgroundPolicy::Filename(next.backgroundFile))next.backgroundFile.clear();
         next.backgroundStrength=ReadFloat(background,"strength",.12f,0,.3f);
@@ -376,7 +392,7 @@ inline void Reload(bool createIfMissing=true) {
 }
 inline void Poll() {
     const bool forced=ForceReload.exchange(false);const auto now=std::chrono::steady_clock::now();
-    if(!forced&&now<NextPoll)return;NextPoll=now+std::chrono::milliseconds(250);
+    if(!forced&&now<NextPoll)return;NextPoll=now+std::chrono::seconds(1);
     if(!Loaded){Reload(true);return;}if(!forced&&!Current.autoReload)return;
     const auto file=FilePath();std::error_code ec;const auto stamp=std::filesystem::last_write_time(file,ec);
     if(forced||ec||!HaveStamp||stamp!=Stamp)Reload(true);

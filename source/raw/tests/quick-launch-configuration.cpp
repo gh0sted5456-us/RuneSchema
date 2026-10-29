@@ -7,9 +7,15 @@ int main(){
     const auto defaults=DecodeSettings("{}");
     Need(defaults.quickLaunch.mode=="lessRestrictive"&&defaults.quickLaunch.softLoading&&!defaults.quickLaunch.enabled);
     Need(!defaults.persistence.allowCorruptCharacterEntry&&defaults.worldSaveCleanup.backupBeforePrune);
+    Need(!defaults.persistence.blanketCleanup&&!defaults.persistence.cleanupOnWorldEntry);
+    Need(DecodeSettings(R"({"persistence":{"blanketCleanup":true}})").persistence.blanketCleanup);
+    const auto entry=DecodeSettings(R"({"persistence":{"blanketCleanup":false,"cleanupOnWorldEntry":true}})");
+    Need(!entry.persistence.blanketCleanup&&entry.persistence.cleanupOnWorldEntry);
     const auto root=std::filesystem::temp_directory_path()/("quick-launch-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     const auto file=root/"settings.ini";
     auto document=SettingsDocument(PSConfigSettings{});document["futureSection"]={{"keep","unchanged"}};
+    document["persistence"]["blanketCleanup"]=false;
+    document["persistence"]["cleanupOnWorldEntry"]=true;
     for(bool bypass:{false,true})for(const auto* mode:{"vanilla","lessRestrictive","quickLaunch"}){
         document["persistence"]["allowCorruptCharacterEntry"]=bypass;ConfigFiles::Write(file,EncodeIniDocument(document));
         const auto before=ConfigFiles::Read(file);const auto snapshot=QuickLaunchConfiguration::Read(root);Need(snapshot.at("Ok")==true);
@@ -19,6 +25,7 @@ int main(){
         Need(ConfigFiles::Read(saved.at("Backup").get<std::string>())==before);
         const auto stored=DecodeIniDocument(ConfigFiles::Read(file));Need(stored.at("persistence").at("allowCorruptCharacterEntry")==bypass);
         Need(stored.at("futureSection").at("keep")=="unchanged");Need(stored.at("quickLaunch").at("mode")==mode);
+        Need(stored.at("persistence").at("blanketCleanup")==false&&stored.at("persistence").at("cleanupOnWorldEntry")==true);
         Need(stored.at("quickLaunch").at("enabled")==(std::string(mode)=="quickLaunch"));
         Need(stored.at("quickLaunch").at("softLoading")==(std::string(mode)!="vanilla"));
         Need(stored.at("quickLaunch").at("worldName")=="World #2; New");

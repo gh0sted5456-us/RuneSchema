@@ -66,8 +66,28 @@ inline nlohmann::json Save(const std::filesystem::path& directory,const nlohmann
             throw std::runtime_error("Settings changed while preparing the backup. Reload before saving.");
         ConfigFiles::Write(file,text);
         auto result=ReadUnlocked(directory);result["Backup"]=backup.string();
-        result["Status"]="Saved settings.ini with a backup. Restart Dragonwilds to apply RuneSchema changes.";
+        bool cleanupOnly=true;
+        for(const auto& [path,value]:patch.items())cleanupOnly&=path=="/persistence/blanketCleanup"||path=="/persistence/cleanupOnWorldEntry";
+        const bool nextEntry=validated.persistence.cleanupOnWorldEntry;
+        result["RestartRequired"]=!cleanupOnly||!nextEntry;
+        result["Status"]=cleanupOnly
+            ?(nextEntry?"Saved with a backup. Cleanup changes apply at the next character/world entry.":"Saved with a backup. Cleanup changes apply after restarting Dragonwilds; the current session policy is retained.")
+            :"Saved settings.ini with a backup. Startup settings require a restart; cleanup uses its selected activation timing.";
         return result;
+    }catch(const std::exception& error){return {{"Ok",false},{"Status",error.what()}};}
+}
+inline nlohmann::json PrepareModMenuFields(const std::filesystem::path& directory){
+    const auto snapshot=Read(directory);if(!snapshot.value("Ok",false))return snapshot;
+    try{
+        const auto original=DecodeIniDocument(snapshot.at("ExpectedContents").get<std::string>());
+        nlohmann::json patch=nlohmann::json::object();
+        for(const auto* path:{"/persistence/blanketCleanup","/persistence/cleanupOnWorldEntry",
+                "/persistence/allowCorruptCharacterEntry","/helpyHotkey","/autoUpdateMappings","/advancedLogging","/archiveLogs"}){
+            const auto pointer=nlohmann::json::json_pointer(path);
+            if(!original.contains(pointer))patch[path]=snapshot.at("Document").at(pointer);
+        }
+        if(patch.empty())return snapshot;
+        return Save(directory,{{"ExpectedContents",snapshot.at("ExpectedContents")},{"Patch",patch}});
     }catch(const std::exception& error){return {{"Ok",false},{"Status",error.what()}};}
 }
 }

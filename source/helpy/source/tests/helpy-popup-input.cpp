@@ -21,6 +21,13 @@ int main(int argc,char** argv){
     PS::HelpyFramePacing inactive;frames=0;
     for(int tick=0;tick<240;++tick)frames+=inactive.Due(now+std::chrono::microseconds(tick*4167),true,false);
     Require(frames<=10);
+    PS::HelpyFramePacing adjustable;Require(adjustable.Due(now,true,true,60));
+    Require(!adjustable.Due(now+16ms,true,true,60));Require(adjustable.Due(now+17ms,true,true,60));
+    Require(adjustable.Due(now+18ms,true,true,15));Require(!adjustable.Due(now+84ms,true,true,15));
+    Require(adjustable.Due(now+85ms,true,true,15));
+    Require(adjustable.WaitMs(now+85ms,true)==16);Require(adjustable.WaitMs(now+150ms,true)==2);
+    Require(adjustable.WaitMs(now,false)==50);
+    Require(adjustable.WaitMs(now+160ms,true)==0);
     using namespace PS::HelpyPopupInput;
     for(unsigned flags=0;flags<4;++flags){
         Require(CanToggle(flags&1,flags&2)==(flags!=0));

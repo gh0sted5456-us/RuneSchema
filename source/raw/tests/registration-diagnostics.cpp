@@ -27,8 +27,10 @@ int main(int argc,char** argv){
     assert(wearable.find("[WEARABLE-BRIDGE][INACTIVE]")!=std::string::npos&&wearable.find("[WEARABLE-BRIDGE][NOT-ENROLLED]")!=std::string::npos);
     assert(registrar.find("[REGISTRY][{}][IDENTITY]")==std::string::npos&&registrar.find("[SOURCE-SUMMARY]")!=std::string::npos);
     assert(registrar.find("EquipmentWearableBridge::ReportDiagnostics();")!=std::string::npos);
-    for(const auto* phase:{"discovery","registration","confirmation","cleanup"})
+    for(const auto* phase:{"discovery","registration","confirmation"})
         assert(registrar.find(std::string("data registrar ")+phase+" complete")!=std::string::npos);
+    assert(registrar.find("data registrar cleanup deferred to world entry")!=std::string::npos);
+    assert(registrar.find("data registrar cleanup complete")==std::string::npos);
     assert(registrar.find("[PERF][REGISTRY] discovery_ms={}")!=std::string::npos);
     const auto roster=catalogue.substr(catalogue.find("json ItemRoster()"),catalogue.find("json Capture(")-catalogue.find("json ItemRoster()"));
     assert(roster.find("objects.Num()>32768")==std::string::npos&&catalogue.find("AssetProvenance::LivePaths()")!=std::string::npos);

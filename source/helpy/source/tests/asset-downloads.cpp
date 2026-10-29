@@ -4,6 +4,7 @@
 #include "Core/BaseCacheDownloads.h"
 #include "Core/CacheBundleIO.h"
 #include "Core/HelpySourceCache.h"
+#include "Core/HelpyIconPack.h"
 #include "Runtime/HostServices.h"
 #include <windows.h>
 #include <filesystem>
@@ -87,6 +88,26 @@ int main(int argc,char** argv){try{
     {std::ofstream f(incoming,std::ios::binary);f<<newer;}reject(true);
     HelpyDownloads::TestAuthorTools(tools,toolDestination);
     if(std::filesystem::exists(toolDestination/"build-helpy-cache.sh"))throw std::runtime_error("Authoring ZIP was extracted automatically");
+    // The initial-assets map is a separately verified, reusable data download.
+    const auto maps=source.parent_path().parent_path()/"cache-bundles",mapCache=destination/"map-cache",mapDownloads=destination/"map-downloads";
+    std::filesystem::remove(HelpySourceCache::NativePath(MapPresentationCache::Folder(mapCache)/"current.json")); // Start cold on repeated fixture runs.
+    const auto mapPack=HelpyDownloads::TestWorldMap(maps,mapCache,mapDownloads);
+    if(mapPack.empty())throw std::runtime_error("Missing map was not staged for import");
+    HelpyIconPack::Progress mapProgress;
+    const auto imported=HelpyIconPack::Import(mapPack,{},mapCache,{},64ull*1024*1024,mapProgress,HelpyIconPack::ImportPolicy::Presentation);
+    if(!imported.MapImported||imported.RecordsImported||imported.Imported)throw std::runtime_error("Map-only dependency must not change item records/pictures");
+    const auto mapMetadata=MapPresentationCache::Folder(mapCache)/"current.json";const auto mapStamp=std::filesystem::last_write_time(mapMetadata);
+    if(!HelpyDownloads::TestWorldMap(maps,mapCache,mapDownloads).empty()||std::filesystem::last_write_time(mapMetadata)!=mapStamp)throw std::runtime_error("Installed map must be reused without reimport");
+    const auto mapReference=MapPresentationCache::Reference(mapCache);const auto badMaps=destination/"bad-maps";std::filesystem::create_directories(badMaps);
+    const auto mapIndex=nlohmann::json::parse(CacheBundleIO::Read(maps/"world-map.json",16*1024));
+    for(int failure=0;failure<3;++failure){auto bad=mapIndex;
+        if(failure==0)bad["File"]="../escape.rsmk-cache";
+        if(failure==1)bad["Bytes"]=25ull*1024*1024;
+        if(failure==2)bad["WorldMap"]["Projection"]["HalfWidth"]=0;
+        {std::ofstream out(badMaps/"world-map.json");out<<bad.dump();}
+        bool refused=false;try{HelpyDownloads::TestWorldMap(badMaps,mapCache,mapDownloads);}catch(...){refused=true;}
+        if(!refused||MapPresentationCache::Reference(mapCache)!=mapReference)throw std::runtime_error("Invalid map dependency changed the previous map");
+    }
     // An already-running inspection must not undo an explicit Hide click.
     HelpyDownloads::Initialize();HelpyDownloads::DismissHint();
     while(HelpyDownloads::Busy()){HelpyDownloads::Poll();std::this_thread::yield();}
