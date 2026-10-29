@@ -11,6 +11,7 @@
 #include "SDK/WeakObjectHandle.h"
 #include "Runtime/BridgeDiagnostics.h"
 #include "Core/ModDataRelay.h"
+#include "Core/BuildingNetworkGuard.h"
 #include "Unreal/Hooks.hpp"
 
 namespace RC::Unreal {
@@ -71,6 +72,7 @@ public:
     ClientNotificationHandler ClientNotification;
     ClientNotificationHandler PersistentState;
     std::function<void(const PS::ModDataRelay::Message&)> ModDataReceived;
+    std::function<PS::BuildingNetworkGuard::Registry(RC::Unreal::UObject*)> BuildingRegistry;
 
 private:
     struct Contract {
@@ -189,6 +191,14 @@ private:
     std::string m_activeRequestCorrelation;
     struct RequestWindow {std::chrono::steady_clock::time_point Started{};uint32_t Count=0;int64_t Revision=0;bool RegistryRejected=false;};
     std::unordered_map<std::string,RequestWindow> m_requestWindows;
+    struct BuildingPeer {PS::WeakObjectHandle Actor;PS::BuildingNetworkGuard::Registry Registry;};
+    std::unordered_map<RC::Unreal::UObject*,BuildingPeer> m_buildingPeers;
+    PS::WeakObjectHandle m_buildingAuthorityWorld;
+    PS::BuildingNetworkGuard::Registry m_buildingAuthority;
+    std::string m_buildingAckFingerprint;
+    std::chrono::steady_clock::time_point m_buildingAckAt{};
+    std::unordered_set<std::string> m_buildingRejections;
+    bool BlockBuildingRequest(RC::Unreal::UObject*,RC::Unreal::UFunction*,void*);
     struct PresentationRoute {
         std::string PluginId;
         std::string Connection;

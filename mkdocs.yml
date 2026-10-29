@@ -132,6 +132,7 @@ nav:
           - Armor: CUSTOM-ARMOR.md
           - Registry declarations: COOKED-PAK-REGISTRY-MANIFEST.md
           - Native data families: COOKED-NATIVE-DATA-FAMILIES.md
+          - Cooked world policies: BUILDING-WORLD-POLICIES.md
           - Large registry shards: COOKED-REGISTRY-SHARDS.md
           - Cooked repair-item boundary: COOKED-REPAIR-KIT.md
       - More capabilities:

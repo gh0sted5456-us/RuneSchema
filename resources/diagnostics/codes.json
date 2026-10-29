@@ -710,6 +710,26 @@
       "summary": "The dedicated-server executable, native method or required settings/world reference could not be verified.",
       "impact": "RuneSchema skips its initialization correction and retains the game's handling. The native filter setup/shutdown wait can still occur.",
       "action": "Keep the original reason and game version. Use a RuneSchema build verified for that server executable; do not disable filtering to conceal the wait."
+    },
+    {
+      "id": "BuildingIdentityPlacementBlocked",
+      "code": "RS-NET-003",
+      "title": "Building placement identity not verified",
+      "severity": "warning",
+      "subsystem": "Multiplayer",
+      "summary": "A placement ID cannot be proven to refer to the same building on the client and authority.",
+      "impact": "The individual placement is blocked before native spawning. Connection entry stays available. A verified matching native prefix can still place native buildings when modded lists differ.",
+      "action": "Match the required building definitions and enable the current RuneSchema networking plugin on both sides. Retry after the compatibility exchange. This guard does not remap building IDs."
+    },
+    {
+      "id": "WorldPolicyContractUnavailable",
+      "code": "RS-WLD-001",
+      "title": "World policy callback unavailable",
+      "severity": "warning",
+      "subsystem": "World effects",
+      "summary": "A cooked policy callback, native hook or reflected gameplay contract failed its validation or execution.",
+      "impact": "The failed policy operation is reported; unsupported native hooks retain native handling. Other independent providers and native game behavior remain available.",
+      "action": "Keep the complete BUILDING-POLICY reason and game/framework version. Check the callback signatures and authoritative world. Native hook support needs verification for that executable; never force an address or disable validation."
     }
   ]
 }

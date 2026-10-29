@@ -282,5 +282,13 @@
   "RS-NET-002": [
     "The authority and client differ in content definitions, source membership, a protected registry baseline, or the availability of a verified mapping. Client-only content and version drift do not themselves cause a RuneSchema entry refusal.",
     "Read the original source/lane detail. Keep extra client mods installed if desired. Shared IDs are aligned only when their identities and native types are verified; update required content for unavailable server features. A warning does not certify that the game itself can deserialize a missing cooked class."
+  ],
+  "RS-NET-003": [
+    "A native placement index was unavailable, unverified or different between the owning client and authority.",
+    "Confirm required building definitions match, including versioned Totems or other building providers. Enable RuneSchema networking on both sides and retry after the handshake. Native-prefix agreement permits native pieces despite unrelated extra mods; no building IDs are silently rewritten."
+  ],
+  "RS-WLD-001": [
+    "A world-effect provider or its native adapter could not validate or execute the listed contract.",
+    "Read the original callback/hook reason. Verify the cooked Blueprint signature and framework/game version. Keep private native fixtures out of user games and report unsupported executable details rather than forcing hooks."
   ]
 }

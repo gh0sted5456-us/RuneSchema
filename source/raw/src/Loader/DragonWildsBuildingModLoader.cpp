@@ -2170,6 +2170,8 @@ namespace DragonWilds {
             return false;
         }
 
+        m_networkNativeCount=vanilla.size();
+        m_networkIdentity={};m_networkWorld.Reset();
         PS::Log<LogLevel::Normal>(STR(
             "[REGISTRY][BUILDING][ADDED] count={} native={} deterministicPersistenceOrder=true verified=true.\n"),
             active.size(), vanilla.size());
@@ -3207,6 +3209,36 @@ namespace DragonWilds {
     void DragonWildsBuildingModLoader::ClearWorldRegistryState()
     {
         m_nativeRegistrySnapshot = {};
+        m_networkWorld.Reset();m_networkIdentity={};m_networkNativeCount=0;
+    }
+
+    PS::BuildingNetworkGuard::Registry DragonWildsBuildingModLoader::NetworkIdentity(UObject* context)
+    {
+        auto* world=context?context->GetWorld():nullptr;
+        if(!world||(!m_applied.empty()&&(!m_worldRegistryReady
+            ||!m_registeredWorldContext.Get()||m_registeredWorldContext.Get()->GetWorld()!=world)))return {};
+        if(m_networkWorld.Get()==world&&m_networkIdentity.Valid())return m_networkIdentity;
+        auto* subsystem=FindBuildingSubsystem(context);
+        auto* property=subsystem?CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(
+            subsystem->GetClassPrivate(),TEXT("NetIdToData"))):nullptr;
+        auto* inner=property?CastField<FObjectPropertyBase>(property->GetInner()):nullptr;
+        if(!inner||inner->GetElementSize()!=sizeof(UObject*))return {};
+        auto* array=property->ContainerPtrToValuePtr<FScriptArray>(subsystem);
+        if(array->Num()<=0||array->Num()>PS::NetworkIdentityPlan::Capacity)return {};
+        const auto native=m_applied.empty()?std::size_t(array->Num()):m_networkNativeCount;
+        if(!native||native>std::size_t(array->Num()))return {};
+        std::vector<std::string> rows;std::unordered_set<std::string> ids;
+        for(int32 index=0;index<array->Num();++index){
+            UObject* object=nullptr;std::memcpy(&object,static_cast<uint8*>(array->GetData())+index*sizeof(object),sizeof(object));
+            auto* id=object?CastField<FStrProperty>(PropertyHelper::GetPropertyByName(object->GetClassPrivate(),TEXT("PersistenceID"))):nullptr;
+            auto* number=object?CastField<FNumericProperty>(PropertyHelper::GetPropertyByName(object->GetClassPrivate(),TEXT("BuildingPieceDataIndex"))):nullptr;
+            if(!id||!number||number->GetSignedIntPropertyValue(number->ContainerPtrToValuePtr<void>(object))!=index)return {};
+            const auto value=id->GetPropertyValue(id->ContainerPtrToValuePtr<void>(object));const auto identity=RC::to_string(*value);
+            if(identity.empty()||!ids.insert(identity).second)return {};
+            rows.push_back(nlohmann::json::array({identity,RC::to_string(object->GetClassPrivate()->GetPathName())}).dump());
+        }
+        m_networkIdentity={native,rows.size(),PS::NetworkIdentityPlan::Fingerprint(std::span(rows).first(native)),PS::NetworkIdentityPlan::Fingerprint(rows)};
+        m_networkWorld.Assign(world);return m_networkIdentity;
     }
 
     UObject* DragonWildsBuildingModLoader::LoadObject(

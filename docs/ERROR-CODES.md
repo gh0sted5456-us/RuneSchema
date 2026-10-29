@@ -4,7 +4,7 @@ Find a code from your log to see what happened and what to try next. Use the mes
 
 Open Helpy's **Diagnostics** for an overview, grouped issues and Live Log. You can copy an entry or follow its reference link here. The viewer leaves the original logs unchanged; recent activity includes normal messages, while notifications focus on warnings and errors.
 
-This page contains **71 legacy reference entries**, **222 structured diagnostic entries** and **19 bridge reason codes**. RS-JRN-001, RS-JRN-002 and RS-SPAWN-001 each have an older and a structured meaning. Follow the link from your message, or check its source and namespace to choose the matching entry. Links between the two meanings are included.
+This page contains **73 legacy reference entries**, **222 structured diagnostic entries** and **19 bridge reason codes**. RS-JRN-001, RS-JRN-002 and RS-SPAWN-001 each have an older and a structured meaning. Follow the link from your message, or check its source and namespace to choose the matching entry. Links between the two meanings are included.
 
 Structured reports in `RSDiagLog.jsonl` include their source, context and outcome. Not every operation emits every code. `Unknown` means the cause has not been identified; use the severity in the actual message. `Partial` means some changes may have occurred, and `Deferred` points to later or restart handling. `Skipped` or `Blocked` can describe one step while the rest of the mod continues.
 
@@ -64,6 +64,7 @@ Structured reports in `RSDiagLog.jsonl` include their source, context and outcom
 | [RS-STR](#structured-family-rs-str) | Strings |
 | [RS-VND](#structured-family-rs-vnd) | Vendors |
 | [RS-WEAR](#legacy-family-rs-wear) | Equipment |
+| [RS-WLD](#legacy-family-rs-wld) | World effects |
 | [RS-WORLD](#legacy-family-rs-world) | World save cleanup |
 
 <div class="rs-code-catalogue" markdown="1">
@@ -1302,6 +1303,34 @@ Read the original source/lane detail. Keep extra client mods installed if desire
 
 </section>
 
+<section class="rs-code-card" data-rs-code="RS-NET-003" data-rs-severity="warning" markdown="1">
+
+### RS-NET-003: Building placement identity not verified {#rs-net-003}
+
+**Multiplayer · Typical level: warning**
+
+A placement ID cannot be proven to refer to the same building on the client and authority.
+
+**Common reasons**
+
+A native placement index was unavailable, unverified or different between the owning client and authority.
+
+**What RuneSchema does**
+
+The individual placement is blocked before native spawning. Connection entry stays available. A verified matching native prefix can still place native buildings when modded lists differ.
+
+**What to do next**
+
+Match the required building definitions and enable the current RuneSchema networking plugin on both sides. Retry after the compatibility exchange. This guard does not remap building IDs.
+
+**Troubleshooting checks**
+
+Confirm required building definitions match, including versioned Totems or other building providers. Enable RuneSchema networking on both sides and retry after the handshake. Native-prefix agreement permits native pieces despite unrelated extra mods; no building IDs are silently rewritten.
+
+[Direct link to RS-NET-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-net-003)
+
+</section>
+
 ## Party — RS-PARTY {#legacy-family-rs-party}
 
 <section class="rs-code-card" data-rs-code="RS-PARTY-001" data-rs-severity="info" markdown="1">
@@ -1968,6 +1997,36 @@ Check the equipment definition and native slot contract.
 Check the named equipment definition and earlier enrollment errors. Verify its slot and cooked class against the current game version; leave unsupported equipment unequipped.
 
 [Direct link to RS-WEAR-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-wear-001)
+
+</section>
+
+## World effects — RS-WLD {#legacy-family-rs-wld}
+
+<section class="rs-code-card" data-rs-code="RS-WLD-001" data-rs-severity="warning" markdown="1">
+
+### RS-WLD-001: World policy callback unavailable {#rs-wld-001}
+
+**World effects · Typical level: warning**
+
+A cooked policy callback, native hook or reflected gameplay contract failed its validation or execution.
+
+**Common reasons**
+
+A world-effect provider or its native adapter could not validate or execute the listed contract.
+
+**What RuneSchema does**
+
+The failed policy operation is reported; unsupported native hooks retain native handling. Other independent providers and native game behavior remain available.
+
+**What to do next**
+
+Keep the complete BUILDING-POLICY reason and game/framework version. Check the callback signatures and authoritative world. Native hook support needs verification for that executable; never force an address or disable validation.
+
+**Troubleshooting checks**
+
+Read the original callback/hook reason. Verify the cooked Blueprint signature and framework/game version. Keep private native fixtures out of user games and report unsupported executable details rather than forcing hooks.
+
+[Direct link to RS-WLD-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-wld-001)
 
 </section>
 

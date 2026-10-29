@@ -923,6 +923,32 @@
       "causes": "The correction could not verify the exact server executable/method, install its world-ready callback, or obtain the required native settings and game-instance references.",
       "troubleshooting": "Retain the full reason and executable/game version. Unsupported builds keep native handling and need a verified compatibility update; do not patch flags or turn filtering off as a generic workaround.",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-srv-002"
+    },
+    {
+      "id": "BuildingIdentityPlacementBlocked",
+      "code": "RS-NET-003",
+      "title": "Building placement identity not verified",
+      "severity": "warning",
+      "subsystem": "Multiplayer",
+      "summary": "A placement ID cannot be proven to refer to the same building on the client and authority.",
+      "impact": "The individual placement is blocked before native spawning. Connection entry stays available. A verified matching native prefix can still place native buildings when modded lists differ.",
+      "action": "Match the required building definitions and enable the current RuneSchema networking plugin on both sides. Retry after the compatibility exchange. This guard does not remap building IDs.",
+      "causes": "A native placement index was unavailable, unverified or different between the owning client and authority.",
+      "troubleshooting": "Confirm required building definitions match, including versioned Totems or other building providers. Enable RuneSchema networking on both sides and retry after the handshake. Native-prefix agreement permits native pieces despite unrelated extra mods; no building IDs are silently rewritten.",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-net-003"
+    },
+    {
+      "id": "WorldPolicyContractUnavailable",
+      "code": "RS-WLD-001",
+      "title": "World policy callback unavailable",
+      "severity": "warning",
+      "subsystem": "World effects",
+      "summary": "A cooked policy callback, native hook or reflected gameplay contract failed its validation or execution.",
+      "impact": "The failed policy operation is reported; unsupported native hooks retain native handling. Other independent providers and native game behavior remain available.",
+      "action": "Keep the complete BUILDING-POLICY reason and game/framework version. Check the callback signatures and authoritative world. Native hook support needs verification for that executable; never force an address or disable validation.",
+      "causes": "A world-effect provider or its native adapter could not validate or execute the listed contract.",
+      "troubleshooting": "Read the original callback/hook reason. Verify the cooked Blueprint signature and framework/game version. Keep private native fixtures out of user games and report unsupported executable details rather than forcing hooks.",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-wld-001"
     }
   ],
   "structuredCodes": [

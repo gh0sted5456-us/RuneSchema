@@ -20,6 +20,7 @@ inline void CheckPosition(UFunction* fn){
 }
 inline bool Register(UObject* object){
  if(!Live(object)||!object->GetWorld())return false;
+ for(auto& entry:providers)if(entry.owner.Get()==object)return false;
  auto* version=object->GetFunctionByNameInChain(L"RuneSchemaBuildingPolicyVersion");
  if(!version)return false;
  Check(version,L"ReturnValue",L"IntProperty",4);
@@ -41,7 +42,17 @@ inline bool Register(UObject* object){
   auto* p=CastField<FObjectPropertyBase>(Field(fn,L"ReturnValue"));
   if(!p||p->GetSize()!=8)throw std::runtime_error("Building overlay material return differs");
  }
- for(auto& entry:providers)if(entry.owner.Get()==object)return false;
+ for(auto* name:{L"RuneSchemaFarmProtection",L"RuneSchemaFarmHarvestMultiplier",L"RuneSchemaResourceRespawnMultiplier",L"RuneSchemaResourceYieldMultiplier",L"RuneSchemaPlayerCarryWeight",L"RuneSchemaPlayerVitality",L"RuneSchemaEnemySpawnMultiplier"})if(auto* fn=object->GetFunctionByNameInChain(name)){
+  CheckPosition(fn);Check(fn,L"ReturnValue",L"DoubleProperty",8);
+ }
+ auto* count=object->GetFunctionByNameInChain(L"RuneSchemaPlayerEffectCount");
+ auto* data=object->GetFunctionByNameInChain(L"RuneSchemaPlayerEffectData");
+ if(bool(count)!=bool(data))throw std::runtime_error("World player effect callbacks must provide both count and data");
+ if(count){
+  Check(count,L"ReturnValue",L"IntProperty",4);CheckPosition(data);Check(data,L"Index",L"IntProperty",4);
+  auto* result=CastField<FClassProperty>(Field(data,L"ReturnValue"));
+  if(!result||result->GetSize()!=sizeof(UObject*))throw std::runtime_error("World policy effect class return differs");
+ }
  Provider value;value.owner=object;providers.push_back(std::move(value));return true;
 }
 inline std::vector<UObject*> Providers(UWorld* world){

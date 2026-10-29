@@ -1467,6 +1467,7 @@ namespace DragonWilds {
 
         auto buildingModLoader = std::make_unique<DragonWildsBuildingModLoader>();
         m_buildingLoader = buildingModLoader.get();
+        m_registryBridge.BuildingRegistry=[service=m_buildingLoader](RC::Unreal::UObject* context){return service->NetworkIdentity(context);};
         RegisterLoader(std::move(buildingModLoader));
 
         auto spawnLoader = std::make_unique<DragonWildsSpawnLoader>();

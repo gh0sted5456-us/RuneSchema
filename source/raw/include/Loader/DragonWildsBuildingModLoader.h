@@ -10,6 +10,7 @@
 #include "Loader/DragonWildsModLoaderBase.h"
 #include "SDK/WeakObjectHandle.h"
 #include "Runtime/WorldBuildingRegistryValidation.h"
+#include "Core/BuildingNetworkGuard.h"
 #include "nlohmann/json.hpp"
 
 namespace RC::Unreal {
@@ -24,6 +25,7 @@ namespace DragonWilds {
         DragonWildsBuildingModLoader();
         ~DragonWildsBuildingModLoader() override;
         void ActivateWorldRegistration();
+        PS::BuildingNetworkGuard::Registry NetworkIdentity(RC::Unreal::UObject* context);
         void ImportCookedDefinitions();
         std::vector<PS::WorldBuildingRegistryValidation::Expected> CleanupExpectations();
         void RejectCleanup(const std::string& reason);
@@ -147,6 +149,9 @@ namespace DragonWilds {
         std::unordered_set<std::string> m_ownedProfileRows;
         std::vector<RC::Unreal::UObject*> m_createdBuildings;
         NativeRegistrySnapshot m_nativeRegistrySnapshot;
+        PS::WeakObjectHandle m_networkWorld;
+        PS::BuildingNetworkGuard::Registry m_networkIdentity;
+        std::size_t m_networkNativeCount=0;
         bool m_hooksRegistered = false;
         bool m_cookedImported = false;
         RC::Unreal::Hook::GlobalCallbackId m_initGameStateCallbackId = RC::Unreal::Hook::ERROR_ID;
