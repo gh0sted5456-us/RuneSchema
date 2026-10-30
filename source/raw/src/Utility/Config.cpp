@@ -5,6 +5,7 @@
 #include "Core/JsonDocument.h"
 #include "Helpers/String.hpp"
 #include "Core/ConfigFiles.h"
+#include "Core/DiagnosticLogPaths.h"
 #include "Utility/ConfigCodec.h"
 #include "Utility/ConfigStore.h"
 #include "Core/RuneSchemaSettingsEditor.h"
@@ -113,6 +114,7 @@ namespace PS {
             m_configFile=std::move(loaded.File);
             m_status=std::move(loaded.Status);
             m_preserveOriginal=false;
+            DiagnosticLogPaths::UseUE4SS=m_settings.logsInUE4SS;
             DiagnosticLog::Initialize(m_settings.archiveLogs);
             StructuredDiagnostics::Initialize();
             if(fs::exists(GetSettingsPath().parent_path()/"modmenu.json")) {

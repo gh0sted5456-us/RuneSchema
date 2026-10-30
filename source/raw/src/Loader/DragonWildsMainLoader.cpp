@@ -1335,9 +1335,20 @@ namespace DragonWilds {
         try {
             PS::NetworkIdentityBootstrap::Start([this] {
                 auto result = m_dataRegistrar.NetworkIdentityManifest();
+                PS::NetworkIdentitySync::Require(m_buildingLoader!=nullptr,"Building registry service is unavailable");
+                result["lanes"]["BUILDING"]=m_buildingLoader->NetworkIdentityManifest();
                 result["registryOwners"] = m_registryBridge.RegistryOwnerFingerprints();
                 result["sourceVersions"] = PS::HelpyCacheSources::Snapshot().Versions; return result;
-            }, [this](const auto& order) { m_dataRegistrar.ApplyNetworkIdentityOrder(order); });
+            }, [this](const auto& order) {
+                auto dataOrder=order;
+                const auto building=dataOrder.find("BUILDING");
+                PS::NetworkIdentitySync::Require(building!=dataOrder.end(),"Building registry order is missing");
+                PS::NetworkIdentitySync::Require(m_buildingLoader!=nullptr,"Building registry service is unavailable");
+                auto buildings=m_buildingLoader->PlanNetworkOrder(building->second);
+                dataOrder.erase(building);
+                m_dataRegistrar.ApplyNetworkIdentityOrder(dataOrder);
+                m_buildingLoader->SetNetworkOrder(std::move(buildings));
+            });
         } catch (const std::exception& error) {
             PS::NetworkIdentityBootstrap::Stop();
             PS::Log<LogLevel::Warning>(STR("[NETWORK-ID-SYNC][UNAVAILABLE] {}\n"), PS::ToWideSafe(error.what()));
@@ -1491,6 +1502,7 @@ namespace DragonWilds {
         m_spawnLoader->ForwardHelpyAuthority=[this](const std::string& action,const std::string& payload){
             return m_registryBridge.RequestAuthority(action,payload);
         };
+        m_spawnLoader->PublishHelpyResult=[this](RC::Unreal::UObject* player,int64_t revision,const nlohmann::json& result){m_registryBridge.PublishHelpyResult(player,revision,result);};
         m_spawnLoader->IsQuestCompleted=[npcService](RC::Unreal::UWorld* world,const std::string& quest){
             return npcService->IsQuestCompleted(world,quest);
         };
@@ -2040,7 +2052,8 @@ namespace DragonWilds {
         try {
             for(const auto& plugin:PS::PluginCatalog::Discover(runeSchemaRoot/"plugins")) {
                 if(!plugin.Enabled)continue;
-                for(const auto& package:PS::PluginCatalog::PakDirectories(plugin)){pakRoots.push_back(package);pakOwners[package]=plugin.Id;}
+                try{for(const auto& package:PS::PluginCatalog::PakDirectories(plugin)){pakRoots.push_back(package);pakOwners[package]=plugin.Id;}}
+                catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[RS-PLUG-009] Plugin '{}' content rejected: {}; independent PAK directories continue.\n"),PS::ToWideSafe(plugin.Id),PS::ToWideSafe(error.what()));}
             }
         } catch(const std::exception& error) {
             pakRoots.resize(pluginRootBegin);

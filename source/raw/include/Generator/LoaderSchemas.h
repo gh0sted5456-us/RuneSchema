@@ -851,8 +851,8 @@ inline nlohmann::json LoaderSchemas() {
             {"ClientPublish",{{"type","boolean"},{"default",false}}},{"Broadcast",{{"type","boolean"},{"default",false}}},{"Snapshot",{{"type","boolean"},{"default",false}}}}}};
     registryEntry["allOf"]={{{"if",{{"properties",{{"Kind",{{"const","DataRelay"}}}}}}},
         {"then",{{"required",{"Relay"}},{"maxProperties",3}}},{"else",{{"not",{{"required",{"Relay"}}}}}}}};
-    result["registry"]={{"type","object"},{"additionalProperties",false},{"required",{"SchemaVersion","Entries"}},
-        {"properties",{{"SchemaVersion",{{"const",1}}},
+    result["registry"]={{"type","object"},{"additionalProperties",false},{"required",{"Entries"}},
+        {"properties",{{"SchemaVersion",{{"description","Informational authoring version; supported fields are validated independently."}}},
             {"Entries",{{"type","array"},{"maxItems",256},{"items",registryEntry}}}}},
         {"description","Enabled loose schema mods and cooked declarations share native-registry enrollment and client/server declarations. Every asset still requires a correct live type and verified native identity; a declaration does not construct an asset or authorize cleanup."}};
     json nativeRegistries={{"type","object"},{"additionalProperties",false},{"properties",json::object()}};
@@ -873,6 +873,10 @@ inline nlohmann::json LoaderSchemas() {
     nativeRegistries["properties"]["Enums"]={{"$ref","#/definitions/modOwnedCookedPaths"},{"description","Read-only verification of exact mod-owned cooked UserDefinedEnum symbol tables; never extends a native enum."}};
     result["registry"]["properties"]["NativeRegistries"]=nativeRegistries;
     result["registry"]["properties"]["LoaderDefinitions"]={{"type","object"},{"additionalProperties",false},{"properties",json::object()}};
+    result["registry"]["properties"]["LoaderDefinitions"]["properties"]["DataTables"]={{"type","object"},{"maxProperties",4096},
+        {"additionalProperties",{{"type","object"},{"required",json::array({"Target"})},{"additionalProperties",false},
+            {"properties",{{"Target",{{"type","string"},{"pattern","^/Game/.+\\.[^./]+$"},{"maxLength",1024}}}}}}},
+        {"description","Append missing rows from each mod-owned cooked source DataTable key into its exact plain vanilla Target before loose JSON edits. Runtime verifies identical RowStruct, row limits and copies; existing target rows are preserved."}};
     for(const auto* lane:{"Recipes","Journals","Lore"})result["registry"]["properties"]["LoaderDefinitions"]["properties"][lane]=
         {{"type","object"},{"maxProperties",4096},{"additionalProperties",{{"type","object"}}}};
     nativeRegistries["properties"]["Buildings"]={{"type","array"},{"maxItems",4096},{"uniqueItems",true},{"items",nativePath},

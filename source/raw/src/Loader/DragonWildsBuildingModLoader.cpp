@@ -42,6 +42,9 @@
 #include "Utility/StructuredDiagnosticB3B.h"
 #include "Runtime/Storefront.h"
 #include "Loader/DragonWildsBuildingModLoader.h"
+#include "Core/NetworkIdentitySync.h"
+#include "Core/NetworkIdentityState.h"
+#include "Core/CacheBundleIO.h"
 #include "Runtime/SlowWork.h"
 #include "Core/CookedPakRegistryManifest.h"
 #include "Core/RegistryEnrollment.h"
@@ -1975,6 +1978,7 @@ namespace DragonWilds {
     bool DragonWildsBuildingModLoader::ProtectWorldRegistry(UObject* subsystem)
     {
         if (!subsystem) return false;
+        if(auto* previous=m_networkPreviousContext.Get();previous&&previous->GetWorld()==subsystem->GetWorld())return false;
         auto* subsystemClass = subsystem->GetClassPrivate();
         auto* arrayProperty = CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(
             subsystemClass, TEXT("NetIdToData")));
@@ -2028,6 +2032,14 @@ namespace DragonWilds {
             [](const auto& left, const auto& right) {
                 return left.PersistenceId < right.PersistenceId;
             });
+
+        if(!m_networkOrder.empty()){
+            if(m_networkOrder.size()!=active.size())return false;
+            std::map<std::string,std::size_t> ranks;
+            for(std::size_t i=0;i<m_networkOrder.size();++i)if(!ranks.emplace(m_networkOrder[i],i).second)return false;
+            for(const auto& row:active)if(!ranks.contains(row.PersistenceId))return false;
+            std::sort(active.begin(),active.end(),[&](const auto& left,const auto& right){return ranks.at(left.PersistenceId)<ranks.at(right.PersistenceId);});
+        }
 
         auto* array = arrayProperty->ContainerPtrToValuePtr<FScriptArray>(subsystem);
         std::vector<UObject*> vanilla;
@@ -3212,12 +3224,74 @@ namespace DragonWilds {
         m_networkWorld.Reset();m_networkIdentity={};m_networkNativeCount=0;
     }
 
+    nlohmann::json DragonWildsBuildingModLoader::NetworkIdentityManifest()
+    {
+        using PS::NetworkIdentitySync::Require;
+        auto* subsystem=FindBuildingSubsystem();
+        auto* property=subsystem?CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(subsystem->GetClassPrivate(),TEXT("NetIdToData"))):nullptr;
+        auto* inner=property?CastField<FObjectPropertyBase>(property->GetInner()):nullptr;
+        Require(inner&&inner->GetElementSize()==sizeof(UObject*),"Building registry is not ready for pre-join planning");
+        std::map<std::string,nlohmann::json> active;
+        std::unordered_set<UObject*> managed;
+        const auto row=[](UObject* object){
+            auto* id=object?CastField<FStrProperty>(PropertyHelper::GetPropertyByName(object->GetClassPrivate(),TEXT("PersistenceID"))):nullptr;
+            Require(id!=nullptr,"Building persistence identity is unavailable");
+            const auto value=id->GetPropertyValue(id->ContainerPtrToValuePtr<void>(object));
+            const auto identity=RC::to_string(*value);Require(!identity.empty(),"Building persistence identity is empty");
+            return nlohmann::json{{"path",RC::to_string(object->GetPathName())},{"identity",identity},{"type",RC::to_string(object->GetClassPrivate()->GetPathName())}};
+        };
+        for(const auto& definition:m_definitions){
+            const auto identity=Identity(definition.Owner,definition.Key);if(!m_applied.contains(identity))continue;
+            auto* object=GetValidBuilding(identity);const auto value=row(object);
+            Require(managed.insert(object).second&&active.emplace(value.at("identity").get<std::string>(),value).second,"Duplicate managed building identity");
+        }
+        auto* array=property->ContainerPtrToValuePtr<FScriptArray>(subsystem);
+        Require(array->Num()>0&&array->Num()<=PS::NetworkIdentityPlan::Capacity,"Invalid native building registry size");
+        auto native=nlohmann::json::array(),entries=nlohmann::json::array();
+        std::set<std::string> nativeIds;
+        for(int32 i=0;i<array->Num();++i){
+            UObject* object=nullptr;std::memcpy(&object,static_cast<uint8*>(array->GetData())+i*sizeof(object),sizeof(object));
+            if(managed.contains(object))continue;
+            auto value=row(object);const auto identity=value.at("identity").get<std::string>();
+            Require(nativeIds.insert(identity).second&&!active.contains(identity),"Native and mod building identities collide");native.push_back(std::move(value));
+        }
+        Require(!native.empty()&&native.size()+active.size()<=PS::NetworkIdentityPlan::Capacity,"Building registry capacity exceeded");
+        if(m_networkOrder.empty()){for(const auto& [identity,value]:active)entries.push_back(value);}
+        else{
+            Require(m_networkOrder.size()==active.size(),"Building definitions changed after authority planning");
+            std::set<std::string> used;
+            for(const auto& identity:m_networkOrder){Require(active.contains(identity)&&used.insert(identity).second,"Building authority order is stale");entries.push_back(active.at(identity));}
+        }
+        return {{"prefixCount",native.size()},{"prefixFingerprint",PS::CacheBundleIO::Hash(native.dump())},{"entries",std::move(entries)}};
+    }
+
+    std::vector<std::string> DragonWildsBuildingModLoader::PlanNetworkOrder(const std::vector<std::size_t>& order)
+    {
+        const auto entries=NetworkIdentityManifest().at("entries");
+        PS::NetworkIdentitySync::Require(order.size()==entries.size(),"Building order is incomplete");
+        std::vector<std::string> result;result.reserve(order.size());std::set<std::size_t> used;
+        for(const auto index:order){
+            PS::NetworkIdentitySync::Require(index<entries.size()&&used.insert(index).second,"Building order is not a permutation");
+            result.push_back(entries.at(index).at("identity").get<std::string>());
+        }
+        return result;
+    }
+
+    void DragonWildsBuildingModLoader::SetNetworkOrder(std::vector<std::string> order) noexcept
+    {
+        // Apply only when constructing the next world registry, never to a live world.
+        m_networkPreviousContext=m_registeredWorldContext;
+        m_networkOrder=std::move(order);m_networkIdentity={};m_networkWorld.Reset();
+    }
+
     PS::BuildingNetworkGuard::Registry DragonWildsBuildingModLoader::NetworkIdentity(UObject* context)
     {
         auto* world=context?context->GetWorld():nullptr;
         if(!world||(!m_applied.empty()&&(!m_worldRegistryReady
             ||!m_registeredWorldContext.Get()||m_registeredWorldContext.Get()->GetWorld()!=world)))return {};
-        if(m_networkWorld.Get()==world&&m_networkIdentity.Valid())return m_networkIdentity;
+        const auto shared=PS::NetworkIdentityState::GetAuthorityBuildingCount();
+        if(m_networkWorld.Get()==world&&m_networkIdentity.Valid()&&m_networkIdentity.SharedCount==
+            (shared>=m_networkIdentity.NativeCount&&shared<=m_networkIdentity.Count?shared:0))return m_networkIdentity;
         auto* subsystem=FindBuildingSubsystem(context);
         auto* property=subsystem?CastField<FArrayProperty>(PropertyHelper::GetPropertyByName(
             subsystem->GetClassPrivate(),TEXT("NetIdToData"))):nullptr;
@@ -3238,6 +3312,9 @@ namespace DragonWilds {
             rows.push_back(nlohmann::json::array({identity,RC::to_string(object->GetClassPrivate()->GetPathName())}).dump());
         }
         m_networkIdentity={native,rows.size(),PS::NetworkIdentityPlan::Fingerprint(std::span(rows).first(native)),PS::NetworkIdentityPlan::Fingerprint(rows)};
+        if(shared>=native&&shared<=rows.size()){
+            m_networkIdentity.SharedCount=shared;m_networkIdentity.SharedFingerprint=PS::NetworkIdentityPlan::Fingerprint(std::span(rows).first(shared));
+        }
         m_networkWorld.Assign(world);return m_networkIdentity;
     }
 

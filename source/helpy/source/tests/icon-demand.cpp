@@ -12,6 +12,17 @@
 #undef assert
 #define assert(value) ((value)?static_cast<void>(0):throw std::runtime_error("line "+std::to_string(__LINE__)+": "+#value))
 
+struct TrackedImGuiAllocations {
+    ImGuiMemAllocFunc Allocate{};ImGuiMemFreeFunc Free{};void* User{};
+    std::map<void*,size_t> Live;
+    TrackedImGuiAllocations(){
+        ImGui::GetAllocatorFunctions(&Allocate,&Free,&User);
+        ImGui::SetAllocatorFunctions([](size_t bytes,void* user){auto& self=*static_cast<TrackedImGuiAllocations*>(user);auto* value=self.Allocate(bytes,self.User);if(value)self.Live[value]=bytes;return value;},
+            [](void* value,void* user){auto& self=*static_cast<TrackedImGuiAllocations*>(user);self.Live.erase(value);self.Free(value,self.User);},this);
+    }
+    ~TrackedImGuiAllocations(){ImGui::SetAllocatorFunctions(Allocate,Free,User);}
+};
+
 int Run() {
     using namespace PS;
     {namespace quick=RuneSchemaSettingsPanel;unsigned writes=0;
@@ -64,7 +75,7 @@ int Run() {
     assert(ImGui::GetForegroundDrawList()->VtxBuffer.Size>vertices&&ImGui::GetMouseCursor()==ImGuiMouseCursor_Hand);
     assert(ImGui::GetItemRectMin().x==sourceRect.x&&ImGui::GetItemRectMin().y==sourceRect.y&&state.Queued.empty()&&submissions==0);end();
     const auto until=[&](auto ready){const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
-        while(!ready()){assert(std::chrono::steady_clock::now()<deadline);const auto before=state.Textures.size();icons::Update();assert(state.Textures.size()<=before+1);std::this_thread::sleep_for(std::chrono::milliseconds(1));}};
+        while(!ready()){assert(std::chrono::steady_clock::now()<deadline);const auto before=state.Textures.size();icons::Update();assert(state.Textures.size()<=before+icons::detail::MaxDiskBatch);std::this_thread::sleep_for(std::chrono::milliseconds(1));}};
     const auto cached=[&](const std::string& icon){icons::Queue(icon,true);until([&]{return state.Textures.contains(icon);});};
     // Reproduce a tooltip opened from a tiny Save Editor table cell for many
     // frames. Width must be viewport-bounded and invariant, not self-shrinking.
@@ -118,21 +129,23 @@ int Run() {
     HelpySourceCache::Current.Key="icon-demand-fixture";
     begin();icons::Update();assert(submissions==0&&state.Queued.empty()); // no longer visible
     for(int i=0;i<80;++i){const auto icon="visible-"+std::to_string(i);state.DiskChecked.insert(icon);icons::Queue(icon,true);}
-    assert(state.Queued.size()==32);icons::Update();assert(submissions==1&&state.Pending.size()==1);
-    state.NextSubmit={};icons::Update();assert(submissions==1); // single in-flight capture
-    const auto active=*state.Pending.begin();end();
+    assert(state.Queued.size()==32);icons::Update();assert(submissions==icons::detail::MaxActiveRemote&&state.Pending.size()==icons::detail::MaxActiveRemote);
+    const auto initialFlight=submissions;
+    assert(state.NextSubmit<=std::chrono::steady_clock::now());
+    state.NextSubmit={};icons::Update();assert(submissions==initialFlight); // Bounded queued requests; the game still captures one icon at a time.
+    const auto accepted=state.Pending;const auto active=*accepted.begin();end();
     begin();
-    replies.push_back({{"Icon",active},{"Status","Error"},{"Retryable",true},{"Error","blank item icon"}});
+    for(const auto& icon:accepted)replies.push_back({{"Icon",icon},{"Status","Error"},{"Retryable",true},{"Error","blank item icon"}});
     icons::Update();state.NextSubmit={};icons::Update();
-    assert(submissions==1&&state.Pending.empty()&&state.Queued.empty()); // retries off-screen are discarded
+    assert(submissions==initialFlight&&state.Pending.empty()&&state.Queued.empty()); // retries off-screen are discarded
     // A visible icon may retry, but never loop indefinitely while idle.
-    state.DiskChecked.insert(active);icons::Queue(active,true);state.NextSubmit={};icons::Update();assert(submissions==2);
+    state.DiskChecked.insert(active);icons::Queue(active,true);state.NextSubmit={};icons::Update();assert(submissions==initialFlight+1);
     replies.push_back({{"Icon",active},{"Status","Error"},{"Retryable",true},{"Error","blank item icon"}});
-    icons::Update();state.NextSubmit={};icons::Update();assert(submissions==3);
+    icons::Update();state.NextSubmit={};icons::Update();assert(submissions==initialFlight+2);
     replies.push_back({{"Icon",active},{"Status","Error"},{"Retryable",true},{"Error","blank item icon"}});
     icons::Update();assert(state.Failed.contains(active)&&state.RetryAt.empty());
-    state.NextSubmit={};icons::Queue(active,true);icons::Update();assert(submissions==3);
-    icons::RetryFailed();state.DiskChecked.insert(active);icons::Queue(active,true);icons::Update();assert(submissions==4);
+    state.NextSubmit={};icons::Queue(active,true);icons::Update();assert(submissions==initialFlight+2);
+    icons::RetryFailed();state.DiskChecked.insert(active);icons::Queue(active,true);icons::Update();assert(submissions==initialFlight+3);
     end();
     // A source-scoped disk hit must install pixels without asking the engine
     // to render again. A cached file cannot stand in for source registration.
@@ -171,9 +184,18 @@ int Run() {
     HelpyEnvironment::Configure({{"DedicatedServer",false},{"Storefront","Steam/Epic"},{"Platform","Steam"},{"NativeIconCaptureAvailable",true}});
     assert(HelpyEnvironment::NativeIconCaptureAvailable);
     HelpySourceCache::Current.Provisional=true;
+    std::vector<std::string> pageIcons;
     for(int i=0;i<40;++i){const auto icon="/Game/Art/Test/T_FirstOpen_"+std::to_string(i)+".T_FirstOpen_"+std::to_string(i);
         const auto target=icons::detail::DiskFile(icon);std::filesystem::create_directories(target.parent_path());std::filesystem::copy_file(file,target,std::filesystem::copy_options::overwrite_existing);
-        cached(icon);assert(state.Textures.contains(icon));}
+        pageIcons.push_back(icon);}
+    end();const auto pageStarted=std::chrono::steady_clock::now();unsigned pageFrames=0;
+    while(std::any_of(pageIcons.begin(),pageIcons.end(),[&](const auto& icon){return !state.Textures.contains(icon);})){
+        assert(++pageFrames<=12);begin();for(const auto& icon:pageIcons)icons::Queue(icon,true);
+        const auto before=state.Textures.size();icons::Update();assert(state.Textures.size()<=before+icons::detail::MaxDiskBatch);end();
+        if(state.DiskWorker.valid())assert(state.DiskWorker.wait_for(std::chrono::seconds(5))==std::future_status::ready);
+    }
+    std::cout<<"Cached page: 40 pictures in "<<pageFrames<<" UI frames / "<<std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-pageStarted).count()<<" ms; native submissions="<<submissions-requestsBeforeDiskHit<<".\n";
+    begin();for(const auto& icon:pageIcons)icons::Queue(icon,true);icons::Update();assert(!state.DiskWorker.valid()&&state.DiskQueue.empty());
     icons::Update();assert(submissions==requestsBeforeDiskHit&&state.Pending.empty()&&state.Queued.empty());
     const std::string provisionalMissing="/Game/Art/Test/T_ProvisionalMiss.T_ProvisionalMiss";
     icons::Queue(provisionalMissing,true);state.NextSubmit={};icons::Update();
@@ -225,8 +247,22 @@ int Run() {
     const auto diskUsage=icons::ScanDiskStats(icons::ActiveDiskFolder());assert(diskUsage.Files>=1&&diskUsage.Bytes>=std::filesystem::file_size(file));
     assert(icons::CleanDiskCache()&&accountingResets==1&&!std::filesystem::exists(file));
     icons::RemoteResetAccounting={};
-    for(auto* texture:state.RetiredTextures)if(texture)texture->SetStatus(ImTextureStatus_Destroyed);
-    icons::detail::ReapRetired(state);icons::ClearRemote();ImGui::DestroyContext();
+    icons::Shutdown();icons::ReleaseTextures();assert(state.Textures.empty()&&state.RetiredTextures.empty());ImGui::DestroyContext();
+    {
+        TrackedImGuiAllocations allocations;
+        for(int cycle=0;cycle<50;++cycle){
+            ImGui::CreateContext();ImGui::GetIO().IniFilename=nullptr;
+            auto* texture=IM_NEW(ImTextureData)();texture->Create(ImTextureFormat_RGBA32,16,16);texture->RefCount=1;texture->SetStatus(ImTextureStatus_OK);
+            texture->BackendUserData=&allocations;ImGui::RegisterUserTexture(texture);state.Textures["fixture"]=texture;state.Failed.insert("old miss");state.WantedFrame["old row"]=1;
+            state.DiskWorker=std::async(std::launch::async,[]{std::vector<icons::detail::DiskRead> result(1);result[0].Pixels.resize(1024*1024);return result;});
+            icons::Shutdown();assert(!state.DiskWorker.valid()&&state.Textures.empty());
+            icons::ReleaseTextures();assert(state.RetiredTextures.size()==1); // GPU ownership must be released first.
+            texture->BackendUserData=nullptr;texture->SetStatus(ImTextureStatus_Destroyed);
+            icons::ReleaseTextures();assert(state.RetiredTextures.empty()&&state.Failed.empty()&&state.WantedFrame.empty());
+            ImGui::DestroyContext();assert(allocations.Live.empty());
+        }
+        std::cout<<"50 renderer lifecycles: zero outstanding ImGui allocations after each shutdown.\n";
+    }
     HelpyEnvironment::Configure(nlohmann::json::object());
     return 0;
 }

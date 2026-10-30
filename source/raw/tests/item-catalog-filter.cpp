@@ -86,6 +86,15 @@ int main(int argc,char** argv){
     assert(misses.NeedsLive("scope1","uncached",empty));
     assert(!misses.NeedsLive("scope1","",empty)); // Browsing never triggers a focused lookup.
     assert(misses.NeedsLive("scope2","Health",empty)); // World/source changes discard old hit state.
+    PS::FocusedItemQuery::Misses imported;
+    const std::string contract="Adamant Catapult Contract";
+    auto downloadedMiss=empty;downloadedMiss["CacheHit"]=true;downloadedMiss["AlphabeticalReady"]=true;
+    assert(!imported.NeedsLive("server",contract,pending));
+    assert(imported.NeedsLive("server",contract,downloadedMiss)); // A completed imported miss still needs live mounted discovery.
+    assert(!misses.NeedsLive("server",contract,found));
+    assert(imported.NeedsLive("server",contract,downloadedMiss)); // Native and imported histories are independent.
+    assert(!imported.NeedsLive("server","catapult",found));
+    assert(!imported.NeedsLive("server","catapult",empty)); // Do not restart a query after its nonempty imported pages.
     for(int i=1;i<argc;++i){
         std::ifstream input(argv[i]);const auto doc=nlohmann::json::parse(input);
         size_t corrected=0,stones=0;const auto& rows=doc.at("Rows");nlohmann::json changes=nlohmann::json::object();

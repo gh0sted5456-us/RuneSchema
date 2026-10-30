@@ -8,6 +8,7 @@
 #include <mutex>
 #include <unordered_map>
 #include <algorithm>
+#include <atomic>
 
 namespace PS::AssetProvenance {
 namespace {
@@ -23,6 +24,7 @@ std::mutex mutex;
 std::unordered_map<RC::Unreal::UObject*,Entry> entries;
 bool warned{};
 bool dirty=true;
+std::atomic<uint64_t> revision=1;
 nlohmann::json Describe(const Entry& entry) {
     return {{"Kind","RuneSchemaAssetClone"},{"Confirmed",true},{"SourceAsset",entry.source},
         {"CreatingMod",entry.creator},{"LastCloneDefinitionSource",entry.lastSource},
@@ -68,19 +70,20 @@ void Record(RC::Unreal::UObject* object,const std::string& source,const std::str
         if(std::string_view(key)=="InternalName")entry.internalName=text;else entry.persistenceId=text;
     }
     dirty=true;
+    ++revision;
 }
 nlohmann::json Lookup(RC::Unreal::UObject* object) {
     std::lock_guard lock(mutex);
     auto found=entries.find(object);
     if(found==entries.end())return nullptr;
     const auto& entry=found->second;
-    if(!Matches(entry,object)){entries.erase(found);return nullptr;}
+    if(!Matches(entry,object)){entries.erase(found);++revision;return nullptr;}
     return Describe(entry);
 }
 std::vector<std::string> LivePaths() {
     std::lock_guard lock(mutex);std::vector<std::string> paths;
     for(auto entry=entries.begin();entry!=entries.end();) {
-        if(!Matches(entry->second,entry->first)){entry=entries.erase(entry);continue;}
+        if(!Matches(entry->second,entry->first)){entry=entries.erase(entry);++revision;continue;}
         paths.push_back(entry->second.path);++entry;
     }
     std::sort(paths.begin(),paths.end());paths.erase(std::unique(paths.begin(),paths.end()),paths.end());
@@ -90,5 +93,6 @@ void Flush() {
     std::lock_guard lock(mutex);
     dirty=false;
 }
-void Clear() {std::lock_guard lock(mutex);entries.clear();warned=false;}
+uint64_t Revision() noexcept{return revision.load();}
+void Clear() {std::lock_guard lock(mutex);entries.clear();warned=false;++revision;}
 }

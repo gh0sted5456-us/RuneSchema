@@ -10,7 +10,7 @@ inline constexpr char Name[]="RSMK";
 inline constexpr char FullName[]="RuneSchema Modding Kit";
 // Retained for task switching and accessibility; the image caption draws only the icon.
 inline constexpr wchar_t WindowTitle[]=L"RuneSchema";
-inline constexpr char Version[]="0.8.0.3";
+inline constexpr char Version[]="0.8.1.0";
 inline constexpr float RuntimeIconSize=36.f;
 // Original 1920x1080 Resources/SplashScreen.png, never upscaled from an icon.
 // Shared crop preserves its aspect ratio and the gap between the two lines.

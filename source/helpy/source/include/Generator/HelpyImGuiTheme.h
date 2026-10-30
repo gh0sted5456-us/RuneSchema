@@ -65,9 +65,11 @@ struct Theme {
     bool itemGridFitRows{true},itemShowPlaceholders{false};
     int itemPageSize{ItemPaging::DefaultSize};
     int runtimeTimeUnit{0}; // Automatic, ms, seconds, minutes.
-    int helpyFpsLimit{30},fpsRefreshMs{1000};
+    int helpyFpsLimit{60},fpsRefreshMs{1000};
     bool showFps{false};
     bool showGameFps{false};
+    bool gameOverlay{false};
+    float overlayOpacity{.88f};
     std::string fpsHotkey{"F10"};
     std::string backgroundFile;
     float backgroundStrength{.12f};
@@ -84,6 +86,7 @@ struct Theme {
     std::string fontFamily{"Segoe UI"};
     std::vector<LiveLog::ColorRule> logColors;
     bool diagnosticToastsEnabled{true};
+    bool diagnosticRegistryActivity{false};
     int diagnosticToastLimit{4},diagnosticToastDuration{6};
     int diagnosticHistoryDays{14},diagnosticHistorySessions{10},diagnosticHistoryMB{20};
     float diagnosticSplitRatio{0.40f};
@@ -250,10 +253,10 @@ inline nlohmann::json DocumentFrom(const Theme& t,int iconCacheMB) {
         {"cache",{{"iconCacheMB",std::clamp(iconCacheMB,0,16384)},{"loadOrder",HelpyRuntimePreferences::CacheFirst.load()?"cacheFirst":"gameFirst"},{"passiveRefresh",HelpyRuntimePreferences::PassiveRefresh.load()}}},
         {"updates",{{"automaticChecks",t.automaticUpdateChecks},{"artwork",t.updateArtwork},{"worldMap",t.updateWorldMap},{"mapFilters",t.updateMapFilters}}},
         {"preview",{{"quality",t.previewQuality},{"animation",t.previewAnimate},{"details",t.previewDetails},{"scaleUsePortrait",t.scaleUsePortrait},{"scaleReferenceIcon",t.scaleReferenceIcon}}},
-        {"runtime",{{"timeUnit",t.runtimeTimeUnit},{"helpyFpsLimit",t.helpyFpsLimit},{"showFps",t.showFps},{"fpsRefreshMs",t.fpsRefreshMs},{"showGameFps",t.showGameFps},{"fpsHotkey",t.fpsHotkey}}},
+        {"runtime",{{"timeUnit",t.runtimeTimeUnit},{"helpyFpsLimit",t.helpyFpsLimit},{"showFps",t.showFps},{"fpsRefreshMs",t.fpsRefreshMs},{"showGameFps",t.showGameFps},{"fpsHotkey",t.fpsHotkey},{"gameOverlay",t.gameOverlay},{"overlayOpacity",t.overlayOpacity}}},
         {"background",{{"file",t.backgroundFile},{"strength",t.backgroundStrength}}},
         {"liveLog",{{"colorRules",LiveLog::WriteColors(t.logColors)}}},
-        {"notifications",{{"enabled",t.diagnosticToastsEnabled},{"visibleLimit",t.diagnosticToastLimit},{"durationSeconds",t.diagnosticToastDuration}}},
+        {"notifications",{{"enabled",t.diagnosticToastsEnabled},{"visibleLimit",t.diagnosticToastLimit},{"durationSeconds",t.diagnosticToastDuration},{"registryActivity",t.diagnosticRegistryActivity}}},
         {"diagnosticHistory",{{"ageDays",t.diagnosticHistoryDays},{"maxSessions",t.diagnosticHistorySessions},{"maxStorageMB",t.diagnosticHistoryMB}}},
         {"diagnosticPresentation",{{"splitRatio",t.diagnosticSplitRatio},{"developerMode",t.diagnosticDeveloperMode}}},
         {"colors",{
@@ -321,6 +324,7 @@ inline void Reload(bool createIfMissing=true) {
         next.updateMapFilters=doc.value("updates",nlohmann::json::object()).value("mapFilters",true);
         const auto notifications=doc.value("notifications",nlohmann::json::object());
         next.diagnosticToastsEnabled=notifications.value("enabled",true);
+        next.diagnosticRegistryActivity=notifications.value("registryActivity",false);
         next.diagnosticToastLimit=ReadInt(notifications,"visibleLimit",4,1,10);
         next.diagnosticToastDuration=ReadInt(notifications,"durationSeconds",6,2,15);
         const auto history=doc.value("diagnosticHistory",nlohmann::json::object());
@@ -347,10 +351,12 @@ inline void Reload(bool createIfMissing=true) {
         next.itemShowPlaceholders=views.value("itemShowPlaceholders",false);
         next.runtimeTimeUnit=ReadInt(doc.value("runtime",nlohmann::json::object()),"timeUnit",0,0,3);
         const auto runtime=doc.value("runtime",nlohmann::json::object());
-        next.helpyFpsLimit=ReadInt(runtime,"helpyFpsLimit",30,15,60);
+        next.helpyFpsLimit=ReadInt(runtime,"helpyFpsLimit",60,15,144);
         next.fpsRefreshMs=ReadInt(runtime,"fpsRefreshMs",1000,500,2000);
         next.showFps=runtime.value("showFps",false);
         next.showGameFps=runtime.value("showGameFps",false);
+        next.gameOverlay=runtime.value("gameOverlay",false);
+        next.overlayOpacity=ReadFloat(runtime,"overlayOpacity",.88f,.60f,1.f);
         next.fpsHotkey=runtime.value("fpsHotkey",std::string("F10"));
         if(const auto* key=HelpyShortcut::Find(next.fpsHotkey))next.fpsHotkey=key->Name;else next.fpsHotkey="F10";
         const auto background=doc.value("background",nlohmann::json::object());

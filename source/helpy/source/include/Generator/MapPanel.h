@@ -154,6 +154,13 @@ inline void ReadGround(MapProjection::Point point,bool selected){
 }
 inline void Reap(){for(auto it=Data.Retired.begin();it!=Data.Retired.end();){auto* texture=*it;if(texture->Status!=ImTextureStatus_Destroyed){++it;continue;}ImGui::UnregisterUserTexture(texture);IM_DELETE(texture);it=Data.Retired.erase(it);}}
 inline PS::ProcessExitFuture<void> MapCacheWriter;
+// Release after the renderer, while its ImGui context still owns the records.
+inline void Shutdown(){
+    if(MapCacheWriter.valid())try{MapCacheWriter.get();}catch(...){}
+    if(Data.Texture)Data.Retired.push_back(Data.Texture);
+    for(auto* texture:Data.Retired){ImGui::UnregisterUserTexture(texture);IM_DELETE(texture);}
+    Data={};
+}
 inline void LoadImage(const Json& image,bool remember=true){
     const auto file=ItemPresentation::Text(image,"File");if(file.empty()||file==Data.ImageFile||ItemPresentation::Text(image,"Status")!="Ready")return;
     std::ifstream input(std::filesystem::path(file),std::ios::binary|std::ios::ate);if(!input)throw std::runtime_error("Native map image is not accessible");
@@ -381,7 +388,8 @@ inline void PlacePopup(){
     if(Data.Operation==2)HelpyImGuiTheme::DetailsText("%s",Data.NearMarker?"Loads this destination, checks ground beside the stone (within 2 metres), then uses native travel.":"Loads the destination before departure, verifies a safe landing, then uses the game's native travel and loading screen. Unsafe or unavailable ground cancels departure.");
     ImGui::EndChild();
     const bool choice=Data.Operation==2||(Data.Operation==1?(!Data.Building.empty()||!Data.Prefab.empty()):!Data.Definition.empty());
-    const bool authority=Data.Operation==0||Data.Snapshot.value("CanBuildAndTeleport",false);
+    const bool authority=Data.Operation==0||Data.Snapshot.value("CanBuildAndTeleport",false)
+        ||(Data.Operation==2&&Data.Snapshot.value("RemoteSelfTeleport",false));
     if(!authority)ImGui::TextWrapped("Use the host's RSMK for building placement and player teleportation.");
     const bool destinationReady=Data.Operation==2||groundReady;
     const bool previewReady=Data.Operation==2||(!Data.ProbePending&&!Data.ProbeWanted&&!Data.BuildingsPending);

@@ -30,6 +30,16 @@ the matching PAK content.
 The host or server decides gameplay results. Clients still need matching item
 and recipe information so those results can be shown and used correctly.
 
+Building IDs have their own exchange during joining. RuneSchema includes them
+in the first server announcement and retries the client acknowledgment up to
+16 times, two seconds apart, while the owned player connection becomes ready.
+Retries stop after a matching reply and do not repeatedly reload quest or
+world snapshots. A temporary `BUILDINGS-PENDING` message means this exchange
+is still finishing; it does not establish that your mod lists differ. The
+`BUILDINGS-READY` message confirms the exchange completed. Each placement
+still checks the selected ID against both building lists; an actual mismatch
+remains blocked with `RS-NET-003`.
+
 ## Game updates
 
 A game update can move content, rename fields, or change how a feature starts.

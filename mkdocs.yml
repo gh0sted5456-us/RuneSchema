@@ -95,6 +95,8 @@ nav:
       - Overview: users/index.md
       - Download: CURRENT-RELEASE.md
       - Install: INSTALLATION.md
+      - Vortex installation: VORTEX-INSTALLATION.md
+      - Standalone Helpy candidate: HELPY-STANDALONE.md
       - Manage mods: users/manage-mods.md
       - Helpy:
           - Workspaces and mappings: HELPY-SCHEMA-WORKSPACES.md
@@ -132,9 +134,11 @@ nav:
           - Armor: CUSTOM-ARMOR.md
           - Registry declarations: COOKED-PAK-REGISTRY-MANIFEST.md
           - Native data families: COOKED-NATIVE-DATA-FAMILIES.md
+          - Cooked table extensions: COOKED-TABLE-EXTENSIONS.md
           - Cooked world policies: BUILDING-WORLD-POLICIES.md
           - Large registry shards: COOKED-REGISTRY-SHARDS.md
           - Cooked repair-item boundary: COOKED-REPAIR-KIT.md
+          - Skill registry investigation: SKILL-REGISTRY.md
       - More capabilities:
           - Authoring tools: ADVANCED-AUTHORING-TOOLS.md
           - Package your mod: MOD-PACKAGING.md
@@ -192,6 +196,7 @@ nav:
   - Updates:
       - Release 0.8.0.3: RELEASE-0.8.0.3.md
       - 0.8.0.3 changelog: CHANGELOG-0.8.0.3.md
+      - 0.8.1.0 experimental: CHANGELOG-0.8.1.0.md
       - Release 0.8.0.2: RELEASE-0.8.0.2.md
       - 0.8.0.2 changelog: CHANGELOG-0.8.0.2.md
       - 0.8.0.1b quick bug fixes: CHANGELOG-0.8.0.1b.md

@@ -3,6 +3,7 @@
 #include "Core/NetworkIdentityState.h"
 #include <cassert>
 #include <iostream>
+#include <random>
 #ifdef _WIN32
 #include "Core/NetworkIdentityWelcome.h"
 #endif
@@ -31,6 +32,9 @@ int Checks() {
     Reset(); SetAuthorityOrderProof("verified-authority"); assert(GetAuthorityOrderProof()=="verified-authority");
     assert(!HasNativeEnrollment(1,2,"quest-id"));
     Reset(); assert(GetAuthorityOrderProof().empty());
+    SetAuthorityOrderProof("verified-buildings",900);assert(GetAuthorityBuildingCount()==900);
+    SetAuthorityOrderProof({});assert(GetAuthorityBuildingCount()==0);
+    SetAuthorityOrderProof("verified-buildings",900);Reset();assert(GetAuthorityBuildingCount()==0);
     auto local = Document(), server = local;
     std::swap(server["lanes"]["items"]["entries"][0], server["lanes"]["items"]["entries"][1]);
     const auto untouched = local.dump();
@@ -56,6 +60,13 @@ int Checks() {
     auto extras=local;
     extras["lanes"]["items"]["entries"].insert(extras["lanes"]["items"]["entries"].begin(),json{{"path","/ClientOnly/C.C"},{"identity","extra"},{"type","/Script/Dominion.ItemData"}});
     assert((Plan(extras,server).at("items")==std::vector<std::size_t>{2,1,0}));
+    auto buildings=extras,hostBuildings=server;
+    buildings["lanes"]["BUILDING"]=buildings["lanes"]["items"];
+    hostBuildings["lanes"]["BUILDING"]=hostBuildings["lanes"]["items"];
+    assert((Plan(buildings,hostBuildings).at("BUILDING")==std::vector<std::size_t>{2,1,0}));
+    buildings["lanes"]["network:FarmPlants:/Script/Dominion.FarmPlantDataSubsystem"]=buildings["lanes"]["items"];
+    hostBuildings["lanes"]["network:FarmPlants:/Script/Dominion.FarmPlantDataSubsystem"]=hostBuildings["lanes"]["items"];
+    assert((Plan(buildings,hostBuildings).at("network:FarmPlants:/Script/Dominion.FarmPlantDataSubsystem")==std::vector<std::size_t>{2,1,0}));
     // A late join only changes that client's tables; reconnects may use a different authority order.
     const auto authorityBeforeJoins = server.dump();
     auto firstClient = extras, lateClient = extras;
@@ -80,10 +91,24 @@ int Checks() {
     { auto bad = server; bad["lanes"]["items"]["entries"][0]["path"] = "/../escape"; Refuses([&]{Validate(bad);}); }
     { auto bad = server; bad["lanes"]["items"]["prefixCount"] = -1; Refuses([&]{Validate(bad);}); }
     Refuses([]{Parse(std::string(MaxDocument + 1, ' '));});
+    Refuses([]{ParseJson(std::string(17,'[')+"0"+std::string(17,']'));});
+    {std::string many="[";for(std::size_t i=0;i<MaxJsonEvents;++i)many+="0,";many+="0]";Refuses([&]{ParseJson(many);});}
 #ifdef _WIN32
     using namespace PS::NetworkIdentityWelcome;
     const auto token = Encode(server); assert(token.size() < MaxWelcome && Decode(token, local) == server);
+    {
+        auto legacy=server;legacy["indexEncoding"]="identity-delta-v1";auto& lane=legacy["lanes"]["items"];
+        lane["identityProof"]=PS::CacheBundleIO::Hash(CanonicalEntries(lane["entries"]).dump());
+        lane["sources"]=json::array({PS::HelpyCacheSources::Source("/Example/A.A")});lane["entries"]=json::array({1,-1});
+        const auto legacyToken=EncodeWire(legacy);assert(legacyToken&&Decode(*legacyToken,local)==server);
+        lane["entries"]=json::array({1,0});Refuses([&]{Decode(*EncodeWire(legacy),local);});
+    }
     assert(Decode(token,extras)==server);
+    auto sameSource=local;
+    sameSource["lanes"]["items"]["entries"].push_back({{"path","/Example/Items/New.New"},{"identity","extra-same-source"},{"type","/Script/Dominion.ItemData"}});
+    assert(Decode(token,sameSource)==server);
+    assert((Plan(sameSource,Decode(token,sameSource)).at("items")==std::vector<std::size_t>{1,0,2}));
+    auto absent=local;absent["lanes"]["items"]["entries"].erase(0);Refuses([&]{Decode(token,absent);});
     PS::HelpyCacheSources::Reset(); PS::HelpyCacheSources::SetDisplayName("Example","Example","1.0");
     assert(PS::HelpyCacheSources::Snapshot().Versions.at("example")=="1.0");
     auto versions=server; versions["sourceVersions"]={{"example","2.0"}};
@@ -101,6 +126,27 @@ int Checks() {
     assert(Decode(Encode(large), large) == large);
     std::reverse(large["lanes"]["items"]["entries"].begin(), large["lanes"]["items"]["entries"].end());
     assert(Decode(Encode(large), large) == large);
+    auto mixed=large;
+    for(int i=4000;i<5000;++i)mixed["lanes"]["items"]["entries"].push_back({{"path","/Example/Item_"+std::to_string(i)},{"identity","item-"+std::to_string(i)},{"type","/Script/Dominion.ItemData"}});
+    for(auto& row:mixed["lanes"]["items"]["entries"])row["path"]="/Example/"+std::string(1800,'x')+row["path"].get<std::string>();
+    mixed["lanes"]["BUILDING"]=Document()["lanes"]["items"];
+    auto mixedClient=mixed;
+    mixedClient["lanes"]["BUILDING"]["entries"].push_back({{"path","/Example/Extra.Extra"},{"identity","extra-building"},{"type","/Script/Dominion.ItemData"}});
+    assert(Decode(Encode(mixed),mixedClient)==mixed); // Large compact lane plus an exact lane with same-source extras.
+    auto broad=Document();std::mt19937_64 random(1);
+    for(int i=0;i<800;++i){std::vector<unsigned char> version(48);for(auto& byte:version)byte=static_cast<unsigned char>(random());broad["sourceVersions"]["capacityfixture"+std::to_string(i)]=Base64(version);}
+    const auto broadToken=Encode(broad);assert(broadToken.size()>48*1024&&broadToken.size()<=MaxWelcome&&Decode(broadToken,local)==broad);
+    auto dense=broad;for(int i=0;i<800;++i){std::vector<unsigned char> identity(48);for(auto& byte:identity)byte=static_cast<unsigned char>(random());dense["registryOwners"]["capacityfixture"+std::to_string(i)]=Base64(identity);}
+    const auto reduced=Decode(Encode(dense),local);assert(reduced.value("telemetryOmitted",false)&&reduced.at("lanes")==dense.at("lanes")&&reduced.at("fixedLanes")==dense.at("fixedLanes"));
+    assert(OrderProof(reduced)==OrderProof(dense));
+    {auto wrong=reduced;wrong["lanes"]["items"]["entries"][0]["identity"]="different";assert(OrderProof(wrong)!=OrderProof(reduced));}
+    {auto tooMany=broad;for(std::size_t i=800;i<=MaxSources;++i)tooMany["sourceVersions"]["capacityfixture"+std::to_string(i)]="1";Refuses([&]{Validate(tooMany);});}
+    PS::HelpyCacheSources::Reset();
+    for(std::size_t i=0;i<MaxSources;++i)PS::HelpyCacheSources::SetDisplayName("capacityfixture"+std::to_string(i),"Capacity fixture","1");
+    assert(PS::HelpyCacheSources::Snapshot().Versions.size()==MaxSources);
+    PS::HelpyCacheSources::SetDisplayName("overflow","Capacity fixture","1");assert(PS::HelpyCacheSources::Snapshot().Versions.size()==MaxSources);
+    PS::HelpyCacheSources::SetDisplayName("capacityfixture0","Updated fixture","2");assert(PS::HelpyCacheSources::Snapshot().Versions.at("capacityfixture0")=="2");
+    PS::HelpyCacheSources::Reset();
 #endif
     std::cout << "Network identity synchronization planning checks passed\n";
     return 0;

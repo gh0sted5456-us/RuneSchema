@@ -1,5 +1,6 @@
 // Change the Helpy shortcut in Quick settings or RuneSchema/settings/settings.ini.
 {
   "enabled": true,
-  "openOnGameStart": false
+  "openOnGameStart": false,
+  "exitWithGame": false
 }

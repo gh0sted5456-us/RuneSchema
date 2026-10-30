@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <set>
 int main(){
+    {PS::HelpySplash::Exit exit;exit.Begin(0,1);if(!exit.At(.2,true,.2).Finished||exit.At(.2).Finished)throw std::runtime_error("Home exit must be shorter than the welcome animation");}
     {using namespace PS::BackgroundPolicy;
         if(!Filename("My art.PNG")||!Filename("Scene.jpeg")||Filename("../Scene.png")||Filename("C:\\Scene.png")||Filename("Scene.png.exe")||Filename("Scene.svg")||Filename(std::string("a\0.png",6)))throw std::runtime_error("Backgrounds must be local supported image filenames");
         const auto wide=Cover(1000,500,500,500),tall=Cover(500,1000,500,500);

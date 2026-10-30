@@ -81,8 +81,7 @@ inline void Envelope(const Json& document,bool shard){
         Require(key=="SchemaVersion"||key=="Entries"||key=="NativeRegistries"||key=="LoaderDefinitions"
             ||(shard?key=="RegistryShard":key=="RegistryShards"),"unsupported document field: "+key);
     }
-    Require(document.contains("SchemaVersion")&&document.at("SchemaVersion")==1&&document.contains("Entries")
-        &&document.at("Entries").is_array()&&document.at("Entries").size()<=256,"SchemaVersion 1 and bounded Entries are required");
+    Require(document.contains("Entries")&&document.at("Entries").is_array()&&document.at("Entries").size()<=256,"A bounded Entries array is required");
     if(shard)Require(document.contains("RegistryShard")&&document.at("RegistryShard").is_boolean()
         &&document.at("RegistryShard")==true&&document.at("Entries").empty(),"shards require RegistryShard:true and Entries:[]");
 }

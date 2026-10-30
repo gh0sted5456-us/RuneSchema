@@ -120,6 +120,7 @@ namespace DragonWilds {
         std::function<void(RC::Unreal::AActor*,const std::string&)> PublishEventIdentity;
         std::function<void(RC::Unreal::AActor*,const std::string&)> PresentEventState;
         std::function<bool(const std::string&,const std::string&)> ForwardHelpyAuthority;
+        std::function<void(RC::Unreal::UObject*,int64_t,const nlohmann::json&)> PublishHelpyResult;
         std::function<nlohmann::json(const nlohmann::json&)> PlanBuildingImport;
         std::function<bool(RC::Unreal::UWorld*,const std::string&)> IsQuestCompleted;
         std::function<bool(RC::Unreal::UWorld*,const std::string&)> IsQuestActive;

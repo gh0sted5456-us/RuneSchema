@@ -1,5 +1,6 @@
 #pragma once
 #include "Core/DiagnosticCodes.h"
+#include "Core/DiagnosticLogPaths.h"
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -26,10 +27,18 @@ inline std::string HelpUrl(const Guide& guide){return Diagnostics::Url(guide);}
 enum class Stream { RuneSchema, UE4SS, Game, EOS };
 inline const char* StreamName(Stream stream){switch(stream){case Stream::UE4SS:return "UE4SS";case Stream::Game:return "Game";case Stream::EOS:return "EOS";default:return "RuneSchema";}}
 inline const char* FileName(Stream stream){return stream==Stream::UE4SS?"UE4SS.log":stream==Stream::RuneSchema?"RuneSchema.log":"RSDragonwilds.log";}
-inline std::filesystem::path LogPath(const std::filesystem::path& mod,Stream stream){if(stream==Stream::UE4SS)return mod.parent_path().parent_path()/FileName(stream);if(stream==Stream::RuneSchema)return mod/FileName(stream);return mod.parent_path().parent_path().parent_path().parent_path().parent_path()/"Saved"/"Logs"/FileName(stream);}
+inline std::filesystem::path LogPath(const std::filesystem::path& mod,Stream stream){if(stream==Stream::UE4SS)return DiagnosticLogPaths::UE4SS(mod)/FileName(stream);if(stream==Stream::RuneSchema)return DiagnosticLogPaths::Directory(mod)/FileName(stream);return mod.parent_path().parent_path().parent_path().parent_path().parent_path()/"Saved"/"Logs"/FileName(stream);}
 // Called only by a file worker. Shipping builds may not create a game log.
 // EOS is a category-filtered view of that log unless the user chooses a file.
+inline std::filesystem::path GamePassLog(const std::filesystem::path& mod,const std::filesystem::path& local){
+    const auto binaries=mod.parent_path().parent_path().parent_path();
+    if(local.empty()||Lower(binaries.filename().string())!="wingdk"||Lower(binaries.parent_path().filename().string())!="binaries")return {};
+    return DiagnosticLogPaths::UseUE4SS?DiagnosticLogPaths::UE4SS(mod)/"RSDragonwilds.log":local/"RSDragonwilds"/"RuneSchema"/"gamepass"/"diagnostics"/"RSDragonwilds.log";
+}
 inline std::filesystem::path ResolveGameLog(const std::filesystem::path& mod,const std::filesystem::path& local){
+    if(DiagnosticLogPaths::UseUE4SS){const auto central=DiagnosticLogPaths::UE4SS(mod)/"RSDragonwilds.log";std::error_code error;if(std::filesystem::is_regular_file(central,error)&&!std::filesystem::is_symlink(central,error))return central;}
+    const auto assigned=GamePassLog(mod,local);std::error_code assignedError;
+    if(!assigned.empty()&&std::filesystem::is_regular_file(assigned,assignedError)&&!std::filesystem::is_symlink(assigned,assignedError))return assigned;
     std::vector<std::filesystem::path> folders;if(!local.empty())folders.push_back(local/"RSDragonwilds"/"Saved"/"Logs");folders.push_back(LogPath(mod,Stream::Game).parent_path());
     std::filesystem::path newest;std::filesystem::file_time_type stamp{};bool found=false;
     for(const auto& folder:folders){std::error_code ec;if(!std::filesystem::is_directory(folder,ec))continue;size_t count=0;
@@ -45,10 +54,13 @@ inline std::string GameBinaryDirectory(std::string_view header){
     const auto start=at+marker.size(),end=header.find_first_of("\r\n",start);auto path=std::string(header.substr(start,end==header.npos?header.size()-start:end-start));
     if(path.empty()||path.size()>32768||std::any_of(path.begin(),path.end(),[](unsigned char c){return c<32||c==127;}))return {};return path;
 }
-inline std::filesystem::path ArchivePath(const std::filesystem::path& mod){return mod/"logs";}
+inline std::filesystem::path ArchivePath(const std::filesystem::path& mod){return DiagnosticLogPaths::Directory(mod)/"logs";}
 // Caller resolves filesystem aliases first; compare normalized Windows names.
 inline bool ProtectedExport(const std::filesystem::path& destination,const std::filesystem::path& mod){
     const auto parent=Lower(destination.lexically_normal().parent_path().generic_string()),name=Lower(destination.filename().string());
+    if(parent==Lower(DiagnosticLogPaths::UE4SS(mod).lexically_normal().generic_string())
+        &&(name.starts_with("runeschema.log")||name.starts_with("rsdiaglog")||name.starts_with("helpy-desktop.log")||(name.starts_with("rsdragonwilds")&&name.ends_with(".log"))))return true;
+    if(parent.ends_with("/rsdragonwilds/runeschema/gamepass/diagnostics")&&name.starts_with("rsdragonwilds")&&name.ends_with(".log"))return true;
     if(parent==Lower(ArchivePath(mod).lexically_normal().generic_string())&&name.starts_with("runeschema-")&&name.ends_with(".log"))return true;
     for(const auto stream:{Stream::RuneSchema,Stream::UE4SS,Stream::Game})
         if(parent==Lower(LogPath(mod,stream).lexically_normal().parent_path().generic_string())
@@ -70,7 +82,7 @@ inline Entry Parse(std::string text){
     }entry.Message=entry.Text.substr(body);if(entry.Message.empty())entry.Message=entry.Text;
     if(s.find("[error]")!=s.npos||s.find("[fatal]")!=s.npos||s.find("error:")!=s.npos||s.find("fatal:")!=s.npos)entry.Severity=Level::Error;
     else if(s.find("[warning]")!=s.npos||s.find("[warn]")!=s.npos||s.find("warning:")!=s.npos)entry.Severity=Level::Warning;
-    else if(s.find("[diagnostic]")!=s.npos||s.find("[verbose]")!=s.npos)entry.Severity=Level::Diagnostic;
+    else if(s.find("[diagnostic]")!=s.npos||s.find("[verbose]")!=s.npos||s.find("[debug]")!=s.npos)entry.Severity=Level::Diagnostic;
     // UE4SS adds timestamp brackets, then [Lua] [ModName] or [RegisterHook].
     // Only structured tags identify a source, never arbitrary message text.
     for(size_t begin=0;(begin=s.find('[',begin))!=s.npos;){
@@ -79,7 +91,7 @@ inline Entry Parse(std::string text){
         const auto first=token.find_first_not_of(" ");if(first==token.npos)continue;token=token.substr(first,token.find_last_not_of(" ")-first+1);
         if(token.empty()||token.size()>128||std::isdigit(static_cast<unsigned char>(token.front())))continue;
         const auto lower=Lower(token);
-        if(lower.starts_with("group=")||lower.starts_with("thread="))continue;
+        if(lower.starts_with("group=")||lower.starts_with("thread=")||lower.starts_with("diag-event="))continue;
         if(lower=="error"||lower=="fatal"||lower=="warning"||lower=="warn"||lower=="diagnostic"||lower=="verbose"||lower=="info"||CodeToken(token))continue;
         if(entry.Source.empty()){entry.Source=std::move(token);if(lower!="lua")break;}
         else if(Lower(entry.Source)=="lua"){entry.Source=std::move(token);break;}
@@ -88,8 +100,8 @@ inline Entry Parse(std::string text){
     if(tag!=s.npos){auto begin=tag+12;
         while(begin<s.size()){while(begin<s.size()&&s[begin]==' ')++begin;if(begin>=s.size()||s[begin]!='[')break;const auto end=s.find(']',begin);if(end==s.npos)break;
             auto token=entry.Text.substr(begin+1,end-begin-1);const auto lower=Lower(token);
-            if(lower!="warning"&&lower!="warn"&&lower!="error"&&lower!="diagnostic"&&lower!="verbose"&&lower!="summary"&&lower!="info"&&!CodeToken(token)){entry.Scope=std::move(token);break;}begin=end+1;}}
-    if(entry.Source.empty()&&entry.Message.starts_with("Log")){const auto colon=entry.Message.find(':');if(colon!=std::string::npos&&colon<96&&std::all_of(entry.Message.begin(),entry.Message.begin()+colon,[](unsigned char c){return std::isalnum(c)||c=='_';})){entry.Source=entry.Message.substr(0,colon);entry.Message.erase(0,colon+1);while(!entry.Message.empty()&&entry.Message.front()==' ')entry.Message.erase(0,1);}}
+            if(lower!="warning"&&lower!="warn"&&lower!="error"&&lower!="diagnostic"&&lower!="verbose"&&lower!="summary"&&lower!="info"&&!lower.starts_with("diag-event=")&&!CodeToken(token)){entry.Scope=std::move(token);break;}begin=end+1;}}
+    if(entry.Message.starts_with("Log")||entry.Message.starts_with("DominionLog:")){const auto colon=entry.Message.find(':');if(colon!=std::string::npos&&colon<96&&std::all_of(entry.Message.begin(),entry.Message.begin()+colon,[](unsigned char c){return std::isalnum(c)||c=='_';})){entry.Source=entry.Message.substr(0,colon);entry.Message.erase(0,colon+1);while(!entry.Message.empty()&&entry.Message.front()==' ')entry.Message.erase(0,1);}}
     if(entry.Scope.empty())entry.Scope=entry.Help>=0?std::string(Guides[entry.Help].Subsystem):entry.Source;
     if(!entry.ReportedCode.empty())return entry;
     for(size_t i=0;i<Guides.size();++i)if(s.find(Lower(Guides[i].Code))!=s.npos){entry.Help=static_cast<int>(i);entry.Suggested=true;return entry;}
@@ -99,14 +111,19 @@ inline Entry Parse(std::string text){
     else if(s.find("loadpackage: skippackage:")!=s.npos||s.find("failed to find object")!=s.npos)gameReference(Diagnostics::Id::NativePackage);
     else if(s.find("invalid shadermap")!=s.npos)gameReference(Diagnostics::Id::NativeShader);
     else if(s.find("accessed none")!=s.npos)gameReference(Diagnostics::Id::NativeScript);
-    else if(s.find("duplicate quest owner")!=s.npos||s.find("ownership conflict")!=s.npos||s.find("duplicate quest persistence")!=s.npos)entry.Help=0;
-    else if(s.find("mismatch")!=s.npos&&(s.find("registry")!=s.npos||s.find("fingerprint")!=s.npos||s.find("network")!=s.npos))entry.Help=2;
-    else if(s.find("wearable-bridge")!=s.npos&&s.find("not-enrolled")!=s.npos)entry.Help=3;
-    else if(s.find("slow-work")!=s.npos)entry.Help=4;
-    else if(s.find("catalog")!=s.npos&&(s.find("expired")!=s.npos||s.find("unavailable")!=s.npos))entry.Help=5;
-    else if((s.find("spawn")!=s.npos||s.find("placement")!=s.npos)&&(s.find("collision")!=s.npos||s.find("not confirmed placed")!=s.npos))entry.Help=6;
-    else if(s.find("registry")!=s.npos&&(s.find("deferred")!=s.npos||s.find("rejected")!=s.npos||s.find("not certified")!=s.npos))entry.Help=1;
-    else if(entry.Severity==Level::Warning||entry.Severity==Level::Error)entry.Help=7;
+    else if(s.find("failed to remove function callback")!=s.npos&&s.find("vitals")!=s.npos)gameReference(Diagnostics::Id::NativeUiCallback);
+    else if(s.find("could not get user settings")!=s.npos||s.find("expected udominionusersettings")!=s.npos||s.find("failed to find user settings during shutdown")!=s.npos)gameReference(Diagnostics::Id::NativeUserSettings);
+    else if(s.find("unable to find recastnavmesh")!=s.npos)gameReference(Diagnostics::Id::NativeNavigation);
+    else if(s.find("uregistrytagsubsystem::unregistertaggedobject")!=s.npos)gameReference(Diagnostics::Id::NativeTagLifecycle);
+    else if((entry.Source.starts_with("Log")||entry.Source=="DominionLog")&&(entry.Severity==Level::Warning||entry.Severity==Level::Error))gameReference(Diagnostics::Id::NativeUnclassified);
+    else if(s.find("duplicate quest owner")!=s.npos||s.find("ownership conflict")!=s.npos||s.find("duplicate quest persistence")!=s.npos)gameReference(Diagnostics::Id::QuestOwnerConflict);
+    else if(s.find("mismatch")!=s.npos&&(s.find("registry")!=s.npos||s.find("fingerprint")!=s.npos||s.find("network")!=s.npos))gameReference(Diagnostics::Id::RegistryMismatch);
+    else if(s.find("wearable-bridge")!=s.npos&&s.find("not-enrolled")!=s.npos)gameReference(Diagnostics::Id::WearableUnenrolled);
+    else if(s.find("slow-work")!=s.npos)gameReference(Diagnostics::Id::SlowWork);
+    else if(s.find("catalog")!=s.npos&&(s.find("expired")!=s.npos||s.find("unavailable")!=s.npos))gameReference(Diagnostics::Id::CatalogUnavailable);
+    else if((s.find("spawn")!=s.npos||s.find("placement")!=s.npos)&&(s.find("collision")!=s.npos||s.find("not confirmed placed")!=s.npos))gameReference(Diagnostics::Id::PlacementPending);
+    else if(s.find("registry")!=s.npos&&(s.find("deferred")!=s.npos||s.find("rejected")!=s.npos||s.find("not certified")!=s.npos))gameReference(Diagnostics::Id::RegistryDeferred);
+    else if(entry.Severity==Level::Warning||entry.Severity==Level::Error){if(entry.Source.starts_with("Log")||entry.Source=="DominionLog")gameReference(Diagnostics::Id::NativeUnclassified);else gameReference(Diagnostics::Id::Unclassified);}
     entry.Suggested=entry.Help>=0;return entry;
 }
 struct ColorRule {
@@ -173,7 +190,8 @@ inline std::vector<Group> Grouped(const History& history,const Filter& filter,bo
 struct Cursor {std::uint64_t Offset=0,Identity=0;std::string Partial;bool Started=false,Discard=false;};
 struct Batch {Cursor Next;std::vector<std::string> Lines;std::string Error;bool Reset=false,Skipped=false,More=false;std::filesystem::path File;};
 // Runs only on the viewer's background I/O task. Never touches engine objects.
-inline Batch Read(const std::filesystem::path& path,Cursor cursor,bool recentTail=true){
+inline Batch Read(const std::filesystem::path& path,Cursor cursor,bool recentTail=true,
+                  std::uint64_t initialTailBytes=1024*1024){
     Batch batch;batch.Next=cursor;batch.File=path;
 #ifdef _WIN32
     const auto handle=CreateFileW(path.c_str(),GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
@@ -184,7 +202,7 @@ inline Batch Read(const std::filesystem::path& path,Cursor cursor,bool recentTai
     const auto identity=(std::uint64_t(info.nFileIndexHigh)<<32)|info.nFileIndexLow;
     auto& next=batch.Next;
     if(!next.Started||identity!=next.Identity||size<next.Offset){batch.Reset=next.Started;next={};next.Started=true;next.Identity=identity;
-        if(recentTail&&size>1024*1024){next.Offset=size-1024*1024;next.Discard=true;batch.Skipped=true;}}
+        if(recentTail&&size>initialTailBytes){next.Offset=size-initialTailBytes;next.Discard=true;batch.Skipped=true;}}
     const auto count=static_cast<DWORD>(std::min<std::uint64_t>(256*1024,size-next.Offset));
     if(!count)return batch;
     LARGE_INTEGER offset{};offset.QuadPart=next.Offset;if(!SetFilePointerEx(handle,offset,nullptr,FILE_BEGIN)){batch.Error="Cannot seek in the log file.";return batch;}

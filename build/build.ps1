@@ -9,7 +9,7 @@ $ErrorActionPreference = 'Stop'
 if ($ManagedUE4SSHost) {
     throw 'Custom UE4SS hosts are retired. RuneSchema must run on an unmodified UE4SS.dll; build a framework-only package instead.'
 }
-$Version = '0.8.0.3'
+$Version = '0.8.1.0'
 $BuildRoot = [IO.Path]::GetFullPath($PSScriptRoot)
 if (-not (Test-Path -LiteralPath (Join-Path $BuildRoot 'source\raw\CMakeLists.txt') -PathType Leaf)) {
     $BuildRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -446,7 +446,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         )
         $configureArgs += '-DRUNESCHEMA_BUILD_MANAGED_UE4SS_HOST=OFF'
         Ensure-CMakeConfigured $RawSource $build $configureArgs 'universal RuneSchema'
-        $targets = if ($OnlyPlugin) { @('RuneSchemaHelpyPlugin') } else { @('RuneSchema', 'RuneSchemaHelpyPlugin') }
+        $targets = if ($OnlyPlugin) { @('RuneSchemaHelpyPlugin','HelpyDesktop') } else { @('RuneSchema', 'RuneSchemaHelpyPlugin','HelpyDesktop') }
         Write-Host $(if ($OnlyPlugin) { '=== Compile Helpy plugin only (RuneSchema.dll is untouched) ===' } else { '=== Compile universal RuneSchema ===' }) -ForegroundColor Cyan
         Write-Host 'Ninja auto-regeneration is disabled; build.ps1 owns all CMake reconfiguration.' -ForegroundColor DarkGray
 
@@ -512,6 +512,9 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
     function Copy-HelpyDlls([string]$HelpyDll,[string]$Destination) {
         New-Item -ItemType Directory -Path $Destination -Force | Out-Null
         Copy-Item -LiteralPath $HelpyDll -Destination (Join-Path $Destination 'RuneSchema.Helpy.dll') -Force
+        $desktop=Join-Path (Split-Path -Parent $HelpyDll) 'Helpy.exe'
+        if(!(Test-Path -LiteralPath $desktop -PathType Leaf)){throw 'The Helpy bridge requires its matching application'}
+        Copy-Item -LiteralPath $desktop -Destination (Join-Path $Destination 'Helpy.exe') -Force
     }
     function New-HelpyPluginPackage([string]$HelpyDll) {
         $name = "RuneSchema.Helpy-$Version"
@@ -693,6 +696,11 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         if (Test-Path $zip) { Remove-Item -LiteralPath $zip -Force }
         Compress-Archive -LiteralPath $payload -DestinationPath $zip -CompressionLevel Optimal
         & (Join-Path $BuildRoot 'build/package-runtime.ps1') -SourceArchive $zip -DestinationArchive $zip -RepositoryRoot $BuildRoot
+        foreach ($platform in @('Steam','GamePass')) {
+            $vortexArchive=Join-Path $DistRoot "$Name-Vortex-$platform.zip"
+            if(Test-Path -LiteralPath $vortexArchive){Remove-Item -LiteralPath $vortexArchive}
+            & (Join-Path $BuildRoot 'build/package-vortex.ps1') -RuneSchemaRoot $payload -OutputPath $vortexArchive -Platform $platform
+        }
         Write-Host "Created $zip" -ForegroundColor Green
     }
 
@@ -768,6 +776,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         & (Join-Path $BuildRoot 'build/tests/release-version.ps1') -Root $BuildRoot
         & (Join-Path $BuildRoot 'build/test-package-optional-art.ps1')
         & (Join-Path $BuildRoot 'build/test-package-mappings.ps1')
+        & (Join-Path $BuildRoot 'build/tests/vortex-package.ps1')
     } else {
         Write-Host "`nSkipping internal contract tests for normal package build." -ForegroundColor DarkGray
         Write-Host "Run Build RuneSchema.bat -Tests to execute the supported local contract suite." -ForegroundColor DarkGray
@@ -775,6 +784,9 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
 
     $helpy = $universal.Helpy
     if (-not (Test-Path $helpy -PathType Leaf)) { throw "Built Helpy DLL not found: $helpy" }
+    $desktopArchive=Join-Path $DistRoot "RuneSchema.Helpy-Standalone-$Version.zip"
+    if(Test-Path -LiteralPath $desktopArchive){Remove-Item -LiteralPath $desktopArchive}
+    & (Join-Path $BuildRoot 'build/package-helpy-desktop.ps1') -Executable (Join-Path (Split-Path -Parent $helpy) 'Helpy.exe') -OutputPath $desktopArchive
     if ($PluginOnly) {
         New-HelpyPluginPackage $helpy
         Write-Host "`n$Version Helpy-only build complete: $DistRoot" -ForegroundColor Green

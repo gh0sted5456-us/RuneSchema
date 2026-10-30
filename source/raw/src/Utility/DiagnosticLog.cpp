@@ -1,5 +1,6 @@
 #include "Utility/DiagnosticLog.h"
 #include "Core/DiagnosticLogFile.h"
+#include "Core/DiagnosticLogPaths.h"
 #include "Core/SystemDiagnostics.h"
 #include "Runtime/ExecutableVersion.h"
 #include "Runtime/HostServices.h"
@@ -22,7 +23,7 @@ void Initialize(bool archiveLogs,bool freshSession) noexcept {
     try {
         std::call_once(Start,[=]{
             const auto mode=archiveLogs?Session::ArchivePrevious:freshSession?Session::Fresh:Session::Append;
-            if(!Sink().Open(HostServices::ModDirectory()/"RuneSchema.log",mode)){ReportFailure();return;}
+            if(!Sink().Open(DiagnosticLogPaths::Directory(HostServices::ModDirectory())/"RuneSchema.log",mode)){ReportFailure();return;}
             Ready=true;
             if(!Sink().Write("[RuneSchema] ========== Startup diagnostics ==========",true,"system"))ReportFailure();
             for(const auto& row:SystemDiagnostics::Startup(HostServices::ModDirectory(),HostServices::CacheDirectory()))if(!Sink().Write("[RuneSchema] "+row,true,"system"))ReportFailure();

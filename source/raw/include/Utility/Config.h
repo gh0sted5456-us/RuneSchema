@@ -160,11 +160,14 @@ namespace PS {
         // Client Helpy requests are always server-executed and independently
         // validated. Permanent authoring/export operations are never accepted.
         bool allowClientItemGrants = false;
+        bool allowClientTeleport = false;
+        bool allowPinAccess = false;
+        std::string accessPin{}; // Private server setting; never replicate or log.
         bool allowClientTemporarySpawns = false;
         int maximumItemCount = 100;
         int maximumSpawnCount = 100;
         int maximumNpcDurationSeconds = 300;
-        // Empty lists deny remote Helpy mutations. GUIDs are preferred;
+        // Without PIN access, empty lists deny remote mutations. GUIDs are preferred;
         // exact names are an explicit compatibility fallback.
         std::vector<std::string> permittedPlayerGuids{};
         std::vector<std::string> permittedPlayerNames{};
@@ -180,6 +183,7 @@ namespace PS {
         bool advancedLogging = false;
         // Keep previous RuneSchema sessions in logs/ using UTC date-time names.
         bool archiveLogs = false;
+        bool logsInUE4SS = false;
         bool authoringTools = true;
         // Retained JSON name for compatibility. This now means heavyweight
         // diagnostics/full catalog work, never ordinary mod authoring.

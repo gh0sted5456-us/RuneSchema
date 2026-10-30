@@ -188,7 +188,7 @@ namespace PS::CookedPakRegistryManifest {
             const auto& definitions=document.at("LoaderDefinitions");
             if(!definitions.is_object())throw std::runtime_error("LoaderDefinitions must be an object");
             for(const auto& [lane,entries]:definitions.items()){
-                if(lane!="Recipes"&&lane!="Journals"&&lane!="Lore"&&lane!="Buildings")throw std::runtime_error("Unsupported cooked loader lane: "+lane);
+                if(lane!="Recipes"&&lane!="Journals"&&lane!="Lore"&&lane!="Buildings"&&lane!="DataTables")throw std::runtime_error("Unsupported cooked loader lane: "+lane);
                 if(!entries.is_object()||entries.size()>4096)throw std::runtime_error("Cooked loader lane must be an object with at most 4096 entries");
                 std::set<std::string> unique;
                 for(const auto& [path,body]:entries.items()){
@@ -197,6 +197,15 @@ namespace PS::CookedPakRegistryManifest {
                         throw std::runtime_error("LoaderDefinitions edits existing cooked assets; use the owning loose loader for schema-created assets, and NativeRegistries to announce their runtime paths");
                     if(!Detail::ValidAssetPath(path)||path.rfind('.')==std::string::npos||path.rfind('.')<=path.rfind('/')||path.back()=='.'||!body.is_object())
                         throw std::runtime_error("Cooked loader definitions require full object-path keys and object bodies");
+                    if(lane=="DataTables"){
+                        if(!Detail::OwnedObjectPath(path,owner)||body.size()!=1||!body.contains("Target")||!body.at("Target").is_string())
+                            throw std::runtime_error("Cooked DataTables requires a mod-owned source table and only a Target string");
+                        const auto target=body.at("Target").get<std::string>();const auto dot=target.find('.',target.find_last_of('/')+1);
+                        if(!target.starts_with("/Game/")||!Detail::ValidAssetPath(target)||dot==target.npos||dot==target.size()-1||target.find('.',dot+1)!=target.npos
+                            ||target.find_first_of("\\: ")!=target.npos||Detail::Fold(target)==Detail::Fold(path)
+                            ||std::any_of(target.begin(),target.end(),[](unsigned char c){return c<33||c>126;}))
+                            throw std::runtime_error("Cooked DataTables Target must be an exact vanilla /Game object path");
+                    }
                     for(const auto* directive:{"$Patch","$Clone","$Target","VendorID","RuneSchemaVendors","VanillaVendors"})if(body.contains(directive))
                         throw std::runtime_error("Cooked declarations reference existing assets; use loose definitions for patches, clones or vendor offers");
                     if(body.contains("Unlock")&&!body.at("Unlock").is_boolean())throw std::runtime_error("Cooked Unlock must be boolean");
@@ -274,10 +283,10 @@ namespace PS::CookedPakRegistryManifest {
 
     struct Definition {std::string Owner,Source,Path;nlohmann::json Body;bool Explicit=false;};
     inline std::vector<Definition> MergeDefinitions(const std::vector<Manifest>& manifests,const std::string& lane) {
-        if(lane!="Recipes"&&lane!="Journals"&&lane!="Lore"&&lane!="Buildings")throw std::runtime_error("Unsupported cooked definition lane");
+        if(lane!="Recipes"&&lane!="Journals"&&lane!="Lore"&&lane!="Buildings"&&lane!="DataTables")throw std::runtime_error("Unsupported cooked definition lane");
         std::map<std::string,Definition> merged;
         const auto add=[&](Definition value){
-            if(!value.Body.contains("Unlock"))value.Body["Unlock"]=false;
+            if(lane!="DataTables"&&!value.Body.contains("Unlock"))value.Body["Unlock"]=false;
             auto [entry,inserted]=merged.emplace(Detail::Fold(value.Path),value);
             if(inserted)return;
             if(lane=="Buildings"&&Detail::Fold(entry->second.Owner)!=Detail::Fold(value.Owner))

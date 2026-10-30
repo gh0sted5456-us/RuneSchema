@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/HelpyRemoteResult.h"
 
 #include <cstdint>
 #include <chrono>
@@ -56,6 +57,7 @@ public:
     // Sends a bounded request through the bridge component owned by the local
     // player. The server remains the only executor and applies its own policy.
     bool RequestAuthority(const std::string& action,const std::string& payload);
+    void PublishHelpyResult(RC::Unreal::UObject* player,int64_t revision,const nlohmann::json& result);
     // Publishes an allow-listed presentation event through the replicated
     // GameState bridge. The payload contains semantic cue data only; asset
     // paths are rejected and client consumers remain mod-owned.
@@ -75,6 +77,14 @@ public:
     std::function<PS::BuildingNetworkGuard::Registry(RC::Unreal::UObject*)> BuildingRegistry;
 
 private:
+    int64_t m_helpyAccessRevision=0;
+    uint64_t m_helpyAccessGeneration=0;
+    PS::WeakObjectHandle m_helpyAccessComponent;
+    int64_t m_helpyMutationRevision=0;
+    uint64_t m_helpyMutationGeneration=0;
+    PS::WeakObjectHandle m_helpyMutationComponent;
+    PS::HelpyRemoteResult::Assembly m_helpyResultParts;
+    std::chrono::steady_clock::time_point m_helpyMutationDeadline{};
     struct Contract {
         RC::Unreal::UClass* Type = nullptr;
         // 0.7.0 can use the compact, proven IdentityPayload RepNotify contract
@@ -189,12 +199,13 @@ private:
     int64_t m_outboundRevision = 0;
     int64_t m_activeRequestRevision = 0;
     std::string m_activeRequestCorrelation;
-    struct RequestWindow {std::chrono::steady_clock::time_point Started{};uint32_t Count=0;int64_t Revision=0;bool RegistryRejected=false;};
+    struct RequestWindow {std::chrono::steady_clock::time_point Started{};uint32_t Count=0;int64_t Revision=0;bool RegistryRejected=false,ItemIdsVerified=false;std::string ItemFingerprint;};
     std::unordered_map<std::string,RequestWindow> m_requestWindows;
     struct BuildingPeer {PS::WeakObjectHandle Actor;PS::BuildingNetworkGuard::Registry Registry;};
     std::unordered_map<RC::Unreal::UObject*,BuildingPeer> m_buildingPeers;
     PS::WeakObjectHandle m_buildingAuthorityWorld;
     PS::BuildingNetworkGuard::Registry m_buildingAuthority;
+    PS::BuildingNetworkGuard::HandshakeRetry m_buildingHandshake;
     std::string m_buildingAckFingerprint;
     std::chrono::steady_clock::time_point m_buildingAckAt{};
     std::unordered_set<std::string> m_buildingRejections;
@@ -252,11 +263,11 @@ private:
     void SendReceipt(RC::Unreal::UObject* component,const std::string& channel,const std::string& entity,int64_t revision,bool success,const std::string& detail);
     void SendNotification(RC::Unreal::UObject* component,const std::string& channel,const std::string& entity,int64_t revision,const std::string& payload);
     int64_t ForwardRegistryRequest(RC::Unreal::UObject* component,const std::string& key,int64_t revision=0);
-    void SendCompatibilityAck(const std::string& remoteFingerprint);
+    void SendCompatibilityAck(const std::string& remoteFingerprint,bool resync=true);
     void InvokeAuthorityAction(RC::Unreal::UObject* graph,const AuthorityAction& action);
     void InvokeAuthorityActionForCaster(RC::Unreal::UObject* caster,const AuthorityAction& action);
     void PublishActionActivation(RC::Unreal::UObject* caster,const AuthorityAction& action);
-    std::string CompactPayload() const;
+    std::string CompactPayload(RC::Unreal::UObject* buildingContext) const;
     void PublishCompactPayload();
     bool PublishWorldSnapshot();
     void RecordDiagnostic(const std::string& channel,const std::string& entity,int64_t revision,

@@ -27,8 +27,8 @@ struct Exit {
     bool Begin(double now,float blend){
         if(Active)return false;Active=true;Started=now;InitialBlend=std::clamp(blend,0.f,1.f);Kind=InitialBlend>=.5f?ExitKind::RuneSchema:ExitKind::Dragonwilds;return true;
     }
-    ExitFrame At(double now,bool animate=true)const{
-        const float t=animate?static_cast<float>(std::clamp((now-Started)/ExitSeconds,0.0,1.0)):1;
+    ExitFrame At(double now,bool animate=true,double duration=ExitSeconds)const{
+        const float t=animate?static_cast<float>(std::clamp((now-Started)/duration,0.0,1.0)):1;
         const float settle=Smooth(t/.2f);const float rune=Kind==ExitKind::RuneSchema?InitialBlend+(1-InitialBlend)*settle:InitialBlend*(1-settle);
         return {t,1-(1-t)*(1-t)*(1-t),1-Smooth(t),rune,1-rune,t>=1};
     }

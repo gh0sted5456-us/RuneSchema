@@ -26,7 +26,7 @@ inline bool Register(UObject* object){
  Check(version,L"ReturnValue",L"IntProperty",4);
  Call call(object,L"RuneSchemaBuildingPolicyVersion");call.Invoke();
  if(*static_cast<int*>(call.Data(L"ReturnValue"))!=1)throw std::runtime_error("Unsupported building policy version");
- for(auto name:{L"RuneSchemaForceBuildingSupport",L"RuneSchemaBlocksBuildingDamage",L"RuneSchemaBlocksBuildingPlacement",L"RuneSchemaBuildingOverlayEnabled"}){
+ for(auto name:{L"RuneSchemaForceBuildingSupport",L"RuneSchemaBlocksBuildingDamage",L"RuneSchemaBlocksBuildingPlacement",L"RuneSchemaBuildingOverlayEnabled",L"RuneSchemaPlayerPhasing",L"RuneSchemaFreeBuildingMaterials",L"RuneSchemaFreeCraftingMaterials"}){
   auto* fn=object->GetFunctionByNameInChain(name);if(!fn)continue;
   CheckPosition(fn);Check(fn,L"ReturnValue",L"BoolProperty",1);
  }

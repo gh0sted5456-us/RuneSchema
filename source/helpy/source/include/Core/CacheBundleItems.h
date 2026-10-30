@@ -39,7 +39,7 @@ public:
     void Invalidate(){++Epoch;Next={};Files=std::make_shared<FileState>();}
     bool Awaiting()const{return Work.valid()&&Key!=Wanted;}
     std::optional<Json> Lookup(const std::filesystem::path& cache,const std::filesystem::path& root,const HelpySourceCache::Snapshot& snapshot,const std::string& locale,const std::string& query,const std::string& cursor,size_t limit){
-        const auto key=Json::array({snapshot.Key,snapshot.Provisional,locale,query,cursor,limit,Epoch}).dump();
+        const auto key=Json::array({snapshot.Key,snapshot.Provisional,snapshot.PresentationOnly?snapshot.Owners:decltype(snapshot.Owners){},locale,query,cursor,limit,Epoch}).dump();
         Wanted=key;
         if(Work.valid()&&Work.wait_for(std::chrono::seconds(0))==std::future_status::ready){auto result=Work.get();if(result.Page.is_object()||Key!=result.Key)Window=std::move(result.Page);Key=std::move(result.Key);Next=Clock::now()+std::chrono::seconds(2);}
         if(!Work.valid()&&(Key!=key||Clock::now()>=Next))Work=std::async(std::launch::async,[cache,root,snapshot,locale,query,cursor,limit,key,files=Files]{
@@ -49,7 +49,8 @@ public:
                 const auto local=cache.parent_path()/"item-catalogues"/"native-items.json";
                 bool nativeChecked=false;
                 // Learned rows may be absent from the older complete sidecar.
-                if(cursor.starts_with("P:")||(cursor.empty()&&(query.empty()||!std::filesystem::exists(learned))))try{
+                const bool currentPages=PagedItemCatalog::Current(PagedItemCatalog::File(local));
+                if(currentPages&&(cursor.starts_with("P:")||(cursor.empty()&&(query.empty()||!std::filesystem::exists(learned)))))try{
                     CacheBundleIO::Safe(PagedItemCatalog::File(local));auto next=cursor;
                     for(int slice=0;slice<8;++slice){
                         auto page=PagedItemCatalog::Read(PagedItemCatalog::File(local),{},query,next,limit,true,locale,snapshot.NativePlugins);
@@ -75,9 +76,18 @@ public:
                 if(index!=learned&&std::filesystem::exists(learned))stamp+="|observed|"+std::to_string(std::filesystem::last_write_time(learned).time_since_epoch().count());
                 if(files->Stamp!=stamp){
                     auto records=CacheBundleStore::Read(cache,root,snapshot,locale,"items");
-                    if(!nativeChecked&&(!std::filesystem::exists(learned)||!std::filesystem::exists(PagedItemCatalog::File(local))))try{
+                    if(!nativeChecked&&(!std::filesystem::exists(learned)||!currentPages))try{
+                        const auto nativeStamp=std::filesystem::last_write_time(local);
                         const auto doc=CacheBundleStore::Parse(CacheBundleIO::Read(local,64*1024*1024));const auto scope=CacheBundleStore::Parse(doc.value("Scope",std::string("{}")));
                         if(doc.value("Version",0)==1&&scope.is_array()&&scope.size()==4&&scope[0]=="item-browse-v2"&&scope[3]==locale&&doc.at("Rows").is_array()&&doc["Rows"].size()<=CacheBundle::MaxRecords){
+                            if(!currentPages)try{
+                                AlphabeticalItemCatalog::Cache rebuilt;rebuilt.Restore(doc["Rows"]);
+                                if(std::filesystem::last_write_time(local)==nativeStamp&&!PagedItemCatalog::Current(PagedItemCatalog::File(local))){
+                                    CacheBundleIO::Safe(PagedItemCatalog::File(local));PagedItemCatalog::Save(local,doc.at("Scope"),rebuilt.Snapshot());
+                                    // A concurrent native refresh must leave this older sidecar stale.
+                                    std::filesystem::last_write_time(PagedItemCatalog::File(local),nativeStamp);
+                                }
+                            }catch(...){} // Readable references remain available if the index cannot be repaired.
                             std::map<std::string,Json> merged;for(const auto& reference:records)merged[reference.at("Path").get<std::string>()]=reference;
                             for(const auto& row:doc["Rows"]){auto reference=CacheBundle::FromRow("items",row);if(!reference.is_null()&&CacheBundleStore::Browsable(reference,snapshot)){
                                 reference["Data"]["CacheSourceVerified"]=false;reference["Data"]["ObservedCurrent"]=false;
@@ -91,7 +101,7 @@ public:
                 }
                 if(files->PageKey!=key){
                     files->Window=files->Items->Page(query,cursor,limit);files->PageKey=key;
-                    if(!query.empty()&&!files->Window.value("HasMore",true)&&std::filesystem::exists(learned))try{
+                    if(!query.empty()&&!files->Window.value("HasMore",true)&&std::filesystem::exists(learned)&&currentPages)try{
                         // Show learned rows first, then continue through the older native sidecar.
                         const auto head=PagedItemCatalog::Read(PagedItemCatalog::File(local),{},"","",1,true,locale,snapshot.NativePlugins);
                         auto next=head.at("NextCursor").get<std::string>();next.replace(next.rfind(':')+1,std::string::npos,"0");

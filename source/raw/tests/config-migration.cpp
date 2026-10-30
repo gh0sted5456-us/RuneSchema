@@ -20,6 +20,9 @@ int main(int argc,char** argv){
         Check(DecodeIniDocument(ini)==document);
         Check(DecodeSettings(DecodeIniDocument(ini).dump()).advancedLogging);
         Check(!DecodeSettings("{}").archiveLogs);
+    Check(!DecodeSettings("{}").logsInUE4SS);
+    auto logLocation=PSConfigSettings{};logLocation.logsInUE4SS=true;
+    Check(DecodeSettings(DecodeIniDocument(EncodeIniDocument(SettingsDocument(logLocation))).dump()).logsInUE4SS);
         auto archiveSettings=PSConfigSettings{};archiveSettings.archiveLogs=true;
         Check(DecodeSettings(DecodeIniDocument(EncodeIniDocument(SettingsDocument(archiveSettings))).dump()).archiveLogs);
         Reject([]{DecodeIniDocument("[RuneSchema]\narchiveLogs=yes\n");});

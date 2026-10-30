@@ -14,6 +14,7 @@ struct Options {
     bool Enabled=true;
     int MaxVisible=4;   // A display limit, not an allocation or logging limit.
     int DurationSeconds=6;
+    bool RegistryActivity=false;
 };
 struct Notice {
     LiveLog::Level Severity=LiveLog::Level::Info;
@@ -174,6 +175,16 @@ public:
     void Clear(){m_visible.clear();m_import={};m_suppressed=0;m_suppressedRepeated=0;m_overflowIdentities.clear();}
     void Accept(const LiveLog::Entry& entry,const Options& raw,const std::chrono::steady_clock::time_point now=std::chrono::steady_clock::now()){
         if(!raw.Enabled)return;
+        // Routine ID exchange stays in Diagnostics; actionable failures still surface.
+        if(!raw.RegistryActivity&&entry.Severity!=LiveLog::Level::Error){
+            const auto& text=entry.Text;
+            if(text.find("[NETWORK][BUILDINGS-PENDING]")!=std::string::npos
+                ||text.find("[NETWORK][BUILDINGS-READY]")!=std::string::npos
+                ||text.find("[RS-NET-002]")!=std::string::npos
+                ||(entry.Severity!=LiveLog::Level::Warning&&(text.find("RuneSchema shared registry parity ")!=std::string::npos
+                    ||text.find("RuneSchema platform mapping telemetry:")!=std::string::npos
+                    ||text.find("RuneSchema legacy registry parity unverified:")!=std::string::npos)))return;
+        }
         Tick(raw,now);
         if(ConsumeImport(entry,raw,now))return;
         const auto identity=IdentityOf(entry);

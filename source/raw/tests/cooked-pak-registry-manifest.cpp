@@ -238,4 +238,15 @@ int main()
         {"LoaderDefinitions",{{"Recipes",{{lower,nlohmann::json::object()}}}}}},"Example","schema-alias.jsonc");}
     catch(const std::exception&){schemaAlias=true;}assert(schemaAlias);
     Reset();
+    const std::string tableSource="/Example/Tables/DT_Extra.DT_Extra",tableTarget="/Game/Tables/DT_Native.DT_Native";
+    const auto tableDocument=[&](const nlohmann::json& body){return nlohmann::json{{"LoaderDefinitions",{{"DataTables",{{tableSource,body}}}}}};};
+    assert(Publish(tableDocument({{"Target",tableTarget}}),"Example","pak:/Example/DA_Registry.DA_Registry"));
+    assert(Definitions("DataTables").size()==1&&Definitions("DataTables")[0].Body==nlohmann::json({{"Target",tableTarget}}));
+    for(const auto& bad:nlohmann::json::array({nlohmann::json::object(),{{"Target",7}},{{"Target","DT_Native"}},
+        {{"Target","/Game/Tables/DT_Native"}},{{"Target","/Game/Tables/A.A:Subobject"}},{{"Target","/Other/Tables/A.A"}},
+        {{"Target",tableTarget},{"Replace",true}},{{"Target",tableTarget},{"Unlock",true}}})){
+        bool rejected=false;try{Parse(tableDocument(bad),"Example","bad.jsonc");}catch(const std::exception&){rejected=true;}assert(rejected);
+    }
+    bool foreign=false;try{Parse(tableDocument({{"Target",tableTarget}}),"OtherOwner","bad.jsonc");}catch(const std::exception&){foreign=true;}assert(foreign);
+    Reset();
 }

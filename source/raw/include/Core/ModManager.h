@@ -93,10 +93,13 @@ inline Json Save(const std::filesystem::path& root,bool enabled,const Json& requ
     std::lock_guard lock(Gate);if(!enabled)throw std::runtime_error("Enable RuneSchema load-order handling in Settings first.");
     const auto current=Read(root,enabled);const Order::Snapshot expected{request.at("ExpectedExists").get<bool>(),request.at("ExpectedContents").get<std::string>()};
     if(expected.Contents.size()>8*1024*1024||current.at("ExpectedContents")!=expected.Contents||current.at("ExpectedExists")!=expected.Exists)throw std::runtime_error("Mod order changed externally. Refresh before applying.");
-    std::set<std::string> required,provided;for(const auto& row:current.at("Rows"))required.insert(Order::Fold(row.at("Name").get<std::string>()));
+    std::set<std::string> allowed,required,provided;for(const auto& row:current.at("Rows")){
+        const auto name=Order::Fold(row.at("Name").get<std::string>());allowed.insert(name);if(row.value("Present",true))required.insert(name);
+    }
     std::vector<Order::Entry> entries;const auto& rows=request.at("Rows");if(!rows.is_array()||rows.size()>1024)throw std::runtime_error("Invalid mod order.");
     for(const auto& row:rows){const auto name=row.at("Name").get<std::string>();if(!Name(name)||!provided.insert(Order::Fold(name)).second)throw std::runtime_error("Invalid or duplicate mod folder.");entries.push_back({name,row.at("Enabled").get<bool>()});}
-    if(required!=provided)throw std::runtime_error("The mod list changed. Refresh before applying.");
+    if(!std::includes(provided.begin(),provided.end(),required.begin(),required.end())
+        ||!std::includes(allowed.begin(),allowed.end(),provided.begin(),provided.end()))throw std::runtime_error("The mod list changed. Refresh before applying.");
     const auto file=root/"mods"/"runeschema.txt";Safe(file);
     if(expected.Exists)ConfigFiles::Backup(file);
     if(!Order::WriteExpected(file,expected,Order::Serialize(entries,expected,true)))throw std::runtime_error("Mod order changed externally; nothing applied.");

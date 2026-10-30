@@ -35,6 +35,10 @@ int RunConfigSettings() {
     assert(!settings.colorCodeLoaderAnnotations);
     assert(!DecodeSettings("{}").advancedLogging);
     assert(DecodeSettings("{}").autoUpdateMappings);
+    assert(!DecodeSettings("{}").helpyAuthority.allowPinAccess&&!DecodeSettings("{}").helpyAuthority.allowClientTeleport);
+    Rejects([&]{DecodeSettings(R"({"helpyAuthority":{"allowPinAccess":true,"accessPin":"123"}})");});
+    const auto pinPolicy=DecodeSettings(R"({"helpyAuthority":{"allowPinAccess":true,"accessPin":"world-2398482","allowClientTeleport":true}})");
+    assert(DecodeSettings(EncodeSettings(pinPolicy)).helpyAuthority.accessPin=="world-2398482");
     assert(DecodeSettings("{}").helpyHotkey=="F2");
     assert(DecodeSettings(R"({"helpyHotkey":"f5"})").helpyHotkey=="F5");
     assert(DecodeSettings(R"({"helpyHotkey":"X"})").helpyHotkey=="X");

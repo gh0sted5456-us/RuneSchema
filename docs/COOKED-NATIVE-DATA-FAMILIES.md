@@ -87,6 +87,8 @@ These families are not added to character quest/item pruning authority.
 - Skills/SkillPerks declarations remain blocked pending compiled ESkill consumer,
   startup, UI, unlock and save/network verification. Mod-owned cooked Enums use
   read-only verification, not native ESkill append/reindex.
+  The [skill registry investigation](SKILL-REGISTRY.md)
+  records the live reflected contracts and the remaining adapter tests.
 - Difficulty needs a dedicated policy/cache adapter. Entitlements are platform/
   backend-owned; no generic unlock or bypass is provided.
 - CacheAssets declares artwork, not gameplay identities. It is now represented

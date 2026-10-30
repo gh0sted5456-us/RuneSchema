@@ -11,7 +11,7 @@ using json=nlohmann::json;
 json LastQuery,LastSubmission,HostSnapshot={{"Players",json::array({{{"Path","/Player/Local"},{"Name","Local player"}}})}};
 uint64_t HostGeneration=41,HostRevision=8;
 bool ThrowHost=false;
-unsigned SettingsWrites=0;
+unsigned SettingsWrites=0;std::map<std::string,unsigned> HostCalls;
 unsigned IconManifestReads=0;
 unsigned CrashOptionReads=0;
 std::map<std::string,unsigned> GuardedCalls;
@@ -21,7 +21,7 @@ int32_t RS_PLUGIN_CALL HostCall(const char*,const char* service,const char* inpu
     if(ThrowHost)throw std::runtime_error("host read failed");
     assert(std::string(service)=="runeschema.tools");
     const auto request=json::parse(input);json reply;
-    const auto action=request.value("Action",std::string{});
+    const auto action=request.value("Action",std::string{});++HostCalls[action];
     if(action=="ModsRead"||action=="ModsSave"||action=="ModsImport"||action=="QuickLoadSave"||action=="AdditionalLoggingSave"||action=="CrashDumpSave"){
         if(!output||capacity<RUNESCHEMA_PLUGIN_MAX_MESSAGE){*size=RUNESCHEMA_PLUGIN_MAX_MESSAGE;return RS_PLUGIN_BUFFER_TOO_SMALL;}
         ++GuardedCalls[action];reply={{"Ok",true},{"Root","D:/XboxGames/Active/RuneSchema"},{"Rows",json::array()},{"Padding",std::string(10000,'x')}};
@@ -64,6 +64,7 @@ int main(){
         auto preferences=PS::HelpyImGuiTheme::Theme{};preferences.runtimeTimeUnit=3;preferences.backgroundFile="Scene.png";preferences.backgroundStrength=.2f;
         preferences.showFps=true;preferences.helpyFpsLimit=45;preferences.fpsRefreshMs=500;
         preferences.showGameFps=true;preferences.fpsHotkey="F11";
+        preferences.gameOverlay=true;preferences.overlayOpacity=.77f;preferences.diagnosticRegistryActivity=true;
         preferences.diagnosticToastsEnabled=false;preferences.diagnosticToastLimit=2;preferences.diagnosticHistoryDays=7;preferences.diagnosticSplitRatio=.6f;preferences.diagnosticDeveloperMode=true;
         PS::HelpyRuntimePreferences::CacheFirst=false;PS::HelpyRuntimePreferences::PassiveRefresh=false;
         const auto document=PS::HelpyImGuiTheme::DocumentFrom(preferences,200);
@@ -74,9 +75,12 @@ int main(){
         assert(document["runtime"]["timeUnit"]==3&&document["background"]["file"]=="Scene.png"&&document["background"]["strength"].get<float>()==.2f);
         assert(document["runtime"]["showFps"]==true&&document["runtime"]["helpyFpsLimit"]==45&&document["runtime"]["fpsRefreshMs"]==500);
         assert(document["runtime"]["showGameFps"]==true&&document["runtime"]["fpsHotkey"]=="F11");
+        assert(document["runtime"]["gameOverlay"]==true&&document["runtime"]["overlayOpacity"].get<float>()==.77f);
+        assert(document["notifications"]["registryActivity"]==true);
         const auto defaults=PS::HelpyImGuiTheme::DefaultDocument()["runtime"];
-        assert(defaults["showFps"]==false&&defaults["helpyFpsLimit"]==30&&defaults["fpsRefreshMs"]==1000);
+        assert(defaults["showFps"]==false&&defaults["helpyFpsLimit"]==60&&defaults["fpsRefreshMs"]==1000);
         assert(defaults["showGameFps"]==false&&defaults["fpsHotkey"]=="F10");
+        assert(defaults["gameOverlay"]==false&&!PS::HelpyImGuiTheme::DefaultDocument()["notifications"]["registryActivity"].get<bool>());
         assert(!document["notifications"]["enabled"].get<bool>()&&document["notifications"]["visibleLimit"]==2&&document["diagnosticHistory"]["ageDays"]==7);
         assert(document["diagnosticPresentation"]["splitRatio"].get<float>()==.6f&&document["diagnosticPresentation"]["developerMode"].get<bool>());
         assert(PS::HelpyImGuiTheme::DefaultDocument()["runtime"]["timeUnit"]==0&&PS::HelpyImGuiTheme::DefaultDocument()["background"]["file"]=="");
@@ -326,6 +330,7 @@ int main(){
     state.ToolsWaiting=false;Cart::PollCartDelivery();const auto once=LastSubmission;
     assert(once["Action"]=="GiveItems"&&once["Player"]=="/Player/Single"&&Cart::CartBatch.Pending());
     Cart::PollCartDelivery();assert(LastSubmission==once);Cart::CartBatch.Stop();Cart::PollCartDelivery();PS::ItemGridPicker::ClearSharedCart();Cart::CartNeedsReview=false;
+    {json reply;const auto calls=HostCalls["Read"];assert(CallCore(&state,{{"Action","Read"},{"Revision",HostRevision}},reply));assert(HostCalls["Read"]==calls+1);}
     ThrowHost=true;json ignored;assert(!CallCore(&state,{{"Action","Read"}},ignored));
     {namespace A=PS::AuthoringClient;A::Clear();bool busy=true;
         A::Remote=[&](const json&,json& reply){reply={{"Generation",77},{"Revision",busy?1:2},{"RequestId",uint64_t(778)},{"Operation","SaveEditorSlotItems"},{"Busy",busy},{"Result",{{"Rows",json::array({{{"Name","Cape"}}})}}}};return true;};
@@ -358,6 +363,7 @@ int main(){
         P::RestoreGear(player,item);assert(P::RepairPending);P::RepairStarted-=std::chrono::seconds(16);P::Poll();assert(!P::RepairPending&&P::RepairStatus.find("unconfirmed")!=std::string::npos&&!P::Open);
         state.ToolsWaiting=false;P::RestoreGear(player,item);assert(P::RepairPending);P::RepairGeneration=PS::SpawnToolRequests::CurrentGeneration()+1;P::Poll();assert(!P::RepairPending&&P::RepairStatus.find("World changed")!=std::string::npos&&!P::Open);state.ToolsWaiting=false;
     }
+    {uint32_t bytes=0;const auto revision=state.ToolsRevision;state.RelayOnly=true;assert(ToolsPush(&state,"not parsed by the game-side relay",nullptr,0,&bytes)==RS_PLUGIN_OK&&state.ToolsRevision==revision);state.RelayOnly=false;assert(ToolsPush(&state,"not JSON",nullptr,0,&bytes)==RS_PLUGIN_FAILED);}
     PS::ItemIconCache::ClearRemote();ClearRemote();PS::SpawnToolRequests::ClearRemote();
     PS::RuneSchemaSettingsPanel::Remote={};
 }

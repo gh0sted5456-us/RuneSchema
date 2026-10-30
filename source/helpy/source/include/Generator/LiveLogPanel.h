@@ -3,6 +3,7 @@
 #include "Core/LiveLog.h"
 #include "Core/DiagnosticLegacyIntake.h"
 #include "Core/StructuredDiagnosticRegistry.h"
+#include "Core/GamePassLogging.h"
 #include "Generator/HelpyImGuiTheme.h"
 #include "Generator/RuneSchemaSettingsPanel.h"
 #include "Runtime/HostServices.h"
@@ -285,6 +286,22 @@ inline void RenderCrashDumpOptions(){
     if(!status.empty())ImGui::TextWrapped("%s",status.c_str());ImGui::PopTextWrapPos();
     if(HelpyImGuiTheme::SoftButton("Reload crash capture settings"))read();
 }
+inline void RenderGamePassLogging(){
+    if(HelpyEnvironment::Current!=HelpyEnvironment::Kind::GamePass)return;
+    ImGui::SeparatorText("Game Pass game log");static std::string status;
+    ImGui::TextUnformatted("Optional logging shortcut");ImGui::SameLine();ImGui::TextDisabled("(?)");
+    if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Save a shortcut, close Dragonwilds normally, then launch Game Pass through it. It passes -log and -ABSLOG before Unreal starts. The game log uses the saved log-folder choice and appears in the Game stream. Some shipping builds disable native logging; a shortcut cannot guarantee a log. Normal Xbox launches are unchanged. Recreate an existing shortcut after changing the log folder.");
+    if(HelpyImGuiTheme::SoftButton("Save logging shortcut..."))try{
+        const auto setup=GamePassLogging::For(HostServices::ModDirectory(),RuneSchemaData::LocalDirectory(),RuneSchemaSettingsPanel::Loaded?RuneSchemaSettingsPanel::Snapshot.at("Document").value("logsInUE4SS",false):DiagnosticLogPaths::UseUE4SS);GamePassLogging::Prepare(setup);
+        wchar_t path[32768]{};const auto suggested=setup.Log.parent_path()/"Launch Game Pass with game logging.lnk";wcsncpy_s(path,suggested.c_str(),_TRUNCATE);
+        OPENFILENAMEW dialog{sizeof(dialog)};dialog.hwndOwner=GetActiveWindow();dialog.lpstrFile=path;dialog.nMaxFile=32768;dialog.lpstrFilter=L"Windows shortcut (*.lnk)\0*.lnk\0\0";dialog.lpstrDefExt=L"lnk";dialog.Flags=OFN_EXPLORER|OFN_NOCHANGEDIR|OFN_PATHMUSTEXIST|OFN_OVERWRITEPROMPT;
+        if(GetSaveFileNameW(&dialog)){GamePassLogging::SaveShortcut(setup,path);status="Shortcut saved. Close the game normally, then use it for your next Game Pass launch.";}
+    }catch(const std::exception& error){status=error.what();}
+    ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Copy launch command"))try{
+        const auto setup=GamePassLogging::For(HostServices::ModDirectory(),RuneSchemaData::LocalDirectory(),RuneSchemaSettingsPanel::Loaded?RuneSchemaSettingsPanel::Snapshot.at("Document").value("logsInUE4SS",false):DiagnosticLogPaths::UseUE4SS);GamePassLogging::Prepare(setup);ImGui::SetClipboardText(GamePassLogging::Command(setup).c_str());status="PowerShell command copied. Use it after closing Dragonwilds normally.";
+    }catch(const std::exception& error){status=error.what();}
+    if(!status.empty()){ImGui::PushTextWrapPos(ImGui::GetCursorPosX()+ImGui::GetFontSize()*28);ImGui::TextWrapped("%s",status.c_str());ImGui::PopTextWrapPos();}
+}
 inline void Render(){
     static nlohmann::json options=nlohmann::json::object();static std::string optionStatus;static bool optionError=false;static double nextOptionsRead=0;
     const auto hint=[](const std::string& text){if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)){PS::HelpyImGuiTheme::BeginDetailsTooltip();ImGui::PushTextWrapPos(ImGui::GetFontSize()*28);ImGui::TextUnformatted(text.c_str());ImGui::PopTextWrapPos();PS::HelpyImGuiTheme::EndDetailsTooltip();}};
@@ -313,7 +330,14 @@ inline void Render(){
         option("World average network latency","averageLatency","Mean native player ping in a verified multiplayer world, with observed/total sample counts. Zero/invalid samples are excluded. Client-replicated ping can be stale; unavailable data is never reported as zero latency.");
         if(HelpyImGuiTheme::SoftButton("Reload logging options"))readOptions();
         if(!optionStatus.empty()){ImGui::TextDisabled(optionError?"Change needs attention — hover for details.":"Saved — hover for details.");hint(optionStatus);}
+        ImGui::SeparatorText("Log folder");
+        if(!RuneSchemaSettingsPanel::Loaded)RuneSchemaSettingsPanel::Load();
+        if(RuneSchemaSettingsPanel::Loaded)RuneSchemaSettingsPanel::QuickToggle("Keep logs in UE4SS (next launch)","/logsInUE4SS");
+        hint("Saved per installation in settings.ini. On the next game and Helpy launch, RuneSchema.log, RSDiagLog.jsonl, and Helpy-Desktop.log are written beside UE4SS.log. RuneSchema archives use ue4ss/logs/. Old logs remain in place. Game Pass native logging shortcuts use this choice when created; recreate older shortcuts. Other game launchers must pass -ABSLOG with ue4ss/RSDragonwilds.log to put the native game/EOS log here. This adds no polling or background copies.");
+        if(RuneSchemaSettingsPanel::QuickToggleError)ImGui::TextWrapped("%s",RuneSchemaSettingsPanel::Status.c_str());
+        if(HelpyImGuiTheme::SoftButton("Open UE4SS folder")){const auto folder=DiagnosticLogPaths::UE4SS(HostServices::ModDirectory());ShellExecuteW(nullptr,L"open",folder.c_str(),nullptr,nullptr,SW_SHOWNORMAL);}
         RenderCrashDumpOptions();
+        RenderGamePassLogging();
         ImGui::EndPopup();
     }
     if(optionError){ImGui::TextColored(HelpyImGuiTheme::Current.warning,"Logging options need attention. Hover for details.");hint(optionStatus);}

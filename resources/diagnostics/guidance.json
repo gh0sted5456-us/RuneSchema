@@ -290,5 +290,21 @@
   "RS-WLD-001": [
     "A world-effect provider or its native adapter could not validate or execute the listed contract.",
     "Read the original callback/hook reason. Verify the cooked Blueprint signature and framework/game version. Keep private native fixtures out of user games and report unsupported executable details rather than forcing hooks."
+  ],
+  "RS-PLUG-009": [
+    "A plugin package had incomplete, duplicate or unsupported container entries. The original reason identifies the package and missing/observed parts.",
+    "Finish deployment before launch and verify the exact names in the game directory. RuneSchema accepts mixed filename case and ordinary hardlinks, skips this plugin on failure, and continues independent sources. Symlinks and genuinely incomplete packages are still checked."
+  ],
+  "RS-RAW-004": [
+    "A declared source/target table failed path, class, row layout, staging or copy verification.",
+    "Read the original COOKED-TABLE reason and exact paths. Correct that declaration; use a plain editable parent for composite tables and test native consumers before release. Independent table and JSON operations continue."
+  ],
+  "RS-UI-001": [
+    "Helpy initialization, resize, presentation or its window thread could not complete.",
+    "Keep the exact message and any matching crash dump. Missing render targets are skipped; record display/DPI changes and graphics-driver status. A window failure is not proof of a RuneSchema-caused game crash."
+  ],
+  "RS-UI-002": [
+    "The optional standalone desktop could not start or attach. Use matching DLLs and Helpy.exe in the assigned installation.",
+    "Read the full startup reason and confirm the current Windows user. Select DLL window and restart to use the fallback."
   ]
 }

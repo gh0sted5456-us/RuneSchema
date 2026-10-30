@@ -9,6 +9,7 @@
 #include "Generator/HelpyIconPacks.h"
 #include "Generator/ToolRequest.h"
 #include "Generator/LazyCatalog.h"
+#include "Generator/HelpyCachedCatalog.h"
 #include "Generator/ItemDetails.h"
 #include "Core/ConfigFiles.h"
 #include "Core/ItemCart.h"
@@ -48,7 +49,7 @@ struct State {
     std::string Query,SelectedPath,ActiveCategory{"All"};
     ItemSource::Kind SourceFilter=ItemSource::Kind::All;
     std::string SourceProvider;
-    std::string FamilyKey,PendingFamilyKey;
+    std::string FamilyKey,PendingFamilyKey,PendingFamilyProvider;
     bool FavoritesOnly=false;std::string PersonalTag;
     uint64_t PersonalRevision=~uint64_t{};
     std::string SearchInput;
@@ -368,9 +369,14 @@ inline void ContextMenu(const json& catalog,const json& row,const std::string& p
     if(multi)ImGui::TextDisabled("Actions apply to all %zu selected items.",selectedCount);ImGui::Separator();
     InspectActions(row);
     const auto family=ItemFamily::Key(ItemPresentation::OriginalName(row));
-    if(ImGui::MenuItem("View family",nullptr,false,!family.empty()))state.PendingFamilyKey=family;
+    if(ImGui::MenuItem("View family",nullptr,false,!family.empty())){state.PendingFamilyKey=family;state.PendingFamilyProvider.clear();}
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::ViewFamily=HelpyPreviewHooks::LastRect();
+#endif
+    const auto provider=ItemSource::Provider(origin);
+    if(ImGui::MenuItem("Show Mod Family",nullptr,false,!family.empty()&&origin.Group==ItemSource::Kind::Modded&&!provider.empty())){state.PendingFamilyKey=family;state.PendingFamilyProvider=provider;}
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::ViewModFamily=HelpyPreviewHooks::LastRect();
 #endif
     if(ImGui::MenuItem(multi?"Add selected to cart":"Add to cart",nullptr,false,!SharedCart.Delivery())) {
         if(persistCart){if(multi){for(const auto& target:state.SelectedPaths)if(const auto* item=Find(catalog,target.c_str()))AddToCart(*item);}else AddToCart(row);}
@@ -543,7 +549,9 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
     if(state.PersonalRevision!=HelpyPersonalization::Revision.load()){state.PersonalRevision=HelpyPersonalization::Revision.load();state.CatalogRevision=0;state.Matches.clear();state.PageIndex=0;state.ResetScroll=true;}
     if(!filter||!filterCapacity||!selected||!selectedCapacity){ImGui::TextDisabled("Item picker buffer unavailable.");ImGui::PopID();return out;}
     if(!state.PendingFamilyKey.empty()){
+        auto provider=std::move(state.PendingFamilyProvider);state.PendingFamilyProvider.clear();
         SelectFamily(state,std::move(state.PendingFamilyKey));filter[0]=0;
+        if(!provider.empty()){state.SourceFilter=ItemSource::Kind::Modded;state.SourceProvider=provider;if(!localCatalog)HelpyImGuiTheme::Current.itemSource=provider;}
         if(!localCatalog)HelpyImGuiTheme::Current.itemCategory="All";
         if(!localCatalog)LazyCatalog::Search(0,BackendQuery(state));
     }
@@ -558,10 +566,13 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
     const float width=ImGui::GetContentRegionAvail().x;
     if(showControls){
     const float categoryWidth=theme.X(width<theme.X(600)?105:142),sourceWidth=theme.X(width<theme.X(600)?100:132);
-    const float controls=categoryWidth+sourceWidth+ImGui::CalcTextSize("Search").x+ImGui::CalcTextSize("View").x+ImGui::GetStyle().FramePadding.x*4+spacing*4;
+    const float controls=categoryWidth+sourceWidth+ImGui::CalcTextSize("Search").x+ImGui::CalcTextSize("View").x+ImGui::CalcTextSize("Refresh source").x+ImGui::GetStyle().FramePadding.x*6+spacing*5;
     ImGui::SetNextItemWidth(std::max(theme.X(90.0f),width-controls));
     const bool enterSubmitted=ImGui::InputTextWithHint("##Search items","Search items...",filter,filterCapacity,ImGuiInputTextFlags_EnterReturnsTrue);
     ImGui::SameLine();const bool searchSubmitted=HelpyImGuiTheme::SoftButton("Search");
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::ItemSearchButton=HelpyPreviewHooks::LastRect();
+#endif
     if(state.SearchInput!=filter){state.SearchInput=filter;state.SearchDue=ImGui::GetTime()+0.4;}
     if(!SearchAsYouType)state.SearchDue=0;
     if(enterSubmitted||searchSubmitted||(state.SearchDue>0&&ImGui::GetTime()>=state.SearchDue)){
@@ -605,6 +616,15 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
     }
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::SourceFilter=HelpyPreviewHooks::LastRect();
+#endif
+    inlineControl(theme.X(110));
+    ImGui::BeginDisabled(localCatalog||!state.SourceProvider.starts_with("mods/")||HelpyCachedCatalog::Check.has_value());
+    if(ImGui::SmallButton(HelpyCachedCatalog::Check?"Checking source...":"Refresh source")){
+        if(!HelpyCachedCatalog::RefreshSource(state.SourceProvider))HelpyCachedCatalog::CheckStatus="Select an enabled mod source and open its game to refresh. Existing cache is retained.";
+    }ImGui::EndDisabled();
+    if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))HelpyImGuiTheme::Tooltip("Check the selected mod's mounted items in bounded slices and update its cache. Existing results stay available. Select a specific mod source first.\n%s",HelpyCachedCatalog::CheckStatus.c_str());
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::RefreshSource=HelpyPreviewHooks::LastRect();
 #endif
     inlineControl(theme.X(96));LayoutControls();state.GridView=theme.itemGridView;
     if(PersonalizationPanel::Filters(state.FavoritesOnly,state.PersonalTag)){state.CatalogRevision=0;state.Matches.clear();state.PageIndex=0;state.ResetScroll=true;}
@@ -652,7 +672,7 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
         if(const auto* payload=ImGui::AcceptDragDropPayload("RS_CART_PATH"))if(payload->DataSize>0 && payload->DataSize<=4097 && static_cast<const char*>(payload->Data)[payload->DataSize-1]=='\0')RemoveFromCart(static_cast<const char*>(payload->Data));
         ImGui::EndDragDropTarget();
     }
-    const bool populationWait=lazy.LastError.empty()&&(!lazy.Started||lazy.Pending||lazy.PreparingAlphabetical||lazy.HasMore)&&state.Matches.empty();
+    const bool populationWait=lazy.LastError.empty()&&(state.CatalogRevision!=revision||!lazy.Started||lazy.Pending||lazy.PreparingAlphabetical||lazy.HasMore)&&state.Matches.empty();
     if(populationWait){if(localCatalog)ImGui::TextDisabled("Checking the cached matching items…");else{const auto progress=ItemPopulation::Describe(lazy.PopulationStage,false,lazy.PopulationDone,{},lazy.CheckingChanges,lazy.PopulationTotal);DrawLoadingSpinner(theme,progress.Label.c_str());}}
     else if(catalog.contains("Items")&&catalog["Items"].is_array()) {
         const auto& items=catalog["Items"];const int total=static_cast<int>(page.Count);
@@ -716,8 +736,13 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
     const auto splitMin=ImGui::GetItemRectMin(),splitMax=ImGui::GetItemRectMax();if(splitHover||splitActive)ImGui::GetWindowDrawList()->AddLine(ImVec2(splitMin.x,(splitMin.y+splitMax.y)*0.5f),ImVec2(splitMax.x,(splitMin.y+splitMax.y)*0.5f),ImGui::GetColorU32(theme.accentHover),theme.X(1.5f));
     ImGui::PopID();
     }
-    PageControls(state,state.Matches.size(),lazy.HasMore&&lazy.LastError.empty(),lazy.Pending);
-    if(lazy.LastError.empty()&&state.Matches.empty()&&!populationWait&&lazy.Started)ImGui::TextDisabled("No matching items in the loaded runtime window.");
+    PageControls(state,state.Matches.size(),lazy.HasMore&&lazy.LastError.empty(),lazy.Pending||populationWait);
+    if(lazy.LastError.empty()&&state.Matches.empty()&&!populationWait&&lazy.Started){
+        ImGui::TextDisabled("No matching items in the loaded runtime window.");
+#if defined(HELPY_PREVIEW)
+        ++HelpyPreviewHooks::ItemEmptyNotices;
+#endif
+    }
     if(state.SelectedRevision!=revision||state.SelectedPath!=selected) {
         state.SelectedRevision=revision;state.SelectedPath=selected;state.SelectedIndex=static_cast<size_t>(-1);
         if(catalog.contains("Items")&&catalog["Items"].is_array()){const auto& items=catalog["Items"];for(size_t i=0;i<items.size();++i)if(items[i].value("Path",std::string{})==selected){state.SelectedIndex=i;break;}}

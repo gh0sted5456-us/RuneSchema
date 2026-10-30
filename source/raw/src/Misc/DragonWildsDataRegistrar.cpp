@@ -1323,9 +1323,13 @@ namespace DragonWilds {
                     // Validate all aliases against this instance before the first asset commits.
                     for(const auto& record:ordered)QuestRegistry::NativeRegistry::RegisterFamily(subsystem,instance,objects[record.SourceIndex],*family,false);
                     const auto before=AuditNetworkRegistry(subsystem);if(!before.Valid)throw std::runtime_error("Existing native network identities do not round-trip: "+before.Detail);
+                    const auto key="network:"+lane.Name+":"+family->Subsystem;
+                    auto& sync=m_networkSyncLanes[key];
+                    if(sync.Subsystem.Get()!=subsystem){
+                        sync={};sync.Subsystem.Assign(subsystem);sync.PrefixCount=before.Count;sync.PrefixFingerprint=before.Fingerprint;
+                    }
                     for(const auto& record:ordered)QuestRegistry::NativeRegistry::RegisterFamily(subsystem,instance,objects[record.SourceIndex],*family);
                     const auto after=AuditNetworkRegistry(subsystem);if(!after.Valid)throw std::runtime_error("Native family network verification failed: "+after.Detail);
-                    const auto key="network:"+lane.Name+":"+family->Subsystem;
                     PS::NetworkIdentityState::Publish(key,after.Fingerprint);PS::NetworkIdentityState::PublishOwner(key,manifest.Owner,after.Fingerprint);
                     enrolled+=ordered.size();
                 }

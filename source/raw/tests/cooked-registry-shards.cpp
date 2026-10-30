@@ -2,9 +2,11 @@
 #include "Core/SaveCleanup.h"
 #include <map>
 #include <stdexcept>
+#include <iostream>
+#include <source_location>
 using namespace PS::CookedRegistryShards;
 namespace M=PS::CookedPakRegistryManifest;
-static void Check(bool value){if(!value)throw std::runtime_error("Cooked registry shard regression");}
+static void Check(bool value,const std::source_location& where=std::source_location::current()){if(!value)throw std::runtime_error("Cooked registry shard regression at "+std::to_string(where.line()));}
 template<class F>static void Reject(F&& action){bool rejected=false;try{action();}catch(const std::exception&){rejected=true;}Check(rejected);}
 static Asset Make(Json document,std::string owner="Dye"){const auto text=document.dump();return {std::move(owner),ParseJson(text),text.size()};}
 static std::string Child(const std::string& id){const auto name="RSREG_Dye_"+id;return "/Game/Mods/Dye/Registry/Shards/"+name+"."+name;}
@@ -12,7 +14,7 @@ static Json Payload(const std::string& recipe){
     const Json body={{"Unlock",false},{"Discovery",{{"AllItems",{"/Example/Items/ITEM_Dye.ITEM_Dye"}}}}};
     return {{"SchemaVersion",1},{"Entries",Json::array()},{"RegistryShard",true},{"LoaderDefinitions",{{"Recipes",{{recipe,body}}}}}};
 }
-int main(){
+int main()try{
     M::Reset();PS::RegistryEnrollment::Reset();
     const std::string recipeA="/Example/Recipes/RECIPE_A.RECIPE_A",recipeB="/Example/Recipes/RECIPE_B.RECIPE_B";
     const auto a=Child("0001"),b=Child("0002"),rootPath=RootPath("Dye");
@@ -22,6 +24,7 @@ int main(){
     std::vector<std::string> visited;
     const auto load=[&](const std::string& path){visited.push_back(path);return assets.at(path);};
     const auto group=Resolve(rootPath,root,load);
+    {auto compatible=root;compatible.Document["SchemaVersion"]=99;Check(Resolve(rootPath,compatible,load).Manifests.size()==2);compatible.Document.erase("SchemaVersion");Check(Resolve(rootPath,compatible,load).Manifests.size()==2);visited.clear();Resolve(rootPath,root,load);}
     {
         const auto alias="/Game/Mods/Dye/Registry/DA_Registry_Ritualist.DA_Registry_Ritualist";
         const auto renamed="/Game/Mods/Dye/Registry/Shards/RSREG_Ritualist_Items.RSREG_Ritualist_Items";
@@ -64,7 +67,6 @@ int main(){
     auto duplicate=root;duplicate.Document["RegistryShards"]={a,a};visited.clear();fail(duplicate);Check(visited.empty());
     duplicate.Document["RegistryShards"]={Child("A"),Child("a")};fail(duplicate);
     auto tooMany=root;tooMany.Document["RegistryShards"]=Json::array();for(int i=0;i<257;++i)tooMany.Document["RegistryShards"].push_back(Child(std::to_string(i)));fail(tooMany);
-    auto wrongVersion=root;wrongVersion.Document["SchemaVersion"]=2;fail(wrongVersion);
     auto empty=root;empty.Document["RegistryShards"]=Json::array();fail(empty);
     auto rootShard=root;rootShard.Document["RegistryShard"]=true;fail(rootShard);
     Reject([&]{Resolve("/Game/Other.Root",root,load);});
@@ -117,4 +119,4 @@ int main(){
     largeRoot=Make(largeRoot.Document);const auto large=Resolve(rootPath,largeRoot,load);
     Check(large.References==recipeCount&&large.Paths.size()==111);M::PublishBatch(large.Manifests);
     Check(M::Definitions("Recipes").size()==recipeCount);
-}
+}catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}

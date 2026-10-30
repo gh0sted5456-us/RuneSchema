@@ -102,6 +102,14 @@ int main(int argc, char** argv)
     const auto desktop=Read(desktopRoot/"src/Generator/HelpyStandaloneWindow.cpp");
     const auto panel=Read(desktopRoot/"include/Generator/AuthoringPanel.h");
     const auto protocol=Read(rawRoot/"include/Core/HelpyAuthoringProtocol.h");
+    const auto registryBridge=Read(rawRoot/"src/Runtime/RegistryBridge.cpp");
+    const auto placementStart=registryBridge.find("bool RegistryBridge::BlockBuildingRequest(");
+    const auto localPlacement=registryBridge.find("if(authority&&LocalController(controller))return false;",placementStart);
+    const auto placementIndex=registryBridge.find("if(!parameters||!BuildingRegistry)",placementStart);
+    Check(placementStart!=std::string::npos&&localPlacement!=std::string::npos&&placementIndex!=std::string::npos
+        &&localPlacement<placementIndex,"local host placement bypasses remote parameter and peer-registry checks");
+    Check(registryBridge.find("BuildingNetworkGuard::Rejection(local,peer,index)",placementIndex)!=std::string::npos,
+        "remote building placement still verifies registry identities");
     Check(entrypoint.find("BeginRuneSchemaTab(\"Authoring & Tools\"")==std::string::npos
         && navigation.find("case Page::Authoring:return \"Authoring\";")!=std::string::npos
         && navigation.find("case Page::Authoring:return Page::Tools;")!=std::string::npos
@@ -109,9 +117,9 @@ int main(int argc, char** argv)
         && desktop.find("AuthoringPanel::Render();")!=std::string::npos,
         "desktop Authoring Tools replaces the duplicate legacy authoring tab");
     const auto serverStart=desktop.find("if(HelpyEnvironment::Server())",desktop.find("void HelpyStandaloneWindow::ThreadMain()"));
+    const auto serverShow=desktop.find("if(PluginRuntimeServices::StartHidden){ClosePopup();}",serverStart);
     Check(serverStart!=std::string::npos
-        && desktop.find("CurrentPage=Page::DedicatedServer;",serverStart)<desktop.find("ShowWindow(m_hwnd,SW_SHOWNOACTIVATE)",serverStart)
-        && desktop.find("ShowWindow(m_hwnd,SW_SHOWNOACTIVATE)",serverStart)!=std::string::npos,
+        && desktop.find("CurrentPage=Page::DedicatedServer;",serverStart)<serverShow&&serverShow!=std::string::npos,
         "dedicated server opens its desktop configuration route without a local-player dependency");
     for(const auto* operation:{"AuthoringActivate","AuthoringSubmit","AuthoringSnapshot"})
         Check(host.find(operation)!=std::string::npos,"native host exposes all desktop authoring service routes");
@@ -161,5 +169,43 @@ int main(int argc, char** argv)
         && loader.find("[SERVER][REGISTRY-DEFERRED]") != std::string::npos
         && loader.find("m_dedicatedServerWorldReady.load") != std::string::npos,
         "dedicated server cloning and registration wait for InitGameState readiness");
+    const auto has=[](const std::string& text,const char* value){return text.find(value)!=std::string::npos;};
+    const auto policyRoot=rawRoot/"include/Runtime/BuildingPolicy";
+    const auto policy=Read(policyRoot/"Policy.h"),policies=Read(policyRoot/"Bridge.h");
+    const auto destruction=Read(policyRoot/"Destruction.h"),materials=Read(policyRoot/"MaterialCosts.h");
+    const auto phase=Read(policyRoot/"PlayerPhasing.h"),placement=Read(policyRoot/"Placement.h");
+    Check(has(policy,"RuneSchemaPlayerPhasing")&&has(policy,"RuneSchemaFreeBuildingMaterials")
+        &&has(policy,"CheckPosition(fn);Check(fn,L\"ReturnValue\",L\"BoolProperty\",1)"),
+        "optional cooked phase/material callbacks retain the validated v1 position/bool contract");
+    Check(has(destruction,"RuneSchemaCanDismantleOwnBuilding")&&has(destruction,"permission.Object(L\"Player\",pawn.Result())")
+        &&has(policies,"OwnDismantlePermission(object,")&&has(policies,"DISMANTLE_PERMISSION_FAILED"),
+        "public own-actor dismantle callback must remain wired to native destruction and permission checks");
+    const auto effects=policies.find("state.effects->Update(world,step)");
+    Check(effects!=std::string::npos&&effects<policies.find("if(!manager)continue;")
+        &&has(policies,"PLAYER_EFFECTS_UPDATE_FAILED")&&has(policies,"BUILDING_DAMAGE_UPDATE_FAILED")
+        &&has(policies,"state.support.Update(")&&has(policies,"worlds[owner->GetWorld()].farming.Update("),
+        "buffs must survive absent managers and independent native adapter failures without repeated failed binding");
+    Check(has(materials,"~MaterialWaiver()")&&has(materials,"array->MoveAssign(saved,")
+        &&has(materials,"BuildingNetworkGuard::PlacementIndexContract")&&has(materials,"void Clear()")
+        &&has(policies,"materials.Before(")&&has(policies,"materials.After(")&&has(policies,"materials.Clear()")
+        &&has(placement,"std::unique_ptr<MaterialWaiver> waiver"),
+        "material waivers must preserve RPC index validation and restore shared recipes after native calls and cleanup");
+    Check(has(phase,"Restore(it->second)")&&has(phase,"Collision(capsule,0);Mode(movement,5)")
+        &&has(phase,"IsDead")&&has(policies,"phasing.clear()")
+        &&has(policies,"HasWorldPolicy(world,L\"RuneSchemaPlayerPhasing\")||phasing.contains(world)"),
+        "full phasing must restore native collision/movement and avoid enumeration without a provider");
+    const auto crafting=Read(policyRoot/"CraftingCosts.h");
+    Check(has(policy,"RuneSchemaFreeCraftingMaterials")&&has(crafting,"L\"ItemsConsumed\"")
+        &&has(crafting,"InventoryController:CraftRecipe")&&has(crafting,"InventoryController:Server_CraftRecipe")
+        &&has(crafting,"CraftingFunctionLibrary:CanCraftRecipe")&&has(crafting,"CraftingFunctionLibrary:GetMaxAmountCraftableOfRecipe")
+        &&has(crafting,"CraftingFunctionLibrary:HasRequiredConsumedItemsForRecipe"),
+        "free crafting must cover native owning-player construction and ingredient UI validation boundaries");
+    Check(has(crafting,"Ref(owner,L\"InventoryController\")==object")&&has(crafting,"Ref(owner,L\"InventoryComponent\")==inventory")
+        &&has(crafting,"controller&&controller!=owner")&&has(crafting,"GetCurrentThreadId()!=thread")
+        &&has(crafting,"ScopedCostSwap")&&has(crafting,"frames.pop_back()")
+        &&has(policies,"crafting.Before(")&&has(policies,"crafting.After(")&&has(policies,"crafting.Clear()"),
+        "crafting must retain exact player ownership, game-thread isolation and nested recipe restoration");
+    for(const auto* forbidden:{"FindAllOf","PreventOriginalFunctionCall","FuelConsumedOverride","RecipesUnlocked","XPMultiplier","BonusCount"})
+        Check(!has(crafting,forbidden),"free crafting must not scan players, replace native validation or edit progression/output/fuel data");
     std::cout << "Native binding resolution contract passed.\n";
 }

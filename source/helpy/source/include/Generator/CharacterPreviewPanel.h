@@ -2,6 +2,7 @@
 #include "Core/CharacterPreviewFrame.h"
 #include "Generator/HelpyImGuiTheme.h"
 #include "Generator/ItemGridPicker.h"
+#include "Runtime/PluginRuntimeServices.h"
 #include <imgui_internal.h>
 namespace PS::CharacterPreviewPanel {
 inline CharacterPreviewFrame::Channel Channel;
@@ -19,7 +20,7 @@ inline void Fail(const std::string& error){const auto ready=Serial;Close();Seria
 inline void Shutdown(){Close();if(Texture)Texture->SetStatus(ImTextureStatus_WantDestroy);}
 // Call after the renderer releases GPU textures, while the ImGui context lives.
 inline void ReleaseTexture(){if(Texture){ImGui::UnregisterUserTexture(Texture);IM_DELETE(Texture);Texture=nullptr;}}
-inline void Attach(const std::string& name){if(Channel.Name()==name)return;Close();Channel.Open(name,false);Status="Loading native appearance…";}
+inline void Attach(const std::string& name){if(Channel.Name()==name)return;Close();Channel.Open(name,false,PluginRuntimeServices::ExternalDesktop?PluginRuntimeServices::GameProcessId.load():GetCurrentProcessId());Status="Loading native appearance…";}
 inline void Draw(float height){
     if(!Channel.Name().empty()&&Channel.Lock()){
         auto* frame=Channel.Get();frame->Heartbeat=GetTickCount64();frame->Yaw=Yaw;frame->Zoom=Zoom;frame->Pitch=Pitch;frame->Animation=Animation;frame->Playing=Playing?1:0;

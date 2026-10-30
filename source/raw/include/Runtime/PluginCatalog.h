@@ -18,6 +18,7 @@ struct Plugin {
     std::string Id,Name,Version,BuiltForRuneSchema,ConsoleMessage;
     int ApiVersion=0;
     bool Enabled=true,Required=false,MountPaks=true;
+    bool PreferSharedRegistry=false;
     fs::path Root,DllRoot,PaksRoot,ScriptsRoot,EntryPoint;
     std::vector<std::string> Capabilities,Connections;
     std::vector<std::pair<std::string,std::string>> Dependencies;
@@ -30,6 +31,7 @@ inline std::vector<fs::path> PakDirectories(const Plugin& plugin) {
         throw std::runtime_error("Plugin paks path is not a safe directory: "+plugin.Id);
     for(const auto& package:fs::directory_iterator(plugin.PaksRoot,fs::directory_options::skip_permission_denied,error)) {
         if(error)throw std::runtime_error("Unable to enumerate plugin paks: "+plugin.Id);
+        if(plugin.PreferSharedRegistry){auto name=package.path().filename().wstring();std::transform(name.begin(),name.end(),name.begin(),::towlower);if(name==L"registrybridge")continue;}
         if(package.is_symlink(error))throw std::runtime_error("Symlinks are not allowed under plugin paks: "+plugin.Id);
         if(!package.is_directory(error)) {
             if(!package.is_regular_file(error))continue;
@@ -39,16 +41,26 @@ inline std::vector<fs::path> PakDirectories(const Plugin& plugin) {
                 throw std::runtime_error("Container files must be inside paks/<PackageName>/: "+plugin.Id);
             continue; // Mod-manager markers and unrelated files are not plugin content.
         }
-        std::map<fs::path,uint8_t> triplets;
+        struct Parts {fs::path Stem;uint8_t Mask=0;};std::map<std::wstring,Parts> triplets;
+        std::string observed;std::size_t observedCount=0;
         for(const auto& file:fs::directory_iterator(package.path(),fs::directory_options::skip_permission_denied,error)) {
             if(error)throw std::runtime_error("Unable to enumerate plugin package: "+plugin.Id);
             if(file.is_symlink(error)||!file.is_regular_file(error))throw std::runtime_error("Package directories may contain only regular container files: "+plugin.Id);
             auto extension=file.path().extension().wstring();std::transform(extension.begin(),extension.end(),extension.begin(),::towlower);
             uint8_t bit=0;if(extension==L".pak")bit=1;else if(extension==L".ucas")bit=2;else if(extension==L".utoc")bit=4;else continue;
-            auto base=file.path();base.replace_extension();triplets[base]|=bit;
+            auto stem=file.path().stem();auto key=stem.wstring();std::transform(key.begin(),key.end(),key.begin(),::towlower);
+            auto& parts=triplets[key];parts.Stem=stem;
+            if(parts.Mask&bit)throw std::runtime_error("Duplicate container part ignoring filename case in "+package.path().string()+": "+file.path().filename().string());
+            parts.Mask|=bit;
+            if(observedCount++<12){if(!observed.empty())observed+=", ";observed+=file.path().filename().string();}
         }
-        if(triplets.empty()||std::any_of(triplets.begin(),triplets.end(),[](const auto& value){return value.second!=7;}))
-            throw std::runtime_error("Incomplete pak/ucas/utoc triplet in "+package.path().string());
+        if(triplets.empty())continue; // Ignore directories containing only mod-manager metadata.
+        for(const auto& [key,parts]:triplets)if(parts.Mask!=7){
+            std::string missing;
+            for(const auto& [bit,extension]:std::vector<std::pair<uint8_t,const char*>>{{1,".pak"},{2,".ucas"},{4,".utoc"}})
+                if(!(parts.Mask&bit)){if(!missing.empty())missing+=", ";missing+=parts.Stem.string()+extension;}
+            throw std::runtime_error("Incomplete pak/ucas/utoc triplet in "+package.path().string()+"; missing "+missing+"; found "+observed);
+        }
         result.push_back(package.path());
     }
     std::sort(result.begin(),result.end());return result;
@@ -88,9 +100,8 @@ inline std::vector<Plugin> Discover(const fs::path& root,std::vector<std::string
         try {
         if(fs::file_size(manifest)>256*1024)throw std::runtime_error("Plugin manifest exceeds 256 KiB: "+manifest.string());
         std::ifstream stream(manifest);nlohmann::json data;stream>>data;
-        for(const auto* field:{"SchemaVersion","Id","Version"})
+        for(const auto* field:{"Id","Version"})
             if(!data.contains(field))throw std::runtime_error(std::string("Plugin manifest missing ")+field+": "+manifest.string());
-        if(data.at("SchemaVersion")!=1)throw std::runtime_error("Unsupported plugin manifest schema: "+manifest.string());
         Plugin plugin;plugin.Id=data.at("Id").get<std::string>();plugin.Name=data.value("Name",plugin.Id);
         plugin.Version=data.at("Version").get<std::string>();plugin.ApiVersion=data.value("ApiVersion",1);
         plugin.BuiltForRuneSchema=data.value("BuiltForRuneSchema",std::string{});
@@ -143,6 +154,10 @@ inline std::vector<Plugin> Discover(const fs::path& root,std::vector<std::string
             diagnostics->push_back(plugin.Id+": legacy Required flag ignored; explicit plugins.txt disable wins and RuneSchema core remains independent");
         plugin.Enabled=plugin.Enabled&&found->second.Enabled;
     }
+    const auto shared=std::find_if(result.begin(),result.end(),[](const auto& plugin){return plugin.Id=="RuneSchema.RegistryBridge"&&plugin.Enabled&&plugin.MountPaks;});
+    if(shared!=result.end())try{
+        if(!PakDirectories(*shared).empty())for(auto& plugin:result)if(plugin.Id=="RSNetworking")plugin.PreferSharedRegistry=true;
+    }catch(const std::exception&){} // An invalid canonical provider must not suppress the legacy fallback.
     std::sort(result.begin(),result.end(),[&](const auto& a,const auto& b){
         const auto left=requestedById.find(a.Id),right=requestedById.find(b.Id);
         if(left!=requestedById.end()&&right!=requestedById.end())return left->second.Position<right->second.Position;

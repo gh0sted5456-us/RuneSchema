@@ -103,6 +103,10 @@ int main(){
     assert(ItemFamily::Matches(hardLeather,"Hard Leather Cowl (Dyed Black, Mirror Trim)"));
     assert(ItemFamily::Key("Hard Leather Cowl (Dyed Black, Mirror Trim)")==hardLeather);
     assert(ItemFamily::Key("Hard Leather Chaps")==ItemFamily::Key("Hard Leather Body"));
+    assert(ItemFamily::Key("Splitbark Body")==ItemFamily::Key("Splitbark Helm"));
+    assert(ItemFamily::Matches("splitbark","Armour T5 Head Splitbark"));
+    assert(ItemFamily::Matches("splitbark","ITEM_Armour_T5_Body_Splitbark"));
+    assert(ItemFamily::Matches("splitbark","Armour T5 Legs Splitbark"));
     assert(!ItemFamily::Matches(hardLeather,"Hard Leather Cowl (Dyed Blue, Mirror Trim)"));
     assert(!ItemFamily::Matches(hardLeather,"Hard Leather Chaps (Dyed Black, Gold Trim)"));
     assert(!ItemFamily::Matches(hardLeather,"Hard Leather Cowl"));
@@ -116,6 +120,10 @@ int main(){
     assert(ItemFamily::Key("Rune Med Helm (Masterwork)")!=ItemFamily::Key("Rune Platebody"));
     assert(ItemFamily::Key("Top Hat")!="hat"&&ItemFamily::Key("Top Hat")=="top");
     assert(ItemFamily::Key("Gold coin").empty()&&ItemFamily::Key("Helm").empty());
+    const auto catapult=ItemFamily::Key("Adamant Catapult Contract");assert(catapult=="catapult_contract");
+    assert(ItemFamily::Matches(catapult,"Bronze Catapult Contract"));
+    assert(ItemFamily::Matches(catapult,"ITEM_RuneCatapultContract"));
+    assert(!ItemFamily::Matches(catapult,"Adamant Cannon Contract"));
     auto familyQuery="__helpyfamily:"+family+" chrome";
     assert(ItemFamily::TakeFilter(familyQuery)==family&&familyQuery=="chrome");
     bool rejected=false;try{auto bad=std::string("__helpyfamily:../private");ItemFamily::TakeFilter(bad);}catch(...){rejected=true;}assert(rejected);

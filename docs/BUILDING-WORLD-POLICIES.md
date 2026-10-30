@@ -8,6 +8,36 @@ A cooked Blueprint actor can provide world policies to RuneSchema. Keep the mod'
 
 Implement `RuneSchemaBuildingPolicyVersion() -> int32` and return `1`. Existing building support, placement, damage, destruction and overlay callbacks keep their contracts.
 
+These optional callbacks accept `Position: Vector` and return a Blueprint boolean:
+
+| Callback | When true |
+| --- | --- |
+| `RuneSchemaPlayerPhasing` | Living authoritative or locally controlled players in range can pass through geometry using native flying movement. Space rises and Left Control descends. Leaving the area, disabling the policy, death and cleanup restore the previous capsule collision and movement mode. |
+| `RuneSchemaFreeBuildingMaterials` | Temporarily waives recipe requirements during native preview, selection and construction calls. Requirements are restored after each synchronous call. Native spatial checks and multiplayer building identity checks remain active. |
+| `RuneSchemaFreeCraftingMaterials` | Temporarily waives only a crafting recipe's `ItemsConsumed` for the actual crafter in range. Recipe unlocks, skills, station requirements, outputs and XP retain native handling. |
+
+Free crafting wraps native `InventoryController:CraftRecipe` and
+`Server_CraftRecipe`, plus `CanCraftRecipe`,
+`GetMaxAmountCraftableOfRecipe` and `HasRequiredConsumedItemsForRecipe` ingredient
+checks. It uses the inventory controller's verified owning player, the explicit
+crafter, or a unique owner proven by the supplied personal inventory. Shared
+storage alone and ambiguous player inventories cannot grant the waiver. Client
+UI checks apply only to the owning player; authority checks use the server's
+current pawn position.
+
+Recipe arrays are borrowed only during synchronous game-thread calls and restored
+afterward. Nested calls from an ineligible player temporarily see the original
+costs, even if another player has a waiver for that same recipe. No additional
+polling loop or global free-crafting flag is used. Passive processors, repair
+requirements and fuel remain outside this callback. The native crafting and
+owning-client tests must pass before a combined content release uses the candidate.
+
+An individual building actor can additionally opt in with
+`RuneSchemaCanDismantleOwnBuilding(Player: Pawn) -> bool`. The argument is the
+requesting controller's current pawn. Keep distance, preview and controlled-pawn
+checks in that cooked callback. This changes only that actor's dismantle
+permission; it does not grant global demolition rights.
+
 Each scalar callback below accepts `Position` as an Unreal `Vector` and returns `ReturnValue` as a Blueprint double. Positions use native world coordinates in centimetres. Return the neutral value outside the affected area or when the provider is disabled.
 
 | Callback | Neutral | Meaning |
@@ -31,11 +61,33 @@ Provide both callbacks together:
 
 Cook capacity, maxima, recovery and other effect rules into the returned native effect classes. Configure their native stacking rules deliberately; the scalar strongest-value rule does not replace native gameplay-effect stacking behavior. Effects are tracked by provider and player and removed when that relationship ends, including exit, death and provider/world cleanup. Ending a vitality effect clamps excess special charge to the player's normal maximum. Well Rested decay is restored when its policy ends.
 
+Server player effects run independently of the global building manager. Missing
+building managers and failed damage, support or phasing adapters do not suppress
+unrelated player buffs. Profile modifiers still compose using the game's native
+effect rules; a cooked effect does not promise an exact final value after other
+mods apply their modifiers.
+
 ## Native behavior and work limits
 
 Farming protection uses private transient plant/stage copies rather than editing the source assets. Harvest parameters are restored after the borrowed native call. Resource durations are restored when their policy ends. Bonus enemies use transient, non-persistent actors and a recursion guard.
 
 Farm and resource detours install only in authoritative worlds. They validate the reflected layout and decoded executable path before binding; unsupported executables retain native handling and report the original failure. This does not certify Game Pass or a later game update without a corresponding runtime test.
+
+The October 29 WinGDK capture identified a stability worker reached by a tail
+jump, a farm-update call six bytes beyond the previous 768-byte search, and a
+different subsystem register in the watering message. The maintained resolver
+accepts those verified variants within fixed search limits, retaining signature,
+layout, ambiguity and output bounds checks. Captured-code checks and a successful
+build establish resolution compatibility; they do not replace a live Game Pass
+world test of farming and stability effects.
+
+An unsupported support adapter is suspended for that building manager; it does
+not repeatedly scan native code or abort the remaining policy tick. A new
+manager retries normally. Failed farm-protection binding is attempted once per
+world even if several providers request it. `SUPPORT_UPDATE_FAILED` and
+`FARM_BIND_FAILED` retain the original reason and identify the unavailable
+override. Native stability and farming continue; these messages do not mean
+that the optional override has been made compatible with that executable.
 
 Provider discovery uses BeginPlay events and a one-time catch-up scan. Unrelated ProcessEvent calls pass a cached function-name filter before path checks. Player effects are sampled at most every half second, and farm maintenance at most once per second when its native adapter is installed. Resource enumeration is skipped when no matching policy or outstanding restoration exists. These are work limits, not measured FPS or latency guarantees.
 

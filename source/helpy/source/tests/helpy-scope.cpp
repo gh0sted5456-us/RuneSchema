@@ -15,7 +15,7 @@ int main(int argc,char** argv){
     assert(!plugin.contains("HelpyNative")&&!plugin.contains("helpy.vision.status"));
     assert(!build.contains("HelpyNative")&&!build.contains("schema-vision"));
     assert(!Read(root/"build/build.ps1").contains("RuneSchema.Helpy.Native.dll"));
-    for(const auto* retired:{"source/helpy/source/native/SchemaVisionRuntime.cpp",
+    for(const auto* retired:{"source/raw/plugins/helpy/HelpyPlugin.cpp","source/helpy/source/native/SchemaVisionRuntime.cpp",
         "source/helpy/source/include/Generator/SchemaVisionPanel.h",
         "source/helpy/source/include/Runtime/HelpyNativeModule.h",
         "source/helpy/assets/SchemaVision","source/plugins/RuneSchema.Helpy/assets/SchemaVision"})
@@ -26,7 +26,9 @@ int main(int argc,char** argv){
     assert(!desktop.contains("DrawHomeBackdrop("));
     const auto cache=desktop.substr(desktop.find("void RenderIconCacheSettings("),desktop.find("void RenderUpdatesAndRuntime(")-desktop.find("void RenderIconCacheSettings("));
     assert(!cache.contains("RefreshSnapshot(")&&!cache.contains("CurrentDiskStats()")&&cache.contains("Refresh usage")&&cache.contains("std::launch::async"));
-    const auto settings=desktop.substr(desktop.find("case Page::Settings:\n"),desktop.find("case Page::Authoring:AuthoringPanel")-desktop.find("case Page::Settings:\n"));
+    const auto settingsStart=desktop.find("void RenderSettingsPage(");assert(settingsStart!=std::string::npos);
+    const auto settings=desktop.substr(settingsStart,desktop.find("void RenderWorkspace(",settingsStart)-settingsStart);
+    assert(settings.contains("##settings-categories")&&settings.contains("##settings-details"));
     assert(!settings.contains("BeginTabItem(\"Item Cache\""));
     const auto tools=desktop.substr(desktop.find("case Page::Tools:\n"));
     assert(tools.contains("BeginTabItem(\"Item Cache\"")&&tools.contains("ToolSection::ItemCache;RenderIconCacheSettings(true,true)"));

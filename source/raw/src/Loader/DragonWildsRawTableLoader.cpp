@@ -12,6 +12,8 @@
 #include "SDK/Structs/Custom/FScriptArrayHelper.h"
 #include "SDK/Structs/Custom/FScriptMapHelper.h"
 #include "SDK/Helper/PropertyHelper.h"
+#include "SDK/Helper/ReflectedContract.h"
+#include "Core/CookedPakRegistryManifest.h"
 #include "Utility/Logging.h"
 #include "Utility/StructuredDiagnosticB3.h"
 #include "Utility/Config.h"
@@ -258,6 +260,11 @@ namespace DragonWilds {
                 RC::to_generic_string(patch.Row));
         }
         m_pendingPatches.clear();
+        m_cookedTables.clear();
+        try{for(const auto& definition:PS::CookedPakRegistryManifest::Definitions("DataTables"))
+            m_cookedTables.push_back({definition.Owner,definition.Path,definition.Body.at("Target").get<std::string>()});
+        }catch(const std::exception& error){m_cookedTables.clear();PS::Log<LogLevel::Warning>(STR("[RS-RAW-004] [COOKED-TABLE][REJECTED] {}; loose JSON table edits continue.\n"),PS::ToWideSafe(error.what()));}
+        ApplyCookedTableExtensions();
         m_rawTargetsReady=true;
         LoadAndApplyRawTargets();
         bool registryPlanBuilt=false;
@@ -501,6 +508,7 @@ namespace DragonWilds {
     void DragonWildsRawTableLoader::OnDatatableSerialized(RC::Unreal::UDataTable* datatable)
     {
         if (!datatable) return;
+        ApplyCookedTableExtensions(datatable);
 
         if (datatable->GetClassPrivate() == UECustom::UCompositeDataTable::StaticClass())
         {
@@ -515,6 +523,60 @@ namespace DragonWilds {
         if(m_tableDataMap.contains(RC::to_generic_string(path)))
             Apply(RC::to_generic_string(path),datatable);
         ApplyRegistryPatches(datatable);
+    }
+
+    void DragonWildsRawTableLoader::ApplyCookedTableExtensions(UDataTable* only)
+    {
+        if(m_importingCookedTables||m_cookedTables.empty()||!PS::PSConfig::Get()->IsLoaderEnabled("raw"))return;
+        m_importingCookedTables=true;struct Reset {bool& Value;~Reset(){Value=false;}} reset{m_importingCookedTables};
+        const auto resolve=[](const std::string& path)->UDataTable*{
+            auto* object=UECustom::UObjectGlobals::StaticFindObject(nullptr,nullptr,RC::to_generic_string(path).c_str(),false);
+            if(!object){UECustom::TSoftObjectPtr<UObject> soft{UECustom::FSoftObjectPath(RC::to_generic_string(path))};object=UECustom::UKismetSystemLibrary::LoadAsset_Blocking(soft);}
+            if(!object||!object->IsA(UDataTable::StaticClass())||RC::to_string(object->GetPathName())!=path
+                ||object->IsA(UECustom::UCompositeDataTable::StaticClass()))throw std::runtime_error("Cooked table extensions require exact plain DataTables; target an editable leaf instead of a composite");
+            return static_cast<UDataTable*>(object);
+        };
+        const auto serializedPath=only?RC::to_string(only->GetPathName()):std::string{};
+        for(const auto& definition:m_cookedTables){
+            if(only&&serializedPath!=definition.Target)continue;
+            try{
+                auto* source=resolve(definition.Source);auto* target=only?only:resolve(definition.Target);
+                if(!target||target->IsA(UECustom::UCompositeDataTable::StaticClass()))throw std::runtime_error("Cooked table target must be an editable plain DataTable");
+                auto& prior=m_cookedTableImports[{definition.Source,definition.Target}];
+                if(prior.Source.Get()==source&&prior.Target.Get()==target)continue;
+                auto* rowType=source->GetRowStruct().Get();
+                if(!rowType||rowType!=target->GetRowStruct().Get()||rowType->GetPropertiesSize()<=0||rowType->GetPropertiesSize()>1024*1024)
+                    throw std::runtime_error("Source and target must share the exact bounded native row struct");
+                const auto count=source->GetRowMap().Num();if(count<0||count>4096)throw std::runtime_error("Cooked source table exceeds its 4096-row limit");
+                if(count&&rowType->GetPropertiesSize()>(16*1024*1024)/count)throw std::runtime_error("Cooked row staging exceeds its 16 MiB inline-data budget");
+                std::vector<FProperty*> properties;
+                for(auto* property:TFieldRange<FProperty>(rowType,EFieldIterationFlags::Default)){
+                    if(!ReflectedContract::Fits(property,rowType->GetPropertiesSize()))throw std::runtime_error("Cooked table row property is outside its struct");
+                    properties.push_back(property);
+                }
+                struct Row {FName Name;std::unique_ptr<FManagedStruct> Data;};std::vector<Row> prepared;std::size_t conflicts=0;
+                for(const auto& [name,bytes]:source->GetRowMap()){
+                    if(!bytes)throw std::runtime_error("Cooked source table has a null row");
+                    if(target->FindRowUnchecked(name)){++conflicts;continue;}
+                    auto copy=std::make_unique<FManagedStruct>(rowType);
+                    for(auto* property:properties)property->CopyCompleteValue_InContainer(copy->GetData(),bytes);
+                    prepared.push_back({name,std::move(copy)});
+                }
+                std::vector<FName> added;added.reserve(prepared.size());
+                try{
+                    for(const auto& row:prepared){
+                        if(target->FindRowUnchecked(row.Name))throw std::runtime_error("Cooked table changed before row import");
+                        target->AddRow(row.Name,*reinterpret_cast<FTableRowBase*>(row.Data->GetData()));added.push_back(row.Name);
+                        auto* actual=target->FindRowUnchecked(row.Name);if(!actual)throw std::runtime_error("Cooked row was not registered");
+                        for(auto* property:properties)if(!property->Identical_InContainer(actual,row.Data->GetData(),0))throw std::runtime_error("Cooked row copy verification failed");
+                    }
+                }catch(...){for(const auto& name:added)target->RemoveRow(name);throw;}
+                prior.Source.Assign(source);prior.Target.Assign(target);
+                PS::Log<LogLevel::Normal>(STR("[COOKED-TABLE][ADDED] owner='{}' source='{}' target='{}' rows={} existing_preserved={}; JSON edits follow.\n"),
+                    PS::ToWideSafe(definition.Owner),PS::ToWideSafe(definition.Source),PS::ToWideSafe(definition.Target),added.size(),conflicts);
+            }catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[RS-RAW-004] [COOKED-TABLE][REJECTED] owner='{}' source='{}' target='{}': {}; other table extensions continue.\n"),
+                PS::ToWideSafe(definition.Owner),PS::ToWideSafe(definition.Source),PS::ToWideSafe(definition.Target),PS::ToWideSafe(error.what()));}
+        }
     }
 
     void DragonWildsRawTableLoader::LoadAndApplyRawTargets()

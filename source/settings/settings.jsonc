@@ -50,6 +50,9 @@
     "progress": false
   },
   "helpyAuthority": {
+    "allowClientTeleport": false,
+    "allowPinAccess": false,
+    "accessPin": "",
     "allowClientItemGrants": false,
     "allowClientTemporarySpawns": false,
     "maximumItemCount": 100,

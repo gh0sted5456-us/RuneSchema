@@ -1,5 +1,6 @@
 #include "Core/HelpyPopupInput.h"
 #include "Core/HelpyFramePacing.h"
+#include "Core/HelpyUiMotion.h"
 #include <fstream>
 #include <iterator>
 #include <stdexcept>
@@ -10,14 +11,15 @@ static std::string Read(const char* path){std::ifstream input(path);Require(inpu
 int main(int argc,char** argv){
     using namespace std::chrono_literals;
     const auto now=PS::HelpyFramePacing::Clock::time_point{};PS::HelpyFramePacing pacing;
-    Require(!pacing.Due(now,false,false));Require(pacing.Due(now,true,false));
-    Require(!pacing.Due(now+1ms,true,false));Require(pacing.Due(now+2ms,true,true));
-    Require(!pacing.Due(now+35ms,true,true));Require(pacing.Due(now+36ms,true,true));
-    Require(pacing.Due(now+70ms,true,false));Require(!pacing.Due(now+169ms,true,false));
+    Require(!pacing.Due(now,false,false));Require(pacing.Due(now,true,false,30));
+    Require(!pacing.Due(now+1ms,true,false,30));Require(pacing.Due(now+2ms,true,true,30));
+    Require(!pacing.Due(now+35ms,true,true,30));Require(pacing.Due(now+36ms,true,true,30));
+    Require(pacing.Due(now+70ms,true,false,30));Require(!pacing.Due(now+169ms,true,false,30));
     Require(!pacing.Due(now+170ms,false,false));Require(pacing.Due(now+171ms,true,true));
     PS::HelpyFramePacing highRefresh;unsigned frames=0;
     for(int tick=0;tick<240;++tick)frames+=highRefresh.Due(now+std::chrono::microseconds(tick*4167),true,true);
-    Require(frames>=25&&frames<=30);
+    Require(frames>=58&&frames<=60);
+    PS::HelpyFramePacing fast;frames=0;for(int tick=0;tick<1000;++tick)frames+=fast.Due(now+std::chrono::milliseconds(tick),true,true,144);Require(frames>=140&&frames<=144);
     PS::HelpyFramePacing inactive;frames=0;
     for(int tick=0;tick<240;++tick)frames+=inactive.Due(now+std::chrono::microseconds(tick*4167),true,false);
     Require(frames<=10);
@@ -28,6 +30,19 @@ int main(int argc,char** argv){
     Require(adjustable.WaitMs(now+85ms,true)==16);Require(adjustable.WaitMs(now+150ms,true)==2);
     Require(adjustable.WaitMs(now,false)==50);
     Require(adjustable.WaitMs(now+160ms,true)==0);
+    PS::HelpyFramePacing late;
+    Require(late.Due(now,true,true,60)&&late.Due(now+18ms,true,true,60));
+    Require(late.Next<now+34ms); // Preserve the cadence after a late wake.
+    Require(late.Due(now+34ms,true,true,60)&&late.Next<now+51ms);
+    Require(late.Due(now+5s,true,true,60)&&!late.Due(now+5s,true,true,60));
+    PS::HelpyUiMotion::PageFade fade;
+    Require(fade.Alpha(0,0,true)==1.f&&fade.Alpha(1,1,true)==.6f);
+    const auto half=fade.Alpha(1,1.08,true);Require(half>.9f&&half<1.f);
+    Require(fade.Alpha(1,1.17,true)==1.f&&fade.Alpha(2,2,false)==1.f);
+    Require(fade.Alpha(2,2.01,true)==1.f);
+    const auto hover=PS::HelpyUiMotion::Hover(0,true,.016f,true);Require(hover>0&&hover<1);
+    Require(PS::HelpyUiMotion::Hover(hover,false,.016f,true)<hover);
+    Require(PS::HelpyUiMotion::Hover(0,true,.016f,false)==1.f);
     using namespace PS::HelpyPopupInput;
     for(unsigned flags=0;flags<4;++flags){
         Require(CanToggle(flags&1,flags&2)==(flags!=0));

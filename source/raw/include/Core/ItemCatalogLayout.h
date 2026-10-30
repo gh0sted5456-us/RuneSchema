@@ -14,8 +14,8 @@ struct ItemCatalogLayout {
         for(const auto count:Counts){if(count>std::numeric_limits<std::size_t>::max()-result)throw std::runtime_error("Item catalogue cursor overflow");result+=count;}
         return result;
     }
-    std::pair<std::size_t,std::size_t> At(std::size_t index) const {
-        for(std::size_t segment=0;segment<Counts.size();++segment){if(index<Counts[segment])return {segment,index};index-=Counts[segment];}
+    std::pair<std::size_t,std::size_t> At(std::size_t index,bool mountedFirst=false) const {
+        for(const auto segment:mountedFirst?std::array<std::size_t,3>{2,0,1}:std::array<std::size_t,3>{0,1,2}){if(index<Counts[segment])return {segment,index};index-=Counts[segment];}
         throw std::runtime_error("Item catalogue cursor is outside its roster");
     }
 };

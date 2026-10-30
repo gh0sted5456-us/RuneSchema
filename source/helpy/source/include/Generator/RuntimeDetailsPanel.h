@@ -21,6 +21,8 @@ inline bool Open=false,Detached=false,FocusWanted=false,SelectTab=false;
 inline HelpyWindowChrome::State Chrome;
 inline Tab Selected=Tab::Runtime;
 inline ImTextureRef GameLogo;
+inline ImTextureRef ModManagerIcon;
+inline bool VortexInstalled=false;
 inline void RenderGameLogo(){
     const auto& theme=HelpyImGuiTheme::Current;const float available=ImGui::GetContentRegionAvail().x;
     if(GameLogo.GetTexID()!=ImTextureID{}){
@@ -49,6 +51,11 @@ inline void PollStats(){
 inline void RenderRuntime(){
     PollStats();const auto& theme=HelpyImGuiTheme::Current;
     RenderGameLogo();
+    if(VortexInstalled){
+        if(ModManagerIcon.GetTexID()){ImGui::Image(ModManagerIcon,{theme.X(24),theme.Y(24)});ImGui::SameLine();}
+        ImGui::TextUnformatted("Vortex installed · Mod manager");
+        if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Vortex is a mod manager. This indicator does not change the selected runtime or prove this installation is managed by Vortex.");
+    }
     if(ImGui::BeginTable("runtime-versions",2,ImGuiTableFlags_SizingStretchProp)){
         ImGui::TableSetupColumn("Name",ImGuiTableColumnFlags_WidthFixed,theme.X(120));ImGui::TableSetupColumn("Value");
         const auto row=[](const char* name,const std::string& value){ImGui::TableNextRow();ImGui::TableNextColumn();ImGui::TextDisabled("%s",name);ImGui::TableNextColumn();ImGui::TextWrapped("%s",value.empty()?"Not reported":value.c_str());};

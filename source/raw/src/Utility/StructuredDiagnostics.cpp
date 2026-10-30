@@ -2,6 +2,7 @@
 #include "Utility/DiagnosticLog.h"
 #include "Core/StructuredDiagnosticLegacyMirror.h"
 #include "Core/StructuredDiagnosticFile.h"
+#include "Core/DiagnosticLogPaths.h"
 #include "Runtime/HostServices.h"
 #include <Windows.h>
 #include <atomic>
@@ -41,7 +42,7 @@ void Initialize() noexcept {
         Session="s-"+std::to_string(std::chrono::system_clock::now().time_since_epoch().count())+
                 "-"+std::to_string(GetCurrentProcessId())+"-"+std::to_string(tick);
         Sink().OnWritten(&MirrorCommitted);
-        Ready=Sink().Open(HostServices::ModDirectory()/L"RSDiagLog.jsonl");
+        Ready=Sink().Open(DiagnosticLogPaths::Directory(HostServices::ModDirectory())/L"RSDiagLog.jsonl");
     });}catch(...){Ready=false;}
 }
 bool Emit(StructuredDiagnostic::Record record) noexcept {

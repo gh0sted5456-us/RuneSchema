@@ -27,13 +27,18 @@ namespace {
     std::size_t WelcomeOffset = 0;
     WeakObjectHandle Mode;
     constexpr std::string_view FailurePrefix = "runeschema-ids-error-v1:";
+    void PublishAuthority(const nlohmann::json& document) {
+        const auto& lanes=document.at("lanes");
+        const auto count=lanes.contains("BUILDING")?lanes.at("BUILDING").at("prefixCount").get<std::size_t>()+lanes.at("BUILDING").at("entries").size():0;
+        NetworkIdentityState::SetAuthorityOrderProof(NetworkIdentityWelcome::OrderProof(document),count);
+    }
 
     void Welcome(AGameModeBase* mode, void* connection, FString& redirect) {
         Original(mode, connection, redirect);
         if (Mode.Get() != mode || !Read || redirect.GetCharArray().Num() > 1) return;
         try {
             const auto document = Read(); const auto token = NetworkIdentityWelcome::Encode(document);
-            NetworkIdentityState::SetAuthorityOrderProof(CacheBundleIO::Hash(document.dump()));
+            PublishAuthority(document);
             redirect = FString(ToWideSafe(token.c_str()));
             Log<LogLevel::Normal>(STR("[NETWORK-ID-SYNC][OFFER] Native pre-join welcome: {} lanes, {} characters.\n"), document.at("lanes").size(), token.size());
         } catch (const std::exception& error) {
@@ -100,7 +105,7 @@ void Start(Snapshot snapshot, Apply apply) {
     if (GetEnvironmentVariableW(L"RUNESCHEMA_NETWORK_ID_SYNC", enabled, 4) != 1 || enabled[0] != L'1') return;
     WelcomeOffset = VerifiedWelcomeOffset();
     Read = std::move(snapshot); Align = std::move(apply);
-    NetworkIdentityState::SetAuthorityOrderProof(CacheBundleIO::Hash(Read().dump()));
+    PublishAuthority(Read());
     Hook::FCallbackOptions options{}; options.OwnerModName = TEXT("RuneSchema"); options.HookName = TEXT("RegistryNativeWelcome");
     WorldHook = Hook::RegisterInitGameStatePostCallback([](auto&, AGameModeBase* mode) {
         try { Install(mode); } catch (const std::exception& error) { Log<LogLevel::Warning>(STR("[NETWORK-ID-SYNC][HOOK-UNAVAILABLE] {}\n"), ToWideSafe(error.what())); }
@@ -121,11 +126,13 @@ void Start(Snapshot snapshot, Apply apply) {
             nlohmann::json local;
             try { local = Read(); } catch(const std::exception& problem) { throw NetworkIdentitySync::Incompatible(problem.what()); }
             const auto authority = NetworkIdentityWelcome::Decode(token, local);
+            if(authority.value("telemetryOmitted",false))
+                Log<LogLevel::Warning>(STR("[RS-NET-002] [NETWORK-ID-SYNC][TELEMETRY-REDUCED] Optional source metadata was reduced to fit the native welcome; complete shared-ID verification remains required.\n"));
             if(authority.contains("sourceVersions")&&local.contains("sourceVersions"))
                 for(const auto& [owner,version]:authority.at("sourceVersions").items())
                     if(local.at("sourceVersions").contains(owner)&&local.at("sourceVersions").at(owner)!=version)
                         Log<LogLevel::Warning>(STR("[RS-NET-002] [NETWORK-ID-SYNC][CONTENT-WARNING] Mod '{}' version differs from the authority; shared IDs are negotiated independently.\n"),ToWideSafe(owner));
-            if(local.at("registryOwners") != authority.at("registryOwners"))
+            if(!authority.at("registryOwners").empty()&&local.at("registryOwners") != authority.at("registryOwners"))
                 Log<LogLevel::Warning>(STR("[RS-NET-002] [NETWORK-ID-SYNC][CONTENT-WARNING] Registry definitions or versions differ; shared IDs are negotiated independently.\n"));
             auto order = NetworkIdentitySync::Plan(local, authority);
             bool changed = false;
@@ -140,7 +147,7 @@ void Start(Snapshot snapshot, Apply apply) {
                     NetworkIdentitySync::Require(rows[i]==i,"Shared registry IDs did not match the authority");
             }
             catch (...) { if (changed) Align(undo); throw; }
-            NetworkIdentityState::SetAuthorityOrderProof(CacheBundleIO::Hash(authority.dump()));
+            PublishAuthority(authority);
             std::size_t clientCount=0,authorityCount=0;
             for(const auto& [key,lane]:local.at("lanes").items())clientCount+=lane.at("entries").size();
             for(const auto& [key,lane]:authority.at("lanes").items())authorityCount+=lane.at("entries").size();

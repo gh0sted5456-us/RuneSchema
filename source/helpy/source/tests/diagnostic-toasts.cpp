@@ -6,6 +6,20 @@ int main(){
     using namespace PS;
     using namespace std::chrono;
     using namespace DiagnosticToastPresentation;
+    {
+        DiagnosticToastFeed::Feed registry;DiagnosticToastFeed::Options options;
+        for(const auto* line:{"[RuneSchema] [NETWORK][BUILDINGS-PENDING] Waiting for IDs",
+            "[RuneSchema] [NETWORK][BUILDINGS-READY] IDs ready",
+            "[RuneSchema] [warning] [RS-NET-002] Content differs",
+            "[RuneSchema] RuneSchema shared registry parity verified: match"})registry.Accept(LiveLog::Parse(line),options);
+        assert(registry.Empty());
+        registry.Accept(LiveLog::Parse("[RuneSchema] [warning] [RS-NET-003] Placement blocked"),options);
+        registry.Accept(LiveLog::Parse("[RuneSchema] [error] [RS-NET-002] Fatal transport failure"),options);
+        assert(registry.Visible().size()==2);
+        registry.Clear();options.RegistryActivity=true;
+        registry.Accept(LiveLog::Parse("[RuneSchema] [NETWORK][BUILDINGS-PENDING] Waiting for IDs"),options);
+        assert(!registry.Empty());
+    }
     {DiagnosticToastFeed::Notice first,second;assert(first==second);
      second.ImportStats.Errors=1;assert(first!=second);
      second=first;second.BatchErrors=1;assert(first!=second);}

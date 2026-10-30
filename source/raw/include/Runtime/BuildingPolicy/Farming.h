@@ -1,5 +1,6 @@
 #pragma once
 #include "WorldEffects.h"
+#include "BindingTargets.h"
 #include "SDK/Helper/ActorHelper.h"
 #include <polyhook2/Detour/x64Detour.hpp>
 #include <Zydis/Zydis.h>
@@ -111,19 +112,18 @@ public:
   auto* serverType=CastField<FStructProperty>(Field(State(),L"ServerState"))->GetStruct().Get();
   auto growth=CastField<FBoolProperty>(Field(serverType,L"bApplyGrowthLock"));
   int lock=CastField<FStructProperty>(Field(State(),L"ServerState"))->GetOffset_Internal()+growth->GetOffset_Internal();
-  for(auto target:Calls(tick,768)){
+  for(auto target:Calls(tick,1024)){
    bool matches=false;
    Instructions(target,48,[&](auto& ins,auto){if(ins.info.mnemonic==ZYDIS_MNEMONIC_CMP&&ins.operands[0].type==ZYDIS_OPERAND_TYPE_MEMORY&&ins.operands[0].mem.base==ZYDIS_REGISTER_R8&&ins.operands[0].mem.disp.value==lock&&ins.operands[1].type==ZYDIS_OPERAND_TYPE_IMMEDIATE&&ins.operands[1].imm.value.u==0)matches=true;});
    if(matches){if(update&&update!=target)throw std::runtime_error("Native plot update is ambiguous");update=target;}
   }
   if(!update)throw std::runtime_error("Native plot update path is unsupported");
   // The native watering notification is the only update helper with this exact message layout.
-  const unsigned char waterMessage[]={0x88,0x4c,0x24,0x24,0x4c,0x8b,0xc7,0x8b,0xcd,0x88,0x44,0x24,0x23,0x44,0x88,0x6c,0x24,0x22,0xe8};
   auto* bytes=reinterpret_cast<unsigned char*>(update);
   if(!Code(bytes,1024))throw std::runtime_error("Native water notification range is not executable");
-  uintptr_t waterCall=0;
-  for(unsigned at=0;at<1024-sizeof(waterMessage);++at)if(!std::memcmp(bytes+at,waterMessage,sizeof(waterMessage))){if(waterCall)throw std::runtime_error("Native water message path is ambiguous");waterCall=update+at+sizeof(waterMessage)-1;}
-  if(!waterCall)throw std::runtime_error("Native water notification layout is unsupported");
+  const auto waterOffset=WaterMessageCall({bytes,1024});
+  if(!waterOffset)throw std::runtime_error("Native water notification layout is unsupported");
+  const auto waterCall=update+waterOffset;
   broadcast=reinterpret_cast<WaterBroadcast>(waterCall+5+*reinterpret_cast<int*>(waterCall+1));
   uintptr_t local=0;
   Instructions(waterCall+5,24,[&](auto& ins,auto address){if(ins.info.mnemonic==ZYDIS_MNEMONIC_CALL&&ins.operands[0].type==ZYDIS_OPERAND_TYPE_IMMEDIATE){ZyanU64 target;ZydisCalcAbsoluteAddress(&ins.info,&ins.operands[0],address,&target);if(local&&local!=target)throw std::runtime_error("Native water visual callback is ambiguous");local=target;}});

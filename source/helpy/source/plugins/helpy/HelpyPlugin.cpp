@@ -1,4 +1,5 @@
 #include <windows.h>
+#include <shellapi.h>
 #include <cstring>
 #include <memory>
 #include <new>
@@ -33,6 +34,7 @@ HMODULE Module{};
 constexpr RuneSchemaPluginDescriptor Descriptor{sizeof(RuneSchemaPluginDescriptor),RUNESCHEMA_PLUGIN_API_VERSION,
     "RuneSchema.Helpy","RSMK (RuneSchema Modding Kit)",PS::HelpyBranding::Version};
 struct State {const RuneSchemaHostApi* Host{};std::unique_ptr<PS::HelpyStandaloneWindow> Window;
+    std::atomic<bool> RelayOnly=false;
     std::atomic<bool> ToolsAvailable=false,ToolsWaiting=false;std::atomic<uint64_t> ToolsGeneration=1;
     std::mutex ToolsMutex;uint64_t ToolsRevision=0; nlohmann::json ToolsResult=nlohmann::json::object(),ToolsCatalog=nlohmann::json::object(),Players=nlohmann::json::array();std::deque<nlohmann::json> IconResults;
     std::map<uint64_t,nlohmann::json> Completed;std::map<uint64_t,std::string> IconDictionary;std::deque<nlohmann::json> QueryResults;uint64_t HostRevision=0;std::chrono::steady_clock::time_point NextHostRead{};
@@ -44,32 +46,29 @@ bool CallCore(State* state,const nlohmann::json& request,nlohmann::json& respons
     const auto input=request.dump();
     const auto action=request.value("Action",std::string{});
     const bool readOnly=action=="Read"||action=="AuthoringSnapshot"||action=="SettingsRead"||action=="ModsRead"||action=="IconCacheOwnership"||action=="IconCacheSources"||action=="CrashDumpRead";
-    uint32_t size=0;
-    std::string output;
-    if(readOnly){
-        const auto probe=state->Host->CallService(Descriptor.Id,"runeschema.tools",input.c_str(),nullptr,0,&size);
-        if(probe!=RS_PLUGIN_BUFFER_TOO_SMALL||!size||size>RUNESCHEMA_PLUGIN_MAX_MESSAGE)return false;
-        output.resize(size);
-    }else{
-        // These core operations reject an undersized buffer before doing any
-        // work. Allocate once: never retry a mutation just to fetch its reply.
-        const bool maximum=action=="Completed"||action=="SettingsSave"||action=="ModsSave"||action=="ModsImport"||action=="QuickLoadSave"||action=="AdditionalLoggingSave"||action=="CrashDumpSave";
-        output.resize(maximum?RUNESCHEMA_PLUGIN_MAX_MESSAGE:4096);
-    }
-    const auto code=state->Host->CallService(Descriptor.Id,"runeschema.tools",input.c_str(),output.data(),static_cast<uint32_t>(output.size()),&size);
+    uint32_t size=0;thread_local std::vector<char> output(8192);
+    const bool maximum=action=="Completed"||action=="SettingsSave"||action=="ModsSave"||action=="ModsImport"||action=="QuickLoadSave"||action=="AdditionalLoggingSave"||action=="CrashDumpSave";
+    uint32_t capacity=readOnly?8192:maximum?RUNESCHEMA_PLUGIN_MAX_MESSAGE:4096;
+    if(output.size()<capacity)output.resize(capacity);
+    auto code=state->Host->CallService(Descriptor.Id,"runeschema.tools",input.c_str(),output.data(),capacity,&size);
+    if(readOnly&&code==RS_PLUGIN_BUFFER_TOO_SMALL&&size>capacity&&size<=RUNESCHEMA_PLUGIN_MAX_MESSAGE){capacity=size;if(output.size()<capacity)output.resize(capacity);code=state->Host->CallService(Descriptor.Id,"runeschema.tools",input.c_str(),output.data(),capacity,&size);}
     if(code!=RS_PLUGIN_OK||!size||size>output.size())return false;
     if(output[size-1]=='\0')--size;
-    output.resize(size);
-    response=nlohmann::json::parse(output);return true;
+    response=nlohmann::json::parse(output.data(),output.data()+size);return true;
     }catch(...){return false;}
 }
 int32_t RS_PLUGIN_CALL About(void*,const char*,char* response,uint32_t capacity,uint32_t* size) {
     if(!size)return RS_PLUGIN_INVALID_ARGUMENT;
     try{
-        static const auto value=nlohmann::json{{"plugin",Descriptor.Id},{"version",Descriptor.Version},{"ui","plugin-dll"},{"umg",false}}.dump();
+        static const auto value=nlohmann::json{{"plugin",Descriptor.Id},{"version",Descriptor.Version},{"ui","standalone-exe"},{"umg",false}}.dump();
         *size=static_cast<uint32_t>(value.size()+1);
         if(!response||capacity<*size)return RS_PLUGIN_BUFFER_TOO_SMALL;std::memcpy(response,value.c_str(),*size);return RS_PLUGIN_OK;
     }catch(...){return RS_PLUGIN_FAILED;}
+}
+int32_t RS_PLUGIN_CALL DesktopStatus(void* context,const char*,char* response,uint32_t capacity,uint32_t* size){
+    auto* state=static_cast<State*>(context);if(!state||!size)return RS_PLUGIN_INVALID_ARGUMENT;
+    const auto value=nlohmann::json{{"Ready",state->Window&&state->Window->Ready()},{"TrayReady",state->Window&&state->Window->TrayReady()},{"WindowVisible",state->Window&&state->Window->WindowVisible()}}.dump();*size=static_cast<uint32_t>(value.size()+1);
+    if(!response||capacity<*size)return RS_PLUGIN_BUFFER_TOO_SMALL;std::memcpy(response,value.c_str(),*size);return RS_PLUGIN_OK;
 }
 int32_t RS_PLUGIN_CALL InventoryService(void* context,const char* requestJson,char* response,uint32_t capacity,uint32_t* size){
     auto* state=static_cast<State*>(context);if(!state||!requestJson||!size)return RS_PLUGIN_INVALID_ARGUMENT;
@@ -102,8 +101,16 @@ void ResetToolsSession(State* state){
     state->MapGroundReply=nlohmann::json::object();state->IconResults.clear();state->IconDictionary.clear();state->Completed.clear();state->QueryResults.clear();
     state->HostRevision=0;state->LoggedQuery=false;state->LoggedRows=false;state->LoggedIcon=false;
 }
+int32_t RS_PLUGIN_CALL DesktopConnection(void* context,const char* input,char*,uint32_t,uint32_t* size){
+    auto* state=static_cast<State*>(context);if(!state||!input||!size)return RS_PLUGIN_INVALID_ARGUMENT;
+    try{const auto value=nlohmann::json::parse(input);PS::PluginRuntimeServices::GameProcessId=value.at("Pid").get<uint32_t>();
+        {std::lock_guard lock(state->ToolsMutex);ResetToolsSession(state);state->ToolsAvailable=false;state->ToolsWaiting=false;state->ToolsGeneration=1;++state->ToolsRevision;}
+        PS::PluginRuntimeServices::ConnectionChanged=true;PS::LazyCatalog::BackendSignal(1);*size=0;return RS_PLUGIN_OK;
+    }catch(...){return RS_PLUGIN_INVALID_ARGUMENT;}
+}
 int32_t RS_PLUGIN_CALL ToolsPush(void* context,const char* requestJson,char*,uint32_t,uint32_t* size) {
     auto* state=static_cast<State*>(context);if(!state||!requestJson||!size)return RS_PLUGIN_INVALID_ARGUMENT;
+    if(state->RelayOnly.load()){*size=0;return RS_PLUGIN_OK;}
     try {
         const auto message=nlohmann::json::parse(requestJson);const auto kind=message.value("Kind",std::string{});std::string diagnostic;
         auto payload=message.value("Payload",nlohmann::json::object());const auto generation=message.value("Generation",uint64_t{1});
@@ -160,6 +167,7 @@ int32_t RS_PLUGIN_CALL ToolsPush(void* context,const char* requestJson,char*,uin
                 }
                 state->ToolsResult=payload;StoreReceipt(state,payload);
             }
+            else if(kind=="profile")PS::PluginRuntimeServices::ProfileChanged=true;
             else if(kind=="clear"){ResetToolsSession(state);state->ToolsResult=payload;}
         }
         if(!diagnostic.empty()&&state->Host&&state->Host->Log)state->Host->Log(RS_LOG_INFO,Descriptor.Id,diagnostic.c_str());
@@ -246,6 +254,8 @@ extern "C" __declspec(dllexport) int32_t RS_PLUGIN_CALL RuneSchemaPlugin_Initial
     if(host->RegisterService(Descriptor.Id,"helpy.about",About,state)!=RS_PLUGIN_OK){delete state;return RS_PLUGIN_DUPLICATE;}
     if(host->RegisterService(Descriptor.Id,"helpy.tools.push",ToolsPush,state)!=RS_PLUGIN_OK){delete state;return RS_PLUGIN_DUPLICATE;}
     if(host->RegisterService(Descriptor.Id,"helpy.inventory",InventoryService,state)!=RS_PLUGIN_OK){delete state;return RS_PLUGIN_DUPLICATE;}
+    if(host->RegisterService(Descriptor.Id,"helpy.desktop.status",DesktopStatus,state)!=RS_PLUGIN_OK){delete state;return RS_PLUGIN_DUPLICATE;}
+    if(host->RegisterService(Descriptor.Id,"helpy.desktop.connection",DesktopConnection,state)!=RS_PLUGIN_OK){delete state;return RS_PLUGIN_DUPLICATE;}
     const auto initialized="RSMK "+std::string(PS::HelpyBranding::Version)+" native GUI plugin initialized";
     host->Log(RS_LOG_INFO,Descriptor.Id,initialized.c_str());*instance=state;return RS_PLUGIN_OK;
 }
@@ -253,20 +263,20 @@ extern "C" __declspec(dllexport) int32_t RS_PLUGIN_CALL RuneSchemaPlugin_OnUiIni
 extern "C" __declspec(dllexport) int32_t RS_PLUGIN_CALL RuneSchemaPlugin_OnUnrealInit(void* instance) noexcept {
     auto* state=static_cast<State*>(instance);if(!state)return RS_PLUGIN_INVALID_ARGUMENT;
     try {
-        wchar_t modulePath[32768]{};const auto length=GetModuleFileNameW(Module,modulePath,_countof(modulePath));
-        if(!length||length>=_countof(modulePath))throw std::runtime_error("cannot resolve RSMK plugin directory");
-        PS::HelpyPaths::Configure(std::filesystem::path(modulePath).parent_path().parent_path());
+        Module=GetModuleHandleW(nullptr);
         PS::HelpySettings::Configure(PS::HelpyPaths::PluginRoot());
         PS::HelpySettings::EnsureLoaded();
-        if(!PS::HelpySettings::IsEnabled()){state->Host->Log(RS_LOG_INFO,Descriptor.Id,"disabled by plugin settings");return RS_PLUGIN_OK;}
+        nlohmann::json environment;
+        if(CallCore(state,{{"Action","Environment"}},environment))PS::HelpyEnvironment::Configure(environment);
+        PS::PluginRuntimeServices::ExternalDesktop=true;
+        PS::PluginRuntimeServices::StartHidden=environment.value("DesktopStartHidden",false);
+        PS::PluginRuntimeServices::GameProcessId=environment.value("GameProcessId",uint32_t{});
         if(!PS::RuneSchemaProfile::Initialized)PS::RuneSchemaProfile::Load(PS::HostServices::StateDirectory());
         if(!PS::HelpyPersonalization::Initialized)PS::HelpyPersonalization::Load(PS::RuneSchemaProfile::Ready?PS::RuneSchemaProfile::Data("labels.json"):PS::HostServices::StateDirectory()/"personalization.json");
         state->InventoryReady=true;
         state->Host->Log(RS_LOG_INFO,Descriptor.Id,"using RuneSchema host reflection services");
         ConfigureTransport(state);
         PS::RuneSchemaSettingsPanel::Load();
-        nlohmann::json environment;
-        if(CallCore(state,{{"Action","Environment"}},environment))PS::HelpyEnvironment::Configure(environment);
         if(PS::HelpyEnvironment::Server()){
             USEROBJECTFLAGS flags{};DWORD bytes=0;
             if(!GetUserObjectInformationW(GetProcessWindowStation(),UOI_FLAGS,&flags,sizeof(flags),&bytes)||!(flags.dwFlags&WSF_VISIBLE)){
@@ -296,9 +306,4 @@ extern "C" __declspec(dllexport) void RS_PLUGIN_CALL RuneSchemaPlugin_Shutdown(v
     PS::ItemIconCache::ClearRemote();PS::LazyCatalog::ClearRemote();PS::SpawnToolRequests::ClearRemote();
     delete state;
     PS::PluginRuntimeServices::Reset();
-}
-BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID reserved) {
-    if(reason==DLL_PROCESS_ATTACH)Module=module;
-    if(reason==DLL_PROCESS_DETACH&&reserved)PS::ProcessExitInProgress.store(true,std::memory_order_relaxed);
-    return TRUE;
 }

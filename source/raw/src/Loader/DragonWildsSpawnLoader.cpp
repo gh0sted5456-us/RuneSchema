@@ -31,6 +31,8 @@
 #include "Loader/AssetMetadataRegistry.h"
 #include "Loader/AssetAuthoringMetadata.h"
 #include "Core/HelpySourceCache.h"
+#include "Core/HelpyActivity.h"
+#include "Core/HelpyRemoteAccess.h"
 #include "Core/IconCacheBuild.h"
 #include "Generator/AssetSearch.h"
 #include "Generator/HelpyRuntimePreferences.h"

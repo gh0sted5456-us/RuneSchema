@@ -8,14 +8,18 @@
 #include "Farming.h"
 #include "ResourceYield.h"
 #include "EnemySpawns.h"
+#include "PlayerPhasing.h"
+#include "AdapterState.h"
+#include "CraftingCosts.h"
 #include "Utility/Logging.h"
 #include <Unreal/Hooks.hpp>
 #include <Unreal/AActor.hpp>
+#include <Unreal/World.hpp>
 #include <unordered_set>
 
 namespace PS::Buildings {
 class Bridge {
- struct WorldState { WeakObject manager;std::unique_ptr<PieceEffects> damage;std::unique_ptr<WorldEffects> effects; };
+ struct WorldState { WeakObject manager;std::unique_ptr<PieceEffects> damage;std::unique_ptr<WorldEffects> effects;AdapterState support,farming; };
  struct OverlayState { WeakObject provider;BuildingGlow overlay; };
  std::unordered_map<UWorld*,WorldState> worlds;
  std::unordered_map<UObject*,OverlayState> overlays;
@@ -24,6 +28,9 @@ class Bridge {
  struct HarvestFrame {UObject* owner;UFunction* function;void* frame;float original;};
  std::vector<HarvestFrame> harvestFrames;
  EnemySpawns enemies;
+ MaterialCosts materials;
+ CraftingCosts crafting;
+ std::unordered_map<UWorld*,std::unique_ptr<PlayerPhasing>> phasing;
  std::unordered_set<std::string> reported;
  bool bound=false,placementBound=false;
  float elapsed=0;
@@ -50,7 +57,9 @@ class Bridge {
   try{
    Call server(Find<UObject>(L"/Script/Engine.Default__KismetSystemLibrary"),L"IsServer");server.Object(L"WorldContextObject",owner);server.Invoke();
    if(server.Bool()){
-    if(owner->GetFunctionByNameInChain(L"RuneSchemaFarmProtection"))try{Farming::Install([this](const std::string& message){Note(message);});}catch(const std::exception& e){Note(std::string("FARM_BIND_FAILED ")+e.what());}
+    if(owner->GetFunctionByNameInChain(L"RuneSchemaFarmProtection"))worlds[owner->GetWorld()].farming.Update(
+     [this]{Farming::Install([this](const std::string& message){Note(message);});},
+     [this](const char* error){Note(std::string("FARM_BIND_FAILED ")+error+"; optional farm protection is unavailable in this world. Native farming and other policies continue.");});
     if(owner->GetFunctionByNameInChain(L"RuneSchemaResourceYieldMultiplier"))try{ResourceYield::Install([this](const std::string& message){Note(message);});}catch(const std::exception& e){Note(std::string("RESOURCE_BIND_FAILED ")+e.what());}
    }
   }catch(const std::exception& e){Note(std::string("WORLD_AUTHORITY_FAILED ")+e.what());}
@@ -68,6 +77,17 @@ public:
    if(!object||!fn)return;
    static const FName beginName(L"ReceiveBeginPlay",FNAME_Add),harvestName(L"Server_TryHarvestPlot",FNAME_Add),spawnName(L"Server_SpawnBuilding",FNAME_Add);
    const auto name=fn->GetFName();
+   if(CraftingCosts::Matches(name))try{crafting.Before(object,fn,params);}catch(const std::exception& e){Note(std::string("CRAFTING_MATERIAL_FAILED ")+e.what());}
+   static const FName destroyName(L"CanBeDestroyedByPlayer",FNAME_Add),tryName(L"TrySpawnPieceAtLocation",FNAME_Add),hoverName(L"OnPieceHovered",FNAME_Add),selectedName(L"OnPieceSelected",FNAME_Add);
+   if(name==spawnName||name==tryName||name==hoverName||name==selectedName)try{materials.Before(object,fn,params);}catch(const std::exception& e){Note(std::string("BUILDING_MATERIAL_FAILED ")+e.what());}
+   if(name==destroyName){
+    try{
+     auto* input=CastField<FObjectPropertyBase>(Field(fn,L"DestroyingPlayerController"));if(!params||!input)return;
+     auto result=OwnDismantlePermission(object,input->GetObjectPropertyValue(input->ContainerPtrToValuePtr<void>(params)));
+     if(result){auto* output=Field(fn,L"ReturnValue");if(output->GetSize()!=1)throw std::runtime_error("Building dismantle result contract differs");*output->ContainerPtrToValuePtr<unsigned char>(params)=*result?0:2;callback.PreventOriginalFunctionCall();}
+    }catch(const std::exception& e){Note(std::string("DISMANTLE_PERMISSION_FAILED ")+e.what());}return;
+   }
+
    if(name==beginName){
     try{Add(object);}catch(const std::exception& e){Note(std::string("REGISTER_FAILED ")+e.what());}return;
    }
@@ -87,12 +107,17 @@ public:
   },options);
   afterEvent=Hook::RegisterProcessEventPostCallback([this](Hook::TCallbackIterationData<void>&,UObject* owner,UFunction* function,void* frame){
    if(!function)return;
-   static const FName beginName(L"ReceiveBeginPlay",FNAME_Add);
-   if(function->GetFName()==beginName)try{enemies.Begin(owner);}catch(const std::exception& e){Note(std::string("ENEMY_SPAWN_POLICY_FAILED ")+e.what());}
+   static const FName beginName(L"ReceiveBeginPlay",FNAME_Add),spawnName(L"Server_SpawnBuilding",FNAME_Add),tryName(L"TrySpawnPieceAtLocation",FNAME_Add),hoverName(L"OnPieceHovered",FNAME_Add),selectedName(L"OnPieceSelected",FNAME_Add);
+   const auto name=function->GetFName();
+   if(CraftingCosts::Matches(name))crafting.After(owner,function,frame);
+   if(name==spawnName||name==tryName||name==hoverName||name==selectedName)materials.After(owner,function,frame);
+   if(name==beginName)try{enemies.Begin(owner);}catch(const std::exception& e){Note(std::string("ENEMY_SPAWN_POLICY_FAILED ")+e.what());}
    if(harvestFrames.empty())return;
    for(size_t i=harvestFrames.size();i;--i){auto saved=harvestFrames[i-1];if(saved.owner==owner&&saved.function==function&&saved.frame==frame){*Field(function,L"YieldMultiplier")->ContainerPtrToValuePtr<float>(frame)=saved.original;harvestFrames.erase(harvestFrames.begin()+i-1);break;}}
   },options);
   tick=Hook::RegisterEngineTickPostCallback([this](Hook::TCallbackIterationData<void>&,UEngine*,float delta,bool){
+   crafting.OnTick();
+   for(auto& [_,state]:phasing)try{state->Input();}catch(const std::exception& e){Note(std::string("PLAYER_PHASE_INPUT_FAILED ")+e.what());}
    elapsed+=delta;if(elapsed<.1f)return;float step=elapsed;elapsed=0;
    try{
     farmElapsed+=step;
@@ -104,21 +129,29 @@ public:
     std::unordered_set<UWorld*> authorityWorlds;
     std::vector<UObject*> owners;
     for(auto& p:providers)if(auto* owner=p.owner.Get();Live(owner)){activeWorlds.insert(owner->GetWorld());owners.push_back(owner);}
+    for(auto it=phasing.begin();it!=phasing.end();)if(!activeWorlds.contains(it->first))it=phasing.erase(it);else ++it;
+    for(auto* world:activeWorlds)try{if(HasWorldPolicy(world,L"RuneSchemaPlayerPhasing")||phasing.contains(world)){auto& state=phasing[world];if(!state)state=std::make_unique<PlayerPhasing>();state->Update(world,step);}}catch(const std::exception& e){Note(std::string("PLAYER_PHASE_UPDATE_FAILED ")+e.what());}
     for(auto it=worlds.begin();it!=worlds.end();)if(!activeWorlds.contains(it->first))it=worlds.erase(it);else ++it;
     for(auto it=overlays.begin();it!=overlays.end();)if(!Live(it->second.provider.Get())){it->second.overlay.Clear();it=overlays.erase(it);}else ++it;
     for(auto* world:activeWorlds){
-     RefreshPolicies(world);auto& state=worlds[world];auto* manager=state.manager.Get();
+     RefreshPolicies(world);auto& state=worlds[world];
+     Call server(Find<UObject>(L"/Script/Engine.Default__KismetSystemLibrary"),L"IsServer");server.Object(L"WorldContextObject",world);server.Invoke();
+     if(server.Bool()){
+      authorityWorlds.insert(world);
+      try{if(!state.effects)state.effects=std::make_unique<WorldEffects>();state.effects->Update(world,step);}catch(const std::exception& e){Note(std::string("PLAYER_EFFECTS_UPDATE_FAILED ")+e.what());}
+     }
+     auto* manager=state.manager.Get();
      if(!Live(manager)||manager->GetWorld()!=world){
       std::vector<UObject*> list;UObjectGlobals::FindAllOf(L"GlobalBuildingManager",list);
       manager=nullptr;for(auto* candidate:list)if(Live(candidate)&&candidate->GetWorld()==world){manager=candidate;break;}
      }
      if(!manager)continue;
-     if(state.manager.Get()!=manager){state.manager=manager;state.damage.reset();state.effects.reset();}
+     if(state.manager.Get()!=manager){state.manager=manager;state.damage.reset();state.support={};}
      Call authority(manager,L"HasAuthority");authority.Invoke();
      if(authority.Bool()){
       authorityWorlds.insert(world);
-      if(!state.damage){state.damage=std::make_unique<PieceEffects>();state.effects=std::make_unique<WorldEffects>();}
-      state.damage->Update(manager,world);SupportTick::Update(manager);state.effects->Update(world,step);
+      try{if(!state.damage)state.damage=std::make_unique<PieceEffects>();state.damage->Update(manager,world);}catch(const std::exception& e){Note(std::string("BUILDING_DAMAGE_UPDATE_FAILED ")+e.what());}
+      state.support.Update([&]{SupportTick::Update(manager);},[this](const char* error){Note(std::string("SUPPORT_UPDATE_FAILED ")+error+"; optional support override is unavailable for this manager. Native stability and other policies continue.");});
      }
     }
     for(auto* owner:owners)if(owner->GetFunctionByNameInChain(L"RuneSchemaBuildingOverlayMaterial")){
@@ -133,7 +166,7 @@ public:
   for(auto id:{begin,tick,event,afterEvent})if(id!=Hook::ERROR_ID)Hook::UnregisterCallback(id);begin=tick=event=afterEvent=Hook::ERROR_ID;
   for(auto& [_,state]:worlds)try{if(state.effects)state.effects->Stop();}catch(...){}
   try{enemies.Stop();ResourceYield::Stop();Farming::Stop();DestructionGuard::Clear();Placement::Clear();SupportTick::Clear();for(auto& [_,state]:overlays)state.overlay.Clear();}catch(...){}
-   providers.clear();overlays.clear();worlds.clear();harvestFrames.clear();bound=placementBound=discovered=false;elapsed=farmElapsed=0;
+   crafting.Clear();materials.Clear();phasing.clear();providers.clear();overlays.clear();worlds.clear();harvestFrames.clear();bound=placementBound=discovered=false;elapsed=farmElapsed=0;
  }
 };
 }

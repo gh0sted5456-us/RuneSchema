@@ -4,7 +4,7 @@ Find a code from your log to see what happened and what to try next. Use the mes
 
 Open Helpy's **Diagnostics** for an overview, grouped issues and Live Log. You can copy an entry or follow its reference link here. The viewer leaves the original logs unchanged; recent activity includes normal messages, while notifications focus on warnings and errors.
 
-This page contains **73 legacy reference entries**, **222 structured diagnostic entries** and **19 bridge reason codes**. RS-JRN-001, RS-JRN-002 and RS-SPAWN-001 each have an older and a structured meaning. Follow the link from your message, or check its source and namespace to choose the matching entry. Links between the two meanings are included.
+This page contains **77 legacy reference entries**, **222 structured diagnostic entries** and **19 bridge reason codes**. RS-JRN-001, RS-JRN-002 and RS-SPAWN-001 each have an older and a structured meaning. Follow the link from your message, or check its source and namespace to choose the matching entry. Links between the two meanings are included.
 
 Structured reports in `RSDiagLog.jsonl` include their source, context and outcome. Not every operation emits every code. `Unknown` means the cause has not been identified; use the severity in the actual message. `Partial` means some changes may have occurred, and `Deferred` points to later or restart handling. `Skipped` or `Blocked` can describe one step while the rest of the mod continues.
 
@@ -52,7 +52,7 @@ Structured reports in `RSDiagLog.jsonl` include their source, context and outcom
 | [RS-PERF](#legacy-family-rs-perf) | Performance |
 | [RS-PLUG](#legacy-family-rs-plug) | Plugins |
 | [RS-QST](#legacy-family-rs-qst) | Quests |
-| [RS-RAW](#structured-family-rs-raw) | Data tables |
+| [RS-RAW](#legacy-family-rs-raw) | Raw tables |
 | [RS-REC](#structured-family-rs-rec) | Recipes |
 | [RS-REG](#legacy-family-rs-reg) | Registry |
 | [RS-RGST](#structured-family-rs-rgst) | Registry |
@@ -62,6 +62,7 @@ Structured reports in `RSDiagLog.jsonl` include their source, context and outcom
 | [RS-SRC](#legacy-family-rs-src) | Content |
 | [RS-SRV](#legacy-family-rs-srv) | Server |
 | [RS-STR](#structured-family-rs-str) | Strings |
+| [RS-UI](#legacy-family-rs-ui) | Helpy UI |
 | [RS-VND](#structured-family-rs-vnd) | Vendors |
 | [RS-WEAR](#legacy-family-rs-wear) | Equipment |
 | [RS-WLD](#legacy-family-rs-wld) | World effects |
@@ -1673,6 +1674,34 @@ Read the earlier plugin messages and returned result. Do not treat this wrapper 
 
 </section>
 
+<section class="rs-code-card" data-rs-code="RS-PLUG-009" data-rs-severity="warning" markdown="1">
+
+### RS-PLUG-009: Plugin container layout rejected {#rs-plug-009}
+
+**Plugins · Typical level: warning**
+
+A plugin's container files could not be validated as complete packages.
+
+**Common reasons**
+
+A plugin package had incomplete, duplicate or unsupported container entries. The original reason identifies the package and missing/observed parts.
+
+**What RuneSchema does**
+
+That plugin's content is skipped. RuneSchema core and independent plugins or mod PAK directories continue; dependent features may be unavailable.
+
+**What to do next**
+
+Read the exact missing and observed filenames. Finish Vortex deployment and verify matching stems across .pak/.ucas/.utoc. Windows filename case and ordinary hardlinks are supported; genuinely missing parts remain rejected.
+
+**Troubleshooting checks**
+
+Finish deployment before launch and verify the exact names in the game directory. RuneSchema accepts mixed filename case and ordinary hardlinks, skips this plugin on failure, and continues independent sources. Symlinks and genuinely incomplete packages are still checked.
+
+[Direct link to RS-PLUG-009](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-plug-009)
+
+</section>
+
 ## Quests — RS-QST {#legacy-family-rs-qst}
 
 <section class="rs-code-card" data-rs-code="RS-QST-001" data-rs-severity="error" markdown="1">
@@ -1700,6 +1729,36 @@ Keep one owner for that ID; review the named mod files.
 Find the named owners and declaration files in the original event. Disable only the duplicate release or ask the authors to resolve ownership; do not rename persistence IDs in an existing save.
 
 [Direct link to RS-QST-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-qst-001)
+
+</section>
+
+## Raw tables — RS-RAW {#legacy-family-rs-raw}
+
+<section class="rs-code-card" data-rs-code="RS-RAW-004" data-rs-severity="warning" markdown="1">
+
+### RS-RAW-004: Cooked table extension skipped {#rs-raw-004}
+
+**Raw tables · Typical level: warning**
+
+A declared cooked source table could not be safely imported into its vanilla target.
+
+**Common reasons**
+
+A declared source/target table failed path, class, row layout, staging or copy verification.
+
+**What RuneSchema does**
+
+That import is skipped or its newly added rows are rolled back. Other table declarations and normal JSON edits continue.
+
+**What to do next**
+
+Read the source, target and original reason. Use exact plain DataTables sharing one row struct, stay within the row/staging limits, and verify the consuming gameplay system in a private fixture.
+
+**Troubleshooting checks**
+
+Read the original COOKED-TABLE reason and exact paths. Correct that declaration; use a plain editable parent for composite tables and test native consumers before release. Independent table and JSON operations continue.
+
+[Direct link to RS-RAW-004](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-raw-004)
 
 </section>
 
@@ -1967,6 +2026,64 @@ Keep the original reason and game version. Use a RuneSchema build verified for t
 Retain the full reason and executable/game version. Unsupported builds keep native handling and need a verified compatibility update; do not patch flags or turn filtering off as a generic workaround.
 
 [Direct link to RS-SRV-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-srv-002)
+
+</section>
+
+## Helpy UI — RS-UI {#legacy-family-rs-ui}
+
+<section class="rs-code-card" data-rs-code="RS-UI-001" data-rs-severity="error" markdown="1">
+
+### RS-UI-001: Helpy window or render surface unavailable {#rs-ui-001}
+
+**Helpy UI · Typical level: error**
+
+Helpy could not initialize, resize or update its window/render surface.
+
+**Common reasons**
+
+Helpy initialization, resize, presentation or its window thread could not complete.
+
+**What RuneSchema does**
+
+An unavailable render target is not drawn. Window-thread failures close Helpy without requesting game termination; an underlying graphics-driver fault may also affect the game independently.
+
+**What to do next**
+
+Keep the full message, display/DPI changes, runtime and driver information. Reopen Helpy after the display is ready. This diagnostic alone does not establish the cause of a reported desktop crash.
+
+**Troubleshooting checks**
+
+Keep the exact message and any matching crash dump. Missing render targets are skipped; record display/DPI changes and graphics-driver status. A window failure is not proof of a RuneSchema-caused game crash.
+
+[Direct link to RS-UI-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-ui-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-UI-002" data-rs-severity="warning" markdown="1">
+
+### RS-UI-002: Standalone Helpy unavailable {#rs-ui-002}
+
+**Helpy UI · Typical level: warning**
+
+The optional executable or local desktop bridge could not start.
+
+**Common reasons**
+
+The optional standalone desktop could not start or attach. Use matching DLLs and Helpy.exe in the assigned installation.
+
+**What RuneSchema does**
+
+The DLL window remains the fallback when initialization can continue. Offline browsing requires the matching optional executable.
+
+**What to do next**
+
+Use matching candidate DLLs and Helpy.exe in the assigned installation. Check the plugin settings, local Windows user and complete error. Switch to DLL window and restart if needed.
+
+**Troubleshooting checks**
+
+Read the full startup reason and confirm the current Windows user. Select DLL window and restart to use the fallback.
+
+[Direct link to RS-UI-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-ui-002)
 
 </section>
 

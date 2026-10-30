@@ -1,4 +1,6 @@
 #include "Runtime/PluginHost.h"
+#include "Core/HelpyActivity.h"
+#include "../../../shared/HelpyDesktopTransport.h"
 #include "Core/MapPresentationCache.h"
 #include "Runtime/PluginCatalog.h"
 #include "Runtime/RuneSchemaPluginApi.h"
@@ -48,6 +50,7 @@ struct Loaded { PluginCatalog::Plugin Manifest;HMODULE Module{};void* Instance{}
 std::mutex Gate;std::unordered_map<std::string,Service> Services;std::unordered_map<std::string,std::string> Capabilities;
 std::unordered_map<std::string,std::string> ActiveConnections;
 thread_local const char* ActiveOwner=nullptr;
+std::atomic<bool> DesktopBridgeReady=false;
 bool Token(const char* value){return value&&PluginCatalog::Token(value);}
 int32_t JsonResponse(const nlohmann::json& value,char* response,uint32_t capacity,uint32_t* size) {
     if(!size)return RS_PLUGIN_INVALID_ARGUMENT;
@@ -61,7 +64,17 @@ int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,ui
     try {
         const auto request=nlohmann::json::parse(requestJson);const auto action=request.value("Action",std::string{});
         nlohmann::json result;
-        if(action=="Environment")result={{"Storefront",Storefront::Name(Storefront::Current())},{"DedicatedServer",Storefront::IsDedicatedServer()},
+        if(action=="HelpyVisibility"){
+            if(!request.contains("Visible")||!request.at("Visible").is_boolean())return RS_PLUGIN_INVALID_ARGUMENT;
+            const auto code=JsonResponse({{"Accepted",true}},response,capacity,size);
+            if(code==RS_PLUGIN_OK)HelpyActivity::Visible=request.at("Visible").get<bool>();
+            return code;
+        }
+        if(action=="HelpyProfileChanged"){
+            const auto code=JsonResponse({{"Accepted",true}},response,capacity,size);if(code==RS_PLUGIN_OK&&SpawnToolRequests::PushUpdate)SpawnToolRequests::PushUpdate("profile",nlohmann::json::object(),0);return code;
+        }
+        if(action=="DesktopBridgeStatus")result={{"Ready",DesktopBridgeReady.load()}};
+        else if(action=="Environment")result={{"Storefront",Storefront::Name(Storefront::Current())},{"DedicatedServer",Storefront::IsDedicatedServer()},{"GameProcessId",GetCurrentProcessId()},
             {"NativeIconCaptureAvailable",!Storefront::IsDedicatedServer()},
             {"Platform",Storefront::PlatformName(Storefront::CurrentDetection())},
             {"RuneSchemaVersion",BuildInfo::Version},{"GameVersion",ExecutableVersion::Current()},
@@ -280,7 +293,7 @@ void CompatibilityNotice(const std::string& message) {
     else Log<RC::LogLevel::Verbose>(TEXT("Plugin compatibility: {}\n"),ToWideSafe(message.c_str()));
 }
 }
-struct PluginHost::State { std::vector<Loaded> LoadedPlugins;std::vector<std::string> Messages; };
+struct PluginHost::State { std::vector<Loaded> LoadedPlugins;std::vector<std::string> Messages;HelpyDesktop::Server Desktop; };
 PluginHost::PluginHost():m_state(std::make_unique<State>()){}
 PluginHost::~PluginHost(){Shutdown();}
 void PluginHost::Load(const std::filesystem::path& root) {
@@ -300,6 +313,12 @@ void PluginHost::Load(const std::filesystem::path& root) {
         // The desktop Helpy frontend has no Unreal imports or viewport hook.
         // Other client plugins retain the existing dedicated-server exclusion.
         if(Storefront::IsDedicatedServer()&&manifest.Id!="RuneSchema.Helpy")continue;
+        std::vector<std::filesystem::path> packages;
+        try{packages=PluginCatalog::PakDirectories(manifest);}
+        catch(const std::exception& error){
+            m_state->Messages.push_back(manifest.Id+": content rejected; core and other plugins continue: "+error.what());
+            PS::Log<RC::LogLevel::Warning>(STR("[RS-PLUG-009] Plugin '{}' content rejected: {}; core and other plugins continue.\n"),PS::ToWideSafe(manifest.Id),PS::ToWideSafe(error.what()));continue;
+        }
         if(manifest.ApiVersion!=RUNESCHEMA_PLUGIN_API_VERSION)
             CompatibilityNotice(manifest.Id+": manifest API "+std::to_string(manifest.ApiVersion)+", host API "+std::to_string(RUNESCHEMA_PLUGIN_API_VERSION)+"; trying native startup");
         if(!manifest.BuiltForRuneSchema.empty()&&manifest.BuiltForRuneSchema!=BuildInfo::Version)
@@ -308,7 +327,7 @@ void PluginHost::Load(const std::filesystem::path& root) {
             std::none_of(manifests.begin(),manifests.end(),[&](const auto& candidate){return candidate.Id==dependency&&candidate.Version==declaredVersion;}))
             CompatibilityNotice(manifest.Id+": dependency "+dependency+" was developed against "+declaredVersion+"; attempting the available version");
         if(manifest.EntryPoint.empty()) {
-            if(PluginCatalog::PakDirectories(manifest).empty()) {
+            if(packages.empty()) {
                 m_state->Messages.push_back(manifest.Id+": content plugin has no complete paks/<PackageName>/<name>.pak/.ucas/.utoc container");continue;
             }
             {std::scoped_lock lock(Gate);for(const auto& capability:manifest.Capabilities) {
@@ -373,7 +392,23 @@ void PluginHost::OnUiInit(){for(auto& plugin:m_state->LoadedPlugins)if(plugin.Ui
         PS::CodedLog<RC::LogLevel::Error>(PS::Diagnostics::Id::PluginUiFailed,TEXT("Plugin {}: UI initialization rejected.\n"),PS::ToWideSafe(plugin.Manifest.Id));}
 }catch(...){m_state->Messages.push_back(plugin.Manifest.Id+": UI initialization threw an exception");
     PS::CodedLog<RC::LogLevel::Error>(PS::Diagnostics::Id::PluginUiFailed,TEXT("Plugin {}: UI initialization threw an exception.\n"),PS::ToWideSafe(plugin.Manifest.Id));}}
-void PluginHost::OnUnrealInit(){for(auto& plugin:m_state->LoadedPlugins){
+void PluginHost::OnUnrealInit(){
+    const auto root=HostServices::ModDirectory();
+    if(HelpyDesktop::Enabled(root)&&std::any_of(m_state->LoadedPlugins.begin(),m_state->LoadedPlugins.end(),[](const auto& plugin){return plugin.Manifest.Id=="RuneSchema.Helpy";})){
+        try{DesktopBridgeReady=m_state->Desktop.Start(root,[](const nlohmann::json& request){
+            if(request.value("Op",std::string{})=="Poll")return nlohmann::json{{"Code",RS_PLUGIN_OK}};
+            if(request.value("Op",std::string{})!="Call"||!request.contains("Request")||!request["Request"].is_object())return nlohmann::json{{"Code",RS_PLUGIN_INVALID_ARGUMENT}};
+            const auto capacity=request.value("Capacity",uint32_t{});if(capacity>RUNESCHEMA_PLUGIN_MAX_MESSAGE)return nlohmann::json{{"Code",RS_PLUGIN_INVALID_ARGUMENT}};
+            const auto input=request["Request"].dump();if(input.size()>RUNESCHEMA_PLUGIN_MAX_MESSAGE)return nlohmann::json{{"Code",RS_PLUGIN_INVALID_ARGUMENT}};
+            thread_local std::vector<char> output;if(output.size()<capacity)output.resize(capacity);uint32_t size=0;
+            const auto code=CoreTools(nullptr,input.c_str(),capacity?output.data():nullptr,capacity,&size);
+            nlohmann::json reply={{"Code",code},{"Size",size}};
+            if(code==RS_PLUGIN_OK&&size&&size<=output.size()){if(output[size-1]=='\0')--size;reply["Body"]=nlohmann::json::parse(output.data(),output.data()+size);}
+            return reply;
+        },[]{HelpyActivity::Visible=false;});}catch(...){m_state->Desktop.Stop();DesktopBridgeReady=false;}
+        if(!DesktopBridgeReady)HostLog(RS_LOG_WARNING,"RuneSchema.Helpy","[RS-UI-002] Helpy game bridge unavailable; the application can still browse its cache offline.");
+    }
+    for(auto& plugin:m_state->LoadedPlugins){
     size_t packs=0;
     try{packs=PluginCatalog::PakDirectories(plugin.Manifest).size();}
     catch(const std::exception& error){
@@ -389,11 +424,12 @@ void PluginHost::OnUnrealInit(){for(auto& plugin:m_state->LoadedPlugins){
     try{const auto result=plugin.UnrealInit(plugin.Instance);if(result!=RS_PLUGIN_OK){m_state->Messages.push_back(plugin.Manifest.Id+": Unreal initialization rejected");PS::CodedLog<RC::LogLevel::Error>(PS::Diagnostics::Id::PluginUnrealFailed,TEXT("Plugin {}: Unreal initialization rejected ({}).\n"),PS::ToWideSafe(plugin.Manifest.Id),result);}else HostLog(RS_LOG_INFO,plugin.Manifest.Id.c_str(),announcement.c_str());}
     catch(...){m_state->Messages.push_back(plugin.Manifest.Id+": Unreal initialization threw an exception");PS::CodedLog<RC::LogLevel::Error>(PS::Diagnostics::Id::PluginUnrealFailed,TEXT("Plugin {}: Unreal initialization threw an exception.\n"),PS::ToWideSafe(plugin.Manifest.Id));}
 }
-    SpawnToolRequests::PushUpdate=[](const char* kind,const nlohmann::json& payload,uint64_t revision){
+    SpawnToolRequests::PushUpdate=[this](const char* kind,const nlohmann::json& payload,uint64_t revision){
         const auto message=nlohmann::json{{"Kind",kind},{"Revision",revision},{"Payload",payload},
             {"Available",SpawnToolRequests::Available.load()},{"Waiting",SpawnToolRequests::Waiting.load()},
             {"Generation",SpawnToolRequests::Generation.load()}}.dump();
         uint32_t ignored=0;CallService("RuneSchema.Core","helpy.tools.push",message.c_str(),nullptr,0,&ignored);
+        if(DesktopBridgeReady)m_state->Desktop.Push(message);
     };
     nlohmann::json bootstrap;uint64_t bootstrapRevision=0;{
         std::lock_guard lock(SpawnToolRequests::Mutex);
@@ -402,7 +438,8 @@ void PluginHost::OnUnrealInit(){for(auto& plugin:m_state->LoadedPlugins){
     }SpawnToolRequests::PushUpdate("bootstrap",bootstrap,bootstrapRevision);
 }
 void PluginHost::Shutdown() noexcept {
-    HelpySourceCache::Requested=false;HelpySourceCache::Shutdown();
+    if(m_state)m_state->Desktop.Stop();DesktopBridgeReady=false;
+    HelpyActivity::Visible=false;HelpySourceCache::Requested=false;HelpySourceCache::Shutdown();
     AssetSearch::ShutdownItemCatalog();
     HelpyQueryService::Clear();
     if(!m_state)return;

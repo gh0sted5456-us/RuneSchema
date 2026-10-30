@@ -471,7 +471,8 @@ public:
             ImGui::TextWrapped("Core settings that affect the whole RuneSchema runtime.");
             ImGui::SeparatorText("Messages");
             ImGui::Checkbox("Advanced logging", &settings.advancedLogging);
-            ImGui::TextWrapped("RuneSchema.log always mirrors normal RuneSchema messages in the mod root. Advanced logging adds detailed loader and bridge traces to that file only; UE4SS keeps concise output.");
+            ImGui::TextWrapped("RuneSchema.log mirrors normal messages in the selected log folder. Advanced logging adds detailed loader and bridge traces to that file only; UE4SS keeps concise output.");
+            ImGui::Checkbox("Keep logs in UE4SS (next launch)", &settings.logsInUE4SS);
             ImGui::Checkbox("Archive RuneSchema logs (restart required)", &settings.archiveLogs);
             ImGui::TextWrapped("Each launch starts a fresh continuous RuneSchema.log. Archiving keeps the previous run in logs/ with a UTC date-time filename. No mid-run size rotation or automatic archive deletion. UE4SS.log is unchanged.");
             ImGui::Checkbox("Color-code loader annotations", &settings.colorCodeLoaderAnnotations);
@@ -533,6 +534,7 @@ public:
             ImGui::SeparatorText("Server Helpy permissions");
             ImGui::TextWrapped("These permissions are disabled by default. Allowed client requests are executed and validated by server authority; clients can never export files or create permanent placements through this bridge.");
             ImGui::Checkbox("Allow client item grants", &settings.helpyAuthority.allowClientItemGrants);
+            ImGui::Checkbox("Allow client self-teleport", &settings.helpyAuthority.allowClientTeleport);
             ImGui::Checkbox("Allow client temporary spawns", &settings.helpyAuthority.allowClientTemporarySpawns);
             ImGui::SetNextItemWidth(140.0f);
             ImGui::InputInt("Maximum items per request", &settings.helpyAuthority.maximumItemCount);
@@ -543,7 +545,7 @@ public:
             settings.helpyAuthority.maximumItemCount=std::clamp(settings.helpyAuthority.maximumItemCount,1,10000);
             settings.helpyAuthority.maximumSpawnCount=std::clamp(settings.helpyAuthority.maximumSpawnCount,1,100);
             settings.helpyAuthority.maximumNpcDurationSeconds=std::clamp(settings.helpyAuthority.maximumNpcDurationSeconds,1,3600);
-            ImGui::TextWrapped("Remote users must also match permittedPlayerGuids or permittedPlayerNames in settings/settings.ini [helpyAuthority] (legacy JSONC is also supported). An empty allowlist denies all remote Helpy mutations; GUIDs are preferred.");
+            ImGui::TextWrapped("Remote users need an allowlist entry or opted-in world PIN access. Configure the PIN in Helpy > Settings > Server access. PIN access covers only self-delivery and self-teleport; action limits and registry checks still apply. GUIDs are preferred for allowlists.");
             ImGui::TextWrapped("Plugin controls are owned by each plugin under plugins/<PluginId>/settings/. Helpy activation and its hotkey are managed by RuneSchema.Helpy.");
             ImGui::TextWrapped("Settings: settings/settings.ini (legacy settings.jsonc supported) | Live jobs: runtime/live/jobs | Live state: runtime/live/saved");
             ImGui::TextWrapped("Hotloading applies supported JSON changes while the game is running. Blueprint patches and ghost appearance changes still require a restart.");

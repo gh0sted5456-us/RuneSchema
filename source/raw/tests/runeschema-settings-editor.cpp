@@ -12,6 +12,7 @@ int main(int argc,char** argv)try{
     ConfigFiles::Write(file,EncodeIniDocument(document));
     auto initial=RuneSchemaSettingsEditor::Read(root);Need(initial.at("Ok").get<bool>());
     Need(initial["Editable"]["/archiveLogs"]==false&&initial["Document"]["archiveLogs"]==false);
+    Need(initial["Editable"]["/logsInUE4SS"]==false&&initial["Document"]["logsInUE4SS"]==false);
     Need(!initial["Editable"].contains("/futureSection/keep"));
     Need(!initial["Editable"].contains("/persistence/recovery")&&!initial["Editable"].contains("/worldSaveCleanup/backupBeforePrune"));
     Need(initial["Editable"]["/persistence/blanketCleanup"]==false
@@ -37,13 +38,14 @@ int main(int argc,char** argv)try{
     Need(!save(json{{"/advancedLogging",true}},"stale").at("Ok").get<bool>());
     Need(!save(json{{"/helpyHotkey","not-a-key"}},original).at("Ok").get<bool>());Need(ConfigFiles::Read(file)==original);
     Need(initial["Document"]["helpyHotkey"]=="F2"&&initial["Editable"].contains("/helpyHotkey"));
-    const auto saved=save(json{{"/advancedLogging",true},{"/archiveLogs",true},{"/persistence/allowCorruptCharacterEntry",true},{"/persistence/blanketCleanup",false}},original);
+    const auto saved=save(json{{"/advancedLogging",true},{"/archiveLogs",true},{"/logsInUE4SS",true},{"/persistence/allowCorruptCharacterEntry",true},{"/persistence/blanketCleanup",false}},original);
     Need(saved.at("Ok").get<bool>()&&saved.at("RestartRequired").get<bool>());
     Need(ConfigFiles::Read(saved.at("Backup").get<std::string>())==original);
     Need(saved["Document"]["futureSection"]["keep"]=="unchanged");
     Need(saved["Document"]["advancedLogging"]==true&&saved["Document"]["persistence"]["allowCorruptCharacterEntry"]==true);
     Need(saved["Document"]["defaultRecovery"]["enabled"]==false&&saved["Document"]["defaultRecovery"]["progress"]==false);
     Need(saved["Document"]["archiveLogs"]==true);
+    Need(saved["Document"]["logsInUE4SS"]==true&&DecodeSettings(DecodeIniDocument(ConfigFiles::Read(file)).dump()).logsInUE4SS);
     Need(saved["Document"]["persistence"]["recovery"]==false);
     Need(saved["Document"]["persistence"]["blanketCleanup"]==false
         &&!DecodeSettings(DecodeIniDocument(ConfigFiles::Read(file)).dump()).persistence.blanketCleanup);

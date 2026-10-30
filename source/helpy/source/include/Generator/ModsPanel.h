@@ -16,6 +16,11 @@ inline PS::ProcessExitFuture<Json> Worker;
 inline std::string Status;
 inline bool Dirty=false,Restart=false;
 inline bool WorkerMutates=false;
+inline size_t RemoveMissing(const std::string& name={}){
+    const auto before=Rows.size();auto& entries=Rows.get_ref<Json::array_t&>();
+    std::erase_if(entries,[&](const auto& row){return !row.value("Present",true)&&(name.empty()||row.value("Name",std::string{})==name);});
+    const auto removed=before-Rows.size();if(removed){Dirty=true;Status="Removed "+std::to_string(removed)+" missing list entries from the draft. Apply for next launch to save.";}return removed;
+}
 inline char Search[128]{};
 inline std::map<std::string,ModHealth::State> Health;
 inline uint64_t HealthRevision=~uint64_t{};
@@ -98,6 +103,9 @@ inline void Render(){
         if(GetOpenFileNameW(&dialog))Import(file);
     }ImGui::SameLine();
     if(HelpyImGuiTheme::SoftButton("Refresh")&&!Worker.valid()&&!Dirty)Start({{"Action","ModsRead"}});
+    ImGui::SameLine();const bool missing=std::any_of(Rows.begin(),Rows.end(),[](const auto& row){return !row.value("Present",true);});
+    ImGui::BeginDisabled(!missing||Worker.valid()||!Snapshot.is_object()||!Snapshot.value("OrderEnabled",false));
+    if(HelpyImGuiTheme::SoftButton("Remove all missing entries"))RemoveMissing();ImGui::EndDisabled();
     ImGui::SameLine();if(Restart)ImGui::TextColored(theme.accent,"Restart required");else ImGui::TextDisabled("Changes apply next launch");
     if(!Status.empty())ImGui::TextWrapped("%s",Status.c_str());
     if(Worker.valid()&&Snapshot.is_null())ImGui::TextDisabled("Reading mods…");
@@ -119,7 +127,7 @@ inline void Render(){
     if(revision!=HealthRevision){Health.clear();for(const auto& row:Rows){const auto owner=row.at("Name").get<std::string>();auto& state=Health[owner];state.AcceptedDeclarations=row.value("AcceptedDeclarations",size_t{});state.RejectedDeclarations=row.value("RejectedDeclarations",size_t{});
         if(ledgerReady&&row.contains("Health")){const auto& current=row["Health"];state.Errors=current.value("Errors",size_t{});state.Warnings=current.value("Warnings",size_t{});state.OptionalProbes=current.value("OptionalProbes",size_t{});state.Details=current.value("Details",std::vector<std::string>{});}
         else for(size_t stream:{size_t(0),size_t(2)})for(const auto& entry:LiveLogPanel::Streams[stream].History.Rows)ModHealth::Observe(state,owner,entry,stream?"Game":"RuneSchema");}HealthRevision=revision;}
-    int moveFrom=-1,moveTo=-1;
+    int moveFrom=-1,moveTo=-1;std::string removeMissing;
 #if defined(HELPY_PREVIEW)
     PreviewPlacards=0;PreviewNativeBadges=0;PreviewArtCards=0;PreviewBadgeOrders.clear();PreviewBadgeTints.clear();
 #endif
@@ -147,10 +155,14 @@ inline void Render(){
                 if(ImGui::IsItemHovered())HealthDetails(row,health,checked);
                 const ImVec2 titleAt{a.x+theme.X(68),a.y+theme.Y(12)};const float titleWidth=std::max(theme.X(40),size.x-theme.X(190));
                 ImGui::SetCursorScreenPos(titleAt);ImGui::InvisibleButton("##mod-title",{titleWidth,theme.Y(60)});
+#if defined(HELPY_PREVIEW)
+                HelpyPreviewHooks::ModTitles[owner]=HelpyPreviewHooks::LastRect();
+#endif
                 const bool hovered=ImGui::IsItemHovered();
                 if(ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceNoPreviewTooltip)){const auto index=static_cast<int>(i);ImGui::SetDragDropPayload("RUNESCHEMA_MOD_ORDER",&index,sizeof(index));DragFeedback::Held("Mod",nickname.c_str());ImGui::EndDragDropSource();}
                 if(ImGui::BeginDragDropTarget()){if(const auto* payload=ImGui::AcceptDragDropPayload("RUNESCHEMA_MOD_ORDER")){const int from=*static_cast<const int*>(payload->Data);if(from>=0&&from<static_cast<int>(Rows.size())&&from!=static_cast<int>(i)){moveFrom=from;moveTo=static_cast<int>(i);}}ImGui::EndDragDropTarget();}
                 if(ImGui::BeginPopupContextWindow("mod-actions",ImGuiPopupFlags_MouseButtonRight)){
+                    if(!row.value("Present",true)&&ImGui::MenuItem("Remove missing entry"))removeMissing=owner;
                     const auto url=row.at("Metadata").value("website",std::string{});
                     if(ImGui::MenuItem("Open mod page",nullptr,false,!url.empty()&&(url.starts_with("https://")||url.starts_with("http://"))&&url.find_first_of("\r\n\t")==url.npos))ShellExecuteA(nullptr,"open",url.c_str(),nullptr,nullptr,SW_SHOWNORMAL);
                     const auto folder=row.value("Folder",std::string{});
@@ -160,7 +172,19 @@ inline void Render(){
                     if(ImGui::MenuItem("Cache & banner...",nullptr,false,!source.empty())){HelpyIconPacks::SelectedSource=source;HelpyIconPacks::Open=true;}
                     if(ImGui::MenuItem("Export source cache…",nullptr,false,!source.empty()&&!HelpyIconPacks::Busy()&&!HelpyIconPacks::Building())){HelpyIconPacks::SelectedSource=source;HelpyIconPacks::Open=true;HelpyIconPacks::Choose(false);}
                     if(ImGui::MenuItem("Change banner...",nullptr,false,!source.empty()))SourceBanners::Choose(source);
-                    ImGui::Separator();if(ImGui::BeginMenu("Mod details")){Metadata(row);ImGui::EndMenu();}ImGui::EndPopup();}
+                    ImGui::Separator();
+                    const auto* viewport=ImGui::GetMainViewport();const float detailsWidth=std::min(theme.X(460),std::max(theme.X(180),viewport->WorkSize.x-theme.X(32)));
+                    ImGui::SetNextWindowSizeConstraints({detailsWidth,0},{detailsWidth,viewport->WorkSize.y*.8f});
+                    ImGui::SetNextWindowSize({detailsWidth,0});
+                    const bool detailsOpen=ImGui::BeginMenu("Mod details");
+#if defined(HELPY_PREVIEW)
+                    HelpyPreviewHooks::ModDetailsMenu=HelpyPreviewHooks::LastRect();
+#endif
+                    if(detailsOpen){
+#if defined(HELPY_PREVIEW)
+                        const auto position=ImGui::GetWindowPos(),size=ImGui::GetWindowSize();HelpyPreviewHooks::ModDetailsWindow={position.x,position.y,position.x+size.x,position.y+size.y};
+#endif
+                        Metadata(row);ImGui::EndMenu();}ImGui::EndPopup();}
                 if(hovered&&!ImGui::IsPopupOpen("mod-actions")){HelpyImGuiTheme::BeginDetailsTooltip(titleAt,{titleAt.x+titleWidth,titleAt.y+theme.Y(60)},480);Metadata(row);HelpyImGuiTheme::EndDetailsTooltip();}
                 auto* draw=ImGui::GetWindowDrawList();draw->PushClipRect(titleAt,{titleAt.x+titleWidth,b.y-theme.Y(6)},true);
                 draw->AddText(ImGui::GetFont(),theme.Y(17),titleAt,ImGui::GetColorU32(theme.text),nickname.c_str());
@@ -173,7 +197,8 @@ inline void Render(){
             }ImGui::EndChild();ImGui::PopID();
         }
     }ImGui::EndChild();
-    if(moveFrom>=0){auto moved=Rows[moveFrom];Rows.erase(Rows.begin()+moveFrom);Rows.insert(Rows.begin()+moveTo,std::move(moved));Dirty=true;}
+    if(!removeMissing.empty())RemoveMissing(removeMissing);
+    else if(moveFrom>=0){auto moved=Rows[moveFrom];Rows.erase(Rows.begin()+moveFrom);Rows.insert(Rows.begin()+moveTo,std::move(moved));Dirty=true;}
     ImGui::BeginDisabled(!Dirty);if(HelpyImGuiTheme::SoftButton("Apply for next launch")){Start({{"Action","ModsSave"},{"ExpectedRoot",Snapshot.value("Root",std::string{})},{"ExpectedExists",Snapshot.at("ExpectedExists")},{"ExpectedContents",Snapshot.at("ExpectedContents")},{"Rows",Rows}});}
     ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Discard changes")){Rows=Snapshot.at("Rows");Dirty=false;}ImGui::EndDisabled();ImGui::EndDisabled();
     ImGui::TextDisabled("Drop a ZIP · Right-click for options");

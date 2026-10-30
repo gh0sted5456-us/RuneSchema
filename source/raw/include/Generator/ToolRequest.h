@@ -73,6 +73,11 @@ template<> struct ToolRequest<SpawnToolTag> {
     inline static uint64_t Revision=1,ActiveRequest=0;
     inline static std::map<uint64_t,nlohmann::json> Completed;
     inline static bool InFlight=false;
+    inline static uint64_t NetworkCompletionId=0;
+    inline static std::function<void(const nlohmann::json&)> NetworkCompletion;
+    static void SetNetworkCompletion(uint64_t id,std::function<void(const nlohmann::json&)> callback){
+        std::lock_guard lock(Mutex);NetworkCompletionId=id;NetworkCompletion=std::move(callback);
+    }
     inline static std::optional<std::string> SearchHint;
     static void PrioritizeSearch(std::string query) {
         if(RemoteSearch){RemoteSearch(std::move(query));return;}
@@ -128,9 +133,11 @@ template<> struct ToolRequest<SpawnToolTag> {
     }
     static void Publish(nlohmann::json result) {
         nlohmann::json pushed;uint64_t revision=0;
+        std::function<void(const nlohmann::json&)> completion;
         {
         std::lock_guard lock(Mutex);
         result["_RequestId"]=ActiveRequest;result["_InProgress"]=false;
+        if(ActiveRequest&&ActiveRequest==NetworkCompletionId){completion=std::move(NetworkCompletion);NetworkCompletionId=0;}
         if(ActiveRequest) {
             // Compact one-shot receipts survive a second settings request.
             // Do not retain copies of full asset catalogs for every command.
@@ -162,6 +169,7 @@ template<> struct ToolRequest<SpawnToolTag> {
         Result=std::move(result);InFlight=false;Waiting=false;ActiveRequest=0;revision=++Revision;pushed=Result;
         if(pushed.contains("PlayersDelta"))pushed.erase("Players");
         }
+        if(completion)try{completion(pushed);}catch(...){/* Native result remains recorded; never repeat a mutation after a transport error. */}
         if(PushUpdate)PushUpdate("result",pushed,revision);
     }
     static bool TakeCompleted(uint64_t request,nlohmann::json& out) {
@@ -227,6 +235,7 @@ template<> struct ToolRequest<SpawnToolTag> {
     static void Clear() {
         nlohmann::json pushed;uint64_t revision=0;{
         std::lock_guard lock(Mutex);Pending.reset();PendingMapGround.reset();SearchHint.reset();Waiting=false;InFlight=false;ActiveRequest=0;
+        NetworkCompletion={};NetworkCompletionId=0;
         CancelRequested=true;Completed.clear();QuickCatalogData=nlohmann::json::object();PendingPlayerRoles=false;NextPlayerRoles={};++Generation;
         Result={{"Status","World changed; refresh tools."}};revision=++Revision;pushed=Result;}
         if(PushUpdate)PushUpdate("clear",pushed,revision);

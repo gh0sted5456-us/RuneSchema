@@ -61,6 +61,10 @@ conflicting tables instead of depending on traversal order.
 Do not guess nested layouts from a USMAP alone. RuneSchema compares the target
 against live reflection before committing a row.
 
+For a PAK-owned source table supplying missing rows to a vanilla table, see the
+development [cooked-table extension guide](../../COOKED-TABLE-EXTENSIONS.md).
+Those imports run before the ordinary JSON edits described here.
+
 ## Simple rules
 
 ### Keep an existing row and change only selected data

@@ -29,7 +29,7 @@ inline bool Browsable(const Json& value,const HelpySourceCache::Snapshot& snapsh
     const auto row=CacheBundle::Parse(value);
     if(row.Owner=="core")return true;
     if(row.Owner.starts_with("plugins/"))return !snapshot.Authoritative||snapshot.NativePlugins.contains(row.Source);
-    if(!snapshot.Authoritative||snapshot.Provisional||!snapshot.SourceKeys.contains(row.Source))return false;
+    if((!snapshot.PresentationOnly&&(!snapshot.Authoritative||snapshot.Provisional))||!snapshot.SourceKeys.contains(row.Source))return false;
     auto aliases=value.at("Data").value("CacheOwners",Json::array());aliases.push_back(row.Owner);
     for(const auto& owner:aliases)if(owner.is_string()){
         const auto token=owner.get<std::string>();if(!token.starts_with("mods/")||!ContentSource::Valid(token))continue;

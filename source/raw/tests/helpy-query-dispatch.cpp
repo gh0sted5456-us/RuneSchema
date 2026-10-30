@@ -27,5 +27,8 @@ int main(){
     const auto beforeCancel=publications;
     assert(queries::PumpOne(false,[](const json&)->json{queries::Cancel(0,2);return {{"CatalogWindow",{{"RequestId",5}}}};}));
     assert(publications==beforeCancel); // cancellation during work cannot publish stale rows
+    queries::Clear();auto scoped=request(6);scoped["Query"]=std::string(512,'x');assert(queries::Submit(scoped));
+    assert(queries::PumpOne(false,read));scoped["Query"]=std::string(513,'x');assert(!queries::Submit(scoped));
+    scoped=request(7,1);scoped["Query"]=std::string(257,'x');assert(!queries::Submit(scoped));
     queries::Clear();SpawnToolRequests::PushUpdate={};
 }

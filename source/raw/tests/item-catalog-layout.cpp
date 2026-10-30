@@ -8,6 +8,10 @@ int main(){
     assert((large.At(0)==std::pair<std::size_t,std::size_t>{0,0}));
     assert((large.At(1)==std::pair<std::size_t,std::size_t>{1,0}));
     assert((large.At(2'000'001)==std::pair<std::size_t,std::size_t>{2,0}));
+    assert((large.At(0,true)==std::pair<std::size_t,std::size_t>{2,0}));
+    assert((large.At(39999,true)==std::pair<std::size_t,std::size_t>{2,39999}));
+    assert((large.At(40000,true)==std::pair<std::size_t,std::size_t>{0,0}));
+    assert((large.At(40001,true)==std::pair<std::size_t,std::size_t>{1,0}));
     // MaxCape can be returned on the first bounded window despite being very
     // late in the global object roster. Ordinary live/mounted coverage remains.
     std::size_t visits=0;bool found=false;

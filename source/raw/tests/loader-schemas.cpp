@@ -12,7 +12,8 @@ int RunLoaderSchemas(int argc,char** argv) {
     assert(schemas["registry"]["properties"]["NativeRegistries"]["properties"].size()==24);
     for(const auto& family:PS::NativeDataFamilies::Families)assert(schemas["registry"]["properties"]["NativeRegistries"]["properties"][family.Lane]["items"]["type"]=="string");
     for(const auto* lane:{"Skills","SkillPerks","Enums"})assert(schemas["registry"]["properties"]["NativeRegistries"]["properties"][lane]["$ref"]=="#/definitions/modOwnedCookedPaths");
-    assert(schemas["registry"]["properties"]["LoaderDefinitions"]["properties"].size()==4);
+    assert(schemas["registry"]["properties"]["LoaderDefinitions"]["properties"].size()==5);
+    assert(schemas["registry"]["properties"]["LoaderDefinitions"]["properties"]["DataTables"]["additionalProperties"]["required"][0]=="Target");
     assert(schemas["registry"]["properties"]["NativeRegistries"]["properties"]["Buildings"]["items"]["type"]=="string");
     assert(schemas["registry"]["properties"]["LoaderDefinitions"]["properties"]["Buildings"]["additionalProperties"]["additionalProperties"]==false);
     assert(schemas["assets"]["patternProperties"]["^(?!(?:RuneSchema|Modded)$)[^$]"]["properties"]["$WearableBridge"]["type"]=="boolean");

@@ -183,7 +183,7 @@
               },
               "MaxBytes": {
                 "default": 65536,
-                "maximum": 1048576,
+                "maximum": 65536,
                 "minimum": 1,
                 "type": "integer"
               },
@@ -295,6 +295,25 @@
             "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
             "type": "string"
           },
+          "type": "object"
+        },
+        "DataTables": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "properties": {
+              "Target": {
+                "maxLength": 1024,
+                "pattern": "^/Game/.+\\.[^./]+$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "Target"
+            ],
+            "type": "object"
+          },
+          "description": "Append missing rows from each mod-owned cooked source DataTable key into its exact plain vanilla Target before loose JSON edits. Runtime verifies identical RowStruct, row limits and copies; existing target rows are preserved.",
+          "maxProperties": 4096,
           "type": "object"
         },
         "Journals": {
@@ -804,11 +823,10 @@
       "type": "object"
     },
     "SchemaVersion": {
-      "const": 1
+      "description": "Informational authoring version; supported fields are validated independently."
     }
   },
   "required": [
-    "SchemaVersion",
     "Entries"
   ],
   "title": "RuneSchema registry manifest",

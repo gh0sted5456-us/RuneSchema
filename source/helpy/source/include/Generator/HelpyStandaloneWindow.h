@@ -6,6 +6,8 @@
 #include <filesystem>
 #include <array>
 #include <windows.h>
+#include "Core/HelpyTrayIcon.h"
+#include "Core/HelpyGameOverlay.h"
 
 struct ID3D11Device;
 struct ID3D11DeviceContext;
@@ -23,6 +25,8 @@ public:
     void ReloadTheme();
     void Shutdown();
     bool Ready() const{return m_ready.load();}
+    bool TrayReady()const{return m_tray.Ready();}
+    bool WindowVisible()const{return m_visible.load();}
     std::string Error() const;
 #if defined(HELPY_PREVIEW)
     int Preview(const std::filesystem::path& output,bool capture,int width=1280,int height=900);
@@ -37,6 +41,7 @@ private:
     void DestroyTarget();
     void SetError(std::string value);
     bool OpenPopup();
+    void SyncGameOverlay();
     void ClosePopup();
     bool SyncItemBay();
     void DestroyItemBay();
@@ -46,6 +51,9 @@ private:
     bool SyncWorkspacePanel(size_t index);
     void DestroyWorkspacePanel(size_t index);
 
+    HelpyTrayIcon::Icon m_tray;
+    HelpyGameOverlay m_gameOverlay;
+    std::chrono::steady_clock::time_point m_nextOverlayGame{};
     HINSTANCE m_module{};HWND m_hwnd{},m_gameWindow{};std::atomic<DWORD> m_threadId{0};
     std::atomic<HWND> m_publishedWindow=nullptr;
     std::atomic<HWND> m_publishedBayWindow=nullptr;

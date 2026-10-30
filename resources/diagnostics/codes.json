@@ -730,6 +730,46 @@
       "summary": "A cooked policy callback, native hook or reflected gameplay contract failed its validation or execution.",
       "impact": "The failed policy operation is reported; unsupported native hooks retain native handling. Other independent providers and native game behavior remain available.",
       "action": "Keep the complete BUILDING-POLICY reason and game/framework version. Check the callback signatures and authoritative world. Native hook support needs verification for that executable; never force an address or disable validation."
+    },
+    {
+      "id": "PluginContentRejected",
+      "code": "RS-PLUG-009",
+      "title": "Plugin container layout rejected",
+      "severity": "warning",
+      "subsystem": "Plugins",
+      "summary": "A plugin's container files could not be validated as complete packages.",
+      "impact": "That plugin's content is skipped. RuneSchema core and independent plugins or mod PAK directories continue; dependent features may be unavailable.",
+      "action": "Read the exact missing and observed filenames. Finish Vortex deployment and verify matching stems across .pak/.ucas/.utoc. Windows filename case and ordinary hardlinks are supported; genuinely missing parts remain rejected."
+    },
+    {
+      "id": "CookedTableExtensionRejected",
+      "code": "RS-RAW-004",
+      "title": "Cooked table extension skipped",
+      "severity": "warning",
+      "subsystem": "Raw tables",
+      "summary": "A declared cooked source table could not be safely imported into its vanilla target.",
+      "impact": "That import is skipped or its newly added rows are rolled back. Other table declarations and normal JSON edits continue.",
+      "action": "Read the source, target and original reason. Use exact plain DataTables sharing one row struct, stay within the row/staging limits, and verify the consuming gameplay system in a private fixture."
+    },
+    {
+      "id": "HelpyWindowUnavailable",
+      "code": "RS-UI-001",
+      "title": "Helpy window or render surface unavailable",
+      "severity": "error",
+      "subsystem": "Helpy UI",
+      "summary": "Helpy could not initialize, resize or update its window/render surface.",
+      "impact": "An unavailable render target is not drawn. Window-thread failures close Helpy without requesting game termination; an underlying graphics-driver fault may also affect the game independently.",
+      "action": "Keep the full message, display/DPI changes, runtime and driver information. Reopen Helpy after the display is ready. This diagnostic alone does not establish the cause of a reported desktop crash."
+    },
+    {
+      "id": "HelpyDesktopUnavailable",
+      "code": "RS-UI-002",
+      "title": "Standalone Helpy unavailable",
+      "severity": "warning",
+      "subsystem": "Helpy UI",
+      "summary": "The optional executable or local desktop bridge could not start.",
+      "impact": "The DLL window remains the fallback when initialization can continue. Offline browsing requires the matching optional executable.",
+      "action": "Use matching candidate DLLs and Helpy.exe in the assigned installation. Check the plugin settings, local Windows user and complete error. Switch to DLL window and restart if needed."
     }
   ]
 }

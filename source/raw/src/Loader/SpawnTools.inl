@@ -225,7 +225,7 @@ void DragonWildsSpawnLoader::HandleNetworkHelpyMarks(UObject* player,const std::
 std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,const std::string& action,const std::string& payload) {
     if(!player || !player->GetWorld() || !GetGameMode(player->GetWorld()))
         throw std::runtime_error("Helpy authority request did not arrive in an authoritative world");
-    if(action!="GiveItems" && action!="Spawn" && action!="Players" && action!="InventoryMarks")
+    if(action!="GiveItems" && action!="MapTeleport" && action!="HelpyRemoteAccess" && action!="Spawn" && action!="Players" && action!="InventoryMarks")
         throw std::runtime_error("Helpy authority action is not permitted");
     if(payload.empty() || payload.size()>256*1024)
         throw std::runtime_error("Helpy authority payload exceeds the safe bound");
@@ -239,6 +239,24 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
 
     const auto& policy=PS::PSConfig::Get()->GetSettings().helpyAuthority;
     const auto playerGuid=GetPlayerCharacterGuid(controller);
+    if(ActorHelper::GetObjectRef(controller,TEXT("Pawn"))!=player)
+        throw std::runtime_error("Helpy remote request requires the current owned character");
+    const PS::WeakObjectHandle peerIdentity(player),worldIdentity(player->GetWorld());
+    const PS::WeakObjectHandle controllerIdentity(controller);
+    const auto identity=[](const auto& value){return std::to_string(value.ObjectIndex)+":"+std::to_string(value.ObjectSerialNumber);};
+    const auto peerKey=identity(controllerIdentity)+"|"+playerGuid,worldKey=identity(worldIdentity);
+    if(action=="HelpyRemoteAccess"){
+        if(playerGuid.empty())throw std::runtime_error("Remote access requires an initialized character identity");
+        if(payload.size()>256)throw std::runtime_error("Remote access request exceeds its size limit");
+        if(request.value("Disconnect",false)){PS::HelpyRemoteAccess::Server.Revoke(peerKey);return nlohmann::json{{"Kind","HelpyRemoteAccess1"},{"Allowed",false},{"Detail","Remote access disconnected."}}.dump();}
+        const auto pin=request.value("Pin",std::string{});
+        const auto result=PS::HelpyRemoteAccess::Server.Authenticate(peerKey,worldKey,policy.allowPinAccess,policy.accessPin,pin);
+        if(result!=PS::HelpyRemoteAccess::Sessions::Result::Granted)
+            throw std::runtime_error(result==PS::HelpyRemoteAccess::Sessions::Result::RateLimited
+                ?"Too many PIN attempts. Wait one minute before retrying.":"Remote access denied. Check the PIN and the server's opt-in settings.");
+        return nlohmann::json{{"Kind","HelpyRemoteAccess1"},{"Allowed",true},{"ItemDelivery",policy.allowClientItemGrants},
+            {"Teleport",policy.allowClientTeleport},{"Detail","PIN access enabled for your current character and world. Server action limits still apply."}}.dump();
+    }
     if(action=="InventoryMarks"){
         const auto normalize=[](std::string value){std::string out;for(unsigned char c:value){if(c=='-'||c=='{'||c=='}')continue;if(!std::isxdigit(c))return std::string{};out+=static_cast<char>(std::tolower(c));}return out.size()==32&&out!=std::string(32,'0')?out:std::string{};};
         const auto guid=normalize(playerGuid);
@@ -293,7 +311,15 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
         if(!actual.empty()&&std::ranges::any_of(policy.permittedPlayerGuids,[&](const auto& value){return normalize(value)==actual;}))return true;
         return !playerName.empty()&&std::find(policy.permittedPlayerNames.begin(),policy.permittedPlayerNames.end(),playerName)!=policy.permittedPlayerNames.end();
     };
-    if(!permitted())throw std::runtime_error("This player is not permitted to use Helpy server mutations");
+    const bool pinAccess=PS::HelpyRemoteAccess::Server.Allowed(peerKey,worldKey,policy.allowPinAccess,policy.accessPin);
+    const bool allowlisted=permitted();
+    if(!allowlisted&&!(pinAccess&&(action=="GiveItems"||action=="MapTeleport")))
+        throw std::runtime_error("Remote access denied. Connect with the server's world PIN in Settings > Server access, or ask for allowlist access.");
+    if(pinAccess&&!allowlisted){
+        const auto target=request.value("Player",std::string{});
+        if(!PS::HelpyRemoteAccess::SelfRequest(action,target,playerGuid,RC::to_string(controller->GetPathName())))
+            throw std::runtime_error("PIN access allows deliveries and teleportation only for your own character");
+    }
     if(action=="GiveItems") {
         if(!policy.allowClientItemGrants)
             throw std::runtime_error("This server does not allow client Helpy item grants");
@@ -312,6 +338,11 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
             if(total>std::clamp(policy.maximumItemCount,1,10000))
                 throw std::runtime_error("Helpy item grant exceeds the server quantity limit");
         }
+    } else if(action=="MapTeleport"){
+        if(!policy.allowClientTeleport)throw std::runtime_error("This server does not allow client Helpy teleportation");
+        if(request.contains("TargetPlayer")||request.value("PartyPoint",false))
+            throw std::runtime_error("Remote teleport requires a map position for your own character");
+        (void)ToolMapTarget(player->GetWorld(),request);
     } else {
         if(!policy.allowClientTemporarySpawns)
             throw std::runtime_error("This server does not allow client Helpy temporary spawns");
@@ -331,10 +362,18 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
     request["Player"]=RC::to_string(controller->GetPathName());
     request["World"]=RC::to_string(player->GetWorld()->GetPathName());
     request["_Source"]="HelpyNetwork";
-    request["_RequestId"]=++m_networkToolSequence;
+    request["_RequestId"]=(uint64_t{1}<<63)|++m_networkToolSequence;
+    const auto bridgeRevision=request.value("_BridgeRevision",int64_t{});
+    const auto queuedId=request.at("_RequestId").get<uint64_t>();
     if(!PS::SpawnToolRequests::TrySubmit(std::move(request)))
         throw std::runtime_error("Helpy server command queue is busy; retry after the active command completes");
-    return action=="GiveItems"?"Server accepted the bounded item request.":"Server accepted the temporary spawn request.";
+    if(PublishHelpyResult&&bridgeRevision>0&&(action=="GiveItems"||action=="MapTeleport")){
+        const auto reply=PublishHelpyResult;
+        PS::SpawnToolRequests::SetNetworkCompletion(queuedId,[reply,peerIdentity,worldIdentity,bridgeRevision](const nlohmann::json& result){
+            auto* owner=peerIdentity.Get();if(owner&&owner->GetWorld()==worldIdentity.Get())reply(owner,bridgeRevision,result);
+        });
+    }
+    return action=="GiveItems"?"Server accepted the bounded item request.":action=="MapTeleport"?"Server accepted the self-teleport request; native ground checks still apply.":"Server accepted the temporary spawn request.";
 }
 
 
@@ -582,7 +621,7 @@ void DragonWildsSpawnLoader::PumpSpawnTools(PS::WorkSlice& work) {
         if(PS::HelpyQueryService::HasPending()) {
             work.Started();PS::SlowWork::Measure("helpy.catalog.query",[&]{PS::HelpyQueryService::PumpOne(false,runCatalogWindow);});
         }else if(g_quickCatalogIndex.active)PS::SlowWork::Measure("helpy.catalog.index",[&]{g_quickCatalogIndex.Tick(work);});
-        else {work.Started();PS::SlowWork::Measure("helpy.catalog.passive",[&]{PS::AssetSearch::PumpItemCatalog();});}
+        else if(PS::HelpyActivity::BackgroundAllowed()){work.Started();PS::SlowWork::Measure("helpy.catalog.passive",[&]{PS::AssetSearch::PumpItemCatalog();});}
     }
     auto request=PS::SpawnToolRequests::Take();if(!request)return;
     const bool f2Spawn=request->value("_Source",std::string{}).starts_with("Helpy")&&request->value("Action",std::string{})=="Spawn";
@@ -786,6 +825,7 @@ void DragonWildsSpawnLoader::PumpSpawnTools(PS::WorkSlice& work) {
             auto result=PS::SpawnToolRequests::Read();
             try{
                 auto& map=result["MapSnapshot"];map=PS::SlowWork::Measure("helpy.map.snapshot",[&]{return PS::HelpyMapRuntime::Snapshot(m_readyWorld,players);});map["CanBuildAndTeleport"]=GetGameMode(m_readyWorld)!=nullptr;
+                map["RemoteSelfTeleport"]=PS::HelpyRemoteAccess::ClientTeleport&&PS::HelpyRemoteAccess::ClientReady(PS::SpawnToolRequests::Generation.load());
                 map["PartyTravelVersion"]=2;
                 bool scanning=false;auto markers=PS::SlowWork::Measure("helpy.map.markers",[&]{return ToolMapNativeMarkers(m_readyWorld,scanning,*request,map["Players"]);});std::unordered_map<std::string,size_t> identities;
                 for(size_t i=0;i<markers.size();++i)identities[markers[i].at("Path").get<std::string>()]=i;
@@ -988,11 +1028,14 @@ void DragonWildsSpawnLoader::PumpSpawnTools(PS::WorkSlice& work) {
                     std::format("Catalogs overwritten: {} AI/resources, {} items, {} buildings ({} verified safe / {} blocked). {}",definitions.size(),items.size(),buildings.size(),safeBuildingCount,buildings.size()-safeBuildingCount,catalogDirectory.string())}});return;
         }
         if(!selected&&catalogWorld&&PS::Network::Detect(catalogWorld).Mode==PS::Network::Role::Client
-            &&(action=="GiveItems"||action=="Spawn")) {
+            &&(action=="GiveItems"||action=="Spawn"||action=="MapTeleport"||action=="HelpyRemoteAccess")) {
+            if(request->dump().size()>4096)throw std::runtime_error("The server request exceeds the native bridge envelope. Split the cart into smaller deliveries; this request was not sent.");
             if(!ForwardHelpyAuthority||!ForwardHelpyAuthority(action,request->dump()))
                 throw std::runtime_error("The owning-player RuneSchema authority bridge is unavailable");
-            auto result=PS::SpawnToolRequests::Read();
-            result["Status"]="Request submitted to server authority; the server will apply its Helpy permission policy.";
+            if(action=="GiveItems"||action=="MapTeleport"){
+                PS::SpawnToolRequests::Progress("Waiting for the server's validated result. No second click is needed.");return;
+            }
+            auto result=PS::SpawnToolRequests::Read();result["Status"]="Request submitted to server authority; the server will apply its Helpy permission policy.";
             PS::SpawnToolRequests::Publish(std::move(result));return;
         }
         if(!selected)throw std::runtime_error("Selected authoritative player is unavailable; refresh");

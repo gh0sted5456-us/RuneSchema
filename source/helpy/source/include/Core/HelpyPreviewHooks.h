@@ -7,7 +7,11 @@
 #include <optional>
 #include <vector>
 namespace PS::HelpyPreviewHooks {
+inline std::optional<double> PageTransitionElapsed;
+inline float PageTransitionAlpha=1.f;
 inline unsigned ModifiedItemBadges=0;
+inline ImVec4 ItemSearchButton{};
+inline unsigned ItemEmptyNotices=0;
 inline unsigned RuntimeBadgeDraws=0;
 inline unsigned CartVerifiedBadges=0,CartRejectedBadges=0,CartUncertainBadges=0;
 inline ImVec4 DeliveryBadge{};inline ImVec2 DeliveryBadgeBottomLeft{};
@@ -87,7 +91,9 @@ inline ImVec4 BayDock{};
 inline ImVec4 CardScale{};
 inline ImVec4 IconCache{};
 inline ImVec4 IconCacheClose{};
-inline ImVec4 SourceFilter{},ViewFamily{};
+inline ImVec4 SourceFilter{},ViewFamily{},ViewModFamily{},RefreshSource{};
+inline std::map<std::string,ImVec4> ModTitles;
+inline ImVec4 ModDetailsMenu{},ModDetailsWindow{};
 inline std::map<std::string,ImVec4> SourceOptions;
 inline size_t ModBadges=0;
 inline size_t LoadingRings=0;

@@ -1,6 +1,7 @@
 #pragma once
 #include "Utility/Config.h"
 #include "Core/HelpyShortcut.h"
+#include "Core/HelpyRemoteAccess.h"
 #include "glaze/glaze.hpp"
 #include <stdexcept>
 #include <string_view>
@@ -29,6 +30,8 @@ namespace PS {
         const auto error = glz::read<glz::opts{.error_on_unknown_keys = false, .error_on_missing_keys = false}>(candidate, json);
         if (error) throw std::runtime_error(glz::format_error(error, json));
         const auto source=nlohmann::json::parse(json);
+        if(candidate.helpyAuthority.allowPinAccess&&!HelpyRemoteAccess::Sessions::ValidPin(candidate.helpyAuthority.accessPin))
+            throw std::runtime_error("Helpy server PIN must contain 8-64 printable characters without spaces");
         const auto* shortcut=HelpyShortcut::Find(candidate.helpyHotkey);
         candidate.helpyHotkey=shortcut?std::string(shortcut->Name):"F2";
         auto& launch=candidate.quickLaunch;

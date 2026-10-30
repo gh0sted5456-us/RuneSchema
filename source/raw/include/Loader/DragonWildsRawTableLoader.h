@@ -101,6 +101,12 @@ namespace DragonWilds {
             const std::string& source={});
         void LoadAndApplyRegistryTargets();
         void LoadAndApplyRawTargets();
+        void ApplyCookedTableExtensions(RC::Unreal::UDataTable* only=nullptr);
+        struct TableExtension {std::string Owner,Source,Target;};
+        std::vector<TableExtension> m_cookedTables;
+        struct TableImport {PS::WeakObjectHandle Source,Target;};
+        std::map<std::pair<std::string,std::string>,TableImport> m_cookedTableImports;
+        bool m_importingCookedTables=false;
         void ApplyRegistryPatches(RC::Unreal::UDataTable* datatable);
         void ApplyObjectRegistryPatches();
         nlohmann::json ResolveRegistryValue(const nlohmann::json& value, const RegistryPatch::Patch& patch) const;

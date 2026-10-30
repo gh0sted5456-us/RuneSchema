@@ -2,6 +2,7 @@
 #include "Core/ProcessExitFuture.h"
 #include "Core/AlphabeticalItemCatalog.h"
 #include "Core/ItemCatalogFilter.h"
+#include "Core/CacheBundleIO.h"
 #include <filesystem>
 #include <fstream>
 #include <future>
@@ -14,6 +15,12 @@ namespace PS::PagedItemCatalog {
 using Json=nlohmann::json;namespace fs=std::filesystem;
 inline constexpr uint64_t MaxBytes=64*1024*1024;
 inline fs::path File(fs::path manifest){manifest+=L".pages";return manifest;}
+inline bool Current(const fs::path& file){std::error_code error;if(!fs::is_regular_file(file,error))return false;auto manifest=file;manifest.replace_extension();if(!fs::exists(manifest,error))return !error;const auto original=fs::last_write_time(manifest,error);if(error)return false;const auto index=fs::last_write_time(file,error);return !error&&index>=original;}
+inline std::string CompactScope(const std::string& scope){
+    auto value=Json::parse(scope,nullptr,false);if(value.is_discarded())return scope;
+    if(value.is_array()&&value.size()==4&&value[0]=="item-browse-v2"&&value[2].is_array())value[2]=CacheBundleIO::Hash(value[2].dump());
+    return value.dump();
+}
 inline uint64_t Hash(std::string_view text){uint64_t hash=14695981039346656037ull;for(unsigned char c:text){hash^=c;hash*=1099511628211ull;}return hash;}
 template<class T> inline T ReadNumber(std::istream& input){T value{};input.read(reinterpret_cast<char*>(&value),sizeof(value));if(!input)throw std::runtime_error("Truncated item page index");return value;}
 template<class T> inline void WriteNumber(std::ostream& out,T value){out.write(reinterpret_cast<const char*>(&value),sizeof(value));}
@@ -27,10 +34,11 @@ inline size_t Offset(const std::string& cursor,uint64_t ticket){
 inline void Save(const fs::path& manifest,const std::string& scope,const std::vector<std::shared_ptr<const Json>>& rows){
     const auto file=File(manifest);auto temp=file;temp+=L"."+std::to_wstring(GetCurrentProcessId())+L".tmp";
     try{
-        if(rows.size()>AlphabeticalItemCatalog::Cache::MaxRows||scope.size()>16384)throw std::runtime_error("Item page index exceeds bounds");
+        const auto compact=CompactScope(scope);
+        if(rows.size()>AlphabeticalItemCatalog::Cache::MaxRows||compact.size()>16384)throw std::runtime_error("Item page index exceeds bounds");
         std::vector<std::string> records;records.reserve(rows.size());uint64_t bytes=0;
         for(const auto& row:rows){auto data=row->dump();if(data.size()>32768||bytes+data.size()>MaxBytes)throw std::runtime_error("Item page data exceeds bounds");bytes+=data.size();records.push_back(std::move(data));}
-        const auto header=Json{{"Version",2},{"Scope",scope},{"Count",records.size()},{"Bytes",bytes}}.dump();
+        const auto header=Json{{"Version",2},{"Scope",compact},{"Count",records.size()},{"Bytes",bytes}}.dump();
         if(header.size()>32768)throw std::runtime_error("Item page header exceeds bounds");
         fs::create_directories(file.parent_path());std::ofstream out(temp,std::ios::binary|std::ios::trunc);
         out.write("RSCAT002",8);WriteNumber(out,uint32_t(header.size()));out.write(header.data(),header.size());
@@ -41,6 +49,7 @@ inline void Save(const fs::path& manifest,const std::string& scope,const std::ve
 }
 inline Json Read(const fs::path& file,const std::string& scope,const std::string& query,const std::string& cursor,size_t limit,bool preview=false,const std::string& locale={},const std::set<std::string>& nativeProviders={}){
     if(!limit||limit>128)throw std::runtime_error("Item page limit must be 1..128");
+    if(!Current(file))throw std::runtime_error("Item page index is older than its native catalogue");
     const auto stamp=fs::last_write_time(file);const auto size=fs::file_size(file);
     if(size<12||size>MaxBytes+1024*1024)throw std::runtime_error("Invalid item page file size");
     std::ifstream input(file,std::ios::binary);char magic[8]{};input.read(magic,8);
@@ -51,7 +60,7 @@ inline Json Read(const fs::path& file,const std::string& scope,const std::string
     const auto savedScope=header.at("Scope").get<std::string>();
     if(preview){const auto identity=Json::parse(savedScope);
         if(!identity.is_array()||identity.size()!=4||identity[0]!="item-browse-v2"||identity[3]!=locale)throw std::runtime_error("Cached preview locale or policy changed");
-    }else if(savedScope!=scope)throw std::runtime_error("Item page source scope changed");
+    }else if(CompactScope(savedScope)!=CompactScope(scope))throw std::runtime_error("Item page source scope changed");
     const auto count=header.at("Count").get<uint64_t>(),bytes=header.at("Bytes").get<uint64_t>();
     if(count>AlphabeticalItemCatalog::Cache::MaxRows||bytes>MaxBytes||12+headerBytes+count*12+bytes!=size)throw std::runtime_error("Invalid item page bounds");
     const auto ticket=Hash(savedScope+"|"+std::to_string(stamp.time_since_epoch().count())+"|"+std::to_string(size));
@@ -62,9 +71,17 @@ inline Json Read(const fs::path& file,const std::string& scope,const std::string
         if(offset!=expected||!length||length>32768||length>bytes-offset)throw std::runtime_error("Invalid item page record bounds");index.emplace_back(offset,length);expected+=length;}
     if(expected!=bytes)throw std::runtime_error("Incomplete item page index");
     const uint64_t start=12+headerBytes+count*12;const ItemCatalogFilter::Query match(query);Json rows=Json::array();size_t scanned=0;uint64_t readBytes=start;
+    const auto readRow=[&](size_t position){const auto [offset,length]=index[position];input.seekg(start+offset);std::string data(length,'\0');input.read(data.data(),length);if(!input)throw std::runtime_error("Incomplete item page record");readBytes+=length;return Json::parse(data);};
+    auto prefix=match.Family.empty()?(match.Words.empty()?std::string{}:match.Words.front()):match.Family.substr(0,match.Family.find('_'));
+    size_t origin=0;
+    if(prefix.size()>=3&&count){
+        size_t first=0,last=static_cast<size_t>(count);while(first<last){const auto middle=first+(last-first)/2;
+            if(HelpyCacheSources::Lower(readRow(middle).value("Name",std::string{}))<prefix)first=middle+1;else last=middle;}
+        if(first<count)origin=first;
+    }
+    // Visit likely names first, then wrap through every remaining row so aliases are retained.
     for(;at<count&&rows.size()<limit&&scanned<2048;++at,++scanned){
-        const auto [offset,length]=index[at];input.seekg(start+offset);std::string data(length,'\0');input.read(data.data(),length);if(!input)throw std::runtime_error("Incomplete item page record");
-        readBytes+=length;auto row=Json::parse(data);AlphabeticalItemCatalog::Cache checked;checked.Restore(Json::array({row}));
+        auto row=readRow((origin+at)%count);AlphabeticalItemCatalog::Cache checked;checked.Restore(Json::array({row}));
         if(!row.value("RuntimeClone",false)&&(row.contains("SourceKind")||!nativeProviders.empty())){
             const auto info=ItemSource::Reattribute(row,{},nativeProviders);
             if(info.Group==ItemSource::Kind::Vanilla||info.Group==ItemSource::Kind::Expansion)row.update(ItemSource::Fields(info));
@@ -80,13 +97,14 @@ inline Json Read(const fs::path& file,const std::string& scope,const std::string
 }
 class Store {
     struct Result {std::string Key,Scope;Json Window;std::string Error;};PS::ProcessExitFuture<Result> m_read;std::string m_scope,m_key,m_failed;Json m_window;
+    fs::file_time_type m_failedStamp{};
 public:
     std::string Failure;
     std::optional<Json> Lookup(const fs::path& manifest,const std::string& scope,const std::string& query,const std::string& cursor,size_t limit,bool preview=false,const std::string& locale={},const std::set<std::string>& nativeProviders={}){
         if(m_scope!=scope){m_scope=scope;m_key.clear();m_failed.clear();m_window=Json{};Failure.clear();}
         if(m_read.valid()&&m_read.wait_for(std::chrono::seconds(0))==std::future_status::ready){auto result=m_read.get();
-            if(result.Scope==scope){m_key=result.Key;m_window=std::move(result.Window);Failure=std::move(result.Error);if(m_window.is_null())m_failed=scope;}}
-        if(m_failed==scope)return {};
+            if(result.Scope==scope){m_key=result.Key;m_window=std::move(result.Window);Failure=std::move(result.Error);if(m_window.is_null()){m_failed=scope;std::error_code error;m_failedStamp=fs::last_write_time(File(manifest),error);}}}
+        if(m_failed==scope){std::error_code error;const auto stamp=fs::last_write_time(File(manifest),error);if(error||stamp==m_failedStamp)return {};m_failed.clear();m_key.clear();}
         const auto key=Json::array({scope,query,cursor,limit,preview,locale,nativeProviders}).dump();if(m_key==key&&!m_window.is_null())return m_window;
         if(!m_read.valid())m_read=std::async(std::launch::async,[manifest,scope,query,cursor,limit,key,preview,locale,nativeProviders]{
             try{

@@ -26,6 +26,9 @@ namespace DragonWilds {
         ~DragonWildsBuildingModLoader() override;
         void ActivateWorldRegistration();
         PS::BuildingNetworkGuard::Registry NetworkIdentity(RC::Unreal::UObject* context);
+        nlohmann::json NetworkIdentityManifest();
+        std::vector<std::string> PlanNetworkOrder(const std::vector<std::size_t>& order);
+        void SetNetworkOrder(std::vector<std::string> order) noexcept;
         void ImportCookedDefinitions();
         std::vector<PS::WorldBuildingRegistryValidation::Expected> CleanupExpectations();
         void RejectCleanup(const std::string& reason);
@@ -152,6 +155,8 @@ namespace DragonWilds {
         PS::WeakObjectHandle m_networkWorld;
         PS::BuildingNetworkGuard::Registry m_networkIdentity;
         std::size_t m_networkNativeCount=0;
+        std::vector<std::string> m_networkOrder;
+        PS::WeakObjectHandle m_networkPreviousContext;
         bool m_hooksRegistered = false;
         bool m_cookedImported = false;
         RC::Unreal::Hook::GlobalCallbackId m_initGameStateCallbackId = RC::Unreal::Hook::ERROR_ID;

@@ -1,6 +1,7 @@
 #pragma once
 #include "Core/ProcessExitFuture.h"
 #include "Core/StructuredDiagnosticReader.h"
+#include "Core/DiagnosticLogPaths.h"
 #include "Runtime/HostServices.h"
 #include <chrono>
 #include <future>
@@ -52,7 +53,7 @@ inline void Poll(bool background=false){
         DrainPending();
     if(!Worker.valid()&&std::chrono::steady_clock::now()>=NextRead){
         NextRead=std::chrono::steady_clock::now()+std::chrono::milliseconds(background?1000:250);
-        const auto path=HostServices::ModDirectory()/L"RSDiagLog.jsonl";const auto cursor=Cursor;
+        const auto path=DiagnosticLogPaths::Directory(HostServices::ModDirectory())/L"RSDiagLog.jsonl";const auto cursor=Cursor;
         try{Worker=std::async(std::launch::async,[path,cursor]{return StructuredDiagnosticReader::Read(path,cursor);});}
         catch(...){Status="Could not start the structured diagnostic reader.";}
     }

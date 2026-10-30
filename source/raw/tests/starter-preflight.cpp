@@ -14,7 +14,7 @@ int main(){
             // Registry manifests are not ordinary clone/patch starters.
             assert(!c.Clone && !c.StarterPatch);
             assert(schemas.at(c.Name).at("properties").contains("Entries"));
-            assert(schemas.at(c.Name).at("required")==json::array({"SchemaVersion","Entries"}));
+            assert(schemas.at(c.Name).at("required")==json::array({"Entries"}));
             continue;
         }
         assert(schemas.at(c.Name).at("x-runeschema-starter-capabilities").at("clone")==c.Clone);

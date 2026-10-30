@@ -1,6 +1,9 @@
 #pragma once
 #include "Generator/HelpyImGuiTheme.h"
 #include "Runtime/HelpySettings.h"
+#include "Runtime/HelpyPaths.h"
+#include "Runtime/PluginRuntimeServices.h"
+#include <shellapi.h>
 #include "Generator/LazyCatalog.h"
 #include "Core/HelpyEnvironment.h"
 #include "Core/HelpyPreviewHooks.h"
@@ -68,8 +71,9 @@ inline void QuickToggle(const char* label,const char* path,bool risky=false){
 inline void CachePreferences(){
     using namespace HelpyRuntimePreferences;
     ImGui::SeparatorText("Content & cache");
-    int order=CacheFirst.load()?0:1;const char* choices[]{"Cache first (recommended)","Game first, cache fallback"};
-    ImGui::SetNextItemWidth(-1);bool changed=ImGui::Combo("##content-load-order",&order,choices,2);
+    int order=CacheFirst.load()?0:1;
+    bool changed=ImGui::RadioButton("Cache first (recommended)",&order,0);
+    changed|=ImGui::RadioButton("Game first, cache fallback",&order,1);
     if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Cache first opens saved/imported item references immediately. Game first discovers loaded game items in bounded slices, using saved references when a live page is unavailable. Neither mode loads every PAK asset or bypasses gameplay validation.");
     bool passive=PassiveRefresh.load();changed|=ImGui::Checkbox("Passive content updates",&passive);
     if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Allow bounded background item-catalogue discovery after content changes. Turn off to update through searches and explicit refresh instead. Source verification and live action checks remain active; this does not disable every map or icon update.");
@@ -80,10 +84,18 @@ inline void QuickSettings(){
     const auto hint=[](const std::string& text){if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)){
         PS::HelpyImGuiTheme::Tooltip("%s",text.c_str());}};
     if(!Loaded&&Status.empty())Load();
-    ImGui::SeparatorText("Helpy");
-    bool autoOpen=HelpySettings::OpenOnGameStart();
-    if(ImGui::Checkbox("Open Helpy at startup",&autoOpen))HelpySettings::SetOpenOnGameStart(autoOpen);
-    hint("Open automatically on the next game launch, or use "+HelpySettings::HotkeyName()+" when disabled.\n"+HelpySettings::Message());
+    ImGui::SeparatorText("Startup & shortcuts");
+    int startup=HelpySettings::OpenOnGameStart()?1:0;
+    ImGui::TextUnformatted("When Dragonwilds starts");
+    if(ImGui::RadioButton("Start in system tray (default)",&startup,0))HelpySettings::SetOpenOnGameStart(false);
+    if(ImGui::RadioButton("Open window at startup",&startup,1))HelpySettings::SetOpenOnGameStart(true);
+    hint("The app runs as its own process. The system tray is beside the Windows clock; use the tray icon or your Helpy shortcut to open it. Startup changes apply next game launch.\n"+HelpySettings::Message());
+    bool alongside=HelpySettings::StartAlongsideGame();if(ImGui::Checkbox("Start Helpy with Dragonwilds",&alongside))HelpySettings::SetBool("startWithGame",alongside);
+    if(PluginRuntimeServices::ExternalDesktop){bool exit=HelpySettings::ExitWhenGameCloses();if(ImGui::Checkbox("Exit Helpy when the game closes",&exit))HelpySettings::SetBool("exitWithGame",exit);
+        hint("Applies immediately. Helpy exits fully when its attached game or dedicated server process ends. A temporary bridge disconnect does not close it; starting Helpy offline still works. Off by default.\n"+HelpySettings::Message());}
+    bool minimize=HelpySettings::CloseToTaskbar();if(ImGui::Checkbox("Close to system tray",&minimize))HelpySettings::SetBool("minimizeOnClose",minimize);
+    hint("X and Alt+F4 return Helpy to the system tray when checked, or exit it when unchecked. Applies immediately.\n"+HelpySettings::Message());
+    if(PluginRuntimeServices::ExternalDesktop&&ImGui::Button("Exit Helpy"))PostQuitMessage(0);
     ImGui::TextUnformatted("Helpy shortcut");
     static std::string hotkeyStatus;
     const bool editable=Loaded&&Snapshot.at("Editable").contains("/helpyHotkey")&&Patch().empty();
@@ -131,9 +143,9 @@ inline void QuickSettings(){
         hint("Toggle the in-game counter while Dragonwilds or Helpy has focus. F10 by default. Choose a different key from Helpy's own shortcut; function keys avoid typing conflicts.");
         if(const auto* binding=HelpyShortcut::Find(theme.fpsHotkey);binding&&binding->Key==HelpySettings::Hotkey.load())ImGui::TextWrapped("Choose a different FPS shortcut from Helpy's own key.");
         ImGui::SetNextItemWidth(HelpyImGuiTheme::Current.X(150));
-        ImGui::SliderInt("Helpy FPS limit",&theme.helpyFpsLimit,15,60,"%d",ImGuiSliderFlags_AlwaysClamp);
+        ImGui::SliderInt("Helpy FPS limit",&theme.helpyFpsLimit,15,144,"%d",ImGuiSliderFlags_AlwaysClamp);
         save|=ImGui::IsItemDeactivatedAfterEdit();
-        hint("Limits Helpy rendering only. Default 30; unfocused Helpy is limited to 10 FPS and hidden/minimized windows stop rendering. The game frame-rate limit is unchanged.");
+        hint("Limits Helpy rendering only. Default 60, adjustable up to 144; unfocused Helpy is limited to 10 FPS and hidden/minimized windows stop rendering. The game frame-rate limit is unchanged.");
         int interval=theme.fpsRefreshMs<=500?0:theme.fpsRefreshMs<=1000?1:2;
         const char* intervals[]{"0.5 seconds","1 second","2 seconds"};
         ImGui::SetNextItemWidth(HelpyImGuiTheme::Current.X(150));
@@ -159,11 +171,9 @@ inline void QuickSettings(){
         if(!quick.empty()&&choicePolls&&ImGui::GetTime()>=nextChoicePoll){load(false);--choicePolls;nextChoicePoll=ImGui::GetTime()+.5;}
         ImGui::BeginDisabled(quick.empty()||quick.value("DedicatedServer",false));
         if(!quick.value("DedicatedServer",false)){
-        ImGui::SetNextItemWidth(HelpyImGuiTheme::Current.X(250));
-        if(ImGui::BeginCombo("Launch mode",mode==2?"Quick Launch":mode==0?"Vanilla Load (advanced)":"Normal")){
-            if(ImGui::Selectable("Normal",mode==1)){mode=1;dirty=true;saved=false;}
-            if(ImGui::Selectable("Quick Launch",mode==2)){mode=2;dirty=true;saved=false;}ImGui::EndCombo();
-        }
+        ImGui::TextUnformatted("Launch mode");
+        if(ImGui::RadioButton("Normal",mode!=2)){mode=1;dirty=true;saved=false;}
+        if(ImGui::RadioButton("Quick Launch",&mode,2)){dirty=true;saved=false;}
         hint("Both modes use Less Restrictive loading and orphan pruning, with bypass as a fallback after native rejection. Quick Launch opens your selected character/world; hold Shift to skip automatic launch. Applies next launch. Missing content may be lost when the game saves.");
         const auto choose=[&](const char* label,const char* key,char* text){
             ImGui::PushID(key);ImGui::SetNextItemWidth(HelpyImGuiTheme::Current.X(250));
@@ -193,9 +203,11 @@ inline void QuickSettings(){
             const bool atEntry=Snapshot.at("Document").at("persistence").value("cleanupOnWorldEntry",false);
             if(Snapshot.at("Editable").contains("/persistence/cleanupOnWorldEntry")){
                 int apply=atEntry?0:1;
-                const char* choices[]{"Next character/world entry","Next game launch"};
-                ImGui::BeginDisabled(!Patch().empty());ImGui::SetNextItemWidth(HelpyImGuiTheme::Current.X(250));
-                if(ImGui::Combo("Apply cleanup changes",&apply,choices,2))SaveQuick("/persistence/cleanupOnWorldEntry",apply==0);
+                ImGui::TextUnformatted("Apply cleanup changes");
+                ImGui::BeginDisabled(!Patch().empty());
+                bool changed=ImGui::RadioButton("Next character/world entry",&apply,0);
+                changed|=ImGui::RadioButton("Next game launch",&apply,1);
+                if(changed)SaveQuick("/persistence/cleanupOnWorldEntry",apply==0);
                 ImGui::EndDisabled();
                 hint("Next entry reads the saved policy at a native load boundary. Next game launch retains the current session's applied policy until restart. Changing this control never starts a background sweep.");
             }
@@ -236,8 +248,8 @@ inline void Field(const std::string& key,json& value,const std::string& path){
     }else if(value.is_number()){double v=value.get<double>();ImGui::SetNextItemWidth(180);if(ImGui::InputDouble(label.c_str(),&v)){value=v;changed=true;}}
     else if(value.is_string()){
         const auto current=value.get<std::string>();if(current.size()>8192){ImGui::TextWrapped("%s: value is too large for this field; edit the INI externally.",label.c_str());ImGui::PopID();return;}
-        std::vector<char> text(8193);std::snprintf(text.data(),text.size(),"%s",current.c_str());ImGui::SetNextItemWidth(300);
-        if(ImGui::InputText(label.c_str(),text.data(),text.size())){value=std::string(text.data());changed=true;}
+        std::vector<char> text(8193);std::snprintf(text.data(),text.size(),"%s",current.c_str());ImGui::SetNextItemWidth(std::max(60.f,std::min(300.f,ImGui::GetContentRegionAvail().x-ImGui::CalcTextSize(label.c_str()).x-ImGui::GetStyle().ItemInnerSpacing.x)));
+        if(ImGui::InputText(label.c_str(),text.data(),text.size(),path=="/helpyAuthority/accessPin"?ImGuiInputTextFlags_Password:0)){value=std::string(text.data());changed=true;}
     }else if(value.is_array()){
         auto [it,inserted]=ArrayText.try_emplace(path,value.dump());if(it->second.size()>16384){ImGui::TextWrapped("%s: list is too large for this field; edit the INI externally.",label.c_str());ImGui::PopID();return;}
         std::vector<char> text(16385);std::snprintf(text.data(),text.size(),"%s",it->second.c_str());

@@ -251,9 +251,9 @@ nlohmann::json DragonWildsRegistryLoader::NormalizeEntry(const json& entry,const
 void DragonWildsRegistryLoader::LoadDocument(const json& input,const std::string& owner,const std::string& source) {
     const auto document=AuthorDocument(input);
     Fields(document,{"SchemaVersion","Entries","NativeRegistries","LoaderDefinitions"},"registry document");
-    if(document.value("SchemaVersion",0)!=1 || !document.contains("Entries") || !document["Entries"].is_array()
+    if(!document.contains("Entries") || !document["Entries"].is_array()
         || document["Entries"].size()>MaxEntriesPerDocument)
-        throw std::runtime_error("registry document requires SchemaVersion 1 and at most 256 Entries");
+        throw std::runtime_error("registry document requires an array of at most 256 Entries");
     // Enabled loose schema mods use the same bounded declarations as a cooked
     // RSREG asset. Publication is not proof of native identity registration.
     PS::CookedPakRegistryManifest::Manifest nativeManifest;
