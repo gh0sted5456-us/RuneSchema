@@ -58,3 +58,7 @@ Thumbs.db
 # Local MkDocs preview output.
 /site/
 /site-preview/
+
+# Local chat attachments and immediate-mode UI state are not project sources.
+/.codex-remote-attachments/
+/imgui.ini

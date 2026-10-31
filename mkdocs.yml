@@ -148,6 +148,7 @@ nav:
       - Bridge diagnostics: BRIDGE-DIAGNOSTICS.md
   - Reference:
       - Guide map: DOCUMENTATION-INDEX.md
+      - Documentation channels: DOCUMENTATION-CHANNELS.md
       - Find a loader: LOADER-WALKTHROUGHS.md
       - Loaders · Content:
           - Assets: reference/loaders/assets.md
@@ -200,3 +201,6 @@ nav:
       - Full 0.8.0.0 changelog: CHANGELOG-0.8.0.0.md
       - Development history: ALPHA-CHANGELOG.md
       - Current release: CURRENT-RELEASE.md
+
+  - Experimental:
+      - Overview: experimental/index.md

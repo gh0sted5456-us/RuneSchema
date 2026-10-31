@@ -27,10 +27,10 @@ submission. Do not submit game or engine content without the required rights.
 
 ## Release checks
 
-Release versions use a channel suffix. Main releases end in lowercase `m`
-(for example, `0.7.7.4m`), while experimental releases end in lowercase `e`
-(for example, `0.7.7.5e`). The builder and archive finalizer reject a main or
-experimental branch carrying the wrong suffix.
+Keep the build version, plugin manifests, Windows resources and release tag
+consistent. Current releases use numeric versions such as `0.8.1.0`; older
+`m`/`e` suffixes remain supported for historical versions. The branch and release
+status identify the channel; do not invent a suffix for a current build.
 
 Use the supported build launcher, or finalize a direct internal build with
 `build/package-licenses.ps1 -FinalizeBuild`. Check the licenses inside the
@@ -42,3 +42,14 @@ powershell.exe -NoProfile -File build/test-package-licenses.ps1
 
 See `LICENSING.md` for scope and `docs/NEXUS-LICENSING.txt` for matching mod-page
 wording. Existing public archives must be checked independently.
+
+## Documentation channels
+
+New experimental feature guides belong under `docs/experimental/`, with a visible
+experimental notice and a `promote_to` frontmatter path. Register them in
+`build/docs-experimental-nav.json`. Keep the normal guides aligned with main.
+
+When promoting a feature, merge its instructions into that normal destination,
+update navigation/defaults/walkthroughs and remove the duplicate experimental
+entry. Preserve historical changelogs and existing diagnostic anchors. See
+[the complete channel and promotion procedure](docs/DOCUMENTATION-CHANNELS.md).

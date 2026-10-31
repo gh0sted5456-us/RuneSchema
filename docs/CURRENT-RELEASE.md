@@ -1,7 +1,9 @@
 # RuneSchema downloads and source updates
 
-The current release is **0.8.0.3**, published October 28, 2026. The `main` and
-`experimental` branches carry the same release source; the `0.8.0.3` tag identifies it.
+The current stable release is **0.8.0.3**, published October 28, 2026. Its source
+is on `main`, identified by the `0.8.0.3` tag. The `experimental` branch contains
+newer integration work, documented in its own [Experimental area](experimental/index.md).
+Source updates do not automatically replace the release package.
 
 [Download 0.8.0.3](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.0.3/RuneSchema-0.8.0.3.zip)
 · [Installation, defaults and verification](RELEASE-0.8.0.3.md)

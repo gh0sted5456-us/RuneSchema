@@ -27,7 +27,11 @@ installable package; branch source can contain changes newer than that package.
 ## Source and contributions
 
 `main` contains the maintained source and documentation. `experimental` receives
-integration updates; experimental features retain their documented opt-in rules.
+integration updates; its guides identify defaults, setup and testing status.
+
+See the [Experimental feature guides](https://gh0sted5456-us.github.io/RuneSchema/experimental/)
+for upcoming behavior, setup and testing status. Those guides are separate from
+the normal documentation until the features are promoted to main.
 
 See [Contributing](CONTRIBUTING.md) for source contributions. For bug reports,
 include the RuneSchema version, game platform, reproduction steps and relevant
