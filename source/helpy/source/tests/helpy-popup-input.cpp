@@ -9,6 +9,10 @@
 static void Require(bool value){if(!value)throw std::runtime_error("Helpy popup input regression");}
 static std::string Read(const char* path){std::ifstream input(path);Require(input.good());return {std::istreambuf_iterator<char>(input),{}};}
 int main(int argc,char** argv){
+    PS::HelpyPushPacing push;
+    Require(push.Delay(100)==0);push.Polled(100);
+    Require(push.Delay(101)==39&&push.Delay(139)==1&&push.Delay(140)==0&&push.Delay(600)==0);
+    unsigned polls=0;for(unsigned ms=600;ms<1600;++ms)if(!push.Delay(ms)){++polls;push.Polled(ms);}Require(polls==25);
     using namespace std::chrono_literals;
     const auto now=PS::HelpyFramePacing::Clock::time_point{};PS::HelpyFramePacing pacing;
     Require(!pacing.Due(now,false,false));Require(pacing.Due(now,true,false,30));
@@ -60,12 +64,13 @@ int main(int argc,char** argv){
     Require(source.find("WS_EX_TOPMOST")==std::string::npos);
     Require(source.find("SetWindowsHookExW(")==std::string::npos);
     Require(source.find("GWLP_HWNDPARENT")==std::string::npos);
-    Require(source.find("SetForegroundWindow(m_hwnd)")!=std::string::npos);
+    Require(source.find("HelpyGameOverlay::Focus(m_hwnd,m_gameWindow,overlay)")!=std::string::npos);
+    Require(source.find("SyncGameOverlay(true);ShowWindow(m_hwnd,SW_SHOWNOACTIVATE)")!=std::string::npos);
     Require(source.find("if(returnToGame)SetForegroundWindow(m_gameWindow)")!=std::string::npos);
     Require(source.find("WH_KEYBOARD_LL")==std::string::npos);
     Require(source.find("ClipCursor(")==std::string::npos&&source.find("SetKeyboardState(")==std::string::npos);
     Require(source.find("PollHotkey(msg.message==WM_KEYDOWN)")!=std::string::npos);
-    Require(source.find("CanToggle(GameWindow(foreground),OwnsWindow(foreground),editing,modified)")!=std::string::npos);
+    Require(source.find("CanToggle(GameWindow(foreground),OwnsWindow(foreground)||(m_nativeOverlay.Visible()&&foreground==m_gameWindow),editing,modified)")!=std::string::npos);
     Require(source.find("if(key!=boundKey){Hotkey.Poll(down);boundKey=key;}else PollHotkey(down);")!=std::string::npos);
     Require(source.find("GetAsyncKeyState(VK_F5)")==std::string::npos);
     const auto detached=Read((std::filesystem::path(argv[1]).parent_path()/"DetachedWorkspaces.inl").string().c_str());

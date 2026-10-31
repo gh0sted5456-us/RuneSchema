@@ -5,7 +5,7 @@
 namespace PS::HelpyNavigation {
 enum class Page { Items, Creation, Recipes, Spawns, Map, Tools, Authoring, Settings, LiveLog, DedicatedServer, SaveEditor, Home, Journal, Mods, Profile, BugReport };
 enum class SpawnSection { Resources, Npcs, Ai };
-enum class ToolSection { Settings, Maintenance, Cleanup, Buildings, ItemCache };
+enum class ToolSection { Settings, Maintenance, Cleanup, Buildings, ItemCache, CacheBuilder, Repair };
 inline constexpr std::array Pages{Page::Home, Page::Items, Page::Creation, Page::Recipes, Page::Spawns, Page::Map, Page::Journal, Page::Authoring, Page::Tools, Page::Settings, Page::LiveLog, Page::SaveEditor, Page::DedicatedServer,Page::Mods,Page::Profile,Page::BugReport};
 // Keep route identities stable: regrouping must not reset editors or drafts.
 inline constexpr std::array SidebarPages{Page::Home,Page::Items,Page::Map,Page::Mods,Page::Tools,Page::Settings,Page::LiveLog,Page::BugReport,Page::DedicatedServer};
@@ -43,7 +43,7 @@ inline constexpr const char* TabTitle(Page page){return page==Page::Items?"Items
 inline constexpr const char* Description(Page page) {
     switch(page) {
     case Page::Profile:return "Your account profile, linked characters, portraits and shared details.";
-    case Page::BugReport:return "Prepare a categorized bug report and review it on GitHub before submitting.";
+    case Page::BugReport:return "Copy a categorized bug report and paste it into a new report on Nexus Mods.";
     case Page::Home:return "Welcome to RuneSchema. Your tools, cached content and common settings in one place.";
     case Page::Mods:return "Manage next-launch mod order, imports and source artwork. Mounted content stays unchanged.";
     case Page::Items:return "Right-click an item for actions, or drag it into your cart.";
@@ -52,7 +52,7 @@ inline constexpr const char* Description(Page page) {
     case Page::Spawns:return "Choose resources, NPCs, or enemies, then place them near a player.";
     case Page::Map:return "Read coordinates, place resources and buildings, or teleport a player to a map point.";
     case Page::Tools:return "Maintain catalogs and manage session tools.";
-    case Page::Settings:return "Configure RuneSchema for the next launch, or adjust RSMK appearance.";
+    case Page::Settings:return "Adjust Helpy, game integration, appearance and diagnostics.";
     case Page::Authoring:return "Create content, inspect contracts, and export reviewed drafts and reports.";
     case Page::LiveLog:return "Live logs and advanced diagnostics: grouped issues, retained evidence, session history and reviewed reports.";
     case Page::DedicatedServer:return "Open co-op session tools or review configuration on the dedicated server itself.";

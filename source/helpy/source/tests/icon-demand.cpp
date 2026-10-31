@@ -70,6 +70,22 @@ int Run() {
     icons::ConfigureRemote([&](const std::string&){++submissions;return true;},[&](nlohmann::json& result){if(replies.empty())return false;result=std::move(replies.front());replies.pop_front();return true;});
     const auto begin=[] {ImGui::NewFrame();ImGui::SetNextWindowPos({0,0});ImGui::SetNextWindowSize({640,480});ImGui::Begin("test");};
     const auto end=[] {ImGui::End();ImGui::EndFrame();assert(GImGui->ErrorCountCurrentFrame==0);};
+    {namespace quick=RuneSchemaSettingsPanel;unsigned reads=0;
+        quick::Remote=[&](const nlohmann::json&,nlohmann::json&){++reads;return false;};
+        quick::Loaded=false;quick::Status.clear();
+        for(int section:{0,2,3}){quick::QuickSection=section;for(int frame=0;frame<3;++frame){begin();quick::QuickSettings();end();}}
+        assert(reads==0);quick::QuickSection=1;begin();quick::QuickSettings();end();assert(reads==1);
+        quick::QuickSection=0;quick::Status.clear();quick::Remote={};
+        assert(quick::ConfigGroup("persistence")==1&&quick::ConfigGroup("quickLaunch")==1&&quick::ConfigGroup("registry")==2&&quick::ConfigGroup("network")==3&&quick::ConfigGroup("futureUnknownOption")==4);
+    }
+    {constexpr std::array labels{"Display","Startup","Cache","Performance","Saves"};int selected=0;ImVec2 target{};
+        const auto draw=[&]{begin();ImGui::BeginChild("narrow tabs",{175,180});float used=0;float previousY=0;bool wrapped=false;
+            for(int i=0;i<int(labels.size());++i){if(HelpyMenu::Tab(labels[i],selected==i,used,150))selected=i;
+                const auto a=ImGui::GetItemRectMin(),b=ImGui::GetItemRectMax();assert(b.x-a.x<=150);if(previousY&&a.y>previousY)wrapped=true;previousY=a.y;
+                if(i==3)target={(a.x+b.x)*.5f,(a.y+b.y)*.5f};}
+            assert(wrapped);ImGui::EndChild();end();};
+        draw();io.AddMousePosEvent(target.x,target.y);draw();io.AddMouseButtonEvent(0,true);draw();io.AddMouseButtonEvent(0,false);draw();assert(selected==3);
+    }
     begin();ImGui::Dummy({50,40});const auto sourceRect=ImGui::GetItemRectMin();const auto vertices=ImGui::GetForegroundDrawList()->VtxBuffer.Size;
     ImGui::GetIO().MousePos={639,479};DragFeedback::Held("Item","A very long held item name that wraps without changing its source layout");
     assert(ImGui::GetForegroundDrawList()->VtxBuffer.Size>vertices&&ImGui::GetMouseCursor()==ImGuiMouseCursor_Hand);

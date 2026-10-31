@@ -48,6 +48,7 @@ These packages are restored by .NET, not copied into RuneSchema's runtime DLLs:
 | [AssetRipper.TextureDecoder](https://github.com/AssetRipper/TextureDecoder) | 2.6.2 | MIT |
 | [SkiaSharp](https://github.com/mono/SkiaSharp) | 2.88.9 | MIT |
 | Microsoft.Bcl.Memory | 10.0.10 | MIT |
+| SharpCompress | 1.0.0 | MIT |
 
 Their transitive dependencies retain their own notices/licenses; see the NuGet
 package metadata and `packages.lock.json`. The tool reads desktop block/raw

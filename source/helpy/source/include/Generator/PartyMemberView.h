@@ -136,7 +136,7 @@ inline void Skills(const nlohmann::json& row,int64_t now){
 }
 inline void Advanced(){
     if(HelpyImGuiTheme::SoftButton("Advanced"))ImGui::OpenPopup("Party display");if(!ImGui::BeginPopup("Party display"))return;
-    auto& p=PlayerPortraitPicker::Choices;bool changed=false;changed|=ImGui::Checkbox("Party placards",&p.CompactParty);changed|=ImGui::Checkbox("Vital meters",&p.Meters);changed|=ImGui::Checkbox("Equipped gear icons",&p.Equipment);changed|=ImGui::Checkbox("Skill icons in expanded rows",&p.Skills);changed|=ImGui::Checkbox("Native power level",&p.Power);changed|=ImGui::Checkbox("Host / role badge",&p.Roles);
+    auto& p=PlayerPortraitPicker::Choices;bool changed=false;changed|=HelpyImGuiTheme::Toggle("Party placards",&p.CompactParty);changed|=HelpyImGuiTheme::Toggle("Vital meters",&p.Meters);changed|=HelpyImGuiTheme::Toggle("Equipped gear icons",&p.Equipment);changed|=HelpyImGuiTheme::Toggle("Skill icons in expanded rows",&p.Skills);changed|=HelpyImGuiTheme::Toggle("Native power level",&p.Power);changed|=HelpyImGuiTheme::Toggle("Host / role badge",&p.Roles);
     if(changed)PlayerPortraitPicker::SaveWanted=true;ImGui::TextWrapped("Double-click a portrait or use Change portrait in the member's right-click menu.");ImGui::EndPopup();
 }
 inline void Details(const nlohmann::json& row,int64_t now){

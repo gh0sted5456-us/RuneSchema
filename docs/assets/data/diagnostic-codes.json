@@ -1001,6 +1001,58 @@
       "causes": "The optional standalone desktop could not start or attach. Use matching DLLs and Helpy.exe in the assigned installation.",
       "troubleshooting": "Read the full startup reason and confirm the current Windows user. Select DLL window and restart to use the fallback.",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-ui-002"
+    },
+    {
+      "title": "Native UE4SS companion retained",
+      "impact": "The native mod is packaged under ue4ss/Mods instead of being silently subloaded through RuneSchema. Other convertible payloads continue.",
+      "severity": "warning",
+      "code": "RS-CACHE-015",
+      "summary": "The authoring converter found a native UE4SS DLL mod and preserved its original loader directory.",
+      "action": "Install the complete Binaries/Content package with a mod manager or manually. Verify the native DLL file paths and any RuneSchema integration before distributing.",
+      "id": "AuthoringNativeDll",
+      "subsystem": "Cache",
+      "causes": "A creation/conversion input includes a native UE4SS DLL mod. Its byte content and native ue4ss/Mods placement are preserved; this is not a DLL compatibility failure.",
+      "troubleshooting": "Review the job warnings and packaged native companion. Do not assume its relative file lookups or native bridge can reach inside RuneSchema. Verify that integration with the DLL author. Helpy does not execute or rewrite the DLL.",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-cache-015"
+    },
+    {
+      "id": "OverlayPresented",
+      "code": "RS-OVL-001",
+      "title": "Native Helpy overlay is presenting",
+      "severity": "info",
+      "subsystem": "Helpy overlay",
+      "summary": "The game submitted a frame from Helpy through its native graphics adapter.",
+      "impact": "This records presentation readiness; it is not a frame-rate or latency measurement.",
+      "action": "No action is needed. Use the Helpy shortcut to show or hide the panel.",
+      "causes": "The game submitted a frame from Helpy through its native graphics adapter.",
+      "troubleshooting": "No action is needed. Use the Helpy shortcut to show or hide the panel.",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-ovl-001"
+    },
+    {
+      "id": "OverlayUnavailable",
+      "code": "RS-OVL-002",
+      "title": "Native Helpy overlay could not open",
+      "severity": "warning",
+      "subsystem": "Helpy overlay",
+      "summary": "The native presentation bridge rejected attachment, a graphics surface or an input contract.",
+      "impact": "The game retains control; Helpy may offer its separate window. The exact bridge error identifies the failed condition.",
+      "action": "Keep the bridge error and renderer/GPU details from RuneSchema.log. Use matching RuneSchema and Helpy builds; a desktop window requires borderless or windowed mode.",
+      "causes": "The native presentation bridge rejected attachment, a graphics surface or an input contract.",
+      "troubleshooting": "Keep the bridge error and renderer/GPU details from RuneSchema.log. Use matching RuneSchema and Helpy builds; a desktop window requires borderless or windowed mode.",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-ovl-002"
+    },
+    {
+      "id": "OverlayReady",
+      "code": "RS-OVL-003",
+      "title": "Helpy overlay bridge is ready",
+      "severity": "info",
+      "subsystem": "Helpy overlay",
+      "summary": "The native presentation bridge is prepared or attached to the game renderer.",
+      "impact": "Preparation alone does not confirm a visible overlay frame.",
+      "action": "Open Helpy with its configured shortcut. RS-OVL-001 confirms an actual visible presentation.",
+      "causes": "The native presentation bridge is prepared or attached to the game renderer.",
+      "troubleshooting": "Open Helpy with its configured shortcut. RS-OVL-001 confirms an actual visible presentation.",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-ovl-003"
     }
   ],
   "structuredCodes": [

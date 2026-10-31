@@ -74,7 +74,7 @@ int Run(int argc,char** argv){
     Check(initialize(&host,&instance)==RS_PLUGIN_OK&&instance);
     const auto cleanup=[&](void*){shutdown(instance);if(!app)FreeLibrary(dll);};
     std::unique_ptr<void,decltype(cleanup)> guard(reinterpret_cast<void*>(1),cleanup);
-    Check(Capabilities.size()==6&&Services.size()==5&&Services.contains("helpy.inventory")&&Services.contains("helpy.desktop.connection")&&Services.contains("helpy.desktop.status"));
+    Check(Capabilities.size()==6&&Services.size()==(app?5:6)&&Services.contains("helpy.inventory")&&Services.contains("helpy.desktop.connection")&&Services.contains("helpy.desktop.status")&&Services.contains("helpy.native-overlay")==!app);
     {const auto inventory=Services.at("helpy.inventory");uint32_t bytes=0;
         Check(inventory.Call(inventory.Context,R"({"Action":"Capabilities"})",nullptr,0,&bytes)==RS_PLUGIN_BUFFER_TOO_SMALL);
         std::vector<char> reply(bytes);Check(inventory.Call(inventory.Context,R"({"Action":"Capabilities"})",reply.data(),bytes,&bytes)==RS_PLUGIN_OK);

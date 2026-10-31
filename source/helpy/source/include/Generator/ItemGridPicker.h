@@ -235,15 +235,15 @@ inline void LayoutControls() {
     static bool dirty=false;
     if(ImGui::BeginPopup("##item-bay-layout")) {
         ImGui::TextUnformatted("Item view");ImGui::Separator();
-        ImGui::Checkbox("Search as I type",&SearchAsYouType);
+        HelpyImGuiTheme::Toggle("Search as I type",&SearchAsYouType);
         if(ImGui::RadioButton("Grid",theme.itemGridView)){theme.itemGridView=true;dirty=true;}ImGui::SameLine();
         if(ImGui::RadioButton("List",!theme.itemGridView)){theme.itemGridView=false;dirty=true;}
         if(ImGui::CollapsingHeader("Layout & advanced")){ImGui::SetNextItemWidth(theme.X(180.0f));
         if(ImGui::SliderInt("Columns",&theme.itemGridColumns,1,ItemBayLayout::MaxColumns))dirty=true;
         ImGui::SetNextItemWidth(theme.X(180.0f));
         if(ImGui::SliderInt("Rows",&theme.itemGridRows,1,ItemBayLayout::MaxRows)){theme.itemGridFitRows=true;dirty=true;}
-        if(ImGui::Checkbox("Size grid by rows",&theme.itemGridFitRows))dirty=true;
-        if(ImGui::Checkbox("Show [PH] placeholder items",&theme.itemShowPlaceholders))dirty=true;
+        if(HelpyImGuiTheme::Toggle("Size grid by rows",&theme.itemGridFitRows))dirty=true;
+        if(HelpyImGuiTheme::Toggle("Show [PH] placeholder items",&theme.itemShowPlaceholders))dirty=true;
         if(HelpyImGuiTheme::SoftButton("Reset to 5 x 4")){theme.itemGridColumns=ItemBayLayout::DefaultColumns;theme.itemGridRows=ItemBayLayout::DefaultRows;theme.itemGridFitRows=true;dirty=true;}}
         if(HelpyImGuiTheme::SoftButton("Reload items")){ItemIconCache::RetryFailed();LazyCatalog::Retry(0);}ImGui::EndPopup();
     }
@@ -716,8 +716,8 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
                         const int rowIndex=gridRow*columns+col;if(rowIndex>=total)break;const auto index=state.Matches[page.First+static_cast<size_t>(rowIndex)];if(index>=items.size())continue;
                         const auto& row=items[index];const auto path=row.value("Path",std::string{}),name=ItemPresentation::Name(row),iconPath=IconForRow(row);const bool fits=path.size()<selectedCapacity,selectedThis=IsSelected(state,path);
                         if(!iconPath.empty())visibleIcons.insert(iconPath);
-                        ImGui::PushID(rowIndex);ImGui::PushID(path.c_str());const auto cardMin=ImGui::GetCursorScreenPos();ImGui::BeginDisabled(!fits);const bool clicked=ImGui::InvisibleButton("##card",ImVec2(cardWidth,cardHeight));ImGui::EndDisabled();const auto cardMax=ImVec2(cardMin.x+cardWidth,cardMin.y+cardHeight);auto* draw=ImGui::GetWindowDrawList();
-                        DrawPlacard(row,cardMin,cardMax,selectedThis,ImGui::IsItemHovered());
+                        ImGui::PushID(rowIndex);ImGui::PushID(path.c_str());const auto cardMin=ImGui::GetCursorScreenPos();ImGui::BeginDisabled(!fits);const bool clicked=ImGui::InvisibleButton("##card",ImVec2(cardWidth,cardHeight),ImGuiButtonFlags_EnableNav);ImGui::EndDisabled();const auto cardMax=ImVec2(cardMin.x+cardWidth,cardMin.y+cardHeight);auto* draw=ImGui::GetWindowDrawList();
+                        DrawPlacard(row,cardMin,cardMax,selectedThis,ImGui::IsItemHovered()||ImGui::IsItemFocused());
                         if(clicked&&fits){if(ApplySelection(state,path,selected,selectedCapacity,ImGui::GetIO().KeyShift,allowMulti)){out.Changed=true;}}
                         if(fits)DragItem(row);
                         ContextMenu(catalog,row,path,name,selected,selectedCapacity,state,out,allowMulti,true,quickActions);if(HelpyImGuiTheme::TooltipReady(std::string("item:")+path+":"+std::to_string(rowIndex),ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)))VerboseTooltip(row,name,path,allowMulti,fits);
@@ -815,7 +815,7 @@ inline Result RenderShared(const json& catalog,uint64_t revision,bool fillSpace=
     LazyCatalog::Overlay(Bay.Catalog,0);
     if(!RenderingDetachedBay){
         if(DetachedBay){ImGui::TextDisabled("Item Bay is in its separate window.");ImGui::SameLine();if(ImGui::SmallButton("Dock back"))DetachedBay=false;}
-        else if(!DockedBay&&ImGui::SmallButton("Detach Item Bay"))DetachedBay=true;
+        else if(!DockedBay&&!HelpyImGuiTheme::NativePresentation&&ImGui::SmallButton("Detach Item Bay"))DetachedBay=true;
     }
     if((DockedBay||DetachedBay)&&!RenderingDetachedBay){Result result;result.SelectedPaths=Bay.Picker.SelectedPaths;result.SelectedCount=result.SelectedPaths.size();result.SelectedTitle=Title(Bay.Catalog,Bay.Selected);result.SelectedRow=Find(Bay.Catalog,Bay.Selected);return result;}
     if(!RenderingDetachedBay){sameRow(HelpyImGuiTheme::Current.X(100));if(ImGui::SmallButton(Bay.Expanded?"Restore pane":"Expand pane"))Bay.Expanded=!Bay.Expanded;

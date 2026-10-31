@@ -26,8 +26,25 @@ static class CacheTool
     static bool EmitProgress;
     static long LastProgress;
     static string LastPhase = "";
+    static string? ControlFile;
+    static void CheckControl()
+    {
+        if(ControlFile is null)return;
+        var invalid=0;var paused=false;
+        while(true){
+            Need(new FileInfo(ControlFile).Length<=16384,"Invalid cache control file.");
+            JObject control;try{control=JObject.Parse(File.ReadAllText(ControlFile));}catch(JsonException){if(++invalid>10)throw;Thread.Sleep(100);continue;}
+            var action=control.Value<string>("Action");
+            var owner=control.Value<int?>("OwnerPid");
+            if(owner is not null){try{using var process=Process.GetProcessById(owner.Value);if(process.HasExited)action="stop";}catch(ArgumentException){action="stop";}}
+            if(action=="stop")throw new OperationCanceledException("Cache build stopped; previous cache retained.");
+            if(action=="run")return;
+            Need(action=="pause","Invalid cache control action.");if(!paused){Console.WriteLine("RS_PAUSED");paused=true;}Thread.Sleep(200);
+        }
+    }
     static void Progress(string phase, int done, int total)
     {
+        CheckControl();
         var now = Environment.TickCount64;
         if (!EmitProgress || (phase == LastPhase && done != total && now - LastProgress < 100)) return;
         LastPhase = phase; LastProgress = now;
@@ -165,12 +182,15 @@ static class CacheTool
             foreach (var (arg, index) in args.Select((s, i) => (s, i)))
                 if (arg.StartsWith("--", StringComparison.Ordinal))
                 {
-                    Need(new[] { "--game", "--mapping", "--oodle", "--folder", "--mod-root", "--mod-id", "--output", "--base-game", "--include-mods", "--locale", "--progress", "--input-root", "--check-inputs" }.Contains(arg), "Unknown option " + arg);
+                    Need(new[] { "--game", "--mapping", "--oodle", "--folder", "--mod-root", "--mod-id", "--output", "--base-game", "--include-mods", "--locale", "--progress", "--input-root", "--check-inputs", "--control-file", "--prepare-creation", "--package-creation", "--platform" }.Contains(arg), "Unknown option " + arg);
                     Need(!options.ContainsKey(arg), "Repeated option " + arg);
                     if (arg is "--base-game" or "--include-mods" or "--progress" or "--check-inputs") options[arg] = "true";
                     else { Need(index + 1 < args.Length && !args[index + 1].StartsWith("--", StringComparison.Ordinal), "Missing value for " + arg); options[arg] = args[index + 1]; }
                 }
             EmitProgress = options.ContainsKey("--progress");
+            ControlFile=options.GetValueOrDefault("--control-file");CheckControl();
+            if(options.TryGetValue("--prepare-creation",out var request)){CreationArchive.Prepare(request,options["--output"],Progress,CheckControl);return 0;}
+            if(options.TryGetValue("--package-creation",out var prepared)){CreationArchive.Package(prepared,options["--platform"],options["--output"],options["--mod-id"],Progress,CheckControl);return 0;}
             var inputRoot = Full(options.GetValueOrDefault("--input-root", Directory.GetCurrentDirectory())); Safe(inputRoot);
             var game = AuthoringInputs.Game(options.GetValueOrDefault("--game"), inputRoot, Closed); Safe(game);
             var oodle = AuthoringInputs.Decoder(options.GetValueOrDefault("--oodle"), Safe); OodleHelper.Initialize(oodle);
@@ -185,7 +205,7 @@ static class CacheTool
             var modId = options.GetValueOrDefault("--mod-id", new DirectoryInfo(modRoot).Name).ToLowerInvariant();
             Need(Regex.IsMatch(modId, "^[a-z0-9][a-z0-9 _.-]{0,127}$") && !modId.Contains(".."), "Use the final RuneSchema mod folder name as --mod-id");
             var output = Full(options.GetValueOrDefault("--output", baseMode ? Path.Combine(folder, "base-game-cache") : Path.Combine(modRoot, "cache"))); Safe(output); Safe(modRoot);
-            if (!baseMode) Need(Directory.Exists(Path.Combine(modRoot, "paks")), "Mod root must contain paks/. Stage the final mod/paks/<package>/ layout first; --mod-root selects it.");
+            if (!baseMode) Need(Directory.Exists(Path.Combine(modRoot, "paks"))||Directory.Exists(Path.Combine(modRoot,"ue4ss")), "Mod root must contain paks/ or ue4ss/. --mod-root selects it.");
             var nativeRoots = new[] { Path.Combine(game, "Content", "Paks"), Path.Combine(game, "Plugins"), Path.Combine(game, "GameFeatures"), Path.Combine(Directory.GetParent(game)!.FullName, "Engine", "Plugins") }.Where(Directory.Exists).ToArray();
             var nativeFiles = nativeRoots.SelectMany(r => Files(r, NativeExtensions)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
             Need(nativeFiles.Length is > 0 and <= 100000, "Native source file count outside 1..100000");
@@ -228,7 +248,7 @@ static class CacheTool
             foreach (var mod in mods) try { Build(mod, mod.Output); } catch (Exception e) { ++failures; Console.Error.WriteLine(mod.Id + ": cache unchanged; " + e.Message); }
             return failures == 0 ? 0 : 1;
 
-            void CheckInputs() { Closed(game); Unchanged(before, nativeRoots.SelectMany(r => Files(r, NativeExtensions)).Concat(mods.SelectMany(m => Files(m.Root, OwnerExtensions))).Append(mapping).Append(oodle)); }
+            void CheckInputs() { CheckControl(); Closed(game); Unchanged(before, nativeRoots.SelectMany(r => Files(r, NativeExtensions)).Concat(mods.SelectMany(m => Files(m.Root, OwnerExtensions))).Append(mapping).Append(oodle)); }
             void Build((string Root, string Id, string Output)? mod, string destination)
             {
                 CheckInputs();
@@ -386,6 +406,7 @@ static class CacheTool
     static void SelfTest()
     {
         AuthoringInputTests.Run();
+        CreationArchiveTests.Run();
         Need(Source("/Game/Gameplay/Mods/Dye/ITEM.Item") == "game/gameplay/mods/dye", "Nested mod namespace");
         Need(Asset("RSDragonwilds/Plugins/Test/Content/UI/T_Icon.uasset") == "/Test/UI/T_Icon.T_Icon", "Plugin virtual path");
         Need(Asset("RSDragonwilds/Content/Items/ITEM_X.uasset") == "/Game/Items/ITEM_X.ITEM_X", "Game virtual path");

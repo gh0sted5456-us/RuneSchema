@@ -62,7 +62,7 @@ inline void SetHidden(State& s,const nlohmann::json& row,bool hidden){
 }
 inline void Silhouette(ImDrawList*,ImVec2 foot,float height,int kind,ImU32 color){PortraitArt::Draw(kind,{foot.x-height*.5f,foot.y-height},{foot.x+height*.5f,foot.y},color);}
 inline void ScaleReference(float scale,int kind,const std::string& name,const std::string& icon,const std::string& playerIcon,const nlohmann::json& row){auto& t=HelpyImGuiTheme::Current;
-    if(ImGui::Checkbox("Journal character reference",&t.scaleUsePortrait))HelpyImGuiTheme::SaveCurrent();
+    if(HelpyImGuiTheme::Toggle("Journal character reference",&t.scaleUsePortrait))HelpyImGuiTheme::SaveCurrent();
     const std::array<std::pair<const char*,const char*>,5> choices{{{"NuLL","scale-null.png"},{"Lonestar","scale-lonestar.png"},{"iGhrazi","scale-ighrazi.png"},{"Hauler","scale-hauler.png"},{"Selected player portrait","@player"}}};
     if(t.scaleUsePortrait){const auto selected=t.scaleReferenceIcon.empty()?std::string("scale-null.png"):t.scaleReferenceIcon;const char* title="NuLL";for(const auto& choice:choices)if(selected==choice.second)title=choice.first;
         ImGui::SetNextItemWidth(-1);if(ImGui::BeginCombo("##scale-reference-art",title)){for(const auto& choice:choices)if(ImGui::Selectable(choice.first,selected==choice.second)){t.scaleReferenceIcon=choice.second;HelpyImGuiTheme::SaveCurrent();}ImGui::EndCombo();}}
@@ -93,7 +93,7 @@ inline void Render(const nlohmann::json& snapshot,uint64_t revision,bool resourc
     if(resource){int mode=0;for(const auto* label:{"Trees","Ore / stone","Other resources"}){if(mode&&ImGui::GetContentRegionAvail().x>t.X(125))ImGui::SameLine();if(ImGui::RadioButton(label,s.Mode==mode)){s.Mode=mode;s.Selected.clear();s.Confirmed=false;s.Rebuild=true;}++mode;}}
     ImGui::SetNextItemWidth(std::max(t.X(120),ImGui::GetContentRegionAvail().x-t.X(80)));const bool search=ImGui::InputTextWithHint("##spawn-search","Search name or source...",s.Search,sizeof(s.Search),ImGuiInputTextFlags_EnterReturnsTrue);ImGui::SameLine();
     if(HelpyImGuiTheme::SoftButton("Search")||search){s.Query=s.Search;s.Confirmed=false;s.Rebuild=true;LazyCatalog::Search(category,s.Query);}
-    if(ImGui::Checkbox("Show hidden",&s.ShowHidden)){s.Rebuild=true;s.Confirmed=false;}
+    if(HelpyImGuiTheme::Toggle("Show hidden",&s.ShowHidden)){s.Rebuild=true;s.Confirmed=false;}
     if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("Include hidden results. Right-click an entry or select it to restore it.\nOnly your local Helpy browser preferences change; no cache entry is deleted.");
     if(!SpawnBrowserSettings::Error.empty()){ImGui::TextWrapped("%s",SpawnBrowserSettings::Error.c_str());if(HelpyImGuiTheme::SoftButton("Retry preferences"))SpawnBrowserSettings::Retry();}
     const auto at=snapshot.find("Definitions");const nlohmann::json empty=nlohmann::json::array();const auto& rows=at!=snapshot.end()&&at->is_array()?*at:empty;
@@ -141,11 +141,11 @@ inline void Render(const nlohmann::json& snapshot,uint64_t revision,bool resourc
     if(ImGui::SliderFloat("Scale",&s.Scale,.1f,10.f,"%.2fx"))s.Confirmed=false;ScaleReference(s.Scale,resource?(s.Mode==0?1:2):npc?0:3,chosen?SpawnNames::Display(*chosen).Art:"",chosen?Icon(*chosen):"",playerIcon,chosen?*chosen:nlohmann::json::object());
     if(!npc&&ImGui::SliderInt("Count",&s.Count,1,20))s.Confirmed=false;
     float metres=s.Radius/100;if(ImGui::SliderFloat("Radius",&metres,0,50,"%.1f m")){s.Radius=metres*100;s.Confirmed=false;}
-    if(ImGui::Checkbox("Permanent placement",&s.Permanent))s.Confirmed=false;ImGui::TextWrapped("%s",s.Permanent?"Installed RuneSchema placement, restored on load.":"Temporary actors; native save-exclusion checks still apply.");
+    if(HelpyImGuiTheme::Toggle("Permanent placement",&s.Permanent))s.Confirmed=false;ImGui::TextWrapped("%s",s.Permanent?"Installed RuneSchema placement, restored on load.":"Temporary actors; native save-exclusion checks still apply.");
     if(ImGui::CollapsingHeader("Advanced placement")){
         if(ImGui::InputText("Name override",s.Name,sizeof(s.Name)))s.Confirmed=false;
         if(ImGui::InputFloat("Yaw (degrees)",&s.Yaw))s.Confirmed=false;if(ImGui::InputFloat("Height offset (cm)",&s.Height))s.Confirmed=false;
-        if(!resource&&!npc){if(ImGui::Checkbox("Override power level",&s.OverridePower))s.Confirmed=false;if(s.OverridePower&&ImGui::SliderInt("Power level",&s.Power,1,100))s.Confirmed=false;}
+        if(!resource&&!npc){if(HelpyImGuiTheme::Toggle("Override power level",&s.OverridePower))s.Confirmed=false;if(s.OverridePower&&ImGui::SliderInt("Power level",&s.Power,1,100))s.Confirmed=false;}
     }
     const bool allowed=chosen&&chosen->value("Available",true)&&(!npc||(s.Permanent?chosen->value("PermanentAllowed",false):chosen->value("TemporaryAllowed",false)));
     if(chosen&&!allowed)ImGui::TextWrapped("%s",chosen->value(s.Permanent?"PermanentReason":"TemporaryReason",chosen->value("Reason",std::string("Not currently supported"))).c_str());

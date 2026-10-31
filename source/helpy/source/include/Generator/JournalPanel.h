@@ -1,4 +1,5 @@
 #pragma once
+#include "Generator/HelpyMenu.h"
 #include "Runtime/HelpyWikiIcons.h"
 #include "Generator/HelpyImGuiTheme.h"
 #include "Core/MapFilters.h"
@@ -24,5 +25,10 @@ inline void Wiki(){
     ImGui::TextWrapped("Artwork and game journal media: copyright Jagex Ltd, via the Dragonwilds Wiki. Wiki text: CC BY-NC-SA 3.0. Third-party media is not RuneSchema MIT.");
 }
 inline void Shutdown(){NativeJournalCache::Shutdown();JournalAuthorPanel::Shutdown();}
-inline void Render(){if(ImGui::BeginTabBar("##journal-tabs",ImGuiTabBarFlags_Reorderable)){if(ImGui::BeginTabItem("Journal / Lore")){NativeJournalPanel::Render();ImGui::EndTabItem();}const auto flags=JournalAuthorPanel::OpenRequested?ImGuiTabItemFlags_SetSelected:ImGuiTabItemFlags_None;JournalAuthorPanel::OpenRequested=false;if(ImGui::BeginTabItem("Author",nullptr,flags)){JournalAuthorPanel::Render();ImGui::EndTabItem();}if(ImGui::BeginTabItem("Wiki reference")){Wiki();ImGui::EndTabItem();}ImGui::EndTabBar();}}
+inline void Render(){
+    static int section=0;if(JournalAuthorPanel::OpenRequested){JournalAuthorPanel::OpenRequested=false;section=1;}
+    constexpr std::array labels{"Journal / Lore","Author","Wiki reference"};HelpyMenu::Tabs("journal",labels,section);
+    if(HelpyMenu::BeginBody("Journal body",section))switch(section){case 0:NativeJournalPanel::Render();break;case 1:JournalAuthorPanel::Render();break;case 2:Wiki();break;}
+    HelpyMenu::EndBody();
+}
 }

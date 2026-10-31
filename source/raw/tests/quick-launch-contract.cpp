@@ -3,13 +3,19 @@
 #include <iterator>
 #include <stdexcept>
 #include <string>
+#include "Core/QuickLaunchStartup.h"
 static void Need(bool value,const char* message){if(!value)throw std::runtime_error(message);}
 int main(int argc,char** argv){
+    PS::QuickLaunchStartup::Gate gate;gate.Arm(5000);
+    Need(gate.Due(5000,true,false,false)&&!gate.Due(5001,true,false,false)&&gate.Due(5500,true,false,false),"frontend readiness probes must be bounded to 500 ms");
+    Need(!gate.Due(6000,true,true,false)&&!gate.Due(6000,true,false,true)&&!gate.Due(6000,false,false,false),"requested/finished/disabled launches cannot replay");
+    Need(!gate.Expired(184999)&&gate.Expired(185000)&&!gate.Due(185000,true,false,false),"frontend timeout starts when armed and leaves slow startups time to reach the menu");
+    PS::QuickLaunchStartup::Gate late;late.Arm(0);Need(late.Due(6000,true,false,false)&&!late.Due(6500,true,false,false)&&late.Due(8000,true,false,false),"slow frontends must back off instead of repeatedly scanning native slots");
     Need(argc==2,"source/raw root required");const std::filesystem::path root=argv[1];
     const auto read=[](const std::filesystem::path& path){std::ifstream stream(path,std::ios::binary);Need(bool(stream),"contract source unavailable");return std::string(std::istreambuf_iterator<char>(stream),{});};
     const auto ui=read(root/"../helpy/source/include/Generator/RuneSchemaSettingsPanel.h");
     Need(ui.find("ImGui::RadioButton(\"Normal\"")!=ui.npos&&ui.find("ImGui::RadioButton(\"Quick Launch\"")!=ui.npos,"launch selector must offer Normal and Quick Launch as exclusive circular controls");
-    Need(ui.find("ImGui::TreeNode(\"Advanced\")")<ui.find("ImGui::Checkbox(\"Vanilla Load\""),"Vanilla Load belongs under Advanced");
+    Need(ui.find("ImGui::TreeNode(\"Advanced\")")<ui.find("HelpyImGuiTheme::Toggle(\"Vanilla Load\""),"Vanilla Load belongs under Advanced");
     Need(ui.find("QuickToggle(\"Save Bypass\",\"/persistence/allowCorruptCharacterEntry\",true)")!=ui.npos,"Save Bypass remains an independent confirmed toggle");
     const auto quick=read(root/"src/Runtime/QuickLoad.cpp");
     const auto save=quick.substr(quick.find("Json Save(const Json& request)"));
@@ -22,6 +28,8 @@ int main(int argc,char** argv){
     Need(quick.find("void SuppressLoadingScreen(void*,const void*){}")!=quick.npos&&quick.find("Fade(controller,1.f)")!=quick.npos&&quick.find("Fade(controller,0.f)")!=quick.npos,"native loading-screen skip and both fade directions must remain");
     Need(quick.find("if(!config.Enabled){SetStatus(")<quick.find("NativeExecutableDiscovery::Resolve")&&quick.find("if(!Storefront::AllowsEmbeddedAobSignatures())")<quick.find("NativeExecutableDiscovery::Resolve"),"manual modes and unknown executable builds must not install Quick Launch signature hooks");
     Need(quick.find("120000")!=quick.npos&&quick.find("if(shift&&loadingHook&&!finished)")!=quick.npos,"a bounded timeout and Shift fallback must restore normal loading");
+    Need(quick.find("const bool start=frontend.Due")!=quick.npos&&quick.find("if(start)Load(object)")!=quick.npos,"an already-ready menu must still start without a map callback");
+    Need(quick.find("ShiftInGame()")!=quick.npos&&quick.find("GetAsyncKeyState(VK_SHIFT)&0x8001")==quick.npos,"unrelated background Shift presses cannot cancel an armed startup");
     const auto registrar=read(root/"src/Misc/DragonWildsDataRegistrar.cpp");
     const auto body=registrar.substr(registrar.find("void DragonWildsDataRegistrar::ScrubCharacterJsonBeforeLoad("));
     Need(body.find("m_pruner.PruneBeforeCharacterLoad")!=body.npos&&body.find("allowCorruptCharacterEntry")==body.npos&&body.find("TolerantLoadingRequested")==body.npos,"general cleanup and native strictness must not be gated by Save Bypass");

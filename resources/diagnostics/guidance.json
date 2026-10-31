@@ -306,5 +306,21 @@
   "RS-UI-002": [
     "The optional standalone desktop could not start or attach. Use matching DLLs and Helpy.exe in the assigned installation.",
     "Read the full startup reason and confirm the current Windows user. Select DLL window and restart to use the fallback."
+  ],
+  "RS-CACHE-015": [
+    "A creation/conversion input includes a native UE4SS DLL mod. Its byte content and native ue4ss/Mods placement are preserved; this is not a DLL compatibility failure.",
+    "Review the job warnings and packaged native companion. Do not assume its relative file lookups or native bridge can reach inside RuneSchema. Verify that integration with the DLL author. Helpy does not execute or rewrite the DLL."
+  ],
+  "RS-OVL-001": [
+    "The game submitted a frame from Helpy through its native graphics adapter.",
+    "No action is needed. Use the Helpy shortcut to show or hide the panel."
+  ],
+  "RS-OVL-002": [
+    "The native presentation bridge rejected attachment, a graphics surface or an input contract.",
+    "Keep the bridge error and renderer/GPU details from RuneSchema.log. Use matching RuneSchema and Helpy builds; a desktop window requires borderless or windowed mode."
+  ],
+  "RS-OVL-003": [
+    "The native presentation bridge is prepared or attached to the game renderer.",
+    "Open Helpy with its configured shortcut. RS-OVL-001 confirms an actual visible presentation."
   ]
 }

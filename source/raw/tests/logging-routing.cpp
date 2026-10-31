@@ -29,4 +29,14 @@ int main(){
     CodedLog<L::Warning>(Diagnostics::Id::CacheMismatch,STR("Reference mismatch {}"),48);
     assert(RC::Output::Rows.back()==DiagnosticLog::Rows.back());
     assert(DiagnosticLog::Rows.back().contains(L"[RS-CACHE-003] Reference mismatch 48"));
+    const auto visible=RC::Output::Rows.size(),file=DiagnosticLog::Rows.size();
+    PluginLog<L::Normal>("RuneSchema.Helpy","[RS-OVL-001] D3D12 presenting");
+    PluginLog<L::Warning>("RuneSchema.Helpy","[RS-OVL-002] Surface unavailable");
+    PluginLog<L::Normal>("RuneSchema.Helpy","[HELPY][OVERLAY] older bridge status");
+    assert(RC::Output::Rows.size()==visible&&DiagnosticLog::Rows.size()==file+3);
+    assert(DiagnosticLog::Rows[file].contains(L"[info] [RS-OVL-001]"));
+    assert(DiagnosticLog::Rows[file+1].contains(L"[warning] [RS-OVL-002]"));
+    PluginLog<L::Error>("Other.Plugin","[RS-OVL-002] unrelated plugin error");
+    PluginLog<L::Warning>("RuneSchema.Helpy","[RS-UI-002] Desktop unavailable");
+    assert(RC::Output::Rows.size()==visible+2&&DiagnosticLog::Rows.size()==file+5);
 }

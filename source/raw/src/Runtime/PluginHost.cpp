@@ -60,10 +60,17 @@ int32_t JsonResponse(const nlohmann::json& value,char* response,uint32_t capacit
     if(!response||capacity<*size)return RS_PLUGIN_BUFFER_TOO_SMALL;
     std::memcpy(response,text.c_str(),*size);return RS_PLUGIN_OK;
 }
+int32_t RS_PLUGIN_CALL CallService(const char*,const char*,const char*,char*,uint32_t,uint32_t*);
 int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,uint32_t capacity,uint32_t* size) {
     try {
         const auto request=nlohmann::json::parse(requestJson);const auto action=request.value("Action",std::string{});
         nlohmann::json result;
+        if(action=="HelpyNativeOverlay"){
+            if(Storefront::IsDedicatedServer())return JsonResponse({{"Ready",false},{"Error","Dedicated servers use Helpy's desktop window"}},response,capacity,size);
+            if(!size)return RS_PLUGIN_INVALID_ARGUMENT;
+            if(!response||capacity<8192){*size=8192;return RS_PLUGIN_BUFFER_TOO_SMALL;}
+            const auto payload=request.at("Payload").dump();return CallService("RuneSchema.Helpy","helpy.native-overlay",payload.c_str(),response,capacity,size);
+        }
         if(action=="HelpyVisibility"){
             if(!request.contains("Visible")||!request.at("Visible").is_boolean())return RS_PLUGIN_INVALID_ARGUMENT;
             const auto code=JsonResponse({{"Accepted",true}},response,capacity,size);
@@ -228,10 +235,10 @@ int32_t RS_PLUGIN_CALL CoreBindings(void*,const char* requestJson,char* response
     }catch(...){return RS_PLUGIN_FAILED;}
 }
 void RS_PLUGIN_CALL HostLog(uint32_t level,const char* plugin,const char* message) {
-    const auto id=ToWideSafe(plugin?plugin:"unknown"),text=ToWideSafe(message?message:"");
-    if(level==RS_LOG_ERROR)PS::ConsolidatedLog<RC::LogLevel::Error>(TEXT("[RuneSchema] Plugin {}: {}\n"),id,text);
-    else if(level==RS_LOG_WARNING)PS::ConsolidatedLog<RC::LogLevel::Warning>(TEXT("[RuneSchema] Plugin {}: {}\n"),id,text);
-    else PS::ConsolidatedLog<RC::LogLevel::Normal>(TEXT("[RuneSchema] Plugin {}: {}\n"),id,text);
+    const std::string_view id=plugin?plugin:"unknown",text=message?message:"";
+    if(level==RS_LOG_ERROR)PS::PluginLog<RC::LogLevel::Error>(id,text);
+    else if(level==RS_LOG_WARNING)PS::PluginLog<RC::LogLevel::Warning>(id,text);
+    else PS::PluginLog<RC::LogLevel::Normal>(id,text);
 }
 int32_t RS_PLUGIN_CALL RegisterCapability(const char* plugin,const char* capability) {
     if(!Token(plugin)||!Token(capability)||!ActiveOwner||std::string_view(plugin)!=ActiveOwner)return RS_PLUGIN_INVALID_ARGUMENT;

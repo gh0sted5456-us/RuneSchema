@@ -47,6 +47,9 @@
 #include "Generator/StructuredLogFeed.h"
 #include "Generator/HelpyDiagnosticOverlay.h"
 #include "Generator/ModsPanel.h"
+#include "Generator/HelpyControllerInput.h"
+#include "Generator/HelpyOverlayInput.h"
+#include "Generator/RuneSchemaRepairPanel.h"
 #include "Generator/DedicatedServerPanel.h"
 #include "Runtime/HelpyPaths.h"
 #include "Runtime/PluginRuntimeServices.h"
@@ -101,7 +104,8 @@ void RefreshMotionPreference(){BOOL enabled=TRUE;if(SystemParametersInfoW(SPI_GE
 ImVec2 MainSurfacePosition{},MainSurfaceSize{};
 HelpyNativeFrame::Metrics NativeCaption;
 HelpyNavigation::SpawnSection CurrentSpawn=HelpyNavigation::SpawnSection::Resources;
-HelpyNavigation::ToolSection CurrentTool=HelpyNavigation::ToolSection::ItemCache;
+HelpyNavigation::ToolSection CurrentTool=HelpyNavigation::ToolSection::CacheBuilder;
+bool FocusAuthoringTools=false;
 std::array<std::string,HelpyNavigation::Pages.size()> PageErrors;
 ID3D11ShaderResourceView* BrandTexture=nullptr;
 ID3D11ShaderResourceView* BrandAccentTexture=nullptr;
@@ -145,17 +149,9 @@ ID3D11ShaderResourceView* XboxTexture=nullptr;
 #if defined(HELPY_PREVIEW)
 bool PreviewSelectSections=false;
 HelpyNavigation::SpawnSection PreviewWantedSpawn=HelpyNavigation::SpawnSection::Resources;
-HelpyNavigation::ToolSection PreviewWantedTool=HelpyNavigation::ToolSection::Maintenance;
+HelpyNavigation::ToolSection PreviewWantedTool=HelpyNavigation::ToolSection::CacheBuilder;
 std::filesystem::path PreviewCapture;
 #endif
-ImGuiTabItemFlags SectionFlags(bool selected) {
-#if defined(HELPY_PREVIEW)
-    if(PreviewSelectSections&&selected)return ImGuiTabItemFlags_SetSelected;
-#else
-    (void)selected;
-#endif
-    return ImGuiTabItemFlags_None;
-}
 float SidebarWidthLogical=-1.0f;
 ImFont* UiRegularFont=nullptr;
 ImFont* UiBoldFont=nullptr;
@@ -244,7 +240,7 @@ bool QueuePlayerRefresh(bool automatic){
 }
 void RenderToasts(const HelpyImGuiTheme::Theme& t){
     const auto now=std::chrono::steady_clock::now();Toasts.erase(std::remove_if(Toasts.begin(),Toasts.end(),[&](const Toast& x){return x.Until<=now;}),Toasts.end());if(Toasts.empty())return;
-    float y=ImGui::GetIO().DisplaySize.y-t.Y(12.0f);for(int i=static_cast<int>(Toasts.size())-1;i>=0;--i){
+    float y=ImGui::GetIO().DisplaySize.y-t.Y(12.0f)-(HelpyControllerInput::Selection.Controller?ImGui::GetFrameHeightWithSpacing():0.f);for(int i=static_cast<int>(Toasts.size())-1;i>=0;--i){
         ImGui::SetNextWindowPos(ImVec2(t.X(12.0f),y),ImGuiCond_Always,ImVec2(0,1));ImGui::SetNextWindowBgAlpha(0.94f);ImGui::SetNextWindowSizeConstraints(ImVec2(t.X(180.0f),0),ImVec2(t.X(420.0f),t.Y(120.0f)));
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,t.X(t.childRounding));ImGui::PushStyleColor(ImGuiCol_WindowBg,t.panelAlt);const std::string id="##helpy-toast-"+std::to_string(i);
         if(ImGui::Begin(id.c_str(),nullptr,ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoInputs|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoFocusOnAppearing)){ImGui::TextWrapped("%s",Toasts[static_cast<size_t>(i)].Text.c_str());y=ImGui::GetWindowPos().y-t.Y(8.0f);}
@@ -411,28 +407,19 @@ void RenderWorkspaceTabs(const HelpyImGuiTheme::Theme& t){
     if(parent!=Page::Items&&parent!=Page::Map&&parent!=Page::Tools&&parent!=Page::Profile)return;
     // Route-backed tabs change immediately and wrap on narrow windows. There
     // is no second, deferred ImGui selection that can dispatch an old editor.
-    const float width=ImGui::GetContentRegionAvail().x,gap=ImGui::GetStyle().ItemSpacing.x;
+    const float width=ImGui::GetContentRegionAvail().x;
     float used=0;ImGui::PushID(parent==Page::Profile?"profile-workflows":parent==Page::Items?"players-workflows":parent==Page::Tools?"tools-workflows":"world-workflows");
     const auto tab=[&](Page page){
         if(!HelpyNavigation::Available(page,t.workspaces,HelpyEnvironment::Server()))return;
         const auto label=HelpyNavigation::TabTitle(page);
-        const float side=std::min(width,ImGui::CalcTextSize(label).x+ImGui::GetStyle().FramePadding.x*2+t.X(12));
-        if(used>0&&used+gap+side<=width){ImGui::SameLine();used+=gap;}else used=0;
-        const bool active=CurrentPage==page;
-        ImGui::PushStyleColor(ImGuiCol_Header,active?t.navigationActive:t.panel);
-        ImGui::PushStyleColor(ImGuiCol_Text,active?t.accentHover:t.textDisabled);
-        ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign,{.5f,.5f});
-        const bool clicked=ImGui::Selectable(label,active,ImGuiSelectableFlags_None,{side,ImGui::GetFrameHeight()});
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor(2);
-        if(active){const auto a=ImGui::GetItemRectMin(),b=ImGui::GetItemRectMax();ImGui::GetWindowDrawList()->AddLine({a.x,b.y},{b.x,b.y},ImGui::GetColorU32(t.accent),t.Y(2));}
+        const bool clicked=HelpyMenu::Tab(label,CurrentPage==page,used,width);
 #if defined(HELPY_PREVIEW)
         HelpyPreviewHooks::WorkspaceTabs[label]=HelpyPreviewHooks::LastRect();
 #endif
         if(parent==Page::Items)NavigationOrder::Drag("players-tabs",page,HelpyNavigation::PlayerTabs,label);
         else if(parent==Page::Map)NavigationOrder::Drag("world-tabs",page,HelpyNavigation::WorldTabs,label);
         else if(parent==Page::Tools)NavigationOrder::Drag("tools-tabs",page,HelpyNavigation::ToolTabs,label);
-        if(clicked)CurrentPage=page;used+=side;
+        if(clicked)CurrentPage=page;
     };
     if(parent==Page::Items)for(auto page:NavigationOrder::Pages("players-tabs",HelpyNavigation::PlayerTabs))tab(page);
     else if(parent==Page::Map)for(auto page:NavigationOrder::Pages("world-tabs",HelpyNavigation::WorldTabs))tab(page);
@@ -446,9 +433,17 @@ bool ReadBrandPixels(const char* asset,UINT& width,UINT& height,std::vector<unsi
     using Microsoft::WRL::ComPtr;
     ComPtr<IWICImagingFactory> factory;ComPtr<IWICBitmapDecoder> decoder;
     ComPtr<IWICBitmapFrameDecode> frame;ComPtr<IWICFormatConverter> converter;
-    if(FAILED(CoCreateInstance(CLSID_WICImagingFactory,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&factory)))||
-       FAILED(factory->CreateDecoderFromFilename(HelpyPaths::Asset(asset).c_str(),nullptr,GENERIC_READ,WICDecodeMetadataCacheOnLoad,&decoder))||
-       FAILED(decoder->GetFrame(0,&frame))||FAILED(factory->CreateFormatConverter(&converter))||
+    if(FAILED(CoCreateInstance(CLSID_WICImagingFactory,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&factory))))return false;
+    ComPtr<IWICStream> bundled;
+    auto opened=factory->CreateDecoderFromFilename(HelpyPaths::Asset(asset).c_str(),nullptr,GENERIC_READ,WICDecodeMetadataCacheOnLoad,&decoder);
+    if(FAILED(opened)&&std::string_view(asset)=="nexus.png"){
+        const auto resource=FindResourceW(nullptr,MAKEINTRESOURCEW(IDR_NEXUS_ICON),RT_RCDATA);
+        const auto loaded=resource?LoadResource(nullptr,resource):nullptr;const auto size=resource?SizeofResource(nullptr,resource):0;
+        auto* data=loaded?static_cast<BYTE*>(LockResource(loaded)):nullptr;
+        if(data&&size&&size<1024*1024&&SUCCEEDED(factory->CreateStream(&bundled))&&SUCCEEDED(bundled->InitializeFromMemory(data,size)))
+            opened=factory->CreateDecoderFromStream(bundled.Get(),nullptr,WICDecodeMetadataCacheOnLoad,&decoder);
+    }
+    if(FAILED(opened)||FAILED(decoder->GetFrame(0,&frame))||FAILED(factory->CreateFormatConverter(&converter))||
        FAILED(converter->Initialize(frame.Get(),GUID_WICPixelFormat32bppRGBA,WICBitmapDitherTypeNone,nullptr,0,WICBitmapPaletteTypeCustom)))return false;
     if(FAILED(converter->GetSize(&width,&height))||!width||!height||width>4096||height>4096)return false;
     pixels.resize(width*height*4);
@@ -674,13 +669,14 @@ void RenderHome(const HelpyImGuiTheme::Theme& theme){
             const bool selected=HomeFocused==index;
             const auto tint=selected?theme.accent:theme.text;
             if(selected)draw->AddRect(origin,{origin.x+tile,origin.y+tile},ImGui::GetColorU32(theme.accent),theme.X(5));
-            HelpyImGuiTheme::DrawIcon(destination.Icon,{origin.x+tile*.5f,origin.y+tile*.38f},theme.Y(33),tint);
+            const bool labels=tile>=theme.Y(100);
+            HelpyImGuiTheme::DrawIcon(destination.Icon,{origin.x+tile*.5f,origin.y+tile*(labels?.38f:.5f)},theme.Y(33),tint);
             const std::string label=destination.Label;const auto split=label.find(' ');
             const auto line=[&](const std::string& text,float y){const auto size=ImGui::CalcTextSize(text.c_str());draw->AddText({origin.x+(tile-size.x)*.5f,y},ImGui::GetColorU32(tint),text.c_str());};
             const float labelY=origin.y+tile*.66f;
-            if(split!=std::string::npos&&ImGui::CalcTextSize(label.c_str()).x>tile-theme.X(12)){
+            if(labels&&split!=std::string::npos&&ImGui::CalcTextSize(label.c_str()).x>tile-theme.X(12)){
                 line(label.substr(0,split),labelY);line(label.substr(split+1),labelY+ImGui::GetTextLineHeight());
-            }else line(label,labelY);
+            }else if(labels)line(label,labelY);
             if(activated&&!HomeExit.Active){HomeExitTarget=destination.Target;HomeLinkDetails=-1;if(animate==FALSE)CurrentPage=destination.Target;else HomeExit.Begin(ImGui::GetTime(),1);}
             ImGui::PopID();
         }
@@ -930,6 +926,8 @@ void RenderSplash(const HelpyImGuiTheme::Theme& theme){
     ImGui::BeginDisabled(SplashExit.Active);const bool entered=HelpyImGuiTheme::SoftButton("Enter",{buttonWidth,buttonHeight});ImGui::EndDisabled();
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::SplashEnter=HelpyPreviewHooks::LastRect();
+    HelpyPreviewHooks::SplashEnterHovered=ImGui::IsItemHovered();
+    if(entered)++HelpyPreviewHooks::SplashEnterPresses;
 #endif
     ImGui::SetItemDefaultFocus();
     ImGui::Dummy({1,buttonGap});
@@ -996,18 +994,19 @@ void RenderSplash(const HelpyImGuiTheme::Theme& theme){
     if(SplashExit.Active&&SplashExit.At(now,animate!=FALSE).Finished){SplashEntered=true;CurrentPage=Page::Home;HomeRevealStarted=animate?now:now-HelpySplash::RevealSeconds;}
 }
 
-void ApplyCaptionTheme(HWND window,const HelpyImGuiTheme::Theme& theme,bool force=false,bool overlay=false) {
+void ApplyCaptionTheme(HWND window,const HelpyImGuiTheme::Theme& theme,bool force=false,bool overlay=false,HelpyCompositionSurface* composition=nullptr) {
     const auto rgb=[](const ImVec4& color){return RGB(static_cast<BYTE>(color.x*255),static_cast<BYTE>(color.y*255),static_cast<BYTE>(color.z*255));};
     const BOOL dark=(theme.window.x+theme.window.y+theme.window.z)<1.5f;
     const COLORREF caption=rgb(theme.window),text=rgb(theme.text),border=rgb(theme.border);
     struct Caption {COLORREF Color,Text,Border;BYTE Opacity;BOOL Dark;bool operator==(const Caption&)const=default;};
     static std::unordered_map<HWND,Caption> captions;
-    const auto opacity=static_cast<BYTE>((overlay?std::clamp(theme.overlayOpacity,.60f,1.f):HelpyBackgrounds::Opaque()?1.0f:std::clamp(theme.windowOpacity,0.60f,1.0f))*255);
+    const float presentationOpacity=overlay&&composition&&composition->Active()?1.f:overlay?std::clamp(theme.overlayOpacity,.60f,1.f):HelpyBackgrounds::Opaque()?1.0f:std::clamp(theme.windowOpacity,0.60f,1.0f);
+    const auto opacity=static_cast<BYTE>(presentationOpacity*255);
     const Caption next{caption,text,border,opacity,dark};
+    if(composition&&composition->Active())composition->Opacity(presentationOpacity);
     if(const auto found=captions.find(window);!force&&found!=captions.end()&&found->second==next)return;
     std::erase_if(captions,[](const auto& value){return !IsWindow(value.first);});captions.insert_or_assign(window,next);
-    SetWindowLongPtrW(window,GWL_EXSTYLE,GetWindowLongPtrW(window,GWL_EXSTYLE)|WS_EX_LAYERED);
-    SetLayeredWindowAttributes(window,0,opacity,LWA_ALPHA);
+    if(!composition||!composition->Active()){SetWindowLongPtrW(window,GWL_EXSTYLE,GetWindowLongPtrW(window,GWL_EXSTYLE)|WS_EX_LAYERED);SetLayeredWindowAttributes(window,0,opacity,LWA_ALPHA);}
     DwmSetWindowAttribute(window,20,&dark,sizeof(dark));
     DwmSetWindowAttribute(window,35,&caption,sizeof(caption));
     DwmSetWindowAttribute(window,36,&text,sizeof(text));
@@ -1143,7 +1142,7 @@ HelpyImGuiTheme::Theme BuiltinColorPreset(int index) {
 
 void RenderAuthorToolsDownload(){
     ImGui::SeparatorText("Authoring tools");
-    ImGui::TextWrapped("Download the cache builders and instructions. Drop your mod ZIP onto Build-Helpy-Cache.cmd for a progress-guided Windows build, or use the Bash script. Keep the target game closed.");
+    ImGui::TextWrapped("Build caches and package mods below. The optional standalone builders and walkthrough are also available as a ZIP; drop an archive onto Build-Helpy-Cache.bat. Keep the target game closed.");
     ImGui::BeginDisabled(HelpyDownloads::Busy());
     if(HelpyImGuiTheme::SoftButton("Download authoring tools ZIP"))HelpyDownloads::StartAuthorTools();
 #if defined(HELPY_PREVIEW)
@@ -1171,7 +1170,7 @@ void RenderIconCacheSettings(bool advanced,bool expanded=false) {
     if(ImGui::Button("Open cache window"))HelpyIconPacks::Open=true;
     if(HelpyIconPacks::Advanced){
     static bool acknowledgeFullScan=false;
-    ImGui::Checkbox("Allow full scan to load additional candidate assets",&acknowledgeFullScan);
+    HelpyImGuiTheme::Toggle("Allow full scan to load additional candidate assets",&acknowledgeFullScan);
     ImGui::BeginDisabled(!acknowledgeFullScan||HelpyIconPacks::Busy()||HelpyIconPacks::Building()||SpawnToolRequests::IsWaiting()||!SpawnToolRequests::IsAvailable()||SpawnToolsPanel::UiSnapshot.value("_CatalogIndexing",false));
     if(ImGui::Button("Full scan game catalogue")){if(SpawnToolRequests::TrySubmit({{"Action","IndexQuickCatalog"},{"_Source","HelpySettings"}}))acknowledgeFullScan=false;}
     ImGui::EndDisabled();
@@ -1179,7 +1178,7 @@ void RenderIconCacheSettings(bool advanced,bool expanded=false) {
     }
     bool persistent=HelpyRuntimePreferences::IconCacheLimitMB.load()>0;
     ImGui::BeginDisabled(HelpyIconPacks::Building()||HelpyIconPacks::Busy());
-    if(ImGui::Checkbox("Keep icons between launches",&persistent)){HelpyRuntimePreferences::IconCacheLimitMB.store(persistent?200:0);HelpyImGuiTheme::SaveCurrent();}
+    if(HelpyImGuiTheme::Toggle("Keep icons between launches",&persistent)){HelpyRuntimePreferences::IconCacheLimitMB.store(persistent?200:0);HelpyImGuiTheme::SaveCurrent();}
     if(advanced&&persistent){int megabytes=HelpyRuntimePreferences::IconCacheLimitMB.load();
         if(ImGui::InputInt("Cache limit (MB)",&megabytes,16,128)){HelpyRuntimePreferences::IconCacheLimitMB.store(std::clamp(megabytes,1,16384));HelpyImGuiTheme::SaveCurrent();}}
     ImGui::EndDisabled();
@@ -1200,13 +1199,16 @@ void RenderIconCacheSettings(bool advanced,bool expanded=false) {
     }
 }
 void RenderUpdatesAndRuntime(const HelpyImGuiTheme::Theme& t) {
+    static int section=0;constexpr std::array labels{"Resources","RuneSchema","UE4SS"};
+    HelpyMenu::Tabs("update-settings",labels,section);if(!HelpyMenu::BeginBody("Update settings body",section)){HelpyMenu::EndBody();return;}
     using namespace RuneSchemaUpdateInfo;
     const auto& state=HelpyUpdates::Current();auto& theme=HelpyImGuiTheme::Current;
+    if(section==0){
     ImGui::SeparatorText("Helpy data and artwork");
     bool assetSettingsChanged=false;
-    assetSettingsChanged|=ImGui::Checkbox("UI artwork (GitHub)",&theme.updateArtwork);
-    assetSettingsChanged|=ImGui::Checkbox("World map and alignment (GitHub)",&theme.updateWorldMap);
-    assetSettingsChanged|=ImGui::Checkbox("Map filters and icons (Wiki / Wildsforge)",&theme.updateMapFilters);
+    assetSettingsChanged|=HelpyImGuiTheme::Toggle("UI artwork (GitHub)",&theme.updateArtwork);
+    assetSettingsChanged|=HelpyImGuiTheme::Toggle("World map and alignment (GitHub)",&theme.updateWorldMap);
+    assetSettingsChanged|=HelpyImGuiTheme::Toggle("Map filters and icons (Wiki / Wildsforge)",&theme.updateMapFilters);
     if(assetSettingsChanged)HelpyImGuiTheme::SaveCurrent();
     ImGui::BeginDisabled(InitialAssetsBusy());
     ImGui::BeginDisabled(!theme.updateArtwork&&!theme.updateWorldMap&&!theme.updateMapFilters);
@@ -1217,12 +1219,14 @@ void RenderUpdatesAndRuntime(const HelpyImGuiTheme::Theme& t) {
     if(HelpyDownloads::Busy()||HelpyMapCache::Busy()||HelpyWikiIcons::Busy()){ImGui::SameLine();if(ImGui::SmallButton("Cancel asset updates")){PendingWikiInitialAssets=false;HelpyDownloads::Cancel();HelpyMapCache::Cancel();HelpyWikiIcons::Cancel();}}
     ImGui::TextWrapped("Choose one dependency or update them together. The world map includes validated coordinate alignment for clients and servers. Verified local files are reused; there are no timed online checks for these assets. Item caches remain separate.");
     auto& mapAssets=HelpyMapCache::Current();
-    if(ImGui::Checkbox("Update map filters after confirmed game patches",&mapAssets.Filters.UpdateAfterGamePatch))HelpyMapCache::SaveFilters();
+    if(HelpyImGuiTheme::Toggle("Update map filters after confirmed game patches",&mapAssets.Filters.UpdateAfterGamePatch))HelpyMapCache::SaveFilters();
     if(!mapAssets.Status.empty())ImGui::TextWrapped("%s",mapAssets.Status.c_str());
     if(!HelpyDownloads::Current().Status.empty())ImGui::TextWrapped("%s",HelpyDownloads::Current().Status.c_str());
+    }
+    if(section==1){
     ImGui::SeparatorText("RuneSchema updates");
     ImGui::Text("Installed: %s",HelpyEnvironment::RuneSchemaVersion.empty()?"Not reported":HelpyEnvironment::RuneSchemaVersion.c_str());
-    if(ImGui::Checkbox("Check automatically once a day when Helpy opens",&theme.automaticUpdateChecks)){
+    if(HelpyImGuiTheme::Toggle("Check automatically once a day when Helpy opens",&theme.automaticUpdateChecks)){
         if(!theme.automaticUpdateChecks)HelpyUpdates::Cancel();HelpyImGuiTheme::SaveCurrent();
     }
     ImGui::TextWrapped("Public GitHub versions and Steam update announcements. Checks run in the background; no game/player data is sent and no update files are downloaded or installed.");
@@ -1247,18 +1251,24 @@ void RenderUpdatesAndRuntime(const HelpyImGuiTheme::Theme& t) {
     if(state.CheckedAt){const auto now=std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
         ImGui::TextDisabled("Last check: %lld minute(s) ago · cached between launches",std::max<std::int64_t>(0,(now-state.CheckedAt)/60));}
     if(!state.CacheError.empty())ImGui::TextWrapped("%s",state.CacheError.c_str());
+    }
+    if(section==2){
     ImGui::SeparatorText("Loaded UE4SS host");
     ImGui::TextWrapped("Build: %s",HelpyEnvironment::UE4SS.value("Build",std::string("Not reported")).c_str());
     ImGui::TextWrapped("Detection: %s",HelpyEnvironment::UE4SS.value("Source",std::string("Unavailable")).c_str());
     ImGui::TextWrapped("Capabilities: %s",HelpyEnvironment::UE4SS.value("Capabilities",std::string("Unavailable")).c_str());
     ImGui::TextWrapped("No build-number ceiling: newer hosts are not rejected by version. They must retain RuneSchema's required C++ exports and ABI. Missing optional capabilities use fallbacks; future breaking ABI changes may require a new RuneSchema build. UE4SS.dll is never replaced by this updater.");
+    }HelpyMenu::EndBody();
 }
 void RenderDiagnosticsSettings(const HelpyImGuiTheme::Theme& t) {
+    static int section=0;constexpr std::array labels{"Alerts","History","Muted"};
+    HelpyMenu::Tabs("diagnostic-settings",labels,section);if(!HelpyMenu::BeginBody("Diagnostic settings body",section)){HelpyMenu::EndBody();return;}
+    static bool pendingSave=false;bool changed=false;
     auto& theme=HelpyImGuiTheme::Current;
+    if(section==0){
     ImGui::SeparatorText("Diagnostic notifications");
-    bool changed=false;
-    changed|=ImGui::Checkbox("Enable on-screen log toasts",&theme.diagnosticToastsEnabled);
-    changed|=ImGui::Checkbox("Show routine registry synchronization notices",&theme.diagnosticRegistryActivity);
+    changed|=HelpyImGuiTheme::Toggle("Enable on-screen log toasts",&theme.diagnosticToastsEnabled);
+    changed|=HelpyImGuiTheme::Toggle("Show routine registry synchronization notices",&theme.diagnosticRegistryActivity);
     ImGui::TextWrapped("Registry handshakes and nonblocking content differences stay in Diagnostics by default. Blocked operations, unrelated warnings and errors still appear.");
     ImGui::SetNextItemWidth(t.X(250));
     changed|=ImGui::SliderInt("Maximum visible toasts",&theme.diagnosticToastLimit,1,10);
@@ -1274,7 +1284,7 @@ void RenderDiagnosticsSettings(const HelpyImGuiTheme::Theme& t) {
         changed=true;
     }
     ImGui::SeparatorText("Diagnostic presentation");
-    changed|=ImGui::Checkbox("Open raw / DMP-style technical details by default",&theme.diagnosticDeveloperMode);
+    changed|=HelpyImGuiTheme::Toggle("Open raw / DMP-style technical details by default",&theme.diagnosticDeveloperMode);
     ImGui::TextWrapped("Diagnostics panels use the shared Appearance spacing, colors and window/background opacity controls. Adjust padding or opacity in Settings > Appearance.");
     if(ImGui::SmallButton("Reset presentation defaults")){
         const HelpyImGuiTheme::Theme defaults{};
@@ -1283,8 +1293,8 @@ void RenderDiagnosticsSettings(const HelpyImGuiTheme::Theme& t) {
     }
     // Same keys in the same ui.jsonc file as M4. This is a relocation of the
     // controls, not a settings migration or a separate configuration source.
-    static bool pendingSave=false;
-    pendingSave|=changed;
+    }
+    if(section==1){
     ImGui::SeparatorText("Diagnostic history");
     int days=theme.diagnosticHistoryDays,sessions=theme.diagnosticHistorySessions,mb=theme.diagnosticHistoryMB;
     ImGui::SetNextItemWidth(t.X(250));changed|=ImGui::SliderInt("Retain history (days)",&days,1,365);
@@ -1304,6 +1314,8 @@ void RenderDiagnosticsSettings(const HelpyImGuiTheme::Theme& t) {
         ImGui::SameLine();if(ImGui::Button("Cancel"))ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
+    }
+    if(section==2){
     ImGui::SeparatorText("Muted notifications");
     const auto& rules=DiagnosticMutes.Rules();
     if(rules.empty())ImGui::TextDisabled("No muted diagnostic notifications.");
@@ -1318,11 +1330,16 @@ void RenderDiagnosticsSettings(const HelpyImGuiTheme::Theme& t) {
         ImGui::PopID();
     }
     if(!DiagnosticMutes.Error().empty())ImGui::TextColored(t.warning,"Mute settings: %s",DiagnosticMutes.Error().c_str());
+    }pendingSave|=changed;
     if(pendingSave&&!ImGui::IsAnyItemActive()){HelpyImGuiTheme::SaveCurrent();pendingSave=false;}
+    HelpyMenu::EndBody();
 }
 void RenderSettings(const HelpyImGuiTheme::Theme& t) {
-    bool advanced=t.advancedMode;if(ImGui::Checkbox("Show advanced controls",&advanced)){HelpyImGuiTheme::Current.advancedMode=advanced;HelpyImGuiTheme::SaveCurrent();}
-    ImGui::Separator();
+    static int section=0;constexpr std::array labels{"Theme","Layout","Colors","Advanced"};
+    HelpyMenu::Tabs("appearance",labels,section);if(!HelpyMenu::BeginBody("Appearance body",section)){HelpyMenu::EndBody();return;}
+    if(section==3){
+    bool advanced=t.advancedMode;if(HelpyImGuiTheme::Toggle("Show advanced controls",&advanced)){HelpyImGuiTheme::Current.advancedMode=advanced;HelpyImGuiTheme::SaveCurrent();}
+    ImGui::Separator();}
     auto& theme=HelpyImGuiTheme::Current;static bool pendingSave=false;const HelpyImGuiTheme::Theme defaults{};
     const auto mix=[](const ImVec4& a,const ImVec4& b,float k){return ImVec4(a.x+(b.x-a.x)*k,a.y+(b.y-a.y)*k,a.z+(b.z-a.z)*k,a.w+(b.w-a.w)*k);};
     const auto lighter=[&](const ImVec4& c,float k){return mix(c,ImVec4(1,1,1,c.w),k);};
@@ -1332,22 +1349,22 @@ void RenderSettings(const HelpyImGuiTheme::Theme& t) {
     const auto sectionActions=[&](const char* id,const auto& resetSection){ImGui::PushID(id);if(ImGui::SmallButton("Reset section")){resetSection();changed();}resetAllButton();ImGui::PopID();};
     const auto optionReset=[&](const char* id,auto& value,const auto& def){ImGui::SameLine();ImGui::PushID(id);if(ImGui::SmallButton("Reset")){value=def;changed();}ImGui::PopID();};
     const auto slider=[&](const char* label,float& value,float lo,float hi,float def,const char* fmt="%.2f"){
-        ImGui::PushID(label);ImGui::AlignTextToFramePadding();ImGui::TextUnformatted(label);if(ImGui::GetContentRegionAvail().x>t.X(300))ImGui::SameLine(t.X(220.0f));
+        ImGui::PushID(label);ImGui::AlignTextToFramePadding();ImGui::TextUnformatted(label);
         const float avail=ImGui::GetContentRegionAvail().x;ImGui::SetNextItemWidth(std::max(t.X(40.0f),avail-t.X(72.0f)));
         if(ImGui::SliderFloat("##value",&value,lo,hi,fmt,ImGuiSliderFlags_AlwaysClamp))changed();optionReset("value-reset",value,def);ImGui::PopID();
     };
     const auto sliderInt=[&](const char* label,int& value,int lo,int hi,int def){
-        ImGui::PushID(label);ImGui::AlignTextToFramePadding();ImGui::TextUnformatted(label);if(ImGui::GetContentRegionAvail().x>t.X(300))ImGui::SameLine(t.X(220.0f));
+        ImGui::PushID(label);ImGui::AlignTextToFramePadding();ImGui::TextUnformatted(label);
         const float avail=ImGui::GetContentRegionAvail().x;ImGui::SetNextItemWidth(std::max(t.X(40.0f),avail-t.X(72.0f)));
         if(ImGui::SliderInt("##value",&value,lo,hi))changed();optionReset("value-reset",value,def);ImGui::PopID();
     };
-    const auto checkbox=[&](const char* label,bool& value,bool def){ImGui::PushID(label);if(ImGui::Checkbox(label,&value))changed();optionReset("value-reset",value,def);ImGui::PopID();};
+    const auto checkbox=[&](const char* label,bool& value,bool def){ImGui::PushID(label);if(HelpyImGuiTheme::Toggle(label,&value))changed();optionReset("value-reset",value,def);ImGui::PopID();};
     const auto color=[&](const char* label,ImVec4& value,const ImVec4& def,bool* bold=nullptr,bool boldDef=false){
-        ImGui::PushID(label);ImGui::AlignTextToFramePadding();ImGui::TextUnformatted(label);ImGui::SameLine(t.X(220.0f));
+        ImGui::PushID(label);ImGui::AlignTextToFramePadding();ImGui::TextUnformatted(label);
         float v[4]{value.x,value.y,value.z,value.w};ImGui::SetNextItemWidth(t.X(58.0f));
         constexpr ImGuiColorEditFlags compactColor=ImGuiColorEditFlags_NoInputs|ImGuiColorEditFlags_AlphaBar|ImGuiColorEditFlags_AlphaPreviewHalf;
         if(ImGui::ColorEdit4("##value",v,compactColor)){value={v[0],v[1],v[2],v[3]};changed();}
-        if(bold){ImGui::SameLine();if(ImGui::Checkbox("Bold",bold))changed();}
+        if(bold){ImGui::SameLine();if(HelpyImGuiTheme::Toggle("Bold",bold))changed();}
         optionReset("value-reset",value,def);
         if(bold){ImGui::SameLine();ImGui::PushID("bold-reset");if(ImGui::SmallButton("Reset bold")){*bold=boldDef;changed();}ImGui::PopID();}
         ImGui::PopID();
@@ -1367,6 +1384,7 @@ void RenderSettings(const HelpyImGuiTheme::Theme& t) {
     const auto layoutPreview=[&](){ImGui::PushID("layout-preview");ImGui::PushStyleColor(ImGuiCol_ChildBg,theme.panel);ImGui::BeginChild("##preview",ImVec2(0,t.Y(115.0f)),true);ImGui::TextUnformatted("Spacing & rounding preview");ImGui::Separator();const auto a=ImGui::GetCursorScreenPos();const float w=std::min(t.X(260.0f),ImGui::GetContentRegionAvail().x),h=t.Y(54.0f);auto* d=ImGui::GetWindowDrawList();d->AddRectFilled(a,ImVec2(a.x+w,a.y+h),ImGui::GetColorU32(theme.panelAlt),t.X(theme.childRounding));d->AddRect(a,ImVec2(a.x+w,a.y+h),ImGui::GetColorU32(theme.border),t.X(theme.childRounding));d->AddText(ImVec2(a.x+t.X(theme.contentPaddingX),a.y+t.Y(theme.contentPaddingY)),ImGui::GetColorU32(theme.text),"Content padding");ImGui::Dummy(ImVec2(w,h));ImGui::EndChild();ImGui::PopStyleColor();ImGui::PopID();};
 
 
+    if(section==3){
     ImGui::SeparatorText("Settings storage");
     int settingsSource=HelpyImGuiTheme::UseUserAppData?1:0;
     ImGui::SetNextItemWidth(t.X(240.0f));
@@ -1376,7 +1394,9 @@ void RenderSettings(const HelpyImGuiTheme::Theme& t) {
         theme=HelpyImGuiTheme::Current;
     }
     ImGui::TextDisabled("Active: %s",HelpyImGuiTheme::FilePath().string().c_str());
-    ImGui::SeparatorText("Appearance");
+    }
+    if(section==0){
+    ImGui::SeparatorText("Theme");
     ImGui::TextWrapped("Settings here and ui.jsonc edit the same live theme. Every section and option can return to the shipped RuneSchema defaults.");
     ImGui::Text("Effective font scale: %.2fx",t.Scale()*theme.fontScale);ImGui::SameLine();ImGui::TextDisabled("DPI %.2fx  density %.2fx",t.Dpi(),theme.density);
 
@@ -1392,7 +1412,7 @@ void RenderSettings(const HelpyImGuiTheme::Theme& t) {
     };
     if(selectedPreset<0||selectedPreset>=presetCount)selectedPreset=std::min(1,std::max(0,presetCount-1));
 
-    if(theme.advancedMode&&ImGui::CollapsingHeader("Color theme presets",ImGuiTreeNodeFlags_DefaultOpen)) {
+    if(ImGui::CollapsingHeader("Color theme presets",ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::TextDisabled("Presets change colors only. Your sizing, layout, cache, and browser preferences stay untouched.");
         ImGui::AlignTextToFramePadding();ImGui::TextUnformatted("Preset");ImGui::SameLine(t.X(220.0f));ImGui::SetNextItemWidth(std::max(t.X(220.0f),ImGui::GetContentRegionAvail().x-t.X(162.0f)));
         const auto preview=presetLabel(selectedPreset);
@@ -1452,14 +1472,6 @@ void RenderSettings(const HelpyImGuiTheme::Theme& t) {
     }
 
     if(HelpyImGuiTheme::SoftButton("Use Dragonwilds Sync colors")){HelpyImGuiTheme::UseSyncColors();changed();}
-    if(!theme.advancedMode) {
-        ImGui::SeparatorText("Size");
-        if(ImGui::SliderFloat("Window scale",&theme.userScale,0.75f,2.0f,"%.2fx"))changed();
-        if(ImGui::SliderFloat("Text scale",&theme.fontScale,0.8f,2.0f,"%.2fx"))changed();
-        LiveLogPanel::RenderColors();
-        ImGui::TextDisabled("Advanced mode adds detailed layout and color controls. Authoring has its own workspace.");
-        if(pendingSave&&!ImGui::IsAnyItemActive()){HelpyImGuiTheme::SaveCurrent();pendingSave=false;}return;
-    }
     if(ImGui::CollapsingHeader("Overall style",ImGuiTreeNodeFlags_DefaultOpen)) {
         sectionActions("overall-style",[&](){
             theme.accent=defaults.accent;theme.accentHover=defaults.accentHover;theme.accentActive=defaults.accentActive;theme.buttonHover=defaults.buttonHover;theme.buttonActive=defaults.buttonActive;theme.selection=defaults.selection;theme.navigationHover=defaults.navigationHover;theme.navigationActive=defaults.navigationActive;theme.scrollbarHover=defaults.scrollbarHover;theme.scrollbarActive=defaults.scrollbarActive;theme.icon=defaults.icon;
@@ -1478,7 +1490,8 @@ void RenderSettings(const HelpyImGuiTheme::Theme& t) {
         ImGui::SameLine();if(ImGui::SmallButton("Reset")){theme.window=defaults.window;theme.panel=defaults.panel;theme.panelAlt=defaults.panelAlt;theme.navigation=defaults.navigation;theme.control=defaults.control;theme.controlHover=defaults.controlHover;theme.controlActive=defaults.controlActive;theme.button=defaults.button;theme.scrollbarTrack=defaults.scrollbarTrack;theme.scrollbar=defaults.scrollbar;theme.border=defaults.border;theme.separator=defaults.separator;theme.scrollFade=defaults.scrollFade;changed();}ImGui::PopID();
     }
 
-    if(ImGui::CollapsingHeader("Display & sizing",ImGuiTreeNodeFlags_DefaultOpen)) {
+    }
+    if(section==1&&ImGui::CollapsingHeader("Display & sizing",ImGuiTreeNodeFlags_DefaultOpen)) {
         sectionActions("display-sizing",[&](){
             theme.itemPageSize=defaults.itemPageSize;
             theme.itemBayBrowseRatio=defaults.itemBayBrowseRatio;theme.dockedBayHeight=defaults.dockedBayHeight;theme.itemCartWidth=defaults.itemCartWidth;
@@ -1494,7 +1507,8 @@ void RenderSettings(const HelpyImGuiTheme::Theme& t) {
         sizingPreview();
     }
 
-    if(ImGui::CollapsingHeader("Backgrounds & surfaces")) {
+    if(section==2){
+    if(ImGui::CollapsingHeader("Backgrounds & surfaces",ImGuiTreeNodeFlags_DefaultOpen)) {
         sectionActions("background-colors",[&](){theme.window=defaults.window;theme.panel=defaults.panel;theme.panelAlt=defaults.panelAlt;theme.navigation=defaults.navigation;theme.control=defaults.control;theme.controlHover=defaults.controlHover;theme.controlActive=defaults.controlActive;theme.button=defaults.button;theme.scrollbarTrack=defaults.scrollbarTrack;theme.scrollbar=defaults.scrollbar;theme.border=defaults.border;theme.separator=defaults.separator;theme.scrollFade=defaults.scrollFade;});
         color("Window",theme.window,defaults.window);color("Panel",theme.panel,defaults.panel);color("Panel alternate / cards",theme.panelAlt,defaults.panelAlt);color("Navigation",theme.navigation,defaults.navigation);color("Control",theme.control,defaults.control);color("Control hover",theme.controlHover,defaults.controlHover);color("Control active",theme.controlActive,defaults.controlActive);color("Button",theme.button,defaults.button);color("Scrollbar track",theme.scrollbarTrack,defaults.scrollbarTrack);color("Scrollbar",theme.scrollbar,defaults.scrollbar);color("Border",theme.border,defaults.border);color("Separator",theme.separator,defaults.separator);color("Scroll fade",theme.scrollFade,defaults.scrollFade);
         surfacePreview();
@@ -1523,7 +1537,8 @@ void RenderSettings(const HelpyImGuiTheme::Theme& t) {
         typographyPreview();
     }
 
-    if(ImGui::CollapsingHeader("Granular layout")) {
+    LiveLogPanel::RenderColors();}
+    if(section==3&&ImGui::CollapsingHeader("Granular layout")) {
         sectionActions("layout",[&](){theme.frameRounding=defaults.frameRounding;theme.childRounding=defaults.childRounding;theme.scrollbarSize=defaults.scrollbarSize;theme.framePaddingX=defaults.framePaddingX;theme.framePaddingY=defaults.framePaddingY;theme.itemSpacingX=defaults.itemSpacingX;theme.itemSpacingY=defaults.itemSpacingY;theme.sectionSpacing=defaults.sectionSpacing;theme.scrollFadeHeight=defaults.scrollFadeHeight;theme.navigationWidth=defaults.navigationWidth;theme.navigationMinWidth=defaults.navigationMinWidth;theme.navigationMaxWidth=defaults.navigationMaxWidth;theme.contentGutter=defaults.contentGutter;theme.contentPaddingX=defaults.contentPaddingX;theme.contentPaddingY=defaults.contentPaddingY;theme.splitterWidth=defaults.splitterWidth;theme.minWindowWidth=defaults.minWindowWidth;theme.minWindowHeight=defaults.minWindowHeight;});
         slider("Frame rounding",theme.frameRounding,0.0f,20.0f,defaults.frameRounding);slider("Child/card rounding",theme.childRounding,0.0f,20.0f,defaults.childRounding);slider("Scrollbar size",theme.scrollbarSize,6.0f,28.0f,defaults.scrollbarSize);
         slider("Frame padding X",theme.framePaddingX,0.0f,24.0f,defaults.framePaddingX);slider("Frame padding Y",theme.framePaddingY,0.0f,24.0f,defaults.framePaddingY);slider("Item spacing X",theme.itemSpacingX,0.0f,30.0f,defaults.itemSpacingX);slider("Item spacing Y",theme.itemSpacingY,0.0f,30.0f,defaults.itemSpacingY);
@@ -1532,14 +1547,15 @@ void RenderSettings(const HelpyImGuiTheme::Theme& t) {
         layoutPreview();
     }
 
-    LiveLogPanel::RenderColors();
-
+    if(section==3){
     ImGui::Dummy(ImVec2(1,t.Y(8.0f)));ImGui::SeparatorText("Theme file & reset");
     if(HelpyImGuiTheme::SoftButton("Reload ui.jsonc")){HelpyImGuiTheme::RequestReload();pendingSave=false;}ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Open ui.jsonc")){const auto path=HelpyImGuiTheme::FilePath();ShellExecuteW(nullptr,L"open",path.c_str(),nullptr,path.parent_path().c_str(),SW_SHOWNORMAL);}ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Reset to RuneSchema defaults"))ImGui::OpenPopup("Reset RuneSchema UI?");
-    if(HelpyImGuiTheme::BeginCenteredModal("Reset RuneSchema UI?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {ImGui::TextWrapped("Restore all RSMK UI colors, typography, scaling, spacing, icon/card sizing, and icon cache limit to the shipped RuneSchema defaults?");if(HelpyImGuiTheme::SoftButton("Reset defaults")){HelpyImGuiTheme::ResetDefaults();ItemGridPicker::ResetViewPreference();SidebarWidthLogical=-1.0f;pendingSave=false;ImGui::CloseCurrentPopup();}ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Cancel"))ImGui::CloseCurrentPopup();ImGui::EndPopup();}
-    ImGui::TextWrapped("%s",HelpyImGuiTheme::Status.c_str());if(pendingSave&&!ImGui::IsAnyItemActive()){HelpyImGuiTheme::SaveCurrent();pendingSave=false;}
+    ImGui::TextWrapped("%s",HelpyImGuiTheme::Status.c_str());}
+    if(HelpyImGuiTheme::BeginCenteredModal("Reset RuneSchema UI?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {ImGui::TextWrapped("Restore Helpy's appearance, spacing and icon cache limit to RuneSchema defaults?");if(HelpyImGuiTheme::SoftButton("Reset defaults")){HelpyImGuiTheme::ResetDefaults();ItemGridPicker::ResetViewPreference();SidebarWidthLogical=-1.0f;pendingSave=false;ImGui::CloseCurrentPopup();}ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Cancel"))ImGui::CloseCurrentPopup();ImGui::EndPopup();}
+    if(pendingSave&&!ImGui::IsAnyItemActive()){HelpyImGuiTheme::SaveCurrent();pendingSave=false;}
 
-    ImGui::Dummy(ImVec2(1,t.Y(12.0f)));ImGui::SeparatorText("Hotkeys");ImGui::TextUnformatted(HelpySettings::HotkeyHint().c_str());ImGui::TextDisabled("Change it in Home > Quick settings.");
+    if(section==3){ImGui::Dummy(ImVec2(1,t.Y(12.0f)));ImGui::SeparatorText("Hotkeys");ImGui::TextUnformatted(HelpySettings::HotkeyHint().c_str());ImGui::TextDisabled("Change it in Settings > Helpy > Startup.");}
+    HelpyMenu::EndBody();
 }
 void RenderServerAccess(){
     ImGui::TextWrapped("Use the connected server's PIN to request items and map travel for your own character. The server executes every request and keeps its quantity and ground checks.");
@@ -1585,40 +1601,36 @@ void RenderSettingsPage(const HelpyImGuiTheme::Theme& t){
         for(size_t i=0;i<labels.size();++i)if(ImGui::Selectable(labels[i],selected==static_cast<int>(i),0,ImVec2(0,t.Y(32))))selected=static_cast<int>(i);
     }
     ImGui::EndChild();ImGui::PopStyleColor();ImGui::SameLine();
-    if(ImGui::BeginChild("##settings-details",ImVec2(0,0),true)){
+    auto surface=t.panel;surface.w=std::max(.94f,surface.w);ImGui::PushStyleColor(ImGuiCol_ChildBg,surface);
+    if(ImGui::BeginChild("##settings-details",ImVec2(0,0),true,ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse)){
         ImGui::SeparatorText(labels[selected]);
         switch(selected){
         case 0:{
-            auto& theme=HelpyImGuiTheme::Current;bool changed=false;
-            changed|=ImGui::Checkbox("Open Helpy as a game overlay",&theme.gameOverlay);
-            ImGui::TextWrapped("The full themed panel runs in Helpy's process over the attached game. Your normal Helpy shortcut opens or hides it. Use windowed or borderless mode; exclusive fullscreen may cover desktop overlays.");
-            ImGui::SetNextItemWidth(std::min(t.X(260),ImGui::GetContentRegionAvail().x));
-            ImGui::TextUnformatted("Overlay opacity");ImGui::SetNextItemWidth(std::min(t.X(260),ImGui::GetContentRegionAvail().x));
-            changed|=ImGui::SliderFloat("##overlay-opacity",&theme.overlayOpacity,.60f,1.f,"%.2f");
-            if(changed)HelpyImGuiTheme::SaveCurrent();
             RuneSchemaSettingsPanel::QuickSettings();break;
         }
-        case 1:RenderServerAccess();break;
+        case 1:if(HelpyMenu::BeginBody("Server access body",0))RenderServerAccess();HelpyMenu::EndBody();break;
         case 2:RuneSchemaSettingsPanel::Render();break;
         case 3:RenderSettings(t);break;
         case 4:RenderDiagnosticsSettings(t);break;
-        case 5:HelpyBackgrounds::Render();break;
+        case 5:if(HelpyMenu::BeginBody("Background settings body",0))HelpyBackgrounds::Render();HelpyMenu::EndBody();break;
         case 6:RenderUpdatesAndRuntime(t);break;
         case 7:{
+            if(!HelpyMenu::BeginBody("Workspace settings body",0)){HelpyMenu::EndBody();break;}
             auto& options=HelpyImGuiTheme::Current.workspaces;bool changed=false;
             ImGui::TextWrapped("Choose the workspaces shown in navigation. Hidden workspaces keep their drafts.");
-            changed|=ImGui::Checkbox("Authoring (inside Tools)",&options.Authoring);
-            changed|=ImGui::Checkbox("Session tools (inside Tools)",&options.Tools);
-            changed|=ImGui::Checkbox("Diagnostics",&options.LiveLog);
-            changed|=ImGui::Checkbox("Server / Co-op",&options.ServerTools);
-            changed|=ImGui::Checkbox("Journal",&options.Journal);
-            if(changed)HelpyImGuiTheme::SaveCurrent();break;
+            changed|=HelpyImGuiTheme::Toggle("Authoring (inside Tools)",&options.Authoring);
+            changed|=HelpyImGuiTheme::Toggle("Session tools (inside Tools)",&options.Tools);
+            changed|=HelpyImGuiTheme::Toggle("Diagnostics",&options.LiveLog);
+            changed|=HelpyImGuiTheme::Toggle("Server / Co-op",&options.ServerTools);
+            changed|=HelpyImGuiTheme::Toggle("Journal",&options.Journal);
+            if(changed)HelpyImGuiTheme::SaveCurrent();HelpyMenu::EndBody();break;
         }
         }
     }
-    ImGui::EndChild();
+    ImGui::EndChild();ImGui::PopStyleColor();
 }
 void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
+    if(CacheBuilderPanel::Requested){CacheBuilderPanel::Requested=false;CurrentPage=Page::Tools;CurrentTool=HelpyNavigation::ToolSection::CacheBuilder;FocusAuthoringTools=true;}
     if(!HelpyNavigation::Available(CurrentPage,t.workspaces,HelpyEnvironment::Server())){
         const auto parent=HelpyNavigation::Parent(CurrentPage);
         CurrentPage=parent!=CurrentPage?parent:Page::Settings;
@@ -1671,9 +1683,18 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
     const auto railAt=ImGui::GetWindowPos(),railSize=ImGui::GetWindowSize();HelpyPreviewHooks::NavigationRail={railAt.x,railAt.y,railAt.x+railSize.x,railAt.y+railSize.y};
 #endif
     ImGui::Dummy(ImVec2(1,t.Y(10.0f)));
-    if(BrandTexture){
+    {
         const float size=std::min(t.X(62.0f),ImGui::GetContentRegionAvail().x);ImGui::SetCursorPosX((ImGui::GetWindowWidth()-size)*0.5f);
-        const auto at=ImGui::GetCursorScreenPos();ImGui::Dummy({size,size});DrawThemedLogo(ImGui::GetWindowDrawList(),at,{at.x+size,at.y+size},t);
+        const auto at=ImGui::GetCursorScreenPos();
+        ImGui::PushStyleColor(ImGuiCol_Text,{0,0,0,0});
+        if(HelpyImGuiTheme::SoftButton("Welcome screen##navigation-logo",{size,size})){
+            SplashEntered=false;SplashExit={};SplashStarted=ImGui::GetTime();
+        }
+        ImGui::PopStyleColor();DrawThemedLogo(ImGui::GetWindowDrawList(),at,{at.x+size,at.y+size},t);
+        if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Return to the welcome screen");
+#if defined(HELPY_PREVIEW)
+        HelpyPreviewHooks::WelcomeLogo=HelpyPreviewHooks::LastRect();
+#endif
     }
     const auto centered=[](const char* text){ImGui::SetCursorPosX(std::max(0.0f,(ImGui::GetWindowWidth()-ImGui::CalcTextSize(text).x)*0.5f));ImGui::TextUnformatted(text);};
     centered("RuneSchema");
@@ -1735,7 +1756,7 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
     ImGui::PushStyleVar(ImGuiStyleVar_Alpha,ImGui::GetStyle().Alpha*pageAlpha);
     if(CurrentPage==Page::Map||CurrentPage==Page::Recipes){
         const size_t index=CurrentPage==Page::Map?0:1;
-        if(HelpyImGuiTheme::SoftButton(DetachedWorkspaces[index]?"Dock back":index==0?"Detach Map":"Detach Recipes"))DetachedWorkspaces[index]=!DetachedWorkspaces[index];
+        if(!HelpyImGuiTheme::NativePresentation&&HelpyImGuiTheme::SoftButton(DetachedWorkspaces[index]?"Dock back":index==0?"Detach Map":"Detach Recipes"))DetachedWorkspaces[index]=!DetachedWorkspaces[index];
     }
     const bool cartAllowed=CurrentPage==Page::Creation||CurrentPage==Page::Recipes||CurrentPage==Page::Spawns||CurrentPage==Page::Map;
     if(cartAllowed){
@@ -1750,7 +1771,8 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
     ItemGridPicker::DockedBay=hasBayDock;
     const float bayHeight=ItemBayLayout::PaneHeight(t.Y(t.dockedBayHeight),std::max(1.0f,ImGui::GetContentRegionAvail().y-t.Y(150)),t.Y(160));
     const float editorHeight=dockBay?(ItemGridPicker::Bay.Expanded?1.f:std::max(t.Y(110),ImGui::GetContentRegionAvail().y-bayHeight-ImGui::GetFrameHeightWithSpacing())):0;
-    const bool scrollVisible=HelpyImGuiTheme::BeginScroll(scrollId.c_str(),ImVec2(0,editorHeight),false);
+    const bool pinned=CurrentPage==Page::Settings||CurrentPage==Page::Tools||CurrentPage==Page::Spawns||CurrentPage==Page::LiveLog||CurrentPage==Page::Journal||CurrentPage==Page::Authoring;
+    const bool scrollVisible=pinned?ImGui::BeginChild(scrollId.c_str(),{0,editorHeight},false,ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse):HelpyImGuiTheme::BeginScroll(scrollId.c_str(),ImVec2(0,editorHeight),false);
     if(scrollVisible&&!(dockBay&&ItemGridPicker::Bay.Expanded)) {
         ImGui::Dummy(ImVec2(1,t.Y(4.0f)));
         auto& pageError=PageErrors[static_cast<size_t>(CurrentPage)];
@@ -1770,7 +1792,7 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
                 case Page::LiveLog:
                     DiagnosticsPanel::Render(DiagnosticStore,&DiagnosticHistory,&DiagnosticMutes);break;
                 case Page::Mods:ModsPanel::Render();break;
-                case Page::BugReport:BugReportPanel::Render();break;
+                case Page::BugReport:BugReportPanel::NexusTexture=HomeLinkTextures[1];BugReportPanel::NexusAccent=HomeNexusAccentTexture;BugReportPanel::Render();break;
                 case Page::SaveEditor:SpawnToolsPanel::RefreshSnapshot(0);SaveEditorPanel::Render(SpawnToolsPanel::UiSnapshot,SpawnToolsPanel::UiRevision);break;
                 case Page::Journal:JournalPanel::Render();break;
                 case Page::DedicatedServer:
@@ -1785,41 +1807,50 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
                     break;
                 case Page::Settings:RenderSettingsPage(t);break;
                 case Page::Authoring:AuthoringPanel::SessionTools=[] {SpawnToolsPanel::RenderSessionCleanup();};AuthoringPanel::OpenSpawns=[] {CurrentPage=Page::Spawns;};AuthoringPanel::Render();break;
-                case Page::Spawns:
-                    {auto selectedSection=CurrentSpawn;
+                case Page::Spawns:{
 #if defined(HELPY_PREVIEW)
-                    if(PreviewSelectSections)selectedSection=PreviewWantedSpawn;
+                    if(PreviewSelectSections)CurrentSpawn=PreviewWantedSpawn;
 #endif
-                    if(ImGui::BeginTabBar("Spawn sections",ImGuiTabBarFlags_Reorderable)) {
-                        if(ImGui::BeginTabItem("Resources",nullptr,SectionFlags(selectedSection==HelpyNavigation::SpawnSection::Resources))){CurrentSpawn=HelpyNavigation::SpawnSection::Resources;SpawnToolsPanel::ForcedActorMode=-1;SpawnToolsPanel::Render(SpawnToolsPanel::View::Resources);ImGui::EndTabItem();}
-                        if(ImGui::BeginTabItem("NPCs",nullptr,SectionFlags(selectedSection==HelpyNavigation::SpawnSection::Npcs))){CurrentSpawn=HelpyNavigation::SpawnSection::Npcs;SpawnToolsPanel::ForcedActorMode=0;SpawnToolsPanel::Render(SpawnToolsPanel::View::Ai);ImGui::EndTabItem();}
-                        if(ImGui::BeginTabItem("AI / Enemies",nullptr,SectionFlags(selectedSection==HelpyNavigation::SpawnSection::Ai))){CurrentSpawn=HelpyNavigation::SpawnSection::Ai;SpawnToolsPanel::ForcedActorMode=1;SpawnToolsPanel::Render(SpawnToolsPanel::View::Ai);ImGui::EndTabItem();}
-                        ImGui::EndTabBar();
-                    }}break;
-                case Page::Tools:
-                    RenderAuthorToolsDownload();
-                    {auto selectedSection=CurrentTool;
+                    int section=static_cast<int>(CurrentSpawn);constexpr std::array labels{"Resources","NPCs","AI / Enemies"};
+                    HelpyMenu::Tabs("spawns",labels,section);CurrentSpawn=static_cast<HelpyNavigation::SpawnSection>(section);
+                    if(HelpyMenu::BeginBody("Spawn body",section)){
+                        SpawnToolsPanel::ForcedActorMode=section==0?-1:section==1?0:1;
+                        SpawnToolsPanel::Render(section==0?SpawnToolsPanel::View::Resources:SpawnToolsPanel::View::Ai);
+                    }HelpyMenu::EndBody();break;
+                }
+                case Page::Tools:{
 #if defined(HELPY_PREVIEW)
-                    if(PreviewSelectSections)selectedSection=PreviewWantedTool;
+                    if(PreviewSelectSections)CurrentTool=PreviewWantedTool;
 #endif
-                    if(ImGui::BeginTabBar("Tools sections",ImGuiTabBarFlags_Reorderable)) {
-                        if(ImGui::BeginTabItem("Item Cache",nullptr,SectionFlags(selectedSection==HelpyNavigation::ToolSection::ItemCache))){CurrentTool=HelpyNavigation::ToolSection::ItemCache;RenderIconCacheSettings(true,true);ImGui::EndTabItem();}
-                        if(t.workspaces.Tools&&ImGui::BeginTabItem("Maintenance",nullptr,SectionFlags(selectedSection==HelpyNavigation::ToolSection::Maintenance))) {
-                            CurrentTool=HelpyNavigation::ToolSection::Maintenance;
-                            ImGui::TextWrapped("Refresh catalogs and players when the installed content changes.");
-                            if(HelpyImGuiTheme::SoftButton("Refresh players"))QueuePlayerRefresh(false);
-                            static bool acknowledged=false;
-                            ImGui::Checkbox("Allow a full scan to load additional candidate assets",&acknowledged);
-                            ImGui::BeginDisabled(!acknowledged||SpawnToolRequests::IsWaiting());
-                            if(HelpyImGuiTheme::SoftButton("Rebuild live catalog")){SpawnToolRequests::Submit({{"Action","IndexQuickCatalog"}});acknowledged=false;}
-                            ImGui::EndDisabled();
-                            ImGui::TextWrapped("%s",SpawnToolsPanel::UiSnapshot.value("Status",std::string{}).c_str());
-                            ImGui::EndTabItem();
-                        }
-                        if(t.workspaces.Tools&&ImGui::BeginTabItem("Session cleanup",nullptr,SectionFlags(selectedSection==HelpyNavigation::ToolSection::Cleanup))){CurrentTool=HelpyNavigation::ToolSection::Cleanup;SpawnToolsPanel::RenderSessionCleanup();ImGui::EndTabItem();}
-                        if(t.workspaces.Tools&&t.advancedMode&&ImGui::BeginTabItem("Building tools",nullptr,SectionFlags(selectedSection==HelpyNavigation::ToolSection::Buildings))){CurrentTool=HelpyNavigation::ToolSection::Buildings;SpawnToolsPanel::Render(SpawnToolsPanel::View::Buildings);ImGui::EndTabItem();}
-                        ImGui::EndTabBar();
-                    }}break;
+                    if(FocusAuthoringTools){FocusAuthoringTools=false;CurrentTool=HelpyNavigation::ToolSection::CacheBuilder;}
+                    using Tool=HelpyNavigation::ToolSection;
+                    constexpr std::array allLabels{"Authoring tools","Item cache","Repair","Maintenance","Session cleanup","Building tools"};
+                    constexpr std::array allRoutes{Tool::CacheBuilder,Tool::ItemCache,Tool::Repair,Tool::Maintenance,Tool::Cleanup,Tool::Buildings};
+                    const size_t count=t.workspaces.Tools?(t.advancedMode?6:5):3;
+                    const auto labels=std::span(allLabels).first(count);const auto routes=std::span(allRoutes).first(count);
+                    const auto found=std::find(routes.begin(),routes.end(),CurrentTool);int section=found==routes.end()?0:static_cast<int>(found-routes.begin());
+                    HelpyMenu::Tabs("utilities",labels,section);CurrentTool=routes[section];
+                    if(HelpyMenu::BeginBody("Utility body",section))switch(CurrentTool){
+                    case Tool::CacheBuilder:
+                        RenderAuthorToolsDownload();
+                        if(ModsPanel::Snapshot.is_null()&&!ModsPanel::Worker.valid())ModsPanel::Start({{"Action","ModsRead"}});ModsPanel::Poll();
+                        CacheBuilderPanel::Render(ModsPanel::Snapshot,ModsPanel::Rows);break;
+                    case Tool::ItemCache:RenderIconCacheSettings(true,true);break;
+                    case Tool::Repair:RuneSchemaRepairPanel::Render();break;
+                    case Tool::Maintenance:{
+                        ImGui::TextWrapped("Refresh catalogs and players when installed content changes.");
+                        if(HelpyImGuiTheme::SoftButton("Refresh players"))QueuePlayerRefresh(false);
+                        static bool acknowledged=false;
+                        HelpyImGuiTheme::Toggle("Allow a full scan to load additional candidate assets",&acknowledged);
+                        ImGui::BeginDisabled(!acknowledged||SpawnToolRequests::IsWaiting());
+                        if(HelpyImGuiTheme::SoftButton("Rebuild live catalog")){SpawnToolRequests::Submit({{"Action","IndexQuickCatalog"}});acknowledged=false;}
+                        ImGui::EndDisabled();ImGui::TextWrapped("%s",SpawnToolsPanel::UiSnapshot.value("Status",std::string{}).c_str());break;
+                    }
+                    case Tool::Cleanup:SpawnToolsPanel::RenderSessionCleanup();break;
+                    case Tool::Buildings:SpawnToolsPanel::Render(SpawnToolsPanel::View::Buildings);break;
+                    default:break;
+                    }HelpyMenu::EndBody();break;
+                }
                 }
             }catch(const std::exception& error){pageError=error.what();}
             catch(...){pageError="An unexpected interface error occurred.";}
@@ -1829,7 +1860,7 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
             }
         }
     }
-    HelpyImGuiTheme::EndScroll(t);
+    if(pinned)ImGui::EndChild();else HelpyImGuiTheme::EndScroll(t);
     if(dockBay){
         ItemGridPicker::ResizeDivider("docked-item-bay-height",true,HelpyImGuiTheme::Current.dockedBayHeight,160,900,-1.0f/std::max(.01f,t.Scale()*t.density));
         ImGui::SeparatorText("Item Bay");
@@ -1871,33 +1902,44 @@ void HelpyStandaloneWindow::PollHotkey(bool down){
     const int key=HelpySettings::Hotkey.load();
     const bool editing=ImGui::GetCurrentContext()&&ImGui::GetIO().WantTextInput&&(key<VK_F1||key>VK_F24);
     const bool modified=(GetAsyncKeyState(VK_CONTROL)|GetAsyncKeyState(VK_MENU)|GetAsyncKeyState(VK_SHIFT)|GetAsyncKeyState(VK_LWIN)|GetAsyncKeyState(VK_RWIN))&0x8000;
-    if(HelpyPopupInput::CanToggle(GameWindow(foreground),OwnsWindow(foreground),editing,modified))Toggle();
+    if(HelpyPopupInput::CanToggle(GameWindow(foreground),OwnsWindow(foreground)||(m_nativeOverlay.Visible()&&foreground==m_gameWindow),editing,modified))Toggle();
 }
 void HelpyStandaloneWindow::ReloadTheme(){if(m_threadId)PostThreadMessageW(m_threadId,ReloadMessage,0,0);}
-void HelpyStandaloneWindow::Shutdown(){if(!m_thread.joinable())return;m_stop=true;HelpyIconPacks::Progress.Cancel=true;if(m_threadId)PostThreadMessageW(m_threadId,StopMessage,0,0);m_thread.join();ModsPanel::Shutdown();HelpyIconPacks::Shutdown();LiveLogPanel::Shutdown();m_threadId=0;m_ready=false;}
+void HelpyStandaloneWindow::Shutdown(){if(!m_thread.joinable())return;m_stop=true;HelpyIconPacks::Progress.Cancel=true;if(m_threadId)PostThreadMessageW(m_threadId,StopMessage,0,0);m_thread.join();HelpyModCacheBuilder::Shutdown();ModsPanel::Shutdown();HelpyIconPacks::Shutdown();LiveLogPanel::Shutdown();m_threadId=0;m_ready=false;}
 std::string HelpyStandaloneWindow::Error() const{std::scoped_lock lock(m_errorMutex);return m_error;}
 void HelpyStandaloneWindow::SetError(std::string value){
     {std::scoped_lock lock(m_errorMutex);if(m_error==value)return;m_error=value;}
     if(!value.empty())try{if(auto* host=PluginRuntimeServices::Host;host&&host->Log){const auto message="[RS-UI-001] "+value;host->Log(RS_LOG_ERROR,"RuneSchema.Helpy",message.c_str());}}catch(...){}
 }
-bool HelpyStandaloneWindow::OpenPopup() {
+bool HelpyStandaloneWindow::OpenPopup(bool desktop) {
     const auto game=GetForegroundWindow();if(!PluginRuntimeServices::ExternalDesktop&&!HelpyEnvironment::Server()&&!GameWindow(game))return false;
     m_gameWindow=GameWindow(game)?game:m_gameWindow;
-    ShowWindow(m_hwnd,IsIconic(m_hwnd)?SW_RESTORE:SW_SHOW);m_visible=true;
+    if(!desktop&&GameWindow(game)&&PluginRuntimeServices::ExternalDesktop&&HelpyImGuiTheme::Current.gameOverlay&&HelpyImGuiTheme::Current.nativeOverlay&&!HelpyEnvironment::Server()){
+        m_gameOverlay.Restore(m_hwnd);ShowWindow(m_hwnd,SW_HIDE);m_nativeOverlay.Show();m_visible=true;
+        if(m_bayWindow)ShowWindow(m_bayWindow,SW_HIDE);if(m_cacheWindow)ShowWindow(m_cacheWindow,SW_HIDE);for(auto& panel:m_workspaces)if(panel.Window)ShowWindow(panel.Window,SW_HIDE);
+        LazyCatalog::FirstOpen(SpawnToolRequests::CurrentGeneration());QueuePlayerRefresh(true);return true;
+    }
+    m_nativeOverlay.Hide();NativeCaption.RefreshControls(m_hwnd);
+    // Fit the hidden surface first; reopening the tray must not resize it twice.
+    if(IsIconic(m_hwnd))ShowWindow(m_hwnd,SW_RESTORE);
+    SyncGameOverlay(true);ShowWindow(m_hwnd,SW_SHOWNOACTIVATE);m_visible=true;
     if(m_bayWindow&&ItemGridPicker::DetachedBay&&!HelpyTaskbar::Current.Contains(HelpyTaskbar::Window::ItemBay))ShowWindow(m_bayWindow,SW_SHOWNOACTIVATE);
     if(m_cacheWindow&&HelpyIconPacks::Detached&&!HelpyTaskbar::Current.Contains(HelpyTaskbar::Window::IconCache))ShowWindow(m_cacheWindow,SW_SHOWNOACTIVATE);
     for(size_t i=0;i<m_workspaces.size();++i)if(m_workspaces[i].Window&&WorkspaceDetached(i)&&!HelpyTaskbar::Current.Contains(WorkspaceTask(i)))ShowWindow(m_workspaces[i].Window,SW_SHOWNOACTIVATE);
-    SyncGameOverlay();SetForegroundWindow(m_hwnd);SetFocus(m_hwnd);
+    const bool overlay=m_gameOverlay.Active()&&GameWindow(game);
+    if(!HelpyGameOverlay::Focus(m_hwnd,m_gameWindow,overlay))PushToast("Click Helpy's taskbar icon to give it keyboard and mouse focus.",5.0);
+    SyncGameOverlay();
 #if !defined(HELPY_PREVIEW)
     if(!LazyCatalog::LocalSubmit)HelpyCachedCatalog::Configure();
 #endif
     LazyCatalog::FirstOpen(SpawnToolRequests::CurrentGeneration());QueuePlayerRefresh(true);return true;
 }
 void HelpyStandaloneWindow::ClosePopup(){
+    m_nativeOverlay.Hide();
     // Closing Helpy must not steal focus back from an unrelated application.
     const auto foreground=GetForegroundWindow();const bool returnToGame=HelpyPopupInput::ReturnToGame(OwnsWindow(foreground),GameWindow(m_gameWindow));
-    m_visible=false;SyncGameOverlay();
     m_visible=false;ShowWindow(m_hwnd,PluginRuntimeServices::ExternalDesktop&&m_tray.Ready()?SW_HIDE:HelpyEnvironment::Server()||PluginRuntimeServices::ExternalDesktop?SW_MINIMIZE:SW_HIDE);
+    SyncGameOverlay();
     if(m_bayWindow)ShowWindow(m_bayWindow,SW_HIDE);
     if(m_cacheWindow)ShowWindow(m_cacheWindow,SW_HIDE);
     for(auto& panel:m_workspaces)if(panel.Window)ShowWindow(panel.Window,SW_HIDE);
@@ -1905,17 +1947,17 @@ void HelpyStandaloneWindow::ClosePopup(){
     if(returnToGame)SetForegroundWindow(m_gameWindow);
 }
 
-void HelpyStandaloneWindow::SyncGameOverlay(){
-    const bool enabled=HelpyImGuiTheme::Current.gameOverlay&&!HelpyEnvironment::Server();
+void HelpyStandaloneWindow::SyncGameOverlay(bool opening){
+    const bool enabled=HelpyImGuiTheme::Current.gameOverlay&&!HelpyEnvironment::Server()&&!m_nativeOverlay.Wanted();
     const auto companions=[&](bool focused){
         HelpyGameOverlay::Companion(m_bayWindow,focused);HelpyGameOverlay::Companion(m_cacheWindow,focused);
         for(const auto& panel:m_workspaces)HelpyGameOverlay::Companion(panel.Window,focused);
     };
-    if(!enabled||!m_visible.load()||IsIconic(m_hwnd)){
-        if(m_gameOverlay.Active())companions(false);
-        m_gameOverlay.Restore(m_hwnd);return;
+    if(!enabled||(!opening&&(!m_visible.load()||IsIconic(m_hwnd)))){
+        if(m_gameOverlay.Focused())companions(false);
+        if(enabled)m_gameOverlay.Suspend(m_hwnd);else m_gameOverlay.Restore(m_hwnd);return;
     }
-    if(enabled&&m_visible.load()&&!GameWindow(m_gameWindow)){
+    if(!GameWindow(m_gameWindow)){
         const auto now=std::chrono::steady_clock::now();
         if(now>=m_nextOverlayGame){
             m_nextOverlayGame=now+std::chrono::seconds(1);m_gameWindow=nullptr;
@@ -1925,9 +1967,9 @@ void HelpyStandaloneWindow::SyncGameOverlay(){
         }
     }
     const auto foreground=GetForegroundWindow();
-    m_gameOverlay.Update(m_hwnd,GameWindow(m_gameWindow)?m_gameWindow:nullptr,enabled,m_visible.load()&&!IsIconic(m_hwnd),
-        GameWindow(foreground)||OwnsWindow(foreground),HelpyImGuiTheme::Current.overlayOpacity);
-    companions(m_gameOverlay.Active()&&(GameWindow(foreground)||OwnsWindow(foreground)));
+    m_gameOverlay.Update(m_hwnd,GameWindow(m_gameWindow)?m_gameWindow:nullptr,enabled,opening||(m_visible.load()&&!IsIconic(m_hwnd)),
+        OwnsWindow(foreground),HelpyImGuiTheme::Current.overlayOpacity,HelpyImGuiTheme::Current.overlaySize);
+    companions(m_gameOverlay.Focused());
 }
 void HelpyStandaloneWindow::ThreadMain() {
     m_threadId=GetCurrentThreadId();
@@ -1938,7 +1980,7 @@ void HelpyStandaloneWindow::ThreadMain() {
     wc.hIconSm=static_cast<HICON>(LoadImageW(m_module,MAKEINTRESOURCEW(IDI_RSMK),IMAGE_ICON,16,16,LR_SHARED));
     const auto cleanup=[&](void*){
         try{nlohmann::json ignored;if(RuneSchemaSettingsPanel::Remote)RuneSchemaSettingsPanel::Remote({{"Action","HelpyVisibility"},{"Visible",false}},ignored);}catch(...){}
-        m_publishedWindow=nullptr;ClosePopup();m_tray.Remove();
+        m_publishedWindow=nullptr;ClosePopup();m_nativeOverlay.Shutdown();HelpyControllerInput::Shutdown();m_tray.Remove();
         LiveLogPanel::DrainPending();StructuredLogFeed::DrainPending();
         DiagnosticHistory.Queue(DiagnosticStore,true);DiagnosticHistory.Close();
         DiagnosticOverlay.Close();StructuredLogFeed::Shutdown();DiagnosticsPanel::Shutdown();
@@ -2009,7 +2051,7 @@ void HelpyStandaloneWindow::ThreadMain() {
         const auto trayLabel=std::wstring(L"Helpy - ")+(HelpyEnvironment::Server()?L"Server":HelpyEnvironment::Current==HelpyEnvironment::Kind::GamePass?L"Game Pass":HelpyEnvironment::Current==HelpyEnvironment::Kind::Epic?L"Epic":L"Steam");
         const auto picture=reinterpret_cast<HICON>(SendMessageW(m_hwnd,WM_GETICON,ICON_SMALL,0));
         if(PluginRuntimeServices::ExternalDesktop&&!m_tray.Add(m_hwnd,picture,trayLabel))SetError("System tray unavailable; Helpy will minimize to the taskbar instead.");
-        if(PluginRuntimeServices::StartHidden){ClosePopup();}else{ShowWindow(m_hwnd,SW_SHOWNOACTIVATE);m_visible=true;}
+        if(PluginRuntimeServices::StartHidden){ClosePopup();}else OpenPopup();
         LazyCatalog::FirstOpen(SpawnToolRequests::CurrentGeneration());
     }
     const auto closeTimer=[](void* timer){if(timer)CloseHandle(timer);};
@@ -2036,14 +2078,14 @@ void HelpyStandaloneWindow::ThreadMain() {
             const bool pressed=fpsHotkey.Poll(fpsDown);
             const bool editing=io.WantTextInput&&(binding->Key<VK_F1||binding->Key>VK_F24);
             const bool modified=(GetAsyncKeyState(VK_CONTROL)|GetAsyncKeyState(VK_MENU)|GetAsyncKeyState(VK_SHIFT)|GetAsyncKeyState(VK_LWIN)|GetAsyncKeyState(VK_RWIN))&0x8000;
-            if(!rebound&&pressed&&binding->Key!=key&&HelpyPopupInput::CanToggle(GameWindow(foreground),OwnsWindow(foreground),editing,modified)){
+            if(!rebound&&pressed&&binding->Key!=key&&HelpyPopupInput::CanToggle(GameWindow(foreground),OwnsWindow(foreground)||(m_nativeOverlay.Visible()&&foreground==m_gameWindow),editing,modified)){
                 HelpyImGuiTheme::Current.showGameFps=!HelpyImGuiTheme::Current.showGameFps;HelpyImGuiTheme::SaveCurrent();
             }
         }
         while(PeekMessageW(&msg,nullptr,0,0,PM_REMOVE)) {
             if(msg.message==WM_QUIT){done=true;break;}
             if(msg.hwnd==nullptr&&msg.message==ToggleMessage) {
-                if(m_visible.load()&&!IsIconic(m_hwnd))ClosePopup();else OpenPopup();
+                if(m_nativeOverlay.Wanted()||(m_visible.load()&&!IsIconic(m_hwnd)))ClosePopup();else OpenPopup();
                 continue;
             }
             if(msg.hwnd==nullptr&&msg.message==ReloadMessage){HelpyImGuiTheme::RequestReload();continue;}
@@ -2056,7 +2098,12 @@ void HelpyStandaloneWindow::ThreadMain() {
             TranslateMessage(&msg);DispatchMessageW(&msg);
         }
         if(done)break;
-        const bool renderable=m_visible.load()&&!IsIconic(m_hwnd);
+        const bool wasNative=m_nativeOverlay.Wanted();
+        m_nativeOverlay.Tick(RuneSchemaSettingsPanel::Remote,PluginRuntimeServices::GameProcessId.load(),PluginRuntimeServices::ExternalDesktop&&HelpyImGuiTheme::Current.gameOverlay&&HelpyImGuiTheme::Current.nativeOverlay&&!HelpyEnvironment::Server(),m_device,HelpyImGuiTheme::Current.overlaySize,1.f);
+        LUID adapter{};if(m_nativeOverlay.AdapterChange(adapter))RebindNativeDevice(adapter);
+        HelpyImGuiTheme::NativeOverlayStatus=m_nativeOverlay.Status;
+        if(wasNative&&!m_nativeOverlay.Wanted()){ClosePopup();if(m_nativeOverlay.Failed()){SetError(m_nativeOverlay.Status);OpenPopup(true);PushToast("Native overlay could not open: "+m_nativeOverlay.Status+". Helpy opened as a window.",10.0);}}
+        const bool renderable=m_visible.load()&&(m_nativeOverlay.Visible()||(!m_nativeOverlay.Wanted()&&!IsIconic(m_hwnd)&&IsWindowVisible(m_hwnd)));
         if(HelpyImGuiTheme::Current.gameOverlay||m_gameOverlay.Active())SyncGameOverlay();
         if(!publishedVisibility||*publishedVisibility!=renderable){
             publishedVisibility=renderable;nlohmann::json ignored;
@@ -2075,7 +2122,7 @@ void HelpyStandaloneWindow::ThreadMain() {
         static const DiagnosticToastFeed::Feed noGameToasts;
         DiagnosticOverlay.Update(m_module,gameFocused?foreground:nullptr,gameToasts?DiagnosticFeed:noGameToasts,performance,gameFocused,gameFocused&&performance.showGameFps?HelpyPerformance::GameLabel():std::string{});
         if(renderable&&std::chrono::steady_clock::now()>=NextPlayerRefresh)QueuePlayerRefresh(true);
-        if(pacing.Due(std::chrono::steady_clock::now(),renderable,OwnsWindow(GetForegroundWindow()),HelpyImGuiTheme::Current.helpyFpsLimit))RenderFrame();
+        if(pacing.Due(std::chrono::steady_clock::now(),renderable,m_nativeOverlay.Visible()||OwnsWindow(GetForegroundWindow()),HelpyImGuiTheme::Current.helpyFpsLimit))RenderFrame();
         const auto now=std::chrono::steady_clock::now();
         if(renderable&&pacing.Focused&&frameTimer&&pacing.Next>now){
             LARGE_INTEGER due{};due.QuadPart=-std::max<int64_t>(1,std::chrono::duration_cast<std::chrono::nanoseconds>(pacing.Next-now).count()/100);
@@ -2306,12 +2353,14 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 for(const auto& [time,name]:std::array{std::pair{10.0,"runeschema"},std::pair{.5,"dragonwilds"},std::pair{6.2,"blend"}}){
                     HelpyPreviewHooks::SplashElapsed=time;
                     SplashEntered=false;SplashExit={};SplashStarted=ImGui::GetTime()-time;RenderFrame();RenderFrame();
-                    const auto enter=HelpyPreviewHooks::SplashEnter;
+                    auto enter=HelpyPreviewHooks::SplashEnter;
                     if(enter.x<0||enter.y<0||enter.z>width||enter.w>height||enter.z<=enter.x||enter.w<=enter.y)throw std::runtime_error("Splash Enter button escaped the visible surface");
-                    HelpyPreviewHooks::MouseEnabled=true;HelpyPreviewHooks::Mouse={(enter.x+enter.z)*.5f,(enter.y+enter.w)*.5f};HelpyPreviewHooks::MouseDown=false;RenderFrame();
-                    HelpyPreviewHooks::MouseDown=true;RenderFrame();HelpyPreviewHooks::MouseDown=false;RenderFrame();
+                    HelpyPreviewHooks::MouseEnabled=true;HelpyPreviewHooks::MouseDown=false;
+                    // Route changes may settle a previous navigation scroll after the first layout.
+                    for(int frame=0;frame<12;++frame){enter=HelpyPreviewHooks::SplashEnter;HelpyPreviewHooks::Mouse={(enter.x+enter.z)*.5f,(enter.y+enter.w)*.5f};RenderFrame();if(frame>=2&&HelpyPreviewHooks::SplashEnterHovered)break;}
+                    HelpyPreviewHooks::MouseDown=true;for(int frame=0;frame<2;++frame)RenderFrame();HelpyPreviewHooks::MouseDown=false;for(int frame=0;frame<2;++frame)RenderFrame();
                     if(HelpyPreviewHooks::SplashAnimated){
-                        if(!SplashExit.Active||SplashEntered)throw std::runtime_error("Enter must start a bounded exit rather than jump directly to Home");
+                        if(!SplashExit.Active||SplashEntered){PreviewCapture=output/"splash-click-failed.png";RenderFrame();PreviewCapture.clear();throw std::runtime_error("Enter must start a bounded exit: phase="+std::string(name)+" active="+std::to_string(SplashExit.Active)+" entered="+std::to_string(SplashEntered)+" hovered="+std::to_string(HelpyPreviewHooks::SplashEnterHovered)+" presses="+std::to_string(HelpyPreviewHooks::SplashEnterPresses)+" rect="+std::to_string(enter.x)+","+std::to_string(enter.y)+","+std::to_string(enter.z)+","+std::to_string(enter.w));}
                         const auto kind=SplashExit.Kind;const auto started=SplashExit.Started;
                         if(SplashExit.Begin(ImGui::GetTime(),1-SplashExit.InitialBlend)||SplashExit.Started!=started)throw std::runtime_error("Repeated Enter restarted the exit animation");
                         if(std::string_view(name)=="runeschema"&&kind!=HelpySplash::ExitKind::RuneSchema)throw std::runtime_error("RuneSchema must use its bracket exit");
@@ -2391,13 +2440,15 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 HelpyBackgrounds::Preview=true;HelpyBackgrounds::DraftStrength=.2f;
                 PreviewCapture=output/"background-settings.png";RenderFrame();PreviewCapture.clear();
                 BYTE pictureOpacity=0;DWORD pictureFlags=0;COLORREF pictureKey=0;
-                if(!GetLayeredWindowAttributes(m_hwnd,&pictureKey,&pictureOpacity,&pictureFlags)||pictureOpacity!=255||!HelpyBackgrounds::Opaque())throw std::runtime_error("A picture background must block underlying native windows");
+                const bool pictureOpaque=m_composition.Active()?m_composition.AppliedOpacity()==1.f:GetLayeredWindowAttributes(m_hwnd,&pictureKey,&pictureOpacity,&pictureFlags)&&pictureOpacity==255;
+                if(!pictureOpaque||!HelpyBackgrounds::Opaque())throw std::runtime_error("A picture background must block underlying native windows");
                 if(!HelpyPreviewHooks::BackgroundDraws||!HelpyImGuiTheme::Current.backgroundFile.empty())throw std::runtime_error("Background preview must draw without saving the draft");
                 CurrentPage=Page::Home;PreviewCapture=output/"background-home.png";RenderFrame();PreviewCapture.clear();
                 if(!HelpyPreviewHooks::BackgroundDraws)throw std::runtime_error("Home must use the same preview background");
                 HelpyBackgrounds::Preview=false;HelpyBackgrounds::DraftStrength=.12f;PreviewBackgroundsTab=false;RenderFrame();
                 BYTE glassOpacity=0;DWORD glassFlags=0;COLORREF glassKey=0;
-                if(!GetLayeredWindowAttributes(m_hwnd,&glassKey,&glassOpacity,&glassFlags)||glassOpacity!=static_cast<BYTE>(std::clamp(HelpyImGuiTheme::Current.windowOpacity,.6f,1.f)*255)||HelpyBackgrounds::Opaque())throw std::runtime_error("Clear glass must restore configured native transparency");
+                const float expectedOpacity=std::clamp(HelpyImGuiTheme::Current.windowOpacity,.6f,1.f);const bool glassTransparent=m_composition.Active()?std::abs(m_composition.AppliedOpacity()-expectedOpacity)<.001f:GetLayeredWindowAttributes(m_hwnd,&glassKey,&glassOpacity,&glassFlags)&&glassOpacity==static_cast<BYTE>(expectedOpacity*255);
+                if(!glassTransparent||HelpyBackgrounds::Opaque())throw std::runtime_error("Clear glass must restore configured native transparency");
             }
             {const auto previous=CurrentPage;CurrentPage=Page::Items;HelpyPreviewHooks::PageTransitionElapsed=.04;
                 PreviewCapture=output/"page-transition.png";RenderFrame();PreviewCapture.clear();
@@ -2517,8 +2568,72 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
             PreviewCapture=output/"updates-runtime.png";RenderFrame();PreviewCapture.clear();PreviewUpdatesTab=false;
             SettingsCategory=0;for(int i=0;i<3;++i)RenderFrame();
             PreviewCapture=output/"settings-panels.png";RenderFrame();PreviewCapture.clear();
+            {
+                namespace Hooks=HelpyPreviewHooks;
+                const bool savedOverlay=HelpyImGuiTheme::Current.gameOverlay;
+                const auto draft=RuneSchemaSettingsPanel::Draft;
+                const auto click=[&](ImVec4 rect){
+                    if(rect.z<=rect.x||rect.w<=rect.y||rect.x<0||rect.y<0||rect.z>width||rect.w>height)throw std::runtime_error("Settings navigation control is clipped");
+                    Hooks::MouseEnabled=true;Hooks::Mouse={(rect.x+rect.z)*.5f,(rect.y+rect.w)*.5f};
+                    Hooks::MouseDown=false;RenderFrame();Hooks::MouseDown=true;RenderFrame();Hooks::MouseDown=false;for(int i=0;i<3;++i)RenderFrame();
+                };
+                HelpyImGuiTheme::Current.gameOverlay=false;RenderFrame();
+                if(!Hooks::OverlayOpacityDisabled)throw std::runtime_error("Regular window mode must disable overlay-only settings");
+                click(Hooks::OverlayToggle);
+                if(!HelpyImGuiTheme::Current.gameOverlay||Hooks::OverlayOpacityDisabled)throw std::runtime_error("Overlay switch did not enable the overlay controls");
+                PreviewCapture=output/"settings-overlay.png";RenderFrame();PreviewCapture.clear();
+                click(Hooks::OverlayToggle);
+                if(HelpyImGuiTheme::Current.gameOverlay||!Hooks::OverlayOpacityDisabled)throw std::runtime_error("Overlay switch did not restore regular window mode");
+                click(Hooks::WelcomeLogo);
+                if(SplashEntered||!Hooks::SplashVisible||RuneSchemaSettingsPanel::Draft!=draft)throw std::runtime_error("Logo must return to the splash without discarding settings drafts");
+                PreviewCapture=output/"welcome-return.png";RenderFrame();PreviewCapture.clear();
+                SplashEntered=true;SplashExit={};CurrentPage=Page::Settings;
+                HelpyImGuiTheme::Current.gameOverlay=savedOverlay;HelpyImGuiTheme::SaveCurrent();
+                Hooks::MouseEnabled=false;Hooks::Mouse={-100,-100};for(int i=0;i<3;++i)RenderFrame();
+            }
+            {
+                RuneSchemaSettingsPanel::Load();
+                namespace Hooks=HelpyPreviewHooks;const auto draft=RuneSchemaSettingsPanel::Draft;
+                const auto visit=[&](int category,const char* group,const auto& labels){
+                    SettingsCategory=category;for(int frame=0;frame<3;++frame)RenderFrame();
+                    int index=0;for(const char* label:labels){const auto key=std::string(group)+"/"+label;const auto rect=Hooks::MenuTabs.at(key);
+                        if(rect.x<0||rect.y<0||rect.z>width||rect.w>height||rect.z<=rect.x||rect.w<=rect.y)throw std::runtime_error("Settings tab is clipped: "+key);
+                        Hooks::MouseEnabled=true;Hooks::Mouse={(rect.x+rect.z)*.5f,(rect.y+rect.w)*.5f};Hooks::MouseDown=false;RenderFrame();Hooks::MouseDown=true;RenderFrame();Hooks::MouseDown=false;for(int frame=0;frame<3;++frame)RenderFrame();
+                        PreviewCapture=output/(std::string(group)+"-"+std::to_string(index++)+".png");RenderFrame();PreviewCapture.clear();
+                        if(RuneSchemaSettingsPanel::Draft!=draft)throw std::runtime_error("Switching settings tabs discarded a draft");
+                    }
+                    Hooks::MouseEnabled=false;Hooks::Mouse={-100,-100};
+                };
+                visit(0,"helpy-settings",std::array{"Display","Startup","Cache","Performance","Saves"});
+                visit(2,"runeschema-settings",std::array{"General","Saves","Content","Network","Advanced"});
+                visit(3,"appearance",std::array{"Theme","Layout","Colors","Advanced"});
+                visit(4,"diagnostic-settings",std::array{"Alerts","History","Muted"});
+                visit(6,"update-settings",std::array{"Resources","RuneSchema","UE4SS"});
+                RuneSchemaSettingsPanel::QuickSection=0;
+            }
             SettingsCategory=1;for(int i=0;i<3;++i)RenderFrame();
             PreviewCapture=output/"settings-server-access.png";RenderFrame();PreviewCapture.clear();SettingsCategory=0;
+            {
+                const auto previous=CurrentPage;const auto wanted=PreviewWantedTool;
+                CurrentPage=Page::Tools;PreviewWantedTool=HelpyNavigation::ToolSection::Repair;
+                for(int i=0;i<4;++i)RenderFrame();
+                if(!HelpyPreviewHooks::RepairConsole||HelpyPreviewHooks::RepairButton.z<=HelpyPreviewHooks::RepairButton.x)throw std::runtime_error("Repair must expose its button and console offline");
+                PreviewCapture=output/"runeschema-repair.png";RenderFrame();PreviewCapture.clear();CurrentPage=previous;PreviewWantedTool=wanted;
+            }
+            {
+                const auto previous=CurrentPage;const auto tool=CurrentTool;const bool selectSections=PreviewSelectSections;PreviewSelectSections=false;
+                CurrentPage=Page::Tools;CurrentTool=HelpyNavigation::ToolSection::CacheBuilder;FocusAuthoringTools=true;
+                CacheBuilderPanel::PreviewTab=0;for(int i=0;i<4;++i)RenderFrame();
+                PreviewCapture=output/"cache-builder-installed.png";RenderFrame();PreviewCapture.clear();
+                CacheBuilderPanel::PreviewTab=1;for(int i=0;i<4;++i)RenderFrame();
+                if(!HelpyPreviewHooks::CacheBuilderCreation)throw std::runtime_error("Creation tab must be reachable independently of the game");
+                PreviewCapture=output/"cache-builder-creation.png";RenderFrame();PreviewCapture.clear();
+                CacheBuilderPanel::PreviewTab=-1;
+                CacheBuilderPanel::FocusInstalled({{"Root","C:/RuneSchema"}},{{"Name","Example"},{"Folder","C:/RuneSchema/mods/Example"}});
+                for(int i=0;i<4;++i)RenderFrame();
+                if(CurrentPage!=Page::Tools||CurrentTool!=HelpyNavigation::ToolSection::CacheBuilder||CacheBuilderPanel::SelectedTab)throw std::runtime_error("Mod context action must focus the installed cache builder");
+                CacheBuilderPanel::Root.clear();CacheBuilderPanel::Folder.clear();CacheBuilderPanel::Owner.clear();CurrentPage=previous;CurrentTool=tool;PreviewSelectSections=selectSections;
+            }
             CurrentPage=Page::Items;
             for(const auto kind:{HelpyEnvironment::Kind::Steam,HelpyEnvironment::Kind::Epic,HelpyEnvironment::Kind::SteamEpic,HelpyEnvironment::Kind::GamePass,HelpyEnvironment::Kind::Dedicated,HelpyEnvironment::Kind::Unknown}) {
                 HelpyEnvironment::Current=kind;
@@ -2587,10 +2702,12 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 PreviewCapture=output/"bug-report-form.png";RenderFrame();PreviewCapture.clear();
                 const auto titleRect=Hooks::BugFields.at("Title");if(titleRect.x<0||titleRect.z>width||titleRect.y<0||titleRect.w>height)throw std::runtime_error("Bug-report title field escaped the viewport");
                 BugReportPanel::ScrollToSubmit=true;for(int frame=0;frame<4;++frame)RenderFrame();BugReportPanel::ScrollToSubmit=false;
+                const auto copy=Hooks::BugCopy;Hooks::MouseEnabled=true;Hooks::Mouse={(copy.x+copy.z)*.5f,(copy.y+copy.w)*.5f};Hooks::MouseDown=false;for(int frame=0;frame<2;++frame)RenderFrame();Hooks::MouseDown=true;for(int frame=0;frame<2;++frame)RenderFrame();Hooks::MouseDown=false;for(int frame=0;frame<3;++frame)RenderFrame();
+                if(!BugReportPanel::CopiedBody.starts_with("Title: Item icons disappear after menu return\n")||BugReportPanel::CopiedBody.find("Category: Cache / icons")==std::string::npos)throw std::runtime_error("Copy bug report must retain the full plain-text form");
                 const auto submit=Hooks::BugSubmit;if(submit.y<0||submit.w>height||submit.z<=submit.x)throw std::runtime_error("Bug-report submit control is not scroll-reachable");
                 Hooks::MouseEnabled=true;Hooks::Mouse={(submit.x+submit.z)*.5f,(submit.y+submit.w)*.5f};Hooks::MouseDown=true;RenderFrame();Hooks::MouseDown=false;RenderFrame();RenderFrame();
-                if(!BugReportPanel::OpenedUrl.starts_with(std::string(BugReport::NewIssue)+"?title=")||BugReportPanel::OpenedUrl.find("Cache%20%2F%20icons")==std::string::npos||BugReportPanel::Status.find("has not submitted")==std::string::npos)throw std::runtime_error("Bug-report action must prepare a categorized GitHub draft, not claim submission");
-                PreviewCapture=output/"bug-report-github-review.png";RenderFrame();PreviewCapture.clear();
+                if(BugReportPanel::OpenedUrl!=BugReport::NexusPage||BugReportPanel::Status.find("has not submitted")==std::string::npos)throw std::runtime_error("Bug-report action must open the Nexus bugs page without claiming submission");
+                PreviewCapture=output/"bug-report-nexus.png";RenderFrame();PreviewCapture.clear();
                 Hooks::MouseEnabled=false;CurrentPage=Page::Items;RenderFrame();CurrentPage=Page::BugReport;RenderFrame();
                 if(std::string(BugReportPanel::Title)!="Item icons disappear after menu return")throw std::runtime_error("Navigation discarded the report draft");
                 BugReportPanel::Title[0]=BugReportPanel::Details[0]=BugReportPanel::Steps[0]=BugReportPanel::Expected[0]=BugReportPanel::Additional[0]=0;BugReportPanel::Status.clear();BugReportPanel::OpenedUrl.clear();BugReportPanel::CopiedBody.clear();BugReportPanel::Category=0;
@@ -2620,11 +2737,11 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 HelpyImGuiTheme::Current.workspaces=enabledWorkspaces;
                 for(size_t index=0;index<HomeDestinations.size();++index){
                     if(!HelpyNavigation::Available(HomeDestinations[index].Target,enabledWorkspaces,HelpyEnvironment::Server()))continue;
-                    CurrentPage=Page::Home;for(int i=0;i<3;++i)RenderFrame();const auto rect=PreviewHomeTiles[index];
+                    Hooks::Mouse={-100,-100};Hooks::MouseDown=false;CurrentPage=Page::Home;for(int i=0;i<24;++i)RenderFrame();const auto rect=PreviewHomeTiles[index];
                     if(rect.x<0||rect.z>ImGui::GetIO().DisplaySize.x||rect.y<0||rect.w>ImGui::GetIO().DisplaySize.y||std::abs((rect.z-rect.x)-(rect.w-rect.y))>1)
                         throw std::runtime_error("Home destination tile is clipped or not square");
                     Hooks::Mouse=center(rect);for(int i=0;i<2;++i)RenderFrame();
-                    if(HomeFocused!=index||!PreviewHomeHoverDetails)throw std::runtime_error("Home hover details do not follow the hovered tile");
+                    if(HomeFocused!=index||!PreviewHomeHoverDetails){PreviewCapture=output/"home-hover-failed.png";RenderFrame();PreviewCapture.clear();throw std::runtime_error("Home hover details do not follow the hovered tile: expected="+std::to_string(index)+" focused="+std::to_string(HomeFocused)+" details="+std::to_string(PreviewHomeHoverDetails)+" exit="+std::to_string(HomeExit.Active)+" rect="+std::to_string(rect.x)+","+std::to_string(rect.y)+","+std::to_string(rect.z)+","+std::to_string(rect.w));}
                     const auto tip=PreviewHomeTooltip;const float tipWidth=tip.z-tip.x,tipCenter=(tip.x+tip.z)*.5f;
                     if(tipWidth>HelpyImGuiTheme::Current.X(200)+1||tip.x<0||tip.y<0||tip.z>ImGui::GetIO().DisplaySize.x||tip.w>ImGui::GetIO().DisplaySize.y){
                         PreviewCapture=output/"home-tooltip-layout-failed.png";RenderFrame();PreviewCapture.clear();
@@ -2741,8 +2858,9 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 if(PreviewHomeQuickPopup.x<0||PreviewHomeQuickPopup.y<0||PreviewHomeQuickPopup.z>ImGui::GetIO().DisplaySize.x||PreviewHomeQuickPopup.w>ImGui::GetIO().DisplaySize.y)throw std::runtime_error("Quick settings escaped the viewport");
                 if(PreviewHomeQuickPopup.w-PreviewHomeQuickPopup.y<HelpyImGuiTheme::Current.Y(400))throw std::runtime_error("Quick settings must open as a usable scrollable panel");
                 PreviewCapture=output/"home-quick-settings.png";RenderFrame();PreviewCapture.clear();
-                click(Hooks::AuthoringButtons.at("Quick performance"));
-                const auto fpsBounds=Hooks::AuthoringButtons.at("Game FPS overlay");
+                const auto revealQuick=[&](const char* label){for(unsigned i=0;i<8;++i){RenderFrame();const auto found=Hooks::AuthoringButtons.find(label);if(found==Hooks::AuthoringButtons.end())throw std::runtime_error(std::string("Quick settings control missing: ")+label);const auto rect=found->second;if(rect.y>=PreviewHomeQuickPopup.y+40&&rect.w<PreviewHomeQuickPopup.w-45)return;ImGuiWindow* child=nullptr;for(auto* window:ImGui::GetCurrentContext()->Windows)if(std::strstr(window->Name,"Quick settings body")){child=window;break;}if(!child)throw std::runtime_error("Quick settings scroll panel missing");ImGui::SetScrollFromPosY(child,rect.y-child->Pos.y,.25f);}throw std::runtime_error(std::string("Quick settings control is not reachable: ")+label);};
+                click(Hooks::MenuTabs.at("helpy-settings/Performance"));
+                revealQuick("Game FPS overlay");const auto fpsBounds=Hooks::AuthoringButtons.at("Game FPS overlay");
                 if(fpsBounds.x<PreviewHomeQuickPopup.x||fpsBounds.z>PreviewHomeQuickPopup.z||fpsBounds.w>PreviewHomeQuickPopup.w)throw std::runtime_error("Performance controls escaped Quick settings");
                 const auto overlayBefore=HelpyImGuiTheme::Current.showGameFps;click(fpsBounds);
                 if(HelpyImGuiTheme::Current.showGameFps==overlayBefore)throw std::runtime_error("In-game FPS toggle did not apply");
@@ -2861,7 +2979,7 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 }
                 Hooks::MouseEnabled=false;Hooks::Mouse={-20,-20};
                 authoringFixture.Seed();
-                for(int i=0;i<IM_ARRAYSIZE(AuthoringPanel::Sections);++i){AuthoringPanel::Current=static_cast<AuthoringPanel::Section>(i);for(int frame=0;frame<3;++frame)RenderFrame();PreviewCapture=output/("authoring-"+std::to_string(i)+".png");RenderFrame();PreviewCapture.clear();}
+                for(size_t i=0;i<AuthoringPanel::Sections.size();++i){AuthoringPanel::Current=static_cast<AuthoringPanel::Section>(i);for(int frame=0;frame<3;++frame)RenderFrame();PreviewCapture=output/("authoring-"+std::to_string(i)+".png");RenderFrame();PreviewCapture.clear();}
                 AuthoringPanel::Current=AuthoringPanel::Section::Content;
                 for(const auto* loader:{"players","nameplates"}){AuthoringPanel::Copy(AuthoringPanel::Loader,sizeof(AuthoringPanel::Loader),loader);AuthoringPanel::Builder=1;RenderFrame();PreviewCapture=output/(std::string("authoring-builder-")+loader+".png");RenderFrame();PreviewCapture.clear();}
                 AuthoringPanel::Copy(AuthoringPanel::Loader,sizeof(AuthoringPanel::Loader),"assets");AuthoringPanel::Builder=0;
@@ -3500,7 +3618,9 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                     const auto color=PartyMemberView::NativeColor(avatar);check(color.has_value(),"Native multiplayer color was rejected");const auto expectedTint=ImGui::GetColorU32(*color);const auto key=avatar.value("Path",std::string{});
                     MapPanel::Data.Next=MapPanel::Clock::now()+std::chrono::seconds(20);for(int i=0;i<10;++i)RenderFrame();
                     check(Hooks::MapPlayerTints.contains(key)&&Hooks::MapPlayerTints.at(key)==expectedTint,"Map portrait must use its own native multiplayer tint");
-                    check(PlayerPortraitPicker::Pictures.contains(PlayerPortraits::Identity(PlayerPortraitPicker::PictureId(member))),"Saved circular portrait did not load for the map");
+                    const auto portraitKey=PlayerPortraits::Identity(PlayerPortraitPicker::PictureId(member));const auto portraitDeadline=GetTickCount64()+2000;
+                    while(!PlayerPortraitPicker::Pictures.contains(portraitKey)&&GetTickCount64()<portraitDeadline){RenderFrame();Sleep(1);}
+                    check(PlayerPortraitPicker::Pictures.contains(portraitKey),"Saved circular portrait did not load for the map");
                     PreviewCapture=output/"portrait-circle-map-tint.png";RenderFrame();PreviewCapture.clear();MapPanel::Data.Snapshot["Players"]=savedPlayers;
                     auto unknown=member;unknown["NativePlayerColorVerified"]=false;unknown["NativePlayerColor"]={1,0,0,1};check(!PartyMemberView::NativeColor(unknown),"Unverified color must not tint a portrait");
                 }
@@ -3541,6 +3661,29 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 if(!PlayerInventoryPanel::Container||!m_workspaces[4].Window||PlayerInventoryPanel::Snapshot.value("Player",std::string{})!="preview-chest"||PlayerInventoryPanel::Snapshot.value("CanDeposit",true))throw std::runtime_error("Map chest click failed identity-bound read-only inspection: "+nlohmann::json{{"Target",PlayerInventoryPanel::Target},{"Snapshot",PlayerInventoryPanel::Snapshot},{"Status",PlayerInventoryPanel::Status},{"MapChest",{Hooks::MapChest.x,Hooks::MapChest.y,Hooks::MapChest.z,Hooks::MapChest.w}},{"MapError",MapPanel::Data.Error}}.dump());
                 CapturePreview(m_device,m_context,m_workspaces[4].Swap,output/"map-chest-inspector.png");SendMessageW(m_workspaces[4].Window,WM_CLOSE,0,0);RenderFrame();
             }
+            {
+                const auto previous=HelpyImGuiTheme::Current.inputMode;const auto glyphs=HelpyImGuiTheme::Current.controllerGlyphs;
+                HelpyImGuiTheme::Current.inputMode=2;HelpyImGuiTheme::Current.controllerGlyphs=2;CurrentPage=Page::Items;
+                for(unsigned i=0;i<3;++i)RenderFrame();if(!HelpyControllerInput::Selection.Controller)throw std::runtime_error("Forced controller navigation did not activate");CapturePreview(m_device,m_context,m_swapChain,output/"controller-navigation.png");
+                HelpyImGuiTheme::Current.inputMode=previous;HelpyImGuiTheme::Current.controllerGlyphs=glyphs;
+            }
+            {
+                HelpyPreviewHooks::MouseEnabled=false;const auto mode=HelpyImGuiTheme::Current.inputMode;const auto opacity=HelpyImGuiTheme::Current.overlayOpacity;const auto background=HelpyImGuiTheme::Current.backgroundFile;HelpyImGuiTheme::Current.inputMode=2;HelpyImGuiTheme::Current.overlayOpacity=.65f;HelpyImGuiTheme::Current.backgroundFile.clear();CurrentPage=Page::Items;
+                Microsoft::WRL::ComPtr<ID3D11Device> oldDevice=m_device;Microsoft::WRL::ComPtr<IDXGIDevice> oldDxgi;Microsoft::WRL::ComPtr<IDXGIAdapter> selected;DXGI_ADAPTER_DESC gpu{};
+                if(FAILED(m_device->QueryInterface(IID_PPV_ARGS(&oldDxgi)))||FAILED(oldDxgi->GetAdapter(&selected))||FAILED(selected->GetDesc(&gpu)))throw std::runtime_error("Native adapter fixture unavailable");
+                auto* retired=IM_NEW(ImTextureData)();retired->Create(ImTextureFormat_RGBA32,2,2);retired->RefCount=1;retired->SetStatus(ImTextureStatus_Destroyed);ImGui::RegisterUserTexture(retired);ImGui::GetPlatformIO().Textures.push_back(retired);ItemIconCache::detail::State().RetiredTextures.push_back(retired);
+                const auto cachedRows=LazyCatalog::For(0).Rows.size();const auto mapImage=MapPanel::Data.ImageFile;
+                RebindNativeDevice(gpu.AdapterLuid);if(m_device==oldDevice.Get()||m_nativeOverlay.Failed()||LazyCatalog::For(0).Rows.size()!=cachedRows||(!mapImage.empty()&&(!MapPanel::Data.Texture||MapPanel::Data.ImageFile!=mapImage)))throw std::runtime_error("Native UI device migration lost cached content");oldDevice.Reset();oldDxgi.Reset();selected.Reset();
+                m_nativeOverlay.PreviewSurface(m_device,width,height);RenderFrame();RenderFrame();if(!ImGui::GetIO().MouseDrawCursor)throw std::runtime_error("Native presentation did not enable its own cursor");
+                const auto published=HelpyOverlayFrames::Read(m_nativeOverlay.Page()->Published);if(published<0)throw std::runtime_error("Native UI did not publish its shared surface");
+                Microsoft::WRL::ComPtr<ID3D11Resource> picture;m_nativeOverlay.Target(published)->GetResource(&picture);Microsoft::WRL::ComPtr<ID3D11Texture2D> back;const auto read=m_swapChain->GetBuffer(0,IID_PPV_ARGS(&back));if(FAILED(read))throw std::runtime_error("Native UI capture target unavailable");
+                m_context->OMSetRenderTargets(0,nullptr,nullptr);m_context->CopyResource(back.Get(),picture.Get());CapturePreview(m_device,m_context,m_swapChain,output/"native-controller-surface.png");
+                D3D11_TEXTURE2D_DESC sample{};back->GetDesc(&sample);sample.BindFlags=0;sample.MiscFlags=0;sample.Usage=D3D11_USAGE_STAGING;sample.CPUAccessFlags=D3D11_CPU_ACCESS_READ;Microsoft::WRL::ComPtr<ID3D11Texture2D> readback;
+                if(FAILED(m_device->CreateTexture2D(&sample,nullptr,&readback)))throw std::runtime_error("Native alpha readback unavailable");m_context->CopyResource(readback.Get(),picture.Get());D3D11_MAPPED_SUBRESOURCE mapped{};if(FAILED(m_context->Map(readback.Get(),0,D3D11_MAP_READ,0,&mapped)))throw std::runtime_error("Native alpha map unavailable");
+                size_t glass=0,foreground=0;for(UINT y=0;y<height;++y){const auto* row=static_cast<const unsigned char*>(mapped.pData)+size_t(y)*mapped.RowPitch;for(UINT x=0;x<width;++x){const auto* pixel=row+x*4;if(pixel[3]>0&&pixel[3]<240)++glass;if(pixel[3]==255&&std::max({pixel[0],pixel[1],pixel[2]})>128)++foreground;}}m_context->Unmap(readback.Get(),0);
+                if(glass<size_t(width)*height/20||foreground<20)throw std::runtime_error("Overlay faded foreground controls or lost its translucent backing");
+                if(!HelpyControllerInput::Selection.Controller)throw std::runtime_error("Native controller surface lost its navigation mode");m_nativeOverlay.Shutdown();HelpyImGuiTheme::Current.inputMode=mode;HelpyImGuiTheme::Current.overlayOpacity=opacity;HelpyImGuiTheme::Current.backgroundFile=background;
+            }
             for(const auto& error:PageErrors)if(!error.empty())throw std::runtime_error(error);
             std::ofstream report(output/"render-result.txt");report<<"Rendered all seven production workspaces with synthetic metadata; no game actions called.\n";
             report<<"Cart delivery button stays inside the viewport with a staged item.\n";
@@ -3560,6 +3703,9 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
 #endif
 
 void HelpyStandaloneWindow::RenderFrame() {
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::MenuTabs.clear();
+#endif
     if(!m_device||!m_context||!m_swapChain||!m_target){SetError("Helpy render surface is unavailable after a display change; reopen Helpy after the display is ready.");ClosePopup();return;}
 #if !defined(HELPY_PREVIEW)
     if(!LazyCatalog::LocalSubmit)HelpyCachedCatalog::Configure();
@@ -3573,6 +3719,12 @@ void HelpyStandaloneWindow::RenderFrame() {
         PendingWikiInitialAssets=false;HelpyWikiIcons::Start(MapPanel::WikiNames(),HelpyMapCache::Current().CachedBuild);
     }
     if(HelpyDownloads::Poll()){ReleaseBrandTextures(false);LoadBrandTextures(m_device);}
+    HelpyModCacheBuilder::Poll();
+    if(const auto bundle=HelpyModCacheBuilder::ReadyBundle();!bundle.empty()&&!HelpyIconPacks::Busy()&&!HelpyIconPacks::Building()){
+        HelpyIconPacks::SelectedSource="mods/"+HelpyCacheSources::Lower(HelpyModCacheBuilder::Current().Owner);
+        const bool accepted=HelpyIconPacks::Start(bundle,true);HelpyModCacheBuilder::BundleApplied();
+        if(!accepted)PushToast("Cache created in the mod folder. "+HelpyIconPacks::Status,5.0);
+    }
     const bool packWasBusy=HelpyIconPacks::Busy();HelpyIconPacks::Poll();if(packWasBusy&&!HelpyIconPacks::Busy()&&HelpyIconPacks::CompletionNotify)PushToast(HelpyIconPacks::Status,5.0);
     static uint64_t importedReferences=0;
     if(importedReferences!=HelpyIconPacks::ReferencesRevision){
@@ -3620,7 +3772,7 @@ void HelpyStandaloneWindow::RenderFrame() {
     if(HelpyUpdates::Tick(HelpyImGuiTheme::Current.automaticUpdateChecks,HelpyEnvironment::UpdateChecksAvailable,HelpyEnvironment::RuneSchemaVersion))
         PushToast("RuneSchema update available. See Settings > Updates & runtime.",6.0);
 #endif
-    ApplyCaptionTheme(m_hwnd,HelpyImGuiTheme::Current,false,m_gameOverlay.Active());
+    ApplyCaptionTheme(m_hwnd,HelpyImGuiTheme::Current,false,m_gameOverlay.Active(),&m_composition);
     PlayerPortraitPicker::Pump();SpawnBrowserSettings::Pump();
     PlayerInventoryPanel::BindRecipient=[] {
         using namespace PlayerInventoryPanel;
@@ -3632,8 +3784,24 @@ void HelpyStandaloneWindow::RenderFrame() {
         return true;
     };
     PlayerInventoryPanel::RenderCart=[](float height){SpawnToolsPanel::RenderCartDock({0,height},[]{ImGui::TextWrapped("%s · player inventory",PlayerInventoryPanel::Target.value("Name",std::string("Player")).c_str());});};
-    const bool bayVisible=SyncItemBay(),cacheVisible=SyncIconCache();const std::array workspaceVisible{SyncWorkspacePanel(0),SyncWorkspacePanel(1),SyncWorkspacePanel(2),SyncWorkspacePanel(3),SyncWorkspacePanel(4)};
+    const bool native=m_nativeOverlay.Visible();HelpyImGuiTheme::NativePresentation=native;
+    const bool transparentOverlay=(native||m_gameOverlay.Active())&&(native||m_composition.Active());
+    std::array<bool,7> detached{ItemGridPicker::DetachedBay,HelpyIconPacks::Detached,WorkspaceDetached(0),WorkspaceDetached(1),WorkspaceDetached(2),WorkspaceDetached(3),WorkspaceDetached(4)};
+    if(native){ItemGridPicker::DetachedBay=false;HelpyIconPacks::Detached=false;for(size_t i=0;i<5;++i)WorkspaceDetached(i)=false;}
+    const auto restoreDetached=[&](void*){if(native){ItemGridPicker::DetachedBay=detached[0];HelpyIconPacks::Detached=detached[1];for(size_t i=0;i<5;++i)WorkspaceDetached(i)=detached[i+2];}HelpyImGuiTheme::NativePresentation=false;HelpyImGuiTheme::OverlayRenderScale=1.f;};
+    std::unique_ptr<void,decltype(restoreDetached)> detachedScope(reinterpret_cast<void*>(1),restoreDetached);
+    const bool bayVisible=!native&&SyncItemBay(),cacheVisible=!native&&SyncIconCache();const std::array workspaceVisible{!native&&SyncWorkspacePanel(0),!native&&SyncWorkspacePanel(1),!native&&SyncWorkspacePanel(2),!native&&SyncWorkspacePanel(3),!native&&SyncWorkspacePanel(4)};
+    HelpyImGuiTheme::OverlayRenderScale=(native||m_gameOverlay.Active())?HelpyImGuiTheme::Current.overlayUiScale:1.f;
+    ImGui::GetIO().MouseDrawCursor=native&&!m_nativeOverlay.HardwareCursor();
     ImGui_ImplDX11_NewFrame();ImGui_ImplWin32_NewFrame();auto& frameIo=ImGui::GetIO();const auto& t=HelpyImGuiTheme::Current;SelectUiFontFamily(t.fontFamily);frameIo.FontDefault=UiRegularFont;frameIo.FontGlobalScale=std::clamp(t.Scale()*t.fontScale,0.50f,4.00f);
+    if(native){auto* page=m_nativeOverlay.Page();HelpyOverlayInput::Feed(*page,m_nativeOverlay.GameWindow());frameIo.DisplaySize={float(page->Width),float(page->Height)};frameIo.DisplayFramebufferScale={1,1};const auto pad=HelpyOverlayInput::Pad(*page);HelpyControllerInput::Poll(t.inputMode,&pad);NativeCaption.Controls={LONG(page->Width)-138,NativeCaption.Border,LONG(page->Width),NativeCaption.Height};}
+    else {
+#if defined(HELPY_PREVIEW)
+        const XINPUT_GAMEPAD neutral{};HelpyControllerInput::Poll(t.inputMode,&neutral);
+#else
+        HelpyControllerInput::Poll(t.inputMode);
+#endif
+    }
     MainSurfacePosition={0,0};MainSurfaceSize=frameIo.DisplaySize;DesktopBayLayout::Canvas bayCanvas;
     if(bayVisible||cacheVisible||std::any_of(workspaceVisible.begin(),workspaceVisible.end(),[](bool visible){return visible;})){
         const auto surface=[](HWND window){RECT r{};POINT p{};GetClientRect(window,&r);ClientToScreen(window,&p);return DesktopBayLayout::Rect{float(p.x),float(p.y),float(r.right),float(r.bottom)};};
@@ -3648,7 +3816,8 @@ void HelpyStandaloneWindow::RenderFrame() {
 #if defined(HELPY_PREVIEW)
     frameIo.DeltaTime=1.f/60.f; // Capture I/O and machine load must not advance an input-test animation.
 #endif
-    ImGui::NewFrame();HelpyWikiIcons::Poll();
+    const bool popupAtFrameStart=ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId);
+    ImGui::NewFrame();HelpyControllerInput::Observe(t.inputMode);HelpyWikiIcons::Poll();
     if(!RuneSchemaProfile::Initialized)RuneSchemaProfile::Load(HostServices::StateDirectory());
     if(!HelpyPersonalization::Initialized)HelpyPersonalization::Load(RuneSchemaProfile::Ready?RuneSchemaProfile::Data("labels.json"):HostServices::StateDirectory()/"personalization.json");
     if(!HelpyNavigationOrder::Initialized)HelpyNavigationOrder::Load(HostServices::StateDirectory()/"navigation-order.json");
@@ -3661,14 +3830,17 @@ void HelpyStandaloneWindow::RenderFrame() {
     LazyCatalog::FirstOpen(SpawnToolRequests::CurrentGeneration());
     HelpyWindowChrome::Bounds(MainSurfacePosition,MainSurfaceSize);
     ImGui::SetNextWindowPos(framePosition);ImGui::SetNextWindowSize(frameSize);
-    ImGui::PushStyleColor(ImGuiCol_WindowBg,t.window);ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,0.0f);ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize,0.0f);
+    ImGui::SetNextWindowScroll({0,0}); // Only inner page panels scroll; native caption and splash stay fixed.
+    auto backing=t.window;if(transparentOverlay)backing.w=HelpyBackgrounds::Opaque()?0.f:std::clamp(t.overlayOpacity,.6f,1.f);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg,backing);ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,0.0f);ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize,0.0f);
     if(ImGui::Begin("##RuneSchemaHelpyStandalone",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoFocusOnAppearing|ImGuiWindowFlags_NoBringToFrontOnFocus)) {
-        HelpyBackgrounds::DrawWindow();
+        HelpyBackgrounds::DrawWindow(transparentOverlay?std::clamp(t.overlayOpacity,.6f,1.f):1.f);
         if(NativeCaption.Height){
             const float icon=float(NativeCaption.Icon),inset=8.f*NativeCaption.Dpi/96.f;
             const ImVec2 at{framePosition.x+inset,framePosition.y+(NativeCaption.Height-icon)*.5f};
             DrawThemedLogo(ImGui::GetWindowDrawList(),at,{at.x+icon,at.y+icon},t);
-            HelpyWindowChrome::RenderNativeCaption(NativeCaption,framePosition,t);
+            if(native){HelpyImGuiTheme::Scope captionSkin(t);const auto cursor=ImGui::GetCursorScreenPos();const float width=t.X(64);ImGui::SetCursorScreenPos({framePosition.x+frameSize.x-width-t.X(8),framePosition.y+3});if(HelpyImGuiTheme::SoftButton("Hide",{width,float(std::max(18,NativeCaption.Height-6))}))ClosePopup();ImGui::SetCursorScreenPos(cursor);}
+            else HelpyWindowChrome::RenderNativeCaption(NativeCaption,framePosition,t);
             if(t.showFps){
                 const auto text=HelpyPerformance::Label(HelpyEnvironment::Server());const auto size=ImGui::CalcTextSize(text.c_str());
                 const float right=framePosition.x+NativeCaption.Controls.left-inset;
@@ -3678,6 +3850,8 @@ void HelpyStandaloneWindow::RenderFrame() {
         ImGui::SetCursorPosY(ImGui::GetCursorPosY()+float(NativeCaption.Height));
         HelpyImGuiTheme::Scope skin(t);ImFont* workspaceFont=(t.textBold&&UiBoldFont)?UiBoldFont:UiRegularFont;
         if(workspaceFont)ImGui::PushFont(workspaceFont);
+        const bool controller=HelpyControllerInput::Selection.Controller;
+        if(controller){const float footer=ImGui::GetFrameHeightWithSpacing();MainSurfaceSize.y=std::max(1.f,MainSurfaceSize.y-footer);ItemGridPicker::DetailsSurfaceSize=MainSurfaceSize;HelpyWindowChrome::Bounds(MainSurfacePosition,MainSurfaceSize);ImGui::BeginChild("##controller-content",{0,std::max(1.f,ImGui::GetContentRegionAvail().y-footer)},false);}
         const bool taskbar=HelpyTaskbar::Current.Count()!=0;
         if(taskbar)ImGui::BeginChild("##helpy-workspace-above-taskbar",{0,std::max(1.0f,ImGui::GetContentRegionAvail().y-ImGui::GetFrameHeightWithSpacing()*(HelpyTaskbar::Current.Count()>2?2:1)-t.Y(12))},false);
         RenderWorkspace(t);
@@ -3702,6 +3876,13 @@ void HelpyStandaloneWindow::RenderFrame() {
             restore("Restore Runtime",HelpyTaskbar::Window::Runtime,m_workspaces[2].Window);
             restore("Restore Party",HelpyTaskbar::Window::Party,m_workspaces[3].Window);
             restore("Restore inventory",HelpyTaskbar::Window::Inventory,m_workspaces[4].Window);
+        }
+        if(controller){ImGui::EndChild();HelpyControllerInput::Hints(t.controllerGlyphs);
+            if(!popupAtFrameStart&&!ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId)&&!frameIo.WantTextInput){
+                const int direction=ImGui::IsKeyPressed(ImGuiKey_GamepadR1,false)?1:ImGui::IsKeyPressed(ImGuiKey_GamepadL1,false)?-1:0;
+                if(direction){const auto& pages=HelpyNavigation::SidebarPages;auto found=std::find(pages.begin(),pages.end(),HelpyNavigation::Parent(CurrentPage));const auto at=found==pages.end()?0:int(found-pages.begin());CurrentPage=pages[(at+direction+int(pages.size()))%int(pages.size())];}
+                if(ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight,false))ClosePopup();
+            }
         }
         if(workspaceFont)ImGui::PopFont();
     }
@@ -3766,7 +3947,10 @@ void HelpyStandaloneWindow::RenderFrame() {
     if(UiRegularFont)ImGui::PopFont();}
     // Submit once, after every visible panel has declared this frame's demand.
     ItemIconCache::Update();
-    ImGui::Render();const float clear[4]{t.window.x,t.window.y,t.window.z,t.window.w};m_context->OMSetRenderTargets(1,&m_target,nullptr);m_context->ClearRenderTargetView(m_target,clear);
+    ImGui::Render();
+    if(native)m_nativeOverlay.Cursor(ImGui::GetMouseCursor());
+    if(native){const int slot=m_nativeOverlay.Begin();if(slot>=0){auto* target=m_nativeOverlay.Target(slot);const float clear[4]{};m_context->OMSetRenderTargets(1,&target,nullptr);m_context->ClearRenderTargetView(target,clear);ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());m_nativeOverlay.Publish(slot);}return;}
+    const float clear[4]{transparentOverlay?0.f:t.window.x,transparentOverlay?0.f:t.window.y,transparentOverlay?0.f:t.window.z,transparentOverlay?0.f:t.window.w};m_context->OMSetRenderTargets(1,&m_target,nullptr);m_context->ClearRenderTargetView(m_target,clear);
     auto mainDraw=*ImGui::GetDrawData();mainDraw.DisplayPos=framePosition;mainDraw.DisplaySize=frameSize;
     HelpySurfaceDraw::Filter(mainDraw);
     ImGui_ImplDX11_RenderDrawData(&mainDraw);
@@ -3868,18 +4052,48 @@ void HelpyStandaloneWindow::DestroyIconCache(){
 }
 
 #include "DetachedWorkspaces.inl"
-bool HelpyStandaloneWindow::CreateDevice() {
+bool HelpyStandaloneWindow::CreateDevice(const LUID* requestedAdapter) {
+    Microsoft::WRL::ComPtr<IDXGIAdapter1> adapter;
+    if(requestedAdapter){
+        Microsoft::WRL::ComPtr<IDXGIFactory1> factory;if(FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory))))return false;
+        for(UINT index=0;SUCCEEDED(factory->EnumAdapters1(index,&adapter));++index){DXGI_ADAPTER_DESC1 desc{};if(SUCCEEDED(adapter->GetDesc1(&desc))&&desc.AdapterLuid.LowPart==requestedAdapter->LowPart&&desc.AdapterLuid.HighPart==requestedAdapter->HighPart)break;adapter.Reset();}
+        if(!adapter)return false;
+    }
+    UINT deviceFlags=D3D11_CREATE_DEVICE_BGRA_SUPPORT;D3D_FEATURE_LEVEL feature{};constexpr D3D_FEATURE_LEVEL requested[]{D3D_FEATURE_LEVEL_11_0,D3D_FEATURE_LEVEL_10_0};
+    auto created=D3D11CreateDevice(adapter.Get(),adapter?D3D_DRIVER_TYPE_UNKNOWN:D3D_DRIVER_TYPE_HARDWARE,nullptr,deviceFlags,requested,2,D3D11_SDK_VERSION,&m_device,&feature,&m_context);
+    if(SUCCEEDED(created)&&m_composition.Create(m_device,m_hwnd,&m_swapChain)){CreateTarget();if(m_target)return true;}
+    DestroyDevice();
+    SetWindowLongPtrW(m_hwnd,GWL_EXSTYLE,(GetWindowLongPtrW(m_hwnd,GWL_EXSTYLE)&~WS_EX_NOREDIRECTIONBITMAP)|WS_EX_LAYERED);
     DXGI_SWAP_CHAIN_DESC sd{};sd.BufferCount=2;sd.BufferDesc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;sd.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT;sd.OutputWindow=m_hwnd;
     sd.SampleDesc.Count=1;sd.Windowed=TRUE;sd.SwapEffect=DXGI_SWAP_EFFECT_DISCARD;UINT flags=0;D3D_FEATURE_LEVEL level{};
     constexpr D3D_FEATURE_LEVEL levels[]{D3D_FEATURE_LEVEL_11_0,D3D_FEATURE_LEVEL_10_0};
-    auto hr=D3D11CreateDeviceAndSwapChain(nullptr,D3D_DRIVER_TYPE_HARDWARE,nullptr,flags,levels,2,D3D11_SDK_VERSION,&sd,&m_swapChain,&m_device,&level,&m_context);
-    if(FAILED(hr)&&HelpyEnvironment::Server()){
+    auto hr=D3D11CreateDeviceAndSwapChain(adapter.Get(),adapter?D3D_DRIVER_TYPE_UNKNOWN:D3D_DRIVER_TYPE_HARDWARE,nullptr,flags,levels,2,D3D11_SDK_VERSION,&sd,&m_swapChain,&m_device,&level,&m_context);
+    if(FAILED(hr)&&HelpyEnvironment::Server()&&!requestedAdapter){
         DestroyDevice();
         hr=D3D11CreateDeviceAndSwapChain(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,flags,levels,2,D3D11_SDK_VERSION,&sd,&m_swapChain,&m_device,&level,&m_context);
     }
     if(FAILED(hr))return false;CreateTarget();return m_target!=nullptr;
 }
-void HelpyStandaloneWindow::DestroyDevice(){DestroyTarget();if(m_swapChain){m_swapChain->Release();m_swapChain=nullptr;}if(m_context){m_context->Release();m_context=nullptr;}if(m_device){m_device->Release();m_device=nullptr;}}
+void HelpyStandaloneWindow::RebindNativeDevice(const LUID& adapter){
+    for(auto* texture:ImGui::GetPlatformIO().Textures)if(texture->BackendUserData&&texture->RefCount!=1){m_nativeOverlay.Fail("A shared UI texture prevented graphics-adapter alignment");return;}
+    ItemIconCache::InvalidateSource();std::string mapFile;
+    if(MapPanel::Data.Texture&&!MapPanel::Data.Texture->Pixels){mapFile=MapPanel::Data.ImageFile;MapPanel::Data.Texture->SetStatus(ImTextureStatus_WantDestroy);MapPanel::Data.Retired.push_back(MapPanel::Data.Texture);MapPanel::Data.Texture=nullptr;MapPanel::Data.ImageFile.clear();}
+    std::vector<ImTextureData*> retained;
+    for(auto* texture:ImGui::GetPlatformIO().Textures){
+        if(texture->RefCount==1&&texture->Status!=ImTextureStatus_WantDestroy&&texture->Status!=ImTextureStatus_Destroyed&&texture->GetPixels())retained.push_back(texture);
+    }
+    m_nativeOverlay.AdapterChanged();const auto minimized=HelpyTaskbar::Current;
+    DestroyItemBay();DestroyIconCache();for(size_t i=0;i<m_workspaces.size();++i)DestroyWorkspacePanel(i);HelpyTaskbar::Current=minimized;
+    m_context->ClearState();m_context->Flush();ImGui_ImplDX11_Shutdown();ImGui::GetPlatformIO().Textures.clear();ItemIconCache::ReleaseTextures();MapPanel::Reap();ReleaseBrandTextures();DestroyDevice();
+    bool aligned=CreateDevice(&adapter);
+    if(!aligned){DestroyDevice();if(!CreateDevice())throw std::runtime_error("Helpy's graphics device could not be restored");}
+    if(!ImGui_ImplDX11_Init(m_device,m_context))throw std::runtime_error("Helpy's renderer could not be restored");
+    for(auto* texture:retained)if(!texture->BackendUserData)texture->SetStatus(ImTextureStatus_WantCreate);
+    LoadBrandTextures(m_device);
+    if(!mapFile.empty())try{MapPanel::LoadImage({{"File",mapFile},{"Status","Ready"}},false);}catch(const std::exception& error){SetError(std::string("Map image reload: ")+error.what());}
+    if(!aligned)m_nativeOverlay.Fail("The game's graphics adapter is unavailable; desktop presentation remains available");
+}
+void HelpyStandaloneWindow::DestroyDevice(){DestroyTarget();m_composition.Reset();if(m_swapChain){m_swapChain->Release();m_swapChain=nullptr;}if(m_context){m_context->Release();m_context=nullptr;}if(m_device){m_device->Release();m_device=nullptr;}}
 void HelpyStandaloneWindow::CreateTarget(){if(!m_swapChain)return;ID3D11Texture2D* backBuffer{};if(SUCCEEDED(m_swapChain->GetBuffer(0,IID_PPV_ARGS(&backBuffer)))){m_device->CreateRenderTargetView(backBuffer,nullptr,&m_target);backBuffer->Release();}}
 void HelpyStandaloneWindow::DestroyTarget(){if(m_target){m_target->Release();m_target=nullptr;}}
 
@@ -3888,8 +4102,8 @@ LRESULT CALLBACK HelpyStandaloneWindow::WndProc(HWND hwnd,UINT msg,WPARAM wParam
     if(msg==WM_NCCREATE){const auto* cs=reinterpret_cast<CREATESTRUCTW*>(lParam);self=static_cast<HelpyStandaloneWindow*>(cs->lpCreateParams);SetWindowLongPtrW(hwnd,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(self));}
     if(self&&hwnd==self->m_hwnd&&PluginRuntimeServices::ExternalDesktop){
         if(msg==HelpyTrayIcon::RestartMessage()){self->m_tray.Recreate();if(!self->m_tray.Ready()&&!self->m_visible.load()){ShowWindow(hwnd,SW_MINIMIZE);}return 0;}
-        if(msg==HelpyTrayIcon::Message){const auto event=LOWORD(lParam);if(event==NIN_SELECT||event==NIN_KEYSELECT)self->OpenPopup();else if(event==WM_CONTEXTMENU){const auto command=self->m_tray.Menu(wParam);if(command)PostMessageW(hwnd,WM_COMMAND,command,0);}return 0;}
-        if(msg==WM_COMMAND){if(LOWORD(wParam)==HelpyTrayIcon::Open){self->OpenPopup();return 0;}if(LOWORD(wParam)==HelpyTrayIcon::Exit){self->m_stop=true;return 0;}}
+        if(msg==HelpyTrayIcon::Message){const auto event=LOWORD(lParam);if(event==NIN_SELECT||event==NIN_KEYSELECT)self->OpenPopup(true);else if(event==WM_CONTEXTMENU){const auto command=self->m_tray.Menu(wParam);if(command)PostMessageW(hwnd,WM_COMMAND,command,0);}return 0;}
+        if(msg==WM_COMMAND){if(LOWORD(wParam)==HelpyTrayIcon::Open){self->OpenPopup(true);return 0;}if(LOWORD(wParam)==HelpyTrayIcon::Exit){self->m_stop=true;return 0;}}
         if(msg==WM_SHOWWINDOW){self->m_visible=wParam!=0&&!IsIconic(hwnd);}
         if(msg==WM_ENDSESSION&&wParam){self->m_stop=true;return 0;}
         if(msg==WM_SYSCOMMAND&&(wParam&0xfff0)==SC_MINIMIZE&&self->m_tray.Ready()){self->ClosePopup();return 0;}
@@ -3926,6 +4140,11 @@ LRESULT CALLBACK HelpyStandaloneWindow::WndProc(HWND hwnd,UINT msg,WPARAM wParam
     switch(msg) {
     case WM_DROPFILES: {
         const auto drop=reinterpret_cast<HDROP>(wParam);const auto count=DragQueryFileW(drop,0xffffffff,nullptr,0);wchar_t path[32768]{};
+        if(CurrentPage==Page::Tools&&CurrentTool==HelpyNavigation::ToolSection::CacheBuilder&&CacheBuilderPanel::DropTarget()){
+            if(count>64)CacheBuilderPanel::Notice="Drop at most 64 source files/folders at once.";
+            else for(UINT i=0;i<count;++i){const auto length=DragQueryFileW(drop,i,path,32768);if(length&&length<32768)CacheBuilderPanel::AddInput(path);}
+            DragFinish(drop);return 0;
+        }
         const auto length=count==1?DragQueryFileW(drop,0,nullptr,0):0;
         bool art=false;if(length>0&&length<32768){DragQueryFileW(drop,0,path,32768);const auto extension=HelpyCacheSources::Lower(std::filesystem::path(path).extension().string());art=extension==".png"||extension==".jpg"||extension==".jpeg"||extension==".webp"||extension==".bmp";
             POINT point{};DragQueryPoint(drop,&point);ClientToScreen(hwnd,&point);
@@ -3967,6 +4186,7 @@ LRESULT CALLBACK HelpyStandaloneWindow::WndProc(HWND hwnd,UINT msg,WPARAM wParam
     case WM_DPICHANGED:
         if(main){HelpyImGuiTheme::SetRuntimeDpi(static_cast<float>(HIWORD(wParam))/96.f);NativeCaption.Update(hwnd,HIWORD(wParam));}
         if(const auto* rect=reinterpret_cast<RECT*>(lParam))SetWindowPos(hwnd,nullptr,rect->left,rect->top,rect->right-rect->left,rect->bottom-rect->top,SWP_NOZORDER|SWP_NOACTIVATE);return 0;
+    case WM_DEVICECHANGE:HelpyControllerInput::Changed();break;
     case WM_CLOSE:if(self){if(hwnd==self->m_bayWindow){ItemGridPicker::DetachedBay=false;ShowWindow(hwnd,SW_HIDE);}else if(hwnd==self->m_cacheWindow){HelpyIconPacks::Detached=false;ShowWindow(hwnd,SW_HIDE);}else if(hwnd==self->m_hwnd){if(PluginRuntimeServices::ExternalDesktop&&!HelpySettings::CloseToTaskbar())self->m_stop=true;else self->ClosePopup();}else for(size_t i=0;i<self->m_workspaces.size();++i)if(hwnd==self->m_workspaces[i].Window){WorkspaceDetached(i)=false;if(i==2)RuntimeDetailsPanel::Open=false;if(i==3)MapPanel::Data.ShowParty=false;if(i==4)PlayerInventoryPanel::Open=false;ShowWindow(hwnd,SW_HIDE);break;}}return 0;
     case WM_SYSCOMMAND:
         if((wParam&0xfff0)==SC_KEYMENU&&lParam!=VK_SPACE)return 0;

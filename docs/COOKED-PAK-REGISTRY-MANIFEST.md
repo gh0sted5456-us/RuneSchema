@@ -1,9 +1,5 @@
 # Declare cooked content for live registries
 
-`SchemaVersion` is optional informational metadata. Examples retain `1` as an
-authoring label; changing or omitting it does not disable supported declarations.
-Fields, ownership, references and limits are still validated independently.
-
 A registry declaration tells RuneSchema which cooked assets to connect to the
 game. Use a small JSONC file for an existing PAK, or include the declaration in
 your cooked content.
@@ -163,11 +159,6 @@ not vetoed by this building-specific failure. Test old-save load, placement,
 deconstruction, host/client interaction, world exit and re-entry before release.
 
 ### Enrollment scope
-
-For additional cooked rows in a vanilla DataTable, the development
-[`LoaderDefinitions.DataTables` route](COOKED-TABLE-EXTENSIONS.md) imports missing
-rows before the usual loose JSON edits. It preserves existing target rows and
-requires a matching row struct; it is separate from native asset enrollment.
 
 Loose and cooked declarations share the same supported lanes and schemas.
 They name exact assets; they do not search every object in a PAK.

@@ -5,6 +5,8 @@
 #include "Generator/PlayerInventoryPanel.h"
 #include "Core/MapProjection.h"
 #include "Core/MapSpawnRequest.h"
+#include "Generator/HelpyOverlayInput.h"
+#include <imgui_internal.h>
 #include <cassert>
 namespace {
 using json=nlohmann::json;
@@ -22,7 +24,11 @@ int32_t RS_PLUGIN_CALL HostCall(const char*,const char* service,const char* inpu
     assert(std::string(service)=="runeschema.tools");
     const auto request=json::parse(input);json reply;
     const auto action=request.value("Action",std::string{});++HostCalls[action];
-    if(action=="ModsRead"||action=="ModsSave"||action=="ModsImport"||action=="QuickLoadSave"||action=="AdditionalLoggingSave"||action=="CrashDumpSave"){
+    if(action=="HelpyNativeOverlay"){
+        if(!output||capacity<8192){*size=8192;return RS_PLUGIN_BUFFER_TOO_SMALL;}
+        ++GuardedCalls[action];reply={{"Ready",true},{"Api","D3D12"}};
+    }
+    else if(action=="ModsRead"||action=="ModsSave"||action=="ModsImport"||action=="QuickLoadSave"||action=="AdditionalLoggingSave"||action=="CrashDumpSave"){
         if(!output||capacity<RUNESCHEMA_PLUGIN_MAX_MESSAGE){*size=RUNESCHEMA_PLUGIN_MAX_MESSAGE;return RS_PLUGIN_BUFFER_TOO_SMALL;}
         ++GuardedCalls[action];reply={{"Ok",true},{"Root","D:/XboxGames/Active/RuneSchema"},{"Rows",json::array()},{"Padding",std::string(10000,'x')}};
     }
@@ -61,6 +67,19 @@ int32_t RS_PLUGIN_CALL HostCall(const char*,const char* service,const char* inpu
 }
 int main(){
     {
+        ImGui::CreateContext();PS::HelpyOverlayFrames::Page page;page.Left=20;page.Top=15;
+        const auto window=CreateWindowW(L"STATIC",L"Private overlay pointer fixture",WS_OVERLAPPEDWINDOW,0,0,400,300,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);assert(window);
+        PS::HelpyOverlayFrames::Push(page,{PS::HelpyOverlayFrames::InputKind::Mouse,0,1,1});
+        PS::HelpyOverlayFrames::Push(page,{PS::HelpyOverlayFrames::InputKind::Button,WM_LBUTTONDOWN,100,80});
+        PS::HelpyOverlayInput::Feed(page,window);assert(page.InputRead==page.InputWrite);
+        auto* context=ImGui::GetCurrentContext();ImVec2 position{};bool clicked=false;
+        for(const auto& event:context->InputEventsQueue){if(event.Type==ImGuiInputEventType_MousePos)position={event.MousePos.PosX,event.MousePos.PosY};if(event.Type==ImGuiInputEventType_MouseButton&&event.MouseButton.Down){assert(position.x==80&&position.y==65);clicked=true;}}
+        POINT latest{};assert(GetCursorPos(&latest)&&ScreenToClient(window,&latest));assert(clicked&&position.x==latest.x-20&&position.y==latest.y-15);
+        RECT client{};assert(GetClientRect(window,&client));page.ViewportWidth=client.right*2;page.ViewportHeight=client.bottom*2;context->InputEventsQueue.clear();
+        PS::HelpyOverlayInput::Feed(page,window);assert(!context->InputEventsQueue.empty());const auto& scaled=context->InputEventsQueue.back();assert(scaled.Type==ImGuiInputEventType_MousePos&&scaled.MousePos.PosX==latest.x*2-20&&scaled.MousePos.PosY==latest.y*2-15);
+        DestroyWindow(window);ImGui::DestroyContext();
+    }
+    {
         auto preferences=PS::HelpyImGuiTheme::Theme{};preferences.runtimeTimeUnit=3;preferences.backgroundFile="Scene.png";preferences.backgroundStrength=.2f;
         preferences.showFps=true;preferences.helpyFpsLimit=45;preferences.fpsRefreshMs=500;
         preferences.showGameFps=true;preferences.fpsHotkey="F11";
@@ -80,7 +99,7 @@ int main(){
         const auto defaults=PS::HelpyImGuiTheme::DefaultDocument()["runtime"];
         assert(defaults["showFps"]==false&&defaults["helpyFpsLimit"]==60&&defaults["fpsRefreshMs"]==1000);
         assert(defaults["showGameFps"]==false&&defaults["fpsHotkey"]=="F10");
-        assert(defaults["gameOverlay"]==false&&!PS::HelpyImGuiTheme::DefaultDocument()["notifications"]["registryActivity"].get<bool>());
+    assert(defaults["gameOverlay"]==true&&defaults["nativeOverlay"]==true&&!PS::HelpyImGuiTheme::DefaultDocument()["notifications"]["registryActivity"].get<bool>());
         assert(!document["notifications"]["enabled"].get<bool>()&&document["notifications"]["visibleLimit"]==2&&document["diagnosticHistory"]["ageDays"]==7);
         assert(document["diagnosticPresentation"]["splitRatio"].get<float>()==.6f&&document["diagnosticPresentation"]["developerMode"].get<bool>());
         assert(PS::HelpyImGuiTheme::DefaultDocument()["runtime"]["timeUnit"]==0&&PS::HelpyImGuiTheme::DefaultDocument()["background"]["file"]=="");
@@ -94,6 +113,11 @@ int main(){
         assert(picker.ActiveCategory=="All"&&picker.PageIndex==0&&picker.SourceProvider=="mods/dye"&&picker.ResetScroll);
     }
     RuneSchemaHostApi host{};host.CallService=HostCall;State state{&host};ConfigureTransport(&state);
+    for(const auto* action:{"Prepare","Open","Show","Hide","Status"}){
+        const auto before=HostCalls["HelpyNativeOverlay"];json reply;
+        assert(PS::RuneSchemaSettingsPanel::Remote({{"Action","HelpyNativeOverlay"},{"Payload",{{"Action",action}}}},reply)&&reply.at("Ready")==true&&reply.at("Api")=="D3D12");
+        assert(HostCalls["HelpyNativeOverlay"]==before+1&&GuardedCalls["HelpyNativeOverlay"]==before+1);
+    }
     {json reply;assert(CallCore(&state,{{"Action","CrashDumpRead"}},reply)&&reply.at("ExpectedContents").get<std::string>().size()==10000&&CrashOptionReads==2);}
     {json manifest;assert(PS::HelpySourceCache::RemoteSnapshot(manifest)&&manifest.at("Padding").get<std::string>().size()==20000&&IconManifestReads==2);
         PS::HelpySourceCache::Current.Provisional=true;PS::HelpySourceCache::CachedSourcesAttempted=true;PS::HelpySourceCache::Next={};

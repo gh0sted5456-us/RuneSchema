@@ -4,6 +4,7 @@
 #include "Generator/AuthoringViews.h"
 #include <Windows.h>
 #include "Generator/HelpyImGuiTheme.h"
+#include "Generator/HelpyMenu.h"
 #include "Core/HelpyEnvironment.h"
 #include "Core/HelpyPreviewHooks.h"
 #include <array>
@@ -18,7 +19,7 @@ enum class Section {Content,Presets,Traces,Inspector,Results,Npc,Cleanup,Effects
 inline Section Current=Section::Content;
 inline std::function<void()> SessionTools,OpenSpawns;
 inline std::string ResultSelection;
-inline constexpr const char* Sections[]{"Content & schemas","Capture presets","Traces & event rules","Inspector","Results & exports","NPC import","Offline save cleanup","Effect tests","Session cleanup"};
+inline constexpr std::array Sections{"Content","Presets","Traces","Inspector","Results","NPC import","Save cleanup","Effects","Session"};
 inline char Query[257]{},Loader[32]="assets",Name[97]="NewItem",Mod[97]="MyMod",Id[129]="new_item",Player[129]="*",Definition[97]="";
 inline char Draft[65537]="{}",Fields[32769]="{}",Preset[16385]="{\"Name\":\"MyPlayer\",\"IncludePlayer\":true}",Trace[32769]="{\"Seconds\":30,\"MaxEvents\":1024,\"Categories\":15,\"Filter\":\"\",\"SuppressTicks\":true,\"TraceSelectedObject\":false,\"CaptureParameters\":false}";
 inline char Profile[32769]="{\"Version\":1,\"Name\":\"MyTrace\",\"Trace\":{\"Seconds\":30,\"MaxEvents\":1024,\"Categories\":15,\"Filter\":\"\",\"SuppressTicks\":true,\"TraceSelectedObject\":false,\"CaptureParameters\":false}}";
@@ -106,7 +107,7 @@ inline void Content(){
     }else{
         const bool enter=ImGui::InputTextWithHint("##authoring-search","Search loaded or authored records...",Query,sizeof(Query),ImGuiInputTextFlags_EnterReturnsTrue);ImGui::SameLine();
         if(UiButton("Search")||enter)AuthoringClient::Submit("AssetSearch",{{"Loader",Loader},{"Query",Query}});
-        ImGui::Checkbox("Read captured values",&ReadValues);ImGui::SameLine();Button("Export search results","ExportCaptured",{{"Kind","AssetSearch"}});
+        HelpyImGuiTheme::Toggle("Read captured values",&ReadValues);ImGui::SameLine();Button("Export search results","ExportCaptured",{{"Kind","AssetSearch"}});
         const auto& found=AuthoringClient::Result("AssetSearch");
         if(found.contains("AssetMatches")&&found["AssetMatches"].is_array()){
             ImGui::BeginChild("##authoring-matches",ImVec2(0,145),true);int i=0;
@@ -253,7 +254,7 @@ inline void Cleanup(){
     if(inspected.contains("Owners")){
         for(const auto& row:inspected["Owners"]){const auto owner=row.at("Owner").get<std::string>();bool checked=Owners.contains(owner);if(ImGui::Checkbox(owner.c_str(),&checked)){if(checked)Owners.insert(owner);else Owners.erase(owner);CleanupToken.clear();Confirmed=false;}ImGui::SameLine();ImGui::TextDisabled("%zu records | %s",row.value("Count",size_t{}),row.value("Installed",false)?"installed folder":"absent / unknown");}
         if(ImGui::Checkbox("Erase progress for selected owners",&EraseProgress)){CleanupToken.clear();Confirmed=false;}
-        ImGui::BeginDisabled(!inspected.value("RegistryReady",false));if(ImGui::Checkbox("Remove invalid item / recipe / quest IDs",&PruneInvalid)){CleanupToken.clear();Confirmed=false;}ImGui::EndDisabled();
+        ImGui::BeginDisabled(!inspected.value("RegistryReady",false));if(HelpyImGuiTheme::Toggle("Remove invalid item / recipe / quest IDs",&PruneInvalid)){CleanupToken.clear();Confirmed=false;}ImGui::EndDisabled();
         if(!inspected.value("RegistryReady",false))ImGui::TextDisabled("Registry cleanup requires a completely loaded native registry.");
         if(Button("Preview removals","CleanupPreview",{{"Owners",Owners},{"EraseProgress",EraseProgress},{"PruneInvalid",PruneInvalid}})){CleanupToken.clear();Confirmed=false;}
     }
@@ -270,6 +271,8 @@ inline void Effects(){
     if(UiButton("Export effect preset"))AuthoringClient::Submit("ExportDocument",{{"Document",Parse(Effect)},{"Kind","Niagara"},{"Jsonc",true},{"Name",ExportName}});
 }
 inline void Render(){
+    int section=static_cast<int>(Current);HelpyMenu::Tabs("authoring-workflows",Sections,section);Current=static_cast<Section>(section);
+    if(!HelpyMenu::BeginBody("Authoring body",section)){HelpyMenu::EndBody();return;}
     AuthoringClient::Poll();try{ApplyResult();}catch(const std::exception& error){AuthoringClient::Error=error.what();}
     const auto& snap=AuthoringClient::Snapshot;
     const auto generation=snap.value("Generation",uint64_t{});if(generation!=Generation){Generation=generation;Applied=0;ResultSelection.clear();Entry=Json::object();Baseline=Json::object();CleanupToken.clear();Confirmed=false;CatalogueRequested=false;}
@@ -282,10 +285,9 @@ inline void Render(){
 #endif
     }
     if(HelpyEnvironment::Server())ImGui::TextDisabled("Dedicated server: local-player and crosshair captures are unavailable.");
-    if(ImGui::CollapsingHeader("Export options")){ImGui::InputText("Export name (optional, no extension)",ExportName,sizeof(ExportName));ImGui::Checkbox("Export reports as JSONC (otherwise JSON)",&Jsonc);ImGui::TextWrapped("Reports, traces and presets use the existing RuneSchema folders. Existing exports are kept.");}
+    if(ImGui::CollapsingHeader("Export options")){ImGui::InputText("Export name (optional, no extension)",ExportName,sizeof(ExportName));HelpyImGuiTheme::Toggle("Export reports as JSONC (otherwise JSON)",&Jsonc);ImGui::TextWrapped("Reports, traces and presets use the existing RuneSchema folders. Existing exports are kept.");}
     AuthoringClient::ExportOptions={{"Name",ExportName},{"Jsonc",Jsonc}};
-    ImGui::SetNextItemWidth(260);int section=static_cast<int>(Current);if(ImGui::Combo("Workflow",&section,Sections,IM_ARRAYSIZE(Sections)))Current=static_cast<Section>(section);
-    ImGui::SameLine();Button("Refresh authoring","Catalogue");
+    Button("Refresh authoring","Catalogue");
     ImGui::Separator();ImGui::BeginDisabled(!snap.value("Active",false)||AuthoringClient::Busy());
     try{switch(Current){case Section::Content:Content();break;case Section::Presets:Presets();break;case Section::Traces:Traces();break;case Section::Inspector:Inspector();break;case Section::Results:Results();break;case Section::Npc:Npc();break;case Section::Cleanup:Cleanup();break;case Section::Effects:Effects();break;case Section::Session:if(SessionTools)SessionTools();else ImGui::TextDisabled("Session tools unavailable.");break;}}
     catch(const std::exception& error){AuthoringClient::Error=error.what();}
@@ -293,5 +295,6 @@ inline void Render(){
     if(AuthoringClient::Busy()){ImGui::TextDisabled("Working on the game thread...");Button("Cancel pending capture","Cancel");}
     ImGui::TextWrapped("%s",AuthoringClient::Error.empty()?snap.value("Status",std::string{}).c_str():AuthoringClient::Error.c_str());
     if(ImGui::CollapsingHeader("Session cleanup")){ImGui::TextWrapped("Stop traces and clear captured results; exported files remain.");ImGui::BeginDisabled(!snap.value("Active",false)||AuthoringClient::Busy());Button("Stop traces and clear results","Clear");ImGui::EndDisabled();}
+    HelpyMenu::EndBody();
 }
 }

@@ -176,7 +176,7 @@ inline void RenderStream(size_t index){
     ImGui::SameLine();ImGui::BeginDisabled(!Search[0]);if(ImGui::SmallButton("Clear")){Search[0]=0;Dirty=true;}ImGui::EndDisabled();
     int preset=std::all_of(Levels.begin(),Levels.end(),[](bool value){return value;})?0:Levels==std::array<bool,4>{false,false,true,true}?1:Levels==std::array<bool,4>{false,false,false,true}?2:3;
     ImGui::SetNextItemWidth(theme.X(180));if(ImGui::Combo("Severity",&preset,"All\0Warnings + errors\0Errors\0Custom\0")){if(preset<3){Levels={preset==0,preset==0,preset<=1,true};Dirty=true;}}
-    if(ImGui::Checkbox("Pause",&Paused))NextRead={};ImGui::SameLine();ImGui::Checkbox("Follow newest",&Follow);ImGui::SameLine();
+    if(HelpyImGuiTheme::Toggle("Pause",&Paused))NextRead={};ImGui::SameLine();HelpyImGuiTheme::Toggle("Follow newest",&Follow);ImGui::SameLine();
     if(HelpyImGuiTheme::SoftButton("Actions"))ImGui::OpenPopup("Log actions");
     if(ImGui::BeginPopup("Log actions")){
         if(ImGui::MenuItem("Open log file"))ShellExecuteW(nullptr,L"open",Path(index).c_str(),nullptr,nullptr,SW_SHOWNORMAL);
@@ -203,7 +203,7 @@ inline void RenderStream(size_t index){
     const bool filtersActive=!Scope.empty()||std::any_of(Levels.begin(),Levels.end(),[](bool enabled){return !enabled;});
     if(ImGui::CollapsingHeader(filtersActive?"Filters & colors (active)###log-filters":"Filters & colors###log-filters")){
         for(size_t i=0;i<Levels.size();++i){if(i)ImGui::SameLine();Dirty|=ImGui::Checkbox(LiveLog::Label(static_cast<LiveLog::Level>(i)),&Levels[i]);}
-        Dirty|=ImGui::Checkbox("Group consecutive repeats",&state.GroupRepeats);
+        Dirty|=HelpyImGuiTheme::Toggle("Group consecutive repeats",&state.GroupRepeats);
         ImGui::SetNextItemWidth(theme.X(230));if(ImGui::BeginCombo("Source / subsystem",Scope.empty()?"All sources":Scope.c_str())){
             if(ImGui::Selectable("All sources",Scope.empty())){Scope.clear();Dirty=true;}
             for(const auto& source:Scopes)if(ImGui::Selectable(source.c_str(),source==Scope)){Scope=source;Dirty=true;}ImGui::EndCombo();}
@@ -255,7 +255,7 @@ inline void RenderStream(size_t index){
     if(selected!=History.Rows.end()){
         if(ImGui::BeginChild("Selected log details",ImVec2(0,0),true)){
             if(ImGui::SmallButton("Copy original"))ImGui::SetClipboardText(selected->Text.c_str());ImGui::SameLine();
-            if(ImGui::SmallButton("Close details"))Selected=0;ImGui::SameLine();ImGui::Checkbox("Technical text",&state.RawDetails);
+            if(ImGui::SmallButton("Close details"))Selected=0;ImGui::SameLine();HelpyImGuiTheme::Toggle("Technical text",&state.RawDetails);
             if(selected->Help>=0){const auto& guide=LiveLog::Guides[selected->Help];ImGui::SeparatorText(selected->Suggested?"Suggested reference - not a diagnosed cause":guide.Title.data());
                 ImGui::TextWrapped("%s",guide.Summary.data());ImGui::TextWrapped("Runtime response: %s",guide.Impact.data());ImGui::TextColored(theme.accentHover,"Next step");ImGui::TextWrapped("%s",guide.Action.data());
                 if(ImGui::SmallButton("Open code reference")){const auto url=LiveLog::HelpUrl(guide);ShellExecuteA(nullptr,"open",url.c_str(),nullptr,nullptr,SW_SHOWNORMAL);}ImGui::SameLine();if(ImGui::SmallButton("Copy code"))ImGui::SetClipboardText(guide.Code.data());
@@ -274,7 +274,7 @@ inline void RenderCrashDumpOptions(){
     ImGui::SeparatorText("Crash capture");
     bool full=snapshot.is_object()&&snapshot.value("FullMemoryDump",false)&&snapshot.value("EnableDumping",true);
     ImGui::BeginDisabled(!snapshot.is_object()||error);
-    if(ImGui::Checkbox("Full-memory crash dumps (next launch)",&full)){
+    if(HelpyImGuiTheme::Toggle("Full-memory crash dumps (next launch)",&full)){
         nlohmann::json result;
         if(RuneSchemaSettingsPanel::Remote&&RuneSchemaSettingsPanel::Remote({{"Action","CrashDumpSave"},{"FullMemoryDump",full},{"ExpectedContents",snapshot.at("ExpectedContents")}},result)&&result.is_object()&&result.value("Ok",false)){
             snapshot=std::move(result);error=false;status=snapshot.value("Status",std::string{});
@@ -315,14 +315,14 @@ inline void Render(){
     };
     bool enabled=!options.empty()&&options.at("Document").value("enabled",false);
     ImGui::BeginDisabled(options.empty()||optionError||!RuneSchemaSettingsPanel::Patch().empty());
-    if(ImGui::Checkbox("Additional Logging Information",&enabled)){saveOption("enabled",enabled);if(enabled&&!optionError)ImGui::OpenPopup("Additional logging options");}
+    if(HelpyImGuiTheme::Toggle("Additional Logging Information",&enabled)){saveOption("enabled",enabled);if(enabled&&!optionError)ImGui::OpenPopup("Additional logging options");}
     hint("Optional context in RuneSchema.log only. Off by default. Select individual fields in Options; saved changes apply on the next sampler tick. Full local paths can reveal personal folder names. Turning this off does not erase existing entries or redact paths already present in ordinary native/mod messages.");
     ImGui::EndDisabled();ImGui::SameLine();
     if(HelpyImGuiTheme::SoftButton("Options##additional-logging"))ImGui::OpenPopup("Additional logging options");
     if(Preview&&PreviewOptions)ImGui::OpenPopup("Additional logging options");
     if(ImGui::BeginPopup("Additional logging options")){
         const auto option=[&](const char* label,const char* key,const char* description){bool selected=!options.empty()&&options.at("Document").value(key,false);
-            ImGui::BeginDisabled(options.empty()||optionError||!RuneSchemaSettingsPanel::Patch().empty());if(ImGui::Checkbox(label,&selected))saveOption(key,selected);hint(description);ImGui::EndDisabled();};
+            ImGui::BeginDisabled(options.empty()||optionError||!RuneSchemaSettingsPanel::Patch().empty());if(HelpyImGuiTheme::Toggle(label,&selected))saveOption(key,selected);hint(description);ImGui::EndDisabled();};
         option("Installation / log paths","filePaths","Full executable, RuneSchema, cache and log paths. Can reveal usernames in directory names.");
         option("Windows region","region","Configured Windows country/region. No IP lookup, GPS, location permission or geolocation service.");
         option("Upload / download rates","networkRates","Observed traffic across active physical Ethernet/Wi-Fi interfaces, in Mbps. Device-wide traffic, not game-only traffic or connection capacity. Needs two comparable samples; no speed test is performed.");

@@ -81,3 +81,11 @@ The RuneScape: Dragonwilds wordmark used for game identification on RSMK's Home
 transition is third-party game artwork, not RuneSchema MIT-licensed artwork.
 RuneScape and Dragonwilds names and marks remain with their respective owners;
 this presentation does not imply affiliation or endorsement.
+
+## Khronos graphics declarations
+
+Helpy's optional native adapters use the Vulkan C headers from
+KhronosGroup/Vulkan-Headers `v1.3.290` and Khronos OpenGL/EGL declaration headers.
+Only declarations are vendored; no GPU driver or Vulkan loader is included.
+Their original notices, license texts, source locations and hashes are retained
+under `source/helpy/vendor/vulkan/` and `source/helpy/vendor/khronos/`.

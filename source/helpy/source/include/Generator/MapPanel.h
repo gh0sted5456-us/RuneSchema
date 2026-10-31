@@ -91,7 +91,7 @@ inline void Filters(){
     if(!ImGui::BeginPopup("Map filters"))return;
     ImGui::BeginChild("##filter-body",{theme.X(330),std::max(theme.Y(120),ImGui::GetIO().DisplaySize.y-theme.Y(160))},false);
     bool changed=false;ImGui::SeparatorText("Cached map layers");
-    changed|=ImGui::Checkbox("Show cached locations",&cache.Filters.ShowCached);
+    changed|=HelpyImGuiTheme::Toggle("Show cached locations",&cache.Filters.ShowCached);
     if(cache.Data){
         if(ImGui::SmallButton("Show all")){cache.Filters.ShowCached=true;cache.Filters.Hidden.clear();changed=true;}ImGui::SameLine();
         if(ImGui::SmallButton("Hide all")){for(const auto& category:cache.Data->Categories)cache.Filters.Hidden.insert(category.Key);changed=true;}
@@ -116,7 +116,7 @@ inline void Filters(){
                 ImGui::SameLine();const auto side=theme.Y(20);const auto at=ImGui::GetCursorScreenPos();MapLayerIcons::Resource(HelpyGlyphs::Resource(category.Group,MapFilters::Fold(category.Name)),category.Name,{at.x+side*.5f,at.y+side*.5f},side);ImGui::Dummy({side,side});ImGui::SameLine();ImGui::TextUnformatted(label.c_str());ImGui::PopID();
             }ImGui::TreePop();}ImGui::PopID();at=end;
         }ImGui::EndChild();
-        changed|=ImGui::Checkbox("Update after confirmed game patches",&cache.Filters.UpdateAfterGamePatch);
+        changed|=HelpyImGuiTheme::Toggle("Update after confirmed game patches",&cache.Filters.UpdateAfterGamePatch);
         if(ImGui::TreeNode("Cache details")){
             ImGui::TextWrapped("Reference data: %s. Cached for %s. No timed online polling.",cache.Data->Built.c_str(),cache.CachedBuild.empty()?"unconfirmed build":cache.CachedBuild.c_str());
             ImGui::TextWrapped("%s",MapFilters::Credit);ImGui::TextLinkOpenURL("Data source",MapFilters::SourceUrl);ImGui::SameLine();ImGui::TextLinkOpenURL("Licence",MapFilters::LicenseUrl);
@@ -126,11 +126,11 @@ inline void Filters(){
     ImGui::BeginDisabled(HelpyWikiIcons::Busy()||!cache.Data);if(HelpyImGuiTheme::SoftButton("Download wiki pictures & journals"))HelpyWikiIcons::Start(WikiNames(),cache.CachedBuild);ImGui::EndDisabled();
     if(!HelpyWikiIcons::Status().empty())ImGui::TextWrapped("%s",HelpyWikiIcons::Status().c_str());
     ImGui::SeparatorText("Loaded game areas");
-    bool nativeChanged=ImGui::Checkbox("Players",&Data.ShowPlayers);ImGui::SameLine();nativeChanged|=ImGui::Checkbox("Lodestones",&Data.ShowLodestones);
-    nativeChanged|=ImGui::Checkbox("RuneSchema placements",&Data.ShowPlaced);
-    nativeChanged|=ImGui::Checkbox("Placed chests / storage (loaded)",&Data.ShowChests);
-    nativeChanged|=ImGui::Checkbox("Loaded resources",&Data.ShowResources);ImGui::SameLine();nativeChanged|=ImGui::Checkbox("AI spawn points",&Data.ShowAI);
-    changed|=ImGui::Checkbox("Observe nodes near party members",&cache.Filters.ObserveNearbyResources);
+    bool nativeChanged=HelpyImGuiTheme::Toggle("Players",&Data.ShowPlayers);ImGui::SameLine();nativeChanged|=HelpyImGuiTheme::Toggle("Lodestones",&Data.ShowLodestones);
+    nativeChanged|=HelpyImGuiTheme::Toggle("RuneSchema placements",&Data.ShowPlaced);
+    nativeChanged|=HelpyImGuiTheme::Toggle("Placed chests / storage (loaded)",&Data.ShowChests);
+    nativeChanged|=HelpyImGuiTheme::Toggle("Loaded resources",&Data.ShowResources);ImGui::SameLine();nativeChanged|=HelpyImGuiTheme::Toggle("AI spawn points",&Data.ShowAI);
+    changed|=HelpyImGuiTheme::Toggle("Observe nodes near party members",&cache.Filters.ObserveNearbyResources);
     float resourceRadius=static_cast<float>(cache.Filters.ResourceRadiusMetres);ImGui::SetNextItemWidth(theme.X(260));
     if(ImGui::SliderFloat("Observation radius",&resourceRadius,25,2000,"%.0f m",ImGuiSliderFlags_Logarithmic)){cache.Filters.ResourceRadiusMetres=resourceRadius;changed=true;Data.Next={};}
     ImGui::TextWrapped("Loaded resources only, near any connected member. Native availability is measured; a countdown is shown only with a verified deadline. Beds, players or buildings may delay respawn.");
@@ -346,7 +346,7 @@ inline void PlacePopup(){
 #endif
     if(Data.TypedSearch!=Data.Search){Data.TypedSearch=Data.Search;Data.Definition=Json::object();Data.SearchWanted=Data.LiveSearch;Data.SearchDue=Clock::now()+std::chrono::milliseconds(400);}
     HelpyImGuiTheme::CenterRow(ImGui::CalcTextSize("Search").x+ImGui::GetStyle().FramePadding.x*2+radioWidth("Search as I type")+ImGui::GetStyle().ItemSpacing.x);
-    const bool search=ImGui::Button("Search");ImGui::SameLine();ImGui::Checkbox("Search as I type",&Data.LiveSearch);
+    const bool search=ImGui::Button("Search");ImGui::SameLine();HelpyImGuiTheme::Toggle("Search as I type",&Data.LiveSearch);
     if(enter||search){Data.SearchWanted=true;Data.SearchDue={};}
     const auto query=std::string(Data.Search)+(Data.SpawnType==1?" ore node":Data.SpawnType==2?" tree":"");
     if(Data.SearchWanted&&Clock::now()>=Data.SearchDue){LazyCatalog::Search(Data.Kind,query);Data.SearchWanted=false;}
@@ -452,7 +452,7 @@ inline void Party(ImVec2 mapMin,ImVec2 mapMax,bool detached=false){
     const auto position=ImGui::GetWindowPos(),size=ImGui::GetWindowSize();
     if(expanded){
         ImGui::TextUnformatted("Party");ImGui::SameLine();
-        if(HelpyImGuiTheme::SoftButton(detached?"Dock below map":"Detach Party"))Data.PartyDetached=!detached;
+        if(!HelpyImGuiTheme::NativePresentation&&HelpyImGuiTheme::SoftButton(detached?"Dock below map":"Detach Party"))Data.PartyDetached=!detached;
 #if defined(HELPY_PREVIEW)
         HelpyPreviewHooks::PartyDetach=HelpyPreviewHooks::LastRect();
 #endif
@@ -606,9 +606,9 @@ inline void Render(){
     const auto refreshDetails=std::string("Refresh loaded world markers and player positions.\nNative markers: ")+(Data.Snapshot.value("MarkersScanning",false)?"checking loaded areas":"current snapshot")+"\n"+mapCache.Status+"\nInstalled game: "+HelpyEnvironment::GameVersion+"\nOnline filter data changes only after a confirmed installed game build change. Cached locations remain visible. No world or save edits.";
     if(HelpyLoadingIndicator::RefreshButton("Refresh",Data.Pending||Data.Snapshot.value("MarkersScanning",false)||HelpyMapCache::Busy(),refreshDetails)){Data.Next={};Data.Error.clear();if(HelpyMapCache::RefreshEligible())HelpyMapCache::Refresh();}
     inlineIfRoom(t.X(160));ImGui::SetNextItemWidth(t.X(120));ImGui::SliderFloat("Zoom",&Data.Zoom,static_cast<float>(Data.View.FitZoom()),32,"%.1fx",ImGuiSliderFlags_Logarithmic);
-    inlineIfRoom(t.X(80));if(ImGui::Checkbox("Players",&Data.ShowPlayers))SaveNativeFilters();
-    inlineIfRoom(t.X(70));ImGui::Checkbox("Party",&Data.ShowParty);
-    inlineIfRoom(t.X(90));if(ImGui::Checkbox("Chests",&Data.ShowChests)){SaveNativeFilters();Data.Next={};}
+    inlineIfRoom(t.X(80));if(HelpyImGuiTheme::Toggle("Players",&Data.ShowPlayers))SaveNativeFilters();
+    inlineIfRoom(t.X(70));HelpyImGuiTheme::Toggle("Party",&Data.ShowParty);
+    inlineIfRoom(t.X(90));if(HelpyImGuiTheme::Toggle("Chests",&Data.ShowChests)){SaveNativeFilters();Data.Next={};}
     inlineIfRoom(t.X(70));if(HelpyImGuiTheme::SoftButton(Data.BuildingPick?"Cancel build":"Build...")){Data.BuildingPick=!Data.BuildingPick;if(Data.BuildingPick){Data.Operation=1;Data.Permanent=true;Data.Status="Click the map to choose a building or prefab position.";}}
     const char* hint="LMB select · drag to pan · RMB options · scroll to zoom";inlineIfRoom(ImGui::CalcTextSize(hint).x);ImGui::TextDisabled("%s",hint);
     Filters();ImGui::SameLine();ImGui::SetNextItemWidth(std::min(t.X(300),ImGui::GetContentRegionAvail().x));ImGui::InputTextWithHint("##map-marker-search","Find iron, oak, chest, lore...",Data.MarkerSearch,sizeof(Data.MarkerSearch));

@@ -1,4 +1,5 @@
 #pragma once
+#include "Generator/HelpyMenu.h"
 #include "Core/ProcessExitFuture.h"
 
 #include "Core/DiagnosticCenterModel.h"
@@ -1094,13 +1095,11 @@ inline void Render(DiagnosticCenterModel::Store& current,
     }
     Historical=!ArchivedSessionId.empty();
     auto& store=*selected;
-    if(ImGui::BeginTabBar("Diagnostics views")){
-        const auto tab=[&](const char* label,View id,const auto& draw){
-            const auto flags=RequestedTab==static_cast<int>(id)?ImGuiTabItemFlags_SetSelected:ImGuiTabItemFlags_None;
-            if(ImGui::BeginTabItem(label,nullptr,flags)){
-                Current=id;draw();ImGui::EndTabItem();
-            }
-        };
+    if(RequestedTab>=0)Current=static_cast<View>(RequestedTab);
+    int section=static_cast<int>(Current);constexpr std::array labels{"Overview","Issues","Live Log"};
+    HelpyMenu::Tabs("diagnostic-views",labels,section);Current=static_cast<View>(section);
+    if(HelpyMenu::BeginBody("Diagnostic view body",section)){
+        const auto visible=Current;const auto tab=[&](const char*,View id,const auto& draw){if(visible==id)draw();};
         tab("Overview",View::Overview,[&]{DrawOverview(store,theme);});
         tab("Issues",View::Issues,[&]{DrawIssues(store,theme);});
         tab("Live Log",View::LiveLog,[&]{
@@ -1146,9 +1145,8 @@ inline void Render(DiagnosticCenterModel::Store& current,
                 }
             }
         });
-        ImGui::EndTabBar();
         RequestedTab=-1;
-    }
+    }HelpyMenu::EndBody();
     DrawExportPopup(theme);
 }
 }

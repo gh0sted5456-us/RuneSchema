@@ -49,14 +49,14 @@ inline void Render(){
     if(ImGui::CollapsingHeader("Placement",ImGuiTreeNodeFlags_DefaultOpen)){
         const char* modes[]{"Native subcategory","Section / category"};ImGui::Combo("Place into",&Placement,modes,2);
         if(Placement==0)Field("Native subcategory",Category,sizeof(Category));else if(ImGui::BeginTable("##journal-placement-fields",2,ImGuiTableFlags_SizingStretchSame)){ImGui::TableNextColumn();Field("Section",Section,sizeof(Section));ImGui::TableNextColumn();Field("Category",CategoryName,sizeof(CategoryName));ImGui::EndTable();}
-        if(ImGui::TreeNode("Group options")){Field("Group ID",GroupId,sizeof(GroupId));Field("Group name",GroupName,sizeof(GroupName));ImGui::Checkbox("Create group if missing",&CreateGroup);Field("Placement key",PlacementKey,sizeof(PlacementKey));ImGui::TreePop();}
+        if(ImGui::TreeNode("Group options")){Field("Group ID",GroupId,sizeof(GroupId));Field("Group name",GroupName,sizeof(GroupName));HelpyImGuiTheme::Toggle("Create group if missing",&CreateGroup);Field("Placement key",PlacementKey,sizeof(PlacementKey));ImGui::TreePop();}
     }
     if(Type==5&&ImGui::CollapsingHeader("Recipe",ImGuiTreeNodeFlags_DefaultOpen)){Field("Recipe asset",Recipe,sizeof(Recipe));Field("Output item (optional)",OutputItem,sizeof(OutputItem));Field("Station data table (optional)",StationTable,sizeof(StationTable));Field("Station row",StationRow,sizeof(StationRow));}
     if(ImGui::CollapsingHeader("Discovery")){
         const char* modes[]{"Manual / undiscovered","Immediate discovery","On item acquisition","Native condition"};ImGui::Combo("Unlock",&Discovery,modes,4);
         if(Discovery==3){const char* triggers[]{"Player start","First item pickup","Recipe unlocked","Interaction","AI defeated","Region unlocked","Manual","Never"};ImGui::Combo("Trigger",&Trigger,triggers,8);
             if(Trigger>=1&&Trigger<=4)Field(Trigger==1?"Unlocking item":Trigger==2?"Unlocking recipe":Trigger==3?"Interaction actor":"AI data",TriggerAsset,sizeof(TriggerAsset));
-            if(Trigger==5){Field("Map region asset",MapRegion,sizeof(MapRegion));ImGui::Checkbox("Specify region ID",&UseRegionId);if(UseRegionId)ImGui::InputInt("Region ID",&RegionId);ImGui::TextDisabled("Region trigger support must be verified in the target game.");}
+            if(Trigger==5){Field("Map region asset",MapRegion,sizeof(MapRegion));HelpyImGuiTheme::Toggle("Specify region ID",&UseRegionId);if(UseRegionId)ImGui::InputInt("Region ID",&RegionId);ImGui::TextDisabled("Region trigger support must be verified in the target game.");}
         }
     }
     ImGui::Text("Page %d / %d",Page+1,int(Pages.size()));

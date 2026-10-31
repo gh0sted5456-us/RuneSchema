@@ -3,6 +3,10 @@
 The site is organized by what you are doing. Choose a role first; use the
 loader reference only when you need exact folder fields.
 
+These are the normal guides from main. See [Experimental](experimental/index.md)
+for upcoming features, or [documentation channels](DOCUMENTATION-CHANNELS.md)
+for how guides move into this area after promotion.
+
 ## Users: install and play
 
 1. [Player start page](users/index.md)

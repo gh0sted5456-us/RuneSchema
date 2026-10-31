@@ -101,7 +101,7 @@ inline ImRect ItemNode(const char* id,const char* title,Json& side,bool& grid,fl
             ImGui::TableNextColumn();ImGui::PushID(static_cast<int>(i));ImGui::BeginGroup();
             Json drag=meta?*meta:Json::object();drag["Path"]=path;drag["Name"]=name;drag["Count"]=row.value("Count",1);
             const auto at=ImGui::GetCursorScreenPos();const ImVec2 cardSize(ImGui::GetContentRegionAvail().x,t.Y(grid?t.gridCardHeight:58.0f));
-            ImGui::InvisibleButton("select-item",cardSize);if(ImGui::IsItemClicked())SelectItem(path);
+            if(ImGui::InvisibleButton("select-item",cardSize,ImGuiButtonFlags_EnableNav))SelectItem(path);
             ItemGridPicker::DrawPlacard(drag,at,ImVec2(at.x+cardSize.x,at.y+cardSize.y),State().SelectedItem==path,ImGui::IsItemHovered());ItemGridPicker::DragItem(drag);
             if(ImGui::BeginDragDropTarget()){if(auto item=ItemGridPicker::AcceptItemDrop(State().Error))replacement={{i,item->at("Path").get<std::string>()}};ImGui::EndDragDropTarget();}
             if(HelpyImGuiTheme::TooltipReady(std::string("recipe:")+id+path,ImGui::IsItemHovered()))ItemGridPicker::VerboseTooltip(drag,name,path,false,true);
@@ -135,7 +135,7 @@ inline ImRect StationNode(float height) {
     if(ImGui::BeginChild("recipe-station",ImVec2(0,height),true)) {
         const auto p=ImGui::GetWindowPos(),size=ImGui::GetWindowSize();bounds=ImRect(p,ImVec2(p.x+size.x,p.y+size.y));
         CenterText("Station & timing");ImGui::Separator();
-        if(s.Override){ImGui::Checkbox("Also add this station",&s.AddStation);ImGui::TextDisabled("%zu original placement(s) retained",s.Placements.size());}
+        if(s.Override){HelpyImGuiTheme::Toggle("Also add this station",&s.AddStation);ImGui::TextDisabled("%zu original placement(s) retained",s.Placements.size());}
         const auto icon=s.StationIcon[0]?std::string(s.StationIcon):ItemPresentation::StationIcon(s.Station);
         const auto left=ImGui::GetCursorPosX();ImGui::SetCursorPosX(left+std::max(0.f,(ImGui::GetContentRegionAvail().x-t.Y(42))*.5f));
         const auto at=ImGui::GetCursorScreenPos();const ImVec2 end(at.x+t.Y(42),at.y+t.Y(42));
@@ -177,7 +177,7 @@ inline ImRect StationNode(float height) {
         ImGui::BeginDisabled(s.Override&&!s.AddStation);
         ImGui::SetNextItemWidth(-1);ImGui::InputTextWithHint("##category","Recipe category",s.Category,sizeof(s.Category));
         ImGui::EndDisabled();
-        ImGui::Checkbox("Set processing duration",&s.Duration);
+        HelpyImGuiTheme::Toggle("Set processing duration",&s.Duration);
         if(s.Duration){ImGui::TextUnformatted("Minimum seconds");ImGui::SetNextItemWidth(-1);ImGui::InputFloat("##min-seconds",&s.MinSeconds,0.5f,5.0f,"%.2f");ImGui::TextUnformatted("Maximum seconds");ImGui::SetNextItemWidth(-1);ImGui::InputFloat("##max-seconds",&s.MaxSeconds,0.5f,5.0f,"%.2f");}
         if(HelpyImGuiTheme::Current.advancedMode){ImGui::SetNextItemWidth(-1);ImGui::InputTextWithHint("##station-icon","Custom cooked station icon path",s.StationIcon,sizeof(s.StationIcon));}
     }ImGui::EndChild();ImGui::PopStyleColor();return bounds;
@@ -214,7 +214,7 @@ inline void Render(const Json& catalog,uint64_t revision) {
     const float loadWidth=ImGui::CalcTextSize("Load").x+ImGui::GetStyle().FramePadding.x*2+ImGui::GetStyle().ItemSpacing.x;
     ImGui::SetNextItemWidth(std::max(t.X(60),ImGui::GetContentRegionAvail().x-loadWidth));ImGui::InputTextWithHint("##recipe-source","Or paste a cooked RecipeData object path",s.Source,sizeof(s.Source));ImGui::SameLine();
     if(HelpyImGuiTheme::SoftButton("Load")&&s.Source[0])Submit({{"Action","InspectRecipe"},{"SourceRecipe",s.Source}});
-    if(!s.LoadedRecipe.empty())ImGui::Checkbox("Save as an override of the loaded recipe",&s.Override);
+    if(!s.LoadedRecipe.empty())HelpyImGuiTheme::Toggle("Save as an override of the loaded recipe",&s.Override);
     ImGui::EndDisabled();}
     const int columns=ImGui::GetContentRegionAvail().x>=std::max(t.X(690),ImGui::CalcTextSize("Station & timing").x*4.5f)?3:1;
     const float height=std::max(t.Y(170),std::min(t.Y(240),ImGui::GetContentRegionAvail().y*0.45f));
@@ -225,7 +225,7 @@ inline void Render(const Json& catalog,uint64_t revision) {
         ImGui::TableNextColumn();nodes[2]=ItemNode("recipe-outputs","Outputs",s.Outputs,s.OutputsGrid,height);
         ImGui::EndTable();
     }ImGui::PopStyleVar();Connector(nodes[0],nodes[1]);Connector(nodes[1],nodes[2]);
-    ImGui::Checkbox("Unlock the saved recipe",&s.Unlock);
+    HelpyImGuiTheme::Toggle("Unlock the saved recipe",&s.Unlock);
     if(ImGui::GetContentRegionAvail().x>ImGui::CalcTextSize("Unlock the saved recipe    Save recipe override").x)ImGui::SameLine();ImGui::BeginDisabled(s.Pending!=0);
     if(HelpyImGuiTheme::SoftButton(s.Override?"Save recipe override":"Save new recipe"))try {
         Json options={{"Ingredients",s.Inputs},{"Outputs",s.Outputs},{"Unlock",s.Unlock},{"Category",s.Category},{"Station",s.Station},{"AddStation",s.AddStation}};

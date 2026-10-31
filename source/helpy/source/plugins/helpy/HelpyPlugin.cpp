@@ -48,7 +48,7 @@ bool CallCore(State* state,const nlohmann::json& request,nlohmann::json& respons
     const bool readOnly=action=="Read"||action=="AuthoringSnapshot"||action=="SettingsRead"||action=="ModsRead"||action=="IconCacheOwnership"||action=="IconCacheSources"||action=="CrashDumpRead";
     uint32_t size=0;thread_local std::vector<char> output(8192);
     const bool maximum=action=="Completed"||action=="SettingsSave"||action=="ModsSave"||action=="ModsImport"||action=="QuickLoadSave"||action=="AdditionalLoggingSave"||action=="CrashDumpSave";
-    uint32_t capacity=readOnly?8192:maximum?RUNESCHEMA_PLUGIN_MAX_MESSAGE:4096;
+    uint32_t capacity=(readOnly||action=="HelpyNativeOverlay")?8192:maximum?RUNESCHEMA_PLUGIN_MAX_MESSAGE:4096;
     if(output.size()<capacity)output.resize(capacity);
     auto code=state->Host->CallService(Descriptor.Id,"runeschema.tools",input.c_str(),output.data(),capacity,&size);
     if(readOnly&&code==RS_PLUGIN_BUFFER_TOO_SMALL&&size>capacity&&size<=RUNESCHEMA_PLUGIN_MAX_MESSAGE){capacity=size;if(output.size()<capacity)output.resize(capacity);code=state->Host->CallService(Descriptor.Id,"runeschema.tools",input.c_str(),output.data(),capacity,&size);}

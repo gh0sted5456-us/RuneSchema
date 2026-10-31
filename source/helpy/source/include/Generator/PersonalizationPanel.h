@@ -36,7 +36,7 @@ inline void Menu(const Json& row){
 inline bool Matches(const Json& row,bool favoriteOnly,const std::string& tag){return (!favoriteOnly||HelpyPersonalization::Favorite(row))&&(tag.empty()||HelpyPersonalization::Tagged(row,tag));}
 inline bool Filters(bool& favorites,std::string& tag){
     bool changed=false;if(HelpyImGuiTheme::SoftButton("Favorites / tags"))ImGui::OpenPopup("##personal-filters");
-    if(ImGui::BeginPopup("##personal-filters")){changed|=ImGui::Checkbox("Favorites only",&favorites);ImGui::Separator();
+    if(ImGui::BeginPopup("##personal-filters")){changed|=HelpyImGuiTheme::Toggle("Favorites only",&favorites);ImGui::Separator();
         if(ImGui::Selectable("All tags",tag.empty())){tag.clear();changed=true;}
         std::set<std::string> tags;{std::shared_lock lock(HelpyPersonalization::Gate);for(const auto& [key,row]:HelpyPersonalization::Entries.items())if((key.starts_with("item:")||HelpyPersonalization::TypeKeyValid(key)||HelpyPersonalization::StackKeyValid(key))&&row.contains("Tags"))for(const auto& value:row["Tags"])tags.insert(value.get<std::string>());}
         for(const auto& value:tags)if(ImGui::Selectable(value.c_str(),value==tag)){tag=value;changed=true;}
@@ -58,7 +58,7 @@ inline void Render(){
     HelpyImGuiTheme::CenterNextWindow();
     if(ImGui::Begin("Helpy labels###personalization",&Open,ImGuiWindowFlags_AlwaysAutoResize)){
         ImGui::TextWrapped("Original: {%s}",Original.c_str());ImGui::SetNextItemWidth(theme.X(380));ImGui::InputText("Nickname",Nickname,sizeof(Nickname));
-        if(Item){ImGui::SetNextItemWidth(theme.X(380));ImGui::InputText("Tags",Tags,sizeof(Tags));ImGui::TextDisabled("Comma-separated tags; use junk for removal review.");ImGui::Checkbox("Favorite",&Favorite);ImGui::Checkbox("Protect every copy from Helpy removal",&Locked);}
+        if(Item){ImGui::SetNextItemWidth(theme.X(380));ImGui::InputText("Tags",Tags,sizeof(Tags));ImGui::TextDisabled("Comma-separated tags; use junk for removal review.");HelpyImGuiTheme::Toggle("Favorite",&Favorite);HelpyImGuiTheme::Toggle("Protect every copy from Helpy removal",&Locked);}
         ImGui::TextWrapped("Display labels only. Game IDs, folders and saves are not renamed.");
         if(HelpyImGuiTheme::SoftButton("Save")){try{Json patch={{"Nickname",std::string(Nickname)}};if(Item){Json tags=Json::array();std::string text=Tags;size_t begin=0;while(begin<text.size()){const auto end=text.find(',',begin);auto tag=HelpyPersonalization::Trim(text.substr(begin,end==text.npos?text.npos:end-begin));if(!tag.empty())tags.push_back(tag);if(end==text.npos)break;begin=end+1;}patch["Tags"]=tags;patch["Favorite"]=Favorite;patch["Locked"]=Locked;}
             if(HelpyPersonalization::Set(Key,patch))Open=false;else Message=HelpyPersonalization::Status;}catch(const std::exception& error){Message=error.what();}}

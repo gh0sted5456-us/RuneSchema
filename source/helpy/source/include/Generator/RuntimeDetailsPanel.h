@@ -103,7 +103,7 @@ inline void RenderRuntime(){
 }
 inline void RenderContents(){
     const int surface=Detached?1:0;if(LastSurface!=surface){LastSurface=surface;SelectTab=true;}
-    if(HelpyImGuiTheme::SoftButton(Detached?"Dock back":"Detach window"))Detached=!Detached;
+    if(!HelpyImGuiTheme::NativePresentation&&HelpyImGuiTheme::SoftButton(Detached?"Dock back":"Detach window"))Detached=!Detached;
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::RuntimeDetach=HelpyPreviewHooks::LastRect();
 #endif

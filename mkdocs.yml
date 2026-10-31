@@ -95,8 +95,6 @@ nav:
       - Overview: users/index.md
       - Download: CURRENT-RELEASE.md
       - Install: INSTALLATION.md
-      - Vortex installation: VORTEX-INSTALLATION.md
-      - Standalone Helpy candidate: HELPY-STANDALONE.md
       - Manage mods: users/manage-mods.md
       - Helpy:
           - Workspaces and mappings: HELPY-SCHEMA-WORKSPACES.md
@@ -134,11 +132,8 @@ nav:
           - Armor: CUSTOM-ARMOR.md
           - Registry declarations: COOKED-PAK-REGISTRY-MANIFEST.md
           - Native data families: COOKED-NATIVE-DATA-FAMILIES.md
-          - Cooked table extensions: COOKED-TABLE-EXTENSIONS.md
-          - Cooked world policies: BUILDING-WORLD-POLICIES.md
           - Large registry shards: COOKED-REGISTRY-SHARDS.md
           - Cooked repair-item boundary: COOKED-REPAIR-KIT.md
-          - Skill registry investigation: SKILL-REGISTRY.md
       - More capabilities:
           - Authoring tools: ADVANCED-AUTHORING-TOOLS.md
           - Package your mod: MOD-PACKAGING.md
@@ -153,6 +148,7 @@ nav:
       - Bridge diagnostics: BRIDGE-DIAGNOSTICS.md
   - Reference:
       - Guide map: DOCUMENTATION-INDEX.md
+      - Documentation channels: DOCUMENTATION-CHANNELS.md
       - Find a loader: LOADER-WALKTHROUGHS.md
       - Loaders · Content:
           - Assets: reference/loaders/assets.md
@@ -196,7 +192,6 @@ nav:
   - Updates:
       - Release 0.8.0.3: RELEASE-0.8.0.3.md
       - 0.8.0.3 changelog: CHANGELOG-0.8.0.3.md
-      - 0.8.1.0 experimental: CHANGELOG-0.8.1.0.md
       - Release 0.8.0.2: RELEASE-0.8.0.2.md
       - 0.8.0.2 changelog: CHANGELOG-0.8.0.2.md
       - 0.8.0.1b quick bug fixes: CHANGELOG-0.8.0.1b.md
@@ -206,3 +201,25 @@ nav:
       - Full 0.8.0.0 changelog: CHANGELOG-0.8.0.0.md
       - Development history: ALPHA-CHANGELOG.md
       - Current release: CURRENT-RELEASE.md
+
+  - Experimental:
+      - Overview: experimental/index.md
+      - Install and platforms:
+        - Install or update: experimental/INSTALLATION.md
+        - Vortex: experimental/VORTEX-INSTALLATION.md
+        - Compatibility: experimental/COMPATIBILITY.md
+      - Helpy:
+        - Desktop and settings: experimental/HELPY-STANDALONE.md
+        - Native overlay and controllers: experimental/NATIVE-OVERLAY.md
+        - Authoring, cache and repair: experimental/AUTHORING-AND-REPAIR.md
+        - Bug reports: experimental/HELPY-BUG-REPORTS.md
+        - Cache bundles: experimental/CACHE-BUNDLES.md
+      - Registries and world policies:
+        - Cooked declarations: experimental/COOKED-PAK-REGISTRY-MANIFEST.md
+        - Native data families: experimental/COOKED-NATIVE-DATA-FAMILIES.md
+        - Cooked table extensions: experimental/COOKED-TABLE-EXTENSIONS.md
+        - Raw table reference: experimental/reference/loaders/raw.md
+        - World policies: experimental/BUILDING-WORLD-POLICIES.md
+        - Skills investigation: experimental/SKILL-REGISTRY.md
+      - Offline cache authoring: experimental/modders/offline-helpy-cache.md
+      - 0.8.1.0 changelog: experimental/CHANGELOG-0.8.1.0.md

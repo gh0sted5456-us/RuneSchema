@@ -162,7 +162,7 @@ inline void Inventory(bool compact=false){
     if(HelpyImGuiTheme::SoftButton("Remove Junk..."))selectRemoval(true);if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("Select junk on this filtered page for reviewed draft removal. Skips locked, favorite, equipped and unresolved items.");
     ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Remove All..."))selectRemoval(false);if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("Select eligible items on this filtered page, not unseen pages. Nothing is removed until confirmed and staged; export is separate.");
     ImGui::TextDisabled("%zu items · %zu selected",visible.size(),ItemSelection.size());
-    if(!compact)ImGui::Checkbox("Advanced record table",&InventoryRecordTable);
+    if(!compact)HelpyImGuiTheme::Toggle("Advanced record table",&InventoryRecordTable);
     if(!InventoryRecordTable)InventoryPlacards(visible,compact,offset);
     else if(ImGui::BeginTable("##save-inventory",compact?2:4,ImGuiTableFlags_BordersInnerH|ImGuiTableFlags_Resizable|ImGuiTableFlags_ScrollY,{0,HelpyImGuiTheme::Current.Y(245)})){
         if(!compact)ImGui::TableSetupColumn("Select",ImGuiTableColumnFlags_WidthFixed,HelpyImGuiTheme::Current.X(40));ImGui::TableSetupColumn("Item / source");ImGui::TableSetupColumn("Stack",ImGuiTableColumnFlags_WidthFixed,HelpyImGuiTheme::Current.X(compact?88:120));if(!compact)ImGui::TableSetupColumn("PersistenceID / saved slot");ImGui::TableHeadersRow();
@@ -206,7 +206,7 @@ inline void Edit(){
         ImGui::EndCombo();
     }
     if(ImGui::InputText("Character JSON path",File,sizeof(File)))Invalidate();
-    ImGui::Checkbox("This character is not currently loaded",&Offline);
+    HelpyImGuiTheme::Toggle("This character is not currently loaded",&Offline);
     ImGui::BeginDisabled(!Offline);Button("Open editable copy","SaveEditorOpen",{{"Path",File},{"Offline",Offline}});ImGui::EndDisabled();
     ImGui::TextWrapped("Copy-only editing: original files, identities, ownership and unknown fields stay intact. World/SPUD and opaque WGS containers are not supported yet.");
     if(!Opened)return;

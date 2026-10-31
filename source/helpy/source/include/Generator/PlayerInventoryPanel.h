@@ -130,7 +130,7 @@ inline void Inventory(float height){
     ImGuiListClipper clip;clip.Begin(int((matches.size()+columns-1)/columns),cardHeight+ImGui::GetStyle().ItemSpacing.y);
     while(clip.Step())for(int line=clip.DisplayStart;line<clip.DisplayEnd;++line)for(int column=0;column<columns;++column){const size_t index=size_t(line)*columns+column;if(index>=matches.size())break;
         const auto& row=rows[matches[index]];const auto slot=std::to_string(row.value("Slot",0)),path=ItemPresentation::Text(row,"Path"),name=ItemPresentation::Name(row);
-        if(column)ImGui::SameLine();ImGui::PushID(slot.c_str());const auto a=ImGui::GetCursorScreenPos();if(ImGui::InvisibleButton("##inventory-card",{width,cardHeight})){SelectedSlot=slot;SelectedInventory=row;ItemGridPicker::PinDetails(row);}
+        if(column)ImGui::SameLine();ImGui::PushID(slot.c_str());const auto a=ImGui::GetCursorScreenPos();if(ImGui::InvisibleButton("##inventory-card",{width,cardHeight},ImGuiButtonFlags_EnableNav)){SelectedSlot=slot;SelectedInventory=row;ItemGridPicker::PinDetails(row);}
         ItemGridPicker::DrawPlacard(row,a,{a.x+width,a.y+cardHeight},SelectedSlot==slot,ImGui::IsItemHovered());
         const auto count=std::string("×")+std::to_string(row.value("Count",1));const auto extent=ImGui::CalcTextSize(count.c_str());ImGui::GetWindowDrawList()->AddText({a.x+width-extent.x-t.X(8),a.y+t.Y(6)},ImGui::GetColorU32(t.text),count.c_str());
         if(HelpyImGuiTheme::TooltipReady("live-inventory:"+slot,ImGui::IsItemHovered()))ItemGridPicker::VerboseTooltip(row,name,path,false,true);
@@ -144,7 +144,7 @@ inline void Inventory(float height){
 }
 inline void Contents(){
     const auto& t=HelpyImGuiTheme::Current;ImGui::PushID("live-inventory-workbench");
-    ImGui::TextWrapped("%s",RuneSchemaProfile::Name(Target).c_str());ImGui::SameLine();if(HelpyImGuiTheme::SoftButton(Detached?"Dock inventory":"Detach inventory"))Detached=!Detached;
+    ImGui::TextWrapped("%s",RuneSchemaProfile::Name(Target).c_str());ImGui::SameLine();if(!HelpyImGuiTheme::NativePresentation&&HelpyImGuiTheme::SoftButton(Detached?"Dock inventory":"Detach inventory"))Detached=!Detached;
     const bool delivering=ItemGridPicker::SharedCart.Delivery()!=0;if(WasDelivering&&!delivering&&Generation==SpawnToolRequests::CurrentGeneration())Reload();WasDelivering=delivering;
     ImGui::BeginChild("##inventory-workbench-body",{0,0});
     if(Container){ImGui::TextWrapped("Lock status: Unknown · locked by: not verified");ImGui::TextWrapped("%s",Snapshot.value("AccessReason",std::string("Direct chest deposits and unlock overrides require a verified native access contract.")).c_str());}

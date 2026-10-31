@@ -1,0 +1,65 @@
+[
+  {
+    "Overview": "experimental/index.md"
+  },
+  {
+    "Install and platforms": [
+      {
+        "Install or update": "experimental/INSTALLATION.md"
+      },
+      {
+        "Vortex": "experimental/VORTEX-INSTALLATION.md"
+      },
+      {
+        "Compatibility": "experimental/COMPATIBILITY.md"
+      }
+    ]
+  },
+  {
+    "Helpy": [
+      {
+        "Desktop and settings": "experimental/HELPY-STANDALONE.md"
+      },
+      {
+        "Native overlay and controllers": "experimental/NATIVE-OVERLAY.md"
+      },
+      {
+        "Authoring, cache and repair": "experimental/AUTHORING-AND-REPAIR.md"
+      },
+      {
+        "Bug reports": "experimental/HELPY-BUG-REPORTS.md"
+      },
+      {
+        "Cache bundles": "experimental/CACHE-BUNDLES.md"
+      }
+    ]
+  },
+  {
+    "Registries and world policies": [
+      {
+        "Cooked declarations": "experimental/COOKED-PAK-REGISTRY-MANIFEST.md"
+      },
+      {
+        "Native data families": "experimental/COOKED-NATIVE-DATA-FAMILIES.md"
+      },
+      {
+        "Cooked table extensions": "experimental/COOKED-TABLE-EXTENSIONS.md"
+      },
+      {
+        "Raw table reference": "experimental/reference/loaders/raw.md"
+      },
+      {
+        "World policies": "experimental/BUILDING-WORLD-POLICIES.md"
+      },
+      {
+        "Skills investigation": "experimental/SKILL-REGISTRY.md"
+      }
+    ]
+  },
+  {
+    "Offline cache authoring": "experimental/modders/offline-helpy-cache.md"
+  },
+  {
+    "0.8.1.0 changelog": "experimental/CHANGELOG-0.8.1.0.md"
+  }
+]

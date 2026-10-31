@@ -1,7 +1,13 @@
 #pragma once
 #include <chrono>
 #include <algorithm>
+#include <cstdint>
 namespace PS {
+struct HelpyPushPacing {
+    std::uint64_t Next=0;
+    unsigned Delay(std::uint64_t now)const{return now<Next?static_cast<unsigned>(std::min<std::uint64_t>(40,Next-now)):0;}
+    void Polled(std::uint64_t now){Next=now+40;}
+};
 struct HelpyFramePacing {
     using Clock=std::chrono::steady_clock;
     Clock::time_point Next{};

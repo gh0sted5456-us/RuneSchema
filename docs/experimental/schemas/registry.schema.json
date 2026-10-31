@@ -1,0 +1,835 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "modOwnedCookedPaths": {
+      "description": "Runtime requires the owning /Owner/ or /Game/Mods/Owner/ namespace and rejects case-insensitive duplicates. Strings only; no Source:Schema or arbitrary property writes.",
+      "items": {
+        "maxLength": 1024,
+        "not": {
+          "pattern": "\\.\\."
+        },
+        "pattern": "^/(?!Script/|Engine/)[A-Za-z0-9_.-]+/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$",
+        "type": "string"
+      },
+      "maxItems": 4096,
+      "type": "array",
+      "uniqueItems": true
+    }
+  },
+  "description": "Enabled loose schema mods and cooked declarations share native-registry enrollment and client/server declarations. Every asset still requires a correct live type and verified native identity; a declaration does not construct an asset or authorize cleanup.",
+  "properties": {
+    "Entries": {
+      "items": {
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "else": {
+              "not": {
+                "required": [
+                  "Relay"
+                ]
+              }
+            },
+            "if": {
+              "properties": {
+                "Kind": {
+                  "const": "DataRelay"
+                }
+              }
+            },
+            "then": {
+              "maxProperties": 3,
+              "required": [
+                "Relay"
+              ]
+            }
+          }
+        ],
+        "anyOf": [
+          {
+            "required": [
+              "Presentation"
+            ]
+          },
+          {
+            "required": [
+              "Authority"
+            ]
+          },
+          {
+            "required": [
+              "Relay"
+            ]
+          }
+        ],
+        "properties": {
+          "Authority": {
+            "additionalProperties": false,
+            "properties": {
+              "Action": {
+                "enum": [
+                  "SpawnFollower",
+                  "ExecuteGraph",
+                  "ConsumedItemAuthority"
+                ]
+              },
+              "Bindings": {
+                "additionalProperties": {
+                  "pattern": "^/(?:Game|DowdunReach|FutureMajorVersion)/",
+                  "type": "string"
+                },
+                "maxProperties": 32,
+                "type": "object"
+              },
+              "DataAsset": {
+                "maxLength": 1024,
+                "pattern": "^/[A-Za-z0-9_.-]+/[^\\r\\n\\t]+$",
+                "type": "string"
+              },
+              "Function": {
+                "default": "Trigger",
+                "pattern": "^[A-Za-z0-9_.-]+$",
+                "type": "string"
+              },
+              "GraphClass": {
+                "pattern": "^/[A-Za-z0-9_.-]+/.+_C$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "Action",
+              "GraphClass"
+            ],
+            "type": "object"
+          },
+          "Id": {
+            "maxLength": 96,
+            "pattern": "^[A-Za-z0-9_.-]+$",
+            "type": "string"
+          },
+          "Kind": {
+            "enum": [
+              "SpellPresentation",
+              "PersistentEffect",
+              "WeatherPresentation",
+              "AudioPresentation",
+              "CosmeticWrapper",
+              "DataRelay",
+              "GameplayAuthority"
+            ]
+          },
+          "Metadata": {
+            "maxProperties": 32,
+            "type": "object"
+          },
+          "Presentation": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "Class": {
+                  "pattern": "^/(?:Game|DowdunReach|FutureMajorVersion)/",
+                  "type": "string"
+                },
+                "Classification": {
+                  "enum": [
+                    "PureVFX",
+                    "CosmeticWrapper",
+                    "NativeReplicated",
+                    "Unsupported"
+                  ]
+                },
+                "Parameters": {
+                  "maxProperties": 32,
+                  "type": "object"
+                },
+                "Phase": {
+                  "maxLength": 96,
+                  "pattern": "^[A-Za-z0-9_.-]+$",
+                  "type": "string"
+                },
+                "Socket": {
+                  "maxLength": 128,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "Phase",
+                "Class",
+                "Classification"
+              ],
+              "type": "object"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "type": "array"
+          },
+          "Relay": {
+            "additionalProperties": false,
+            "properties": {
+              "Broadcast": {
+                "default": false,
+                "type": "boolean"
+              },
+              "Channel": {
+                "maxLength": 96,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9_.-]+$",
+                "type": "string"
+              },
+              "ClientPublish": {
+                "default": false,
+                "type": "boolean"
+              },
+              "MaxBytes": {
+                "default": 65536,
+                "maximum": 65536,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "Snapshot": {
+                "default": false,
+                "type": "boolean"
+              },
+              "Version": {
+                "default": 1,
+                "maximum": 65535,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "Channel"
+            ],
+            "type": "object"
+          },
+          "Spell": {
+            "pattern": "^/(?:Game|DowdunReach|FutureMajorVersion)/",
+            "type": "string"
+          }
+        },
+        "required": [
+          "Id",
+          "Kind"
+        ],
+        "type": "object"
+      },
+      "maxItems": 256,
+      "type": "array"
+    },
+    "LoaderDefinitions": {
+      "additionalProperties": false,
+      "properties": {
+        "Buildings": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "properties": {
+              "AddTo": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "Collection": {
+                        "maxLength": 256,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "PageIndex": {
+                        "maximum": 2147483647,
+                        "minimum": 0,
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "Collection"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "Collection": {
+                          "maxLength": 256,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "PageIndex": {
+                          "maximum": 2147483647,
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "Collection"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 64,
+                    "minItems": 1,
+                    "type": "array"
+                  }
+                ]
+              },
+              "InternalName": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              "PersistenceID": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              "Unlock": {
+                "default": false,
+                "type": "boolean"
+              }
+            },
+            "type": "object"
+          },
+          "maxProperties": 4096,
+          "propertyNames": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "DataTables": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "properties": {
+              "Target": {
+                "maxLength": 1024,
+                "pattern": "^/Game/.+\\.[^./]+$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "Target"
+            ],
+            "type": "object"
+          },
+          "description": "Append missing rows from each mod-owned cooked source DataTable key into its exact plain vanilla Target before loose JSON edits. Runtime verifies identical RowStruct, row limits and copies; existing target rows are preserved.",
+          "maxProperties": 4096,
+          "type": "object"
+        },
+        "Journals": {
+          "additionalProperties": {
+            "type": "object"
+          },
+          "maxProperties": 4096,
+          "type": "object"
+        },
+        "Lore": {
+          "additionalProperties": {
+            "type": "object"
+          },
+          "maxProperties": 4096,
+          "type": "object"
+        },
+        "Recipes": {
+          "additionalProperties": {
+            "type": "object"
+          },
+          "maxProperties": 4096,
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "NativeRegistries": {
+      "additionalProperties": false,
+      "properties": {
+        "Buildings": {
+          "description": "Existing cooked BuildingPieceData only. Preserves native identity and gameplay; no schema clones or automatic unlock.",
+          "items": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "CacheAssets": {
+          "description": "Original artwork references; not gameplay registry identities.",
+          "items": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "CombatSpells": {
+          "items": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "Path": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                    "type": "string"
+                  },
+                  "Source": {
+                    "const": "Schema"
+                  }
+                },
+                "required": [
+                  "Path",
+                  "Source"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "ContainerContents": {
+          "description": "Exact existing cooked objects only. Startup identity enrollment does not synthesize assets, activate hooks or certify gameplay/save lifecycle.",
+          "items": {
+            "maxLength": 1024,
+            "not": {
+              "pattern": "\\.\\."
+            },
+            "pattern": "^/(?!Script/|Engine/)[A-Za-z0-9_.-]+/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$",
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "Enums": {
+          "$ref": "#/definitions/modOwnedCookedPaths",
+          "description": "Read-only verification of exact mod-owned cooked UserDefinedEnum symbol tables; never extends a native enum."
+        },
+        "EquipmentEffects": {
+          "items": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "Path": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                    "type": "string"
+                  },
+                  "Source": {
+                    "const": "Schema"
+                  }
+                },
+                "required": [
+                  "Path",
+                  "Source"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "FTUENotifications": {
+          "description": "Exact existing cooked objects only. Startup identity enrollment does not synthesize assets, activate hooks or certify gameplay/save lifecycle.",
+          "items": {
+            "maxLength": 1024,
+            "not": {
+              "pattern": "\\.\\."
+            },
+            "pattern": "^/(?!Script/|Engine/)[A-Za-z0-9_.-]+/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$",
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "FarmPlants": {
+          "description": "Exact existing cooked objects only. Startup identity enrollment does not synthesize assets, activate hooks or certify gameplay/save lifecycle.",
+          "items": {
+            "maxLength": 1024,
+            "not": {
+              "pattern": "\\.\\."
+            },
+            "pattern": "^/(?!Script/|Engine/)[A-Za-z0-9_.-]+/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$",
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "FixedTextNotifications": {
+          "description": "Exact existing cooked objects only. Startup identity enrollment does not synthesize assets, activate hooks or certify gameplay/save lifecycle.",
+          "items": {
+            "maxLength": 1024,
+            "not": {
+              "pattern": "\\.\\."
+            },
+            "pattern": "^/(?!Script/|Engine/)[A-Za-z0-9_.-]+/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$",
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "Items": {
+          "items": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "Path": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                    "type": "string"
+                  },
+                  "Source": {
+                    "const": "Schema"
+                  }
+                },
+                "required": [
+                  "Path",
+                  "Source"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "Journals": {
+          "items": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "Path": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                    "type": "string"
+                  },
+                  "Source": {
+                    "const": "Schema"
+                  }
+                },
+                "required": [
+                  "Path",
+                  "Source"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "Lore": {
+          "items": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "Path": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                    "type": "string"
+                  },
+                  "Source": {
+                    "const": "Schema"
+                  }
+                },
+                "required": [
+                  "Path",
+                  "Source"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "MeleeAttackClasses": {
+          "items": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "PlayerHooks": {
+          "description": "Exact existing cooked objects only. Startup identity enrollment does not synthesize assets, activate hooks or certify gameplay/save lifecycle.",
+          "items": {
+            "maxLength": 1024,
+            "not": {
+              "pattern": "\\.\\."
+            },
+            "pattern": "^/(?!Script/|Engine/)[A-Za-z0-9_.-]+/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$",
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "Quests": {
+          "items": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "Path": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                    "type": "string"
+                  },
+                  "Source": {
+                    "const": "Schema"
+                  }
+                },
+                "required": [
+                  "Path",
+                  "Source"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "RangedAttackClasses": {
+          "items": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "Recipes": {
+          "items": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "Path": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                    "type": "string"
+                  },
+                  "Source": {
+                    "const": "Schema"
+                  }
+                },
+                "required": [
+                  "Path",
+                  "Source"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "SkillPerks": {
+          "$ref": "#/definitions/modOwnedCookedPaths",
+          "description": "Staged declaration only. Native enrollment remains blocked pending verified perk startup/cache and unlock lifecycle."
+        },
+        "Skills": {
+          "$ref": "#/definitions/modOwnedCookedPaths",
+          "description": "Staged declaration only. Native enrollment remains blocked pending verified ESkill consumers and lifecycle."
+        },
+        "TreeGrowth": {
+          "description": "Exact existing cooked objects only. Startup identity enrollment does not synthesize assets, activate hooks or certify gameplay/save lifecycle.",
+          "items": {
+            "maxLength": 1024,
+            "not": {
+              "pattern": "\\.\\."
+            },
+            "pattern": "^/(?!Script/|Engine/)[A-Za-z0-9_.-]+/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$",
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "Trees": {
+          "description": "Exact existing cooked objects only. Startup identity enrollment does not synthesize assets, activate hooks or certify gameplay/save lifecycle.",
+          "items": {
+            "maxLength": 1024,
+            "not": {
+              "pattern": "\\.\\."
+            },
+            "pattern": "^/(?!Script/|Engine/)[A-Za-z0-9_.-]+/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$",
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "UtilitySpells": {
+          "items": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "Path": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                    "type": "string"
+                  },
+                  "Source": {
+                    "const": "Schema"
+                  }
+                },
+                "required": [
+                  "Path",
+                  "Source"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "WearableMeshData": {
+          "items": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "Path": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
+                    "type": "string"
+                  },
+                  "Source": {
+                    "const": "Schema"
+                  }
+                },
+                "required": [
+                  "Path",
+                  "Source"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "WorldHooks": {
+          "description": "Exact existing cooked objects only. Startup identity enrollment does not synthesize assets, activate hooks or certify gameplay/save lifecycle.",
+          "items": {
+            "maxLength": 1024,
+            "not": {
+              "pattern": "\\.\\."
+            },
+            "pattern": "^/(?!Script/|Engine/)[A-Za-z0-9_.-]+/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$",
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "type": "object"
+    },
+    "SchemaVersion": {
+      "description": "Informational authoring version; supported fields are validated independently."
+    }
+  },
+  "required": [
+    "Entries"
+  ],
+  "title": "RuneSchema registry manifest",
+  "type": "object",
+  "x-runeschema-coverage": "structural"
+}

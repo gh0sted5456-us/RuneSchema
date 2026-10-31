@@ -6,6 +6,7 @@
 #include "Generator/RuneSchemaSettingsPanel.h"
 #include "Generator/PersonalizationPanel.h"
 #include "Generator/DragFeedback.h"
+#include "Generator/CacheBuilderPanel.h"
 #include <future>
 #include <map>
 
@@ -35,6 +36,7 @@ inline std::vector<size_t> PreviewBadgeOrders;
 inline std::vector<ImU32> PreviewBadgeTints;
 #endif
 inline void Start(Json request){
+    if(HelpyModCacheBuilder::Current().Running&&request.value("Action",std::string{})!="ModsRead"){Status="Wait for the cache builder to finish before changing mod files/order.";return;}
     if(Worker.valid()){Status="An operation is already in progress.";return;}
     const auto remote=RuneSchemaSettingsPanel::Remote;if(!remote){Status="Mod management requires a matching RuneSchema core.";return;}
     WorkerMutates=request.value("Action",std::string{})!="ModsRead";
@@ -168,6 +170,7 @@ inline void Render(){
                     const auto folder=row.value("Folder",std::string{});
                     if(ImGui::MenuItem("Open folder",nullptr,false,row.value("Present",false)&&!folder.empty()))ShellExecuteW(nullptr,L"open",std::filesystem::u8path(folder).c_str(),nullptr,nullptr,SW_SHOWNORMAL);
                     ImGui::Separator();
+                    if(ImGui::MenuItem("Create/Update Cache",nullptr,false,row.value("Present",false)&&!Worker.valid()))CacheBuilderPanel::FocusInstalled(Snapshot,row);
                     if(ImGui::MenuItem("Set nickname..."))PersonalizationPanel::Edit(HelpyPersonalization::ModKey(owner),owner,false);
                     if(ImGui::MenuItem("Cache & banner...",nullptr,false,!source.empty())){HelpyIconPacks::SelectedSource=source;HelpyIconPacks::Open=true;}
                     if(ImGui::MenuItem("Export source cache…",nullptr,false,!source.empty()&&!HelpyIconPacks::Busy()&&!HelpyIconPacks::Building())){HelpyIconPacks::SelectedSource=source;HelpyIconPacks::Open=true;HelpyIconPacks::Choose(false);}
@@ -192,7 +195,7 @@ inline void Render(){
                 const auto& metadata=row.at("Metadata");const auto version=metadata.value("version",std::string{});
                 const std::string subtitle=!row.value("Present",false)?"Folder missing":!row.value("Enabled",false)?"Disabled for next launch":version.empty()?"Enabled for next launch":"v"+version+"  |  Enabled next launch";
                 draw->AddText({titleAt.x,titleAt.y+theme.Y(46)},ImGui::GetColorU32(theme.textDisabled),subtitle.c_str());draw->PopClipRect();
-                ImGui::SetCursorScreenPos({b.x-theme.X(116),a.y+theme.Y(12)});bool enabled=row.at("Enabled").get<bool>();if(ImGui::Checkbox("Enabled",&enabled)){row["Enabled"]=enabled;Dirty=true;}
+                ImGui::SetCursorScreenPos({b.x-theme.X(116),a.y+theme.Y(12)});bool enabled=row.at("Enabled").get<bool>();if(HelpyImGuiTheme::Toggle("Enabled",&enabled)){row["Enabled"]=enabled;Dirty=true;}
                 ImGui::SetCursorScreenPos({b.x-theme.X(116),a.y+theme.Y(46)});if(ImGui::SmallButton("Up")&&i){moveFrom=static_cast<int>(i);moveTo=moveFrom-1;}ImGui::SameLine();if(ImGui::SmallButton("Down")&&i+1<Rows.size()){moveFrom=static_cast<int>(i);moveTo=moveFrom+1;}
             }ImGui::EndChild();ImGui::PopID();
         }

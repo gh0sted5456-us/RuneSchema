@@ -47,7 +47,7 @@ inline bool Render(const nlohmann::json& catalog){
     const bool named=!doc.at("ProfileName").get<std::string>().empty();const nlohmann::json account={{"Guid",id},{"Name",named?doc.at("ProfileName").get<std::string>():std::string("Profile")}};
     if(ImGui::BeginChild("##profile-account",{0,t.Y(112)},ImGuiChildFlags_Borders)){
         const auto a=ImGui::GetCursorScreenPos();const float side=t.Y(84);ImGui::BeginGroup();
-        const bool picture=ImGui::InvisibleButton("##account-portrait",{side,side});
+        const bool picture=ImGui::InvisibleButton("##account-portrait",{side,side},ImGuiButtonFlags_EnableNav);
 #ifdef HELPY_PREVIEW
         HelpyPreviewHooks::AuthoringButtons["Profile portrait"]=HelpyPreviewHooks::LastRect();
 #endif

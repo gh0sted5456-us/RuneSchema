@@ -14,6 +14,12 @@ int main(){
         if(!Filename("My art.PNG")||!Filename("Scene.jpeg")||Filename("../Scene.png")||Filename("C:\\Scene.png")||Filename("Scene.png.exe")||Filename("Scene.svg")||Filename(std::string("a\0.png",6)))throw std::runtime_error("Backgrounds must be local supported image filenames");
         const auto wide=Cover(1000,500,500,500),tall=Cover(500,1000,500,500);
         if(wide.Left!=.25f||wide.Right!=.75f||wide.Top!=0||tall.Top!=.25f||tall.Bottom!=.75f||Strength(-1)!=0||Strength(1)!=.3f)throw std::runtime_error("Background fitting must preserve aspect and stay subdued");
+        for(float opacity:{0.f,.6f,.88f,.93f,1.f})for(float strength:{0.f,.12f,.3f}){
+            const auto layers=TintLayers(opacity,strength);const float alpha=layers.Image+layers.Base*(1-layers.Image);
+            const float color=.8f*layers.Image+.04f*layers.Base*(1-layers.Image);
+            const float expected=opacity*(.8f*strength+.04f*(1-strength));
+            if(std::abs(alpha-opacity)>.00001f||std::abs(color-expected)>.00001f)throw std::runtime_error("Overlay background must retain the desktop tint at every opacity");
+        }
     }
     {using namespace PS::RuntimeDuration;
         if(Format(0)!="0 ms"||Format(999)!="999 ms"||Format(1000)!="1 s"||Format(26327)!="26.3 s"||Format(90000)!="1.5 min"||Format(-1)!="Not available"||Format(26327,Unit::Milliseconds)!="26327 ms"||Format(26327,Unit::Seconds)!="26.327 s"||Format(26327,Unit::Minutes)!="0.439 min"||Format(1,Unit::Seconds)!="0.001 s"||Format(60000,Unit::Minutes)!="1 min")throw std::runtime_error("Startup durations must support readable automatic and explicit units");

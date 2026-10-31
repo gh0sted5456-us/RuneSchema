@@ -770,6 +770,46 @@
       "summary": "The optional executable or local desktop bridge could not start.",
       "impact": "The DLL window remains the fallback when initialization can continue. Offline browsing requires the matching optional executable.",
       "action": "Use matching candidate DLLs and Helpy.exe in the assigned installation. Check the plugin settings, local Windows user and complete error. Switch to DLL window and restart if needed."
+    },
+    {
+      "title": "Native UE4SS companion retained",
+      "impact": "The native mod is packaged under ue4ss/Mods instead of being silently subloaded through RuneSchema. Other convertible payloads continue.",
+      "severity": "warning",
+      "code": "RS-CACHE-015",
+      "summary": "The authoring converter found a native UE4SS DLL mod and preserved its original loader directory.",
+      "action": "Install the complete Binaries/Content package with a mod manager or manually. Verify the native DLL file paths and any RuneSchema integration before distributing.",
+      "id": "AuthoringNativeDll",
+      "subsystem": "Cache"
+    },
+    {
+      "id": "OverlayPresented",
+      "code": "RS-OVL-001",
+      "title": "Native Helpy overlay is presenting",
+      "severity": "info",
+      "subsystem": "Helpy overlay",
+      "summary": "The game submitted a frame from Helpy through its native graphics adapter.",
+      "impact": "This records presentation readiness; it is not a frame-rate or latency measurement.",
+      "action": "No action is needed. Use the Helpy shortcut to show or hide the panel."
+    },
+    {
+      "id": "OverlayUnavailable",
+      "code": "RS-OVL-002",
+      "title": "Native Helpy overlay could not open",
+      "severity": "warning",
+      "subsystem": "Helpy overlay",
+      "summary": "The native presentation bridge rejected attachment, a graphics surface or an input contract.",
+      "impact": "The game retains control; Helpy may offer its separate window. The exact bridge error identifies the failed condition.",
+      "action": "Keep the bridge error and renderer/GPU details from RuneSchema.log. Use matching RuneSchema and Helpy builds; a desktop window requires borderless or windowed mode."
+    },
+    {
+      "id": "OverlayReady",
+      "code": "RS-OVL-003",
+      "title": "Helpy overlay bridge is ready",
+      "severity": "info",
+      "subsystem": "Helpy overlay",
+      "summary": "The native presentation bridge is prepared or attached to the game renderer.",
+      "impact": "Preparation alone does not confirm a visible overlay frame.",
+      "action": "Open Helpy with its configured shortcut. RS-OVL-001 confirms an actual visible presentation."
     }
   ]
 }

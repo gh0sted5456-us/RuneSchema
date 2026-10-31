@@ -42,23 +42,6 @@ launches reuse them without waiting for a complete catalogue rebuild. These
 partial observations do not mark the catalogue complete or grant permission to
 spawn an item. Disabled or removed providers remain excluded.
 
-The current local development candidate also checks typed searches and family
-queries that already have cached hits, so an old partial cache does not hide
-newly mounted items. Results merge into the visible page and are saved. These
-checks use up to 32 slices over ten seconds, with a one-minute repeat cooldown;
-ordinary automatic work pauses while Helpy is hidden.
-
-To request a particular mod's index, choose its name in the Item Bay source
-filter and click **Refresh source** beside it. The game must be connected.
-Existing cache remains available while mounted metadata is checked. If the
-bounded check stops early, refresh again to continue. It updates browsing
-references; it does not reload PAKs or change gameplay registrations.
-
-Right-click an item and choose **Show Mod Family** to find the same family
-within its modpack. **View family** retains the broader source selection.
-Equipment keeps its dye/trim distinctions; contract families group material
-tiers of the same equipment type.
-
 Discovery also checks the exact package inventory of enabled containers when
 the native item registry omits mod assets. `ITEM_` package names are presentation
 candidates; the actual native type and availability are still checked when used.

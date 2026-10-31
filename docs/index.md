@@ -31,6 +31,9 @@ includes the October 28 update, with safer cleanup timing, Mod Menu integration
 and Helpy refinements. Check <a href="CURRENT-RELEASE/">download and source status</a>
 to see which changes are in the release package.</p>
 
+<p>Trying an upcoming feature? Visit the <a href="experimental/">Experimental area</a>
+for its setup, defaults, testing status and changelog. The guides below follow main.</p>
+
 <h2 class="rs-section-heading">Choose your path</h2>
 <div class="rs-paths">
   <article class="rs-path">

@@ -181,7 +181,7 @@ inline void Render(bool catalogueBusy=false){
         if(!error)ShellExecuteW(nullptr,L"open",folder.c_str(),nullptr,nullptr,SW_SHOWNORMAL);
     }
     if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("%s",HostServices::CacheDirectory().string().c_str());
-    ImGui::Checkbox("Advanced",&Advanced);
+    HelpyImGuiTheme::Toggle("Advanced",&Advanced);
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::CacheAdvanced=HelpyPreviewHooks::LastRect();
 #endif
@@ -225,7 +225,7 @@ inline void Render(bool catalogueBusy=false){
     ImGui::TextWrapped("Mod authors can ship cache/*.rsmk-cache (or legacy *.rsmk-icons) inside their RuneSchema mod. Typed references are restricted to that active owner; supplied bundles are never edited.");
     ImGui::BeginDisabled(Busy()||Building()||catalogueBusy);
     if(HelpyEnvironment::Server()){
-        ImGui::Checkbox("Use client packs as display-only thumbnails",&ServerDisplayOnly);
+        HelpyImGuiTheme::Toggle("Use client packs as display-only thumbnails",&ServerDisplayOnly);
         ImGui::TextWrapped("Matches exact icon paths in active server sources, even when the server cook omits textures. These pictures may differ from the server version; they are not item definitions and are excluded from verified cache exports.");
     }
     if(ImGui::Button("Build / update, then export..."))Choose(false,true);ImGui::EndDisabled();
@@ -256,7 +256,7 @@ inline void Render(bool catalogueBusy=false){
 }
 inline void RenderWindowContents(bool catalogueBusy=false){
     ImGui::TextUnformatted("Content cache");ImGui::SameLine();
-    if(ImGui::SmallButton(Detached?"Dock back":"Detach window"))Detached=!Detached;
+    if(!HelpyImGuiTheme::NativePresentation&&ImGui::SmallButton(Detached?"Dock back":"Detach window"))Detached=!Detached;
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::CacheDetach=HelpyPreviewHooks::LastRect();
 #endif

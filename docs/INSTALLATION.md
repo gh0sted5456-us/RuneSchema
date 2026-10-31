@@ -7,10 +7,6 @@ and Game Pass. Use the package intended for your game and UE4SS installation.
 New to the framework? Start with [what RuneSchema is, what its files do, and
 how to make an add-on](MOD-HOSTS-AND-GETTING-STARTED.md).
 
-Using Vortex? See [installer layouts and triplet troubleshooting](VORTEX-INSTALLATION.md).
-The [optional standalone Helpy app](HELPY-STANDALONE.md) is a local development
-candidate; the normal release continues to include the DLL desktop window.
-
 ## Before installation
 
 You need:

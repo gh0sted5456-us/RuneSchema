@@ -4,9 +4,11 @@ Find a code from your log to see what happened and what to try next. Use the mes
 
 Open Helpy's **Diagnostics** for an overview, grouped issues and Live Log. You can copy an entry or follow its reference link here. The viewer leaves the original logs unchanged; recent activity includes normal messages, while notifications focus on warnings and errors.
 
-This page contains **77 legacy reference entries**, **222 structured diagnostic entries** and **19 bridge reason codes**. RS-JRN-001, RS-JRN-002 and RS-SPAWN-001 each have an older and a structured meaning. Follow the link from your message, or check its source and namespace to choose the matching entry. Links between the two meanings are included.
+This page contains **81 legacy reference entries**, **222 structured diagnostic entries** and **19 bridge reason codes**. RS-JRN-001, RS-JRN-002 and RS-SPAWN-001 each have an older and a structured meaning. Follow the link from your message, or check its source and namespace to choose the matching entry. Links between the two meanings are included.
 
 Structured reports in `RSDiagLog.jsonl` include their source, context and outcome. Not every operation emits every code. `Unknown` means the cause has not been identified; use the severity in the actual message. `Partial` means some changes may have occurred, and `Deferred` points to later or restart handling. `Skipped` or `Blocked` can describe one step while the rest of the mod continues.
+
+This shared reference covers stable and [experimental builds](experimental/index.md). A code's presence here does not mean every build can emit it; use your installed version and original event as context.
 
 ## Find your next step {#read-a-code-safely}
 
@@ -48,6 +50,7 @@ Structured reports in `RSDiagLog.jsonl` include their source, context and outcom
 | [RS-NET](#legacy-family-rs-net) | Multiplayer |
 | [RS-NIA](#structured-family-rs-nia) | Niagara |
 | [RS-NPC](#structured-family-rs-npc) | NPCs |
+| [RS-OVL](#legacy-family-rs-ovl) | Helpy overlay |
 | [RS-PARTY](#legacy-family-rs-party) | Party |
 | [RS-PERF](#legacy-family-rs-perf) | Performance |
 | [RS-PLUG](#legacy-family-rs-plug) | Plugins |
@@ -433,6 +436,34 @@ Correct cache.loadOrder in ui.jsonc, then reload Helpy. Use cacheFirst or gameFi
 Correct cache.loadOrder in ui.jsonc, then reload Helpy. Use cacheFirst or gameFirst. The invalid preference is rejected; the original configuration is retained.
 
 [Direct link to RS-CACHE-013](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-cache-013)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-CACHE-015" data-rs-severity="warning" markdown="1">
+
+### RS-CACHE-015: Native UE4SS companion retained {#rs-cache-015}
+
+**Cache · Typical level: warning**
+
+The authoring converter found a native UE4SS DLL mod and preserved its original loader directory.
+
+**Common reasons**
+
+A creation/conversion input includes a native UE4SS DLL mod. Its byte content and native ue4ss/Mods placement are preserved; this is not a DLL compatibility failure.
+
+**What RuneSchema does**
+
+The native mod is packaged under ue4ss/Mods instead of being silently subloaded through RuneSchema. Other convertible payloads continue.
+
+**What to do next**
+
+Install the complete Binaries/Content package with a mod manager or manually. Verify the native DLL file paths and any RuneSchema integration before distributing.
+
+**Troubleshooting checks**
+
+Review the job warnings and packaged native companion. Do not assume its relative file lookups or native bridge can reach inside RuneSchema. Verify that integration with the DLL author. Helpy does not execute or rewrite the DLL.
+
+[Direct link to RS-CACHE-015](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-cache-015)
 
 </section>
 
@@ -1329,6 +1360,92 @@ Match the required building definitions and enable the current RuneSchema networ
 Confirm required building definitions match, including versioned Totems or other building providers. Enable RuneSchema networking on both sides and retry after the handshake. Native-prefix agreement permits native pieces despite unrelated extra mods; no building IDs are silently rewritten.
 
 [Direct link to RS-NET-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-net-003)
+
+</section>
+
+## Helpy overlay — RS-OVL {#legacy-family-rs-ovl}
+
+<section class="rs-code-card" data-rs-code="RS-OVL-001" data-rs-severity="info" markdown="1">
+
+### RS-OVL-001: Native Helpy overlay is presenting {#rs-ovl-001}
+
+**Helpy overlay · Typical level: info**
+
+The game submitted a frame from Helpy through its native graphics adapter.
+
+**Common reasons**
+
+The game submitted a frame from Helpy through its native graphics adapter.
+
+**What RuneSchema does**
+
+This records presentation readiness; it is not a frame-rate or latency measurement.
+
+**What to do next**
+
+No action is needed. Use the Helpy shortcut to show or hide the panel.
+
+**Troubleshooting checks**
+
+No action is needed. Use the Helpy shortcut to show or hide the panel.
+
+[Direct link to RS-OVL-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-ovl-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-OVL-002" data-rs-severity="warning" markdown="1">
+
+### RS-OVL-002: Native Helpy overlay could not open {#rs-ovl-002}
+
+**Helpy overlay · Typical level: warning**
+
+The native presentation bridge rejected attachment, a graphics surface or an input contract.
+
+**Common reasons**
+
+The native presentation bridge rejected attachment, a graphics surface or an input contract.
+
+**What RuneSchema does**
+
+The game retains control; Helpy may offer its separate window. The exact bridge error identifies the failed condition.
+
+**What to do next**
+
+Keep the bridge error and renderer/GPU details from RuneSchema.log. Use matching RuneSchema and Helpy builds; a desktop window requires borderless or windowed mode.
+
+**Troubleshooting checks**
+
+Keep the bridge error and renderer/GPU details from RuneSchema.log. Use matching RuneSchema and Helpy builds; a desktop window requires borderless or windowed mode.
+
+[Direct link to RS-OVL-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-ovl-002)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-OVL-003" data-rs-severity="info" markdown="1">
+
+### RS-OVL-003: Helpy overlay bridge is ready {#rs-ovl-003}
+
+**Helpy overlay · Typical level: info**
+
+The native presentation bridge is prepared or attached to the game renderer.
+
+**Common reasons**
+
+The native presentation bridge is prepared or attached to the game renderer.
+
+**What RuneSchema does**
+
+Preparation alone does not confirm a visible overlay frame.
+
+**What to do next**
+
+Open Helpy with its configured shortcut. RS-OVL-001 confirms an actual visible presentation.
+
+**Troubleshooting checks**
+
+Open Helpy with its configured shortcut. RS-OVL-001 confirms an actual visible presentation.
+
+[Direct link to RS-OVL-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-ovl-003)
 
 </section>
 

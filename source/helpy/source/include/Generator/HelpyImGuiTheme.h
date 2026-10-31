@@ -31,6 +31,9 @@
 namespace PS::HelpyImGuiTheme {
 
 inline float RuntimeDpi=1.0f;
+inline float OverlayRenderScale=1.f;
+inline bool NativePresentation=false;
+inline std::string NativeOverlayStatus;
 inline bool PictureBackingActive=false; // Presentation state, not a saved preference.
 inline void SetRuntimeDpi(float dpi){RuntimeDpi=std::clamp(dpi,0.75f,3.0f);}
 inline ImVec4 Hex(unsigned value){return {((value>>16)&255)/255.0f,((value>>8)&255)/255.0f,(value&255)/255.0f,1.0f};}
@@ -68,8 +71,11 @@ struct Theme {
     int helpyFpsLimit{60},fpsRefreshMs{1000};
     bool showFps{false};
     bool showGameFps{false};
-    bool gameOverlay{false};
-    float overlayOpacity{.88f};
+    bool gameOverlay{true};
+    bool nativeOverlay{true};
+    int inputMode=0,controllerGlyphs=0;
+    bool autoInstallAuthoringDotNet{true};
+    float overlayOpacity{.88f},overlaySize{.9f},overlayUiScale{1.f};
     std::string fpsHotkey{"F10"};
     std::string backgroundFile;
     float backgroundStrength{.12f};
@@ -100,7 +106,7 @@ struct Theme {
         const auto fb=ImGui::GetIO().DisplayFramebufferScale;dpi=std::max({dpi,std::max(fb.x,fb.y),RuntimeDpi});
         return std::clamp(dpi,0.75f,3.0f);
     }
-    float Scale() const{return std::clamp(Dpi()*userScale,0.65f,3.0f);}
+    float Scale() const{return std::clamp(Dpi()*userScale*OverlayRenderScale,0.65f,3.0f);}
     float X(float value) const{return value*Scale();}
     float Y(float value) const{return value*Scale()*density;}
 };
@@ -181,6 +187,27 @@ inline bool SoftButton(const char* label,const ImVec2& size=ImVec2(0,0)){
     if(fade>0.01f){auto outline=Current.accent;outline.w*=fade*0.65f;ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(),ImGui::GetItemRectMax(),ImGui::GetColorU32(outline),Current.X(Current.frameRounding),0,1.0f);}
     return clicked;
 }
+inline bool Toggle(const char* label,bool* value){
+    const auto visible=std::string_view(label).substr(0,std::string_view(label).find("##"));
+    const float height=ImGui::GetFrameHeight(),track=height*1.75f,gap=ImGui::GetStyle().ItemInnerSpacing.x;
+    const float width=std::max(1.f,ImGui::GetContentRegionAvail().x);
+    const float labelWidth=std::max(1.f,width-track-gap);
+    const auto text=ImGui::CalcTextSize(visible.data(),visible.data()+visible.size(),false,labelWidth);
+    const ImVec2 size{std::min(width,track+gap+text.x),std::max(height,text.y)};
+    const auto at=ImGui::GetCursorScreenPos();
+    ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(0,0,0,0));
+    ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(0,0,0,0));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered,ImVec4(0,0,0,0));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,ImVec4(0,0,0,0));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize,0.f);
+    const bool pressed=ImGui::Button(label,size);ImGui::PopStyleVar();ImGui::PopStyleColor(4);
+    if(pressed)*value=!*value;
+    auto* draw=ImGui::GetWindowDrawList();const float y=at.y+(size.y-height)*.5f;
+    draw->AddRectFilled({at.x,y},{at.x+track,y+height},ImGui::GetColorU32(*value?ImGuiCol_CheckMark:ImGui::IsItemHovered()?ImGuiCol_FrameBgHovered:ImGuiCol_FrameBg),height*.5f);
+    draw->AddCircleFilled({at.x+(*value?track-height*.5f:height*.5f),y+height*.5f},height*.34f,ImGui::GetColorU32(ImGuiCol_Text));
+    draw->AddText(nullptr,0,{at.x+track+gap,at.y+(size.y-text.y)*.5f},ImGui::GetColorU32(ImGuiCol_Text),visible.data(),visible.data()+visible.size(),labelWidth);
+    return pressed;
+}
 inline std::atomic<bool> ForceReload{true};
 inline bool Loaded=false,HaveStamp=false;
 inline std::filesystem::file_time_type Stamp{};
@@ -251,9 +278,11 @@ inline nlohmann::json DocumentFrom(const Theme& t,int iconCacheMB) {
         {"display",{{"dpiAware",t.dpiAware},{"userScale",t.userScale},{"fontScale",t.fontScale},{"density",t.density},{"fontFamily",t.fontFamily},{"textBold",t.textBold},{"verboseTooltips",t.verboseTooltips},{"tooltipDelay",t.tooltipDelay}}},
         {"views",{{"advancedMode",t.advancedMode},{"itemGrid",t.itemGridView},{"itemPageSize",t.itemPageSize},{"itemGridColumns",t.itemGridColumns},{"itemGridRows",t.itemGridRows},{"itemGridFitRows",t.itemGridFitRows},{"itemShowPlaceholders",t.itemShowPlaceholders},{"aiGrid",t.aiGridView},{"itemResultHeight",t.itemResultHeight},{"aiResultHeight",t.aiResultHeight},{"itemCategory",t.itemCategory},{"itemSource",t.itemSource},{"itemBayBrowseRatio",t.itemBayBrowseRatio},{"dockedBayHeight",t.dockedBayHeight},{"itemCartWidth",t.itemCartWidth}}},
         {"cache",{{"iconCacheMB",std::clamp(iconCacheMB,0,16384)},{"loadOrder",HelpyRuntimePreferences::CacheFirst.load()?"cacheFirst":"gameFirst"},{"passiveRefresh",HelpyRuntimePreferences::PassiveRefresh.load()}}},
+        {"input",{{"mode",t.inputMode},{"glyphs",t.controllerGlyphs}}},
+        {"authoring",{{"autoInstallDotNet",t.autoInstallAuthoringDotNet}}},
         {"updates",{{"automaticChecks",t.automaticUpdateChecks},{"artwork",t.updateArtwork},{"worldMap",t.updateWorldMap},{"mapFilters",t.updateMapFilters}}},
         {"preview",{{"quality",t.previewQuality},{"animation",t.previewAnimate},{"details",t.previewDetails},{"scaleUsePortrait",t.scaleUsePortrait},{"scaleReferenceIcon",t.scaleReferenceIcon}}},
-        {"runtime",{{"timeUnit",t.runtimeTimeUnit},{"helpyFpsLimit",t.helpyFpsLimit},{"showFps",t.showFps},{"fpsRefreshMs",t.fpsRefreshMs},{"showGameFps",t.showGameFps},{"fpsHotkey",t.fpsHotkey},{"gameOverlay",t.gameOverlay},{"overlayOpacity",t.overlayOpacity}}},
+        {"runtime",{{"timeUnit",t.runtimeTimeUnit},{"helpyFpsLimit",t.helpyFpsLimit},{"showFps",t.showFps},{"fpsRefreshMs",t.fpsRefreshMs},{"showGameFps",t.showGameFps},{"fpsHotkey",t.fpsHotkey},{"gameOverlay",t.gameOverlay},{"nativeOverlay",t.nativeOverlay},{"overlayOpacity",t.overlayOpacity},{"overlaySize",t.overlaySize},{"overlayUiScale",t.overlayUiScale}}},
         {"background",{{"file",t.backgroundFile},{"strength",t.backgroundStrength}}},
         {"liveLog",{{"colorRules",LiveLog::WriteColors(t.logColors)}}},
         {"notifications",{{"enabled",t.diagnosticToastsEnabled},{"visibleLimit",t.diagnosticToastLimit},{"durationSeconds",t.diagnosticToastDuration},{"registryActivity",t.diagnosticRegistryActivity}}},
@@ -355,8 +384,13 @@ inline void Reload(bool createIfMissing=true) {
         next.fpsRefreshMs=ReadInt(runtime,"fpsRefreshMs",1000,500,2000);
         next.showFps=runtime.value("showFps",false);
         next.showGameFps=runtime.value("showGameFps",false);
-        next.gameOverlay=runtime.value("gameOverlay",false);
+        next.gameOverlay=runtime.value("gameOverlay",true);
+        next.nativeOverlay=runtime.value("nativeOverlay",true);
+        const auto input=doc.value("input",nlohmann::json::object());next.inputMode=ReadInt(input,"mode",0,0,2);next.controllerGlyphs=ReadInt(input,"glyphs",0,0,3);
+        next.autoInstallAuthoringDotNet=doc.value("authoring",nlohmann::json::object()).value("autoInstallDotNet",true);
         next.overlayOpacity=ReadFloat(runtime,"overlayOpacity",.88f,.60f,1.f);
+        next.overlaySize=ReadFloat(runtime,"overlaySize",.9f,.45f,.98f);
+        next.overlayUiScale=ReadFloat(runtime,"overlayUiScale",1.f,.65f,1.5f);
         next.fpsHotkey=runtime.value("fpsHotkey",std::string("F10"));
         if(const auto* key=HelpyShortcut::Find(next.fpsHotkey))next.fpsHotkey=key->Name;else next.fpsHotkey="F10";
         const auto background=doc.value("background",nlohmann::json::object());
@@ -443,7 +477,7 @@ inline bool TooltipReady(std::string_view key,bool hovered) {
 
 inline bool SearchIconButton(const char* id,float logicalSize=0.0f) {
     const auto& t=Current;const float side=logicalSize>0.0f?t.Y(logicalSize):ImGui::GetFrameHeight();
-    ImGui::PushID(id);const bool clicked=ImGui::InvisibleButton("##search",ImVec2(side,side));
+    ImGui::PushID(id);const bool clicked=ImGui::InvisibleButton("##search",ImVec2(side,side),ImGuiButtonFlags_EnableNav);
     const auto a=ImGui::GetItemRectMin(),b=ImGui::GetItemRectMax();auto* draw=ImGui::GetWindowDrawList();
     const ImU32 bg=ImGui::GetColorU32(ImGui::IsItemActive()?t.buttonActive:ImGui::IsItemHovered()?t.buttonHover:t.button);
     draw->AddRectFilled(a,b,bg,t.X(t.frameRounding));

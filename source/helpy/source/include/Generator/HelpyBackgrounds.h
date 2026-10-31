@@ -74,17 +74,17 @@ inline void Pump(){
     }}SettingsVisible=false;
 }
 inline const Image* Find(const std::string& name){const auto found=Images.find(name);return found==Images.end()?nullptr:&found->second;}
-inline void DrawWindow(){
+inline void DrawWindow(float opacity=1.f){
     if(!Opaque())return;const auto* image=Find(Effective());
     const auto strength=BackgroundPolicy::Strength(Preview?DraftStrength:HelpyImGuiTheme::Current.backgroundStrength);
     const auto a=ImGui::GetWindowPos(),size=ImGui::GetWindowSize();
     auto* draw=ImGui::GetWindowDrawList();draw->PushClipRect(a,{a.x+size.x,a.y+size.y},true);
     const auto base=HelpyImGuiTheme::Current.window;
-    draw->AddRectFilled(a,{a.x+size.x,a.y+size.y},ImGui::GetColorU32(ImVec4(base.x,base.y,base.z,1)));
+    const auto layers=BackgroundPolicy::TintLayers(opacity,image&&image->Texture?strength:0.f);
+    draw->AddRectFilled(a,{a.x+size.x,a.y+size.y},ImGui::GetColorU32(ImVec4(base.x,base.y,base.z,layers.Base)));
     if(image&&image->Texture){
         const auto crop=BackgroundPolicy::Cover(float(image->Width),float(image->Height),size.x,size.y);
-        draw->AddImage(ImTextureRef(image->Texture),a,{a.x+size.x,a.y+size.y},{crop.Left,crop.Top},{crop.Right,crop.Bottom},ImGui::GetColorU32(ImVec4(1,1,1,1)));
-        draw->AddRectFilled(a,{a.x+size.x,a.y+size.y},ImGui::GetColorU32(ImVec4(base.x,base.y,base.z,1-strength)));
+        draw->AddImage(ImTextureRef(image->Texture),a,{a.x+size.x,a.y+size.y},{crop.Left,crop.Top},{crop.Right,crop.Bottom},ImGui::GetColorU32(ImVec4(1,1,1,layers.Image)));
     }draw->PopClipRect();
 #if defined(HELPY_PREVIEW)
     ++HelpyPreviewHooks::BackgroundDraws;

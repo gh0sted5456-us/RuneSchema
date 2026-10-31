@@ -1,5 +1,6 @@
 #include "HelpyDesktopTransport.h"
 #include "Core/HelpyGameLifetime.h"
+#include "Core/HelpyFramePacing.h"
 #include "Runtime/HelpySettings.h"
 #include "Runtime/RuneSchemaPluginApi.h"
 #include "Runtime/HelpyOfflineRuntime.h"
@@ -7,6 +8,7 @@
 #include "Core/DiagnosticLogPaths.h"
 #include "Runtime/HelpyPaths.h"
 #include "HelpyDesktopLaunch.h"
+#include "HelpyDesktopShortcut.h"
 #include <shellapi.h>
 #include <map>
 #include <cstring>
@@ -131,6 +133,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR,int){
         singleton=CreateMutexW(nullptr,FALSE,local.c_str());
         if(!singleton)throw std::runtime_error("Cannot reserve this runtime's Helpy window");
         if(GetLastError()==ERROR_ALREADY_EXISTS){if(!startHidden)SetEvent(activate);CloseHandle(activate);CloseHandle(singleton);return 0;}
+        if(!smoke)try{PS::HelpyDesktopShortcut::Ensure(root/"plugins/RuneSchema.Helpy/dll/Helpy.exe",platform,executable.parent_path());}catch(const std::exception& error){Log(RS_LOG_WARNING,"RuneSchema.Helpy",error.what());}
         OfflineEnvironment={{"Storefront",platform=="gamepass"?"Game Pass/WinGDK":"Steam/Epic"},{"Platform",platform=="epic"?"Epic Games":"Steam"},{"DedicatedServer",platform=="server"},{"NativeIconCaptureAvailable",false},{"UpdateChecksAvailable",true},{"DesktopStartHidden",startHidden}};
         Bridge.Connect(root);
         PS::HelpyPaths::Configure(root/"plugins/RuneSchema.Helpy");
@@ -140,7 +143,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR,int){
         const auto unreal=RuneSchemaPlugin_OnUnrealInit;
         if(unreal(instance)!=RS_PLUGIN_OK||!Ready())throw std::runtime_error("Helpy desktop window could not start; check its plugin settings");
         worker=std::jthread([root](std::stop_token stop){
-            std::string lastFailure;const auto stopped=CreateEventW(nullptr,TRUE,FALSE,nullptr);
+            PS::HelpyPushPacing pushPacing;std::string lastFailure;const auto stopped=CreateEventW(nullptr,TRUE,FALSE,nullptr);
             {std::stop_callback cancel(stop,[stopped]{if(stopped)SetEvent(stopped);});bool update=true;
             while(!stop.stop_requested()){
                 try{
@@ -152,14 +155,14 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR,int){
                         if(!Bridge.Pid.load()&&Bridge.Connect(root)){
                             Connection(Bridge.Pid.load());Json ignored;if(Bridge.Exchange({{"Op","Call"},{"Request",{{"Action","HelpyVisibility"},{"Visible",Visible.load()}}},{"Capacity",4096}},ignored))Deliver(ignored);
                         }
-                        Json reply;if(Bridge.Pid.load()&&Bridge.Exchange({{"Op","Poll"}},reply))Deliver(reply);else Connection(0);
+                        Json reply;if(Bridge.Pid.load()&&Bridge.Exchange({{"Op","Poll"}},reply)){Deliver(reply);pushPacing.Polled(GetTickCount64());}else Connection(0);
                     }
                 }catch(const std::exception& error){std::lock_guard lock(RpcMutex);Bridge.Disconnect();Connection(0);if(lastFailure!=error.what()){lastFailure=error.what();Log(RS_LOG_WARNING,"RuneSchema.Helpy",("[RS-UI-002] "+lastFailure).c_str());}}
                 if(stop.stop_requested())break;
                 const bool attached=Bridge.Pid.load()!=0,notifications=attached&&Bridge.Notifications();
                 const auto interval=!attached?2000u:notifications?(Visible.load()?2000u:5000u):(Visible.load()?200u:2000u);
                 update=Bridge.WaitForUpdates(stopped?interval:std::min(interval,100u),stopped);
-                if(update){if(stopped){if(WaitForSingleObject(stopped,40)==WAIT_OBJECT_0)break;}else Sleep(40);}
+                if(update)if(const auto delay=pushPacing.Delay(GetTickCount64());delay){if(stopped){if(WaitForSingleObject(stopped,delay)==WAIT_OBJECT_0)break;}else Sleep(delay);}
             }}if(stopped)CloseHandle(stopped);
 
         });

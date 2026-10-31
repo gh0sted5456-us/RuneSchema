@@ -1,6 +1,11 @@
 #include <windows.h>
 #include "Core/RsmkResources.h"
 IDI_RSMK ICON "RSMK.ico"
+#ifdef RSMK_EXECUTABLE
+IDR_CACHE_BUILDER RCDATA "../../../../resources/tools/build-helpy-cache.ps1"
+IDR_NEXUS_ICON RCDATA "../../../../resources/helpy-ui/v1/nexus.png"
+IDR_RUNESCHEMA_REPAIR RCDATA "../../../../resources/tools/repair-runeschema.ps1"
+#endif
 
 VS_VERSION_INFO VERSIONINFO
  FILEVERSION 0,8,1,0

@@ -446,7 +446,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         )
         $configureArgs += '-DRUNESCHEMA_BUILD_MANAGED_UE4SS_HOST=OFF'
         Ensure-CMakeConfigured $RawSource $build $configureArgs 'universal RuneSchema'
-        $targets = if ($OnlyPlugin) { @('RuneSchemaHelpyPlugin','HelpyDesktop') } else { @('RuneSchema', 'RuneSchemaHelpyPlugin','HelpyDesktop') }
+        $targets = if ($OnlyPlugin) { @('RuneSchemaHelpyPlugin','HelpyDesktop','HelpyVulkanBootstrap') } else { @('RuneSchema', 'RuneSchemaHelpyPlugin','HelpyDesktop','HelpyVulkanBootstrap') }
         Write-Host $(if ($OnlyPlugin) { '=== Compile Helpy plugin only (RuneSchema.dll is untouched) ===' } else { '=== Compile universal RuneSchema ===' }) -ForegroundColor Cyan
         Write-Host 'Ninja auto-regeneration is disabled; build.ps1 owns all CMake reconfiguration.' -ForegroundColor DarkGray
 
@@ -515,6 +515,9 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         $desktop=Join-Path (Split-Path -Parent $HelpyDll) 'Helpy.exe'
         if(!(Test-Path -LiteralPath $desktop -PathType Leaf)){throw 'The Helpy bridge requires its matching application'}
         Copy-Item -LiteralPath $desktop -Destination (Join-Path $Destination 'Helpy.exe') -Force
+        $vulkan=Join-Path (Split-Path -Parent $HelpyDll) 'RuneSchema.Helpy.Vulkan.dll'
+        if(!(Test-Path -LiteralPath $vulkan -PathType Leaf)){throw 'The Helpy package requires its matching opt-in Vulkan startup selector'}
+        Copy-Item -LiteralPath $vulkan -Destination (Join-Path $Destination 'RuneSchema.Helpy.Vulkan.dll') -Force
     }
     function New-HelpyPluginPackage([string]$HelpyDll) {
         $name = "RuneSchema.Helpy-$Version"

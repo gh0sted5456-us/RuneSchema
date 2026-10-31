@@ -103,7 +103,7 @@ existing joined player's IDs are not rewritten to admit another client.
 
 ## Optional external desktop and installer follow-up
 
-The [standalone desktop candidate](../HELPY-STANDALONE.md) reuses the existing
+The [standalone desktop candidate](../experimental/HELPY-STANDALONE.md) reuses the existing
 GUI DLL in a separate executable host, with local runtime-specific JSON IPC.
 The EXE is now the sole UI host; the DLL contains bridge services only. Offline settings/order/import operations
 reuse existing filesystem logic; game operations retain their native adapters.

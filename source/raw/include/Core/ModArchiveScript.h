@@ -65,7 +65,11 @@ try {
     [IO.Directory]::CreateDirectory($stage)|Out-Null
     $stagePrefix=[IO.Path]::GetFullPath($stage)+[IO.Path]::DirectorySeparatorChar
     foreach($file in $files){
-      if(!$file.Name.StartsWith($prefix,[StringComparison]::OrdinalIgnoreCase)){throw 'Archive contains files outside its single mod folder.'}
+      if($file.Name -ieq 'Content/Paks/~mods/runeschema.txt'){if($file.Entry.Length -gt 4096){throw 'RuneSchema deployment marker is too large.'};continue}
+      if(!$file.Name.StartsWith($prefix,[StringComparison]::OrdinalIgnoreCase)){
+        if($file.Name -match '^(?i)Binaries/(Win64|WinGDK)/ue4ss/Mods/'){throw 'This package also contains a native UE4SS mod. Install the complete Binaries/Content package through your mod manager or manually; Helpy will not discard its native companion.'}
+        throw 'Archive contains files outside its single mod folder.'
+      }
       $relative=$file.Name.Substring($prefix.Length)
       if(!$relative){throw 'Empty mod payload path.'}
       $target=[IO.Path]::GetFullPath((Join-Path $stage $relative))

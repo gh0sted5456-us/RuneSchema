@@ -29,7 +29,7 @@ dotnet "$(cygpath -w "$stage/bin/Release/net10.0/HelpyCache.dll")" --folder "$(c
 
 def render():
     result = HEADER
-    for name in ("HelpyCache.csproj", "Program.cs", "AuthoringInputs.cs", "AuthoringInputs.Tests.cs", "packages.lock.json"):
+    for name in ("HelpyCache.csproj", "Program.cs", "AuthoringInputs.cs", "AuthoringInputs.Tests.cs", "CreationArchive.cs", "CreationArchive.Tests.cs", "packages.lock.json"):
         delimiter = "RUNESCHEMA_" + name.replace(".", "_").upper()
         source = (ROOT / name).read_text(encoding="utf-8")
         assert delimiter not in source.splitlines()
@@ -39,12 +39,12 @@ def render():
 
 def render_powershell():
     source = []
-    for name in ("HelpyCache.csproj", "Program.cs", "AuthoringInputs.cs", "AuthoringInputs.Tests.cs", "packages.lock.json"):
+    for name in ("HelpyCache.csproj", "Program.cs", "AuthoringInputs.cs", "AuthoringInputs.Tests.cs", "CreationArchive.cs", "CreationArchive.Tests.cs", "packages.lock.json"):
         text = (ROOT / name).read_text(encoding="utf-8")
         assert "'@" not in text.splitlines()
         source.append(f"$builderSource=@'\n{text.rstrip()}\n'@\n"
                       f"[IO.File]::WriteAllText((Join-Path $stage '{name}'), $builderSource, [Text.UTF8Encoding]::new($false))")
-    return (ROOT / "build-cache.template.ps1").read_text(encoding="utf-8").replace("@@BUILDER_SOURCES@@", "\n".join(source))
+    return (ROOT / "build-cache.template.ps1").read_text(encoding="utf-8").replace("@@BUILDER_SOURCES@@", "\n".join(source)).replace("@@DOTNET_BOOTSTRAP@@", (ROOT / "dotnet-bootstrap.ps1").read_text(encoding="utf-8"))
 
 
 DRAG_DROP = '@echo off\r\npowershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0build-helpy-cache.ps1" -ZipPath "%~1"\r\nset "RSCacheExit=%ERRORLEVEL%"\r\necho.\r\npause\r\nexit /b %RSCacheExit%\r\n'

@@ -27,11 +27,11 @@ installable package; branch source can contain changes newer than that package.
 ## Source and contributions
 
 `main` contains the maintained source and documentation. `experimental` receives
-integration updates; experimental features retain their documented opt-in rules.
+integration updates; its guides identify defaults, setup and testing status.
 
-The current experimental source is **0.8.1.0**. Read its
-[changelog](docs/CHANGELOG-0.8.1.0.md) for Helpy's settings panels, game overlay
-and optional server PIN controls.
+See the [Experimental feature guides](https://gh0sted5456-us.github.io/RuneSchema/experimental/)
+for upcoming behavior, setup and testing status. Those guides are separate from
+the normal documentation until the features are promoted to main.
 
 See [Contributing](CONTRIBUTING.md) for source contributions. For bug reports,
 include the RuneSchema version, game platform, reproduction steps and relevant

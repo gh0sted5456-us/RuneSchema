@@ -143,8 +143,8 @@ inline void RenderDraft(Draft& draft,Mode mode,const Json& catalog,const std::st
         }
     }
     ImGui::TextWrapped("Export saves reusable files without creating or giving an item. Keep all exported folders together in your RuneSchema content mod.");
-    if(ImGui::Checkbox("Save created item to mod folder",&draft.Permanent)){draft.Id.clear();draft.Changed();}
-    ImGui::Checkbox("Give to selected player",&draft.Give);ImGui::SameLine();ImGui::SetNextItemWidth(theme.X(100));ImGui::InputInt("Quantity",&draft.Count);draft.Count=std::clamp(draft.Count,1,10000);
+    if(HelpyImGuiTheme::Toggle("Save created item to mod folder",&draft.Permanent)){draft.Id.clear();draft.Changed();}
+    HelpyImGuiTheme::Toggle("Give to selected player",&draft.Give);ImGui::SameLine();ImGui::SetNextItemWidth(theme.X(100));ImGui::InputInt("Quantity",&draft.Count);draft.Count=std::clamp(draft.Count,1,10000);
     ImGui::TextWrapped("Live creation uses RuneSchema's single-player authoring support. Test new items on a backed-up save.");
     ImGui::Checkbox("Use my backed-up test save",&draft.Acknowledged);
     const bool temporaryAllowed=draft.Permanent||!draft.Inspection.value("SoftDeleteField",std::string{}).empty();
