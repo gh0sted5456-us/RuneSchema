@@ -11,6 +11,10 @@ a staging cart, mod management, map tools and diagnostics.
 > being assembled separately by the maintainer. GitHub's source archives are not
 > installable runtime packages. Existing stable downloads remain available.
 
+The matching [controller binary update](https://github.com/gh0sted5456-us/RuneSchema/tree/pre-release/pre-release-binaries)
+is available for an existing complete 0.8.1.0 candidate installation. It is a
+binary follow-up, separate from the complete runtime ZIP being assembled.
+
 **[Documentation website](https://gh0sted5456-us.github.io/RuneSchema/)** ·
 **[Downloads](https://github.com/gh0sted5456-us/RuneSchema/releases/latest)** ·
 **[Report a bug](https://github.com/gh0sted5456-us/RuneSchema/issues/new/choose)**

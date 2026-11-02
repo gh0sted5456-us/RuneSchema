@@ -1,0 +1,109 @@
+{
+  "Version": "0.8.1.0",
+  "Channel": "pre-release",
+  "PackageKind": "binary update for an existing complete candidate",
+  "CompleteRuntimePackage": false,
+  "SourceCommit": "866ea0bd19bd5c2c529e0b7c2d831d0fb2100af8",
+  "CoreTests": 257,
+  "CoreVerificationReused": true,
+  "HelpyTests": 149,
+  "DiagnosticTests": 7,
+  "DocumentationChannelTests": 4,
+  "StrictDocumentationBuild": true,
+  "LicenseSmokeTest": true,
+  "VirtualControllerFamilies": [
+    "Xbox",
+    "DualShock 4",
+    "DualSense PS5",
+    "Nintendo Switch Pro"
+  ],
+  "ControllerInputRepetitions": 20,
+  "PhysicalControllerTested": false,
+  "SteamGuideExclusivityVerified": false,
+  "CompressedDllsVerified": true,
+  "Files": [
+    {
+      "Path": "RuneSchema/dlls/main.dll",
+      "Bytes": 4131328,
+      "SHA256": "B35CF820522FBBB76F8D68151D6B180627D33F88492C7DF6B8E2E76249D29BB3"
+    },
+    {
+      "Path": "RuneSchema/plugins/RuneSchema.Helpy/dll/Helpy.exe",
+      "Bytes": 6717952,
+      "SHA256": "0EDEF5B0882A41BD979F9C20D7F2E8772FC6681FE0AE3EE37B023D4DA47E8901"
+    },
+    {
+      "Path": "RuneSchema/plugins/RuneSchema.Helpy/dll/RuneSchema.Helpy.dll",
+      "Bytes": 489472,
+      "SHA256": "6D9C16FE556CF467AA8358178509343329B50EC41CC28B38FD74228EB9229517"
+    },
+    {
+      "Path": "RuneSchema/plugins/RuneSchema.Helpy/dll/RuneSchema.Helpy.Vulkan.dll",
+      "Bytes": 151552,
+      "SHA256": "E8FB09CB8EAF5FD33E21A24F7048101B8B8FAFC34E2CE2799C964AD538290E20"
+    },
+    {
+      "Path": "RuneSchema/plugins/RuneSchema.Helpy/dll/SDL3.dll",
+      "Bytes": 2844160,
+      "SHA256": "1F98969319302A100931F4385E5918A0BD53AB07773040682D22E7EDB54858C0"
+    },
+    {
+      "Path": "RuneSchema/settings/licenses/RuneSchema-Licenses.txt",
+      "Bytes": 41449,
+      "SHA256": "48471BDE8245CB1BF817C37B1C6CDD86ECB8775E0B069DA813F36D5C4CF3E142"
+    }
+  ],
+  "Compression": [
+    {
+      "Name": "main.dll",
+      "PackedBytes": 4131328,
+      "PackedSHA256": "B35CF820522FBBB76F8D68151D6B180627D33F88492C7DF6B8E2E76249D29BB3",
+      "SourceBytes": 11326976,
+      "SourceSHA256": "FF8AD07D274BC6B224C143AE5FA458630D0162E85A02D1CBD526E25839547510",
+      "RestoredSHA256": "86E3D98C42EE9E753F9FB3743AC52B981C28785B8A584072E3088841683F06C9",
+      "ExecutableSections": [
+        ".text"
+      ],
+      "CodeExact": true,
+      "ExportUnwindRelocationExact": true,
+      "ResourceContentsIdentical": true,
+      "ImportedAPIsAndSlotsIdentical": true,
+      "EntireFileExact": false,
+      "Comparison": "UPX may rewrite import/debug metadata; executable code, exports, resources, unwinding, relocations and imported API slots verified"
+    },
+    {
+      "Name": "RuneSchema.Helpy.dll",
+      "PackedBytes": 489472,
+      "PackedSHA256": "6D9C16FE556CF467AA8358178509343329B50EC41CC28B38FD74228EB9229517",
+      "SourceBytes": 1227264,
+      "SourceSHA256": "4F1063A1832D58EF8CA8396BBF516418009858A3AD68562D885B20F3286B7D28",
+      "RestoredSHA256": "22F686F6AA3C6EF9C531FF5BAA58FE5F8FDBE30A04300E4D40C4170BA1E87A47",
+      "ExecutableSections": [
+        ".text"
+      ],
+      "CodeExact": true,
+      "ExportUnwindRelocationExact": true,
+      "ResourceContentsIdentical": true,
+      "ImportedAPIsAndSlotsIdentical": true,
+      "EntireFileExact": false,
+      "Comparison": "UPX may rewrite import/debug metadata; executable code, exports, resources, unwinding, relocations and imported API slots verified"
+    },
+    {
+      "Name": "RuneSchema.Helpy.Vulkan.dll",
+      "PackedBytes": 151552,
+      "PackedSHA256": "E8FB09CB8EAF5FD33E21A24F7048101B8B8FAFC34E2CE2799C964AD538290E20",
+      "SourceBytes": 350720,
+      "SourceSHA256": "6328E24EBF8B1A5B32B739E13416034FB8A45EE540E021DDB370FDC7DEE67C3C",
+      "RestoredSHA256": "3B97EC54D29BCF42FBB3119790F99036525D7C3E527D31EE42805A0D86A83251",
+      "ExecutableSections": [
+        ".text"
+      ],
+      "CodeExact": true,
+      "ExportUnwindRelocationExact": true,
+      "ResourceContentsIdentical": true,
+      "ImportedAPIsAndSlotsIdentical": true,
+      "EntireFileExact": false,
+      "Comparison": "UPX may rewrite import/debug metadata; executable code, exports, resources, unwinding, relocations and imported API slots verified"
+    }
+  ]
+}

@@ -1,0 +1,822 @@
+RUNESCHEMA CONSOLIDATED LICENSES, CREDITS, AND THIRD-PARTY NOTICES
+
+This is the only license document shipped with this RuneSchema package.
+It contains the complete local text for every project and dependency notice collected by the build.
+
+Primary upstream links:
+RuneSchema: https://github.com/gh0sted5456-us/RuneSchema
+PalSchema: https://github.com/Okaetsu/PalSchema
+UE4SS / RE-UE4SS: https://github.com/UE4SS-RE/RE-UE4SS
+JSON for Modern C++: https://github.com/nlohmann/json
+UPX: https://github.com/upx/upx
+Roboto: https://github.com/googlefonts/roboto-classic
+Android / Droid fonts: https://source.android.com/
+
+==============================================================================
+RuneSchema — MIT License
+Upstream: https://github.com/gh0sted5456-us/RuneSchema
+Source document: RuneSchema-MIT.txt
+==============================================================================
+
+MIT License
+
+Copyright (c) 2026 RSDW Modding Community
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+==============================================================================
+RuneSchema — Licensing Scope and Ownership
+Upstream: https://github.com/gh0sted5456-us/RuneSchema
+Source document: LICENSING.md
+==============================================================================
+
+# RuneSchema licensing and ownership
+
+## Community and publication
+
+RuneSchema began within the RSDW Modding Community and is developed and
+maintained as a community project. Credited members are **Jonesing4Space,
+NuLLZz, Snorkles, and CHP**; the consolidated roster and historical credit are
+in [AUTHORS.md](AUTHORS.md). Official repository and distribution work are
+published under **gh0sted5456-us** at
+https://github.com/gh0sted5456-us/RuneSchema.
+
+RSDW Modding Community owns its original RuneSchema work, as declared by the
+project owner. Community attribution does not itself transfer a member's
+copyright or establish a license for that member's contribution.
+
+## MIT grant and its scope
+
+The [MIT License](LICENSE) applies to the original software, accompanying
+documentation, schemas, and example definitions in this repository to the
+extent that RSDW Modding Community owns or has authority to license them.
+The grant permits use, modification, copying, redistribution, sublicensing,
+and commercial use of that covered work, subject to preserving the copyright
+and permission notices. Source publication and individual approval of forks
+are not required by MIT.
+
+Third-party material remains under its applicable original license or other
+permission. A root MIT file, repository location, filename, or project credit
+does not override those terms. See [Third-party notices](THIRD_PARTY_NOTICES.md).
+Where coverage differs, use the license attached to the relevant component.
+
+## Existing contributions
+
+Community credits include the original RuneSchema work by Snorkles. Preserve
+applicable author notices and the license or permission attached to the
+revision incorporated. Neither this roster nor the root license supplies a
+missing grant for a contribution the community does not own or have authority
+to license. Any such permission must be established before that contribution
+is represented as MIT-covered or redistributed.
+
+## Names, logos, and game or engine content
+
+The software license is not a trademark license and does not authorize false
+claims that a fork is an official RSDW Modding Community release. Factual
+attribution and descriptions of compatibility are not prohibited by this
+statement. Independently licensed artwork, third-party assets, game data, and
+Epic Games engine material are not relicensed by the software's MIT grant.
+
+The code license does not grant rights held by Jagex, Epic Games, Microsoft,
+or other third parties. Applicable game and engine terms remain separate;
+no non-commercial restriction is being added to the MIT-covered code.
+
+## Distribution
+
+Our release packaging combines `LICENSE`, `AUTHORS.md`, `LICENSING.md`,
+`CONTRIBUTING.md`, `THIRD_PARTY_NOTICES.md`, and every collected dependency
+notice into the single file `settings/licenses/RuneSchema-Licenses.txt`.
+That document includes complete notice texts, component names, original source
+paths and hashes, and upstream links. This is the project's packaging practice,
+not an additional condition on the MIT grant.
+Downstream obligations are those in the applicable component licenses.
+Preserve required upstream copyright and permission notices rather than
+replacing their authors with the project name. An acknowledgment or an
+upstream URL alone is not a substitute for the required notice text.
+
+The supported `Build RuneSchema.bat` launcher finalizes the generated Core,
+Universal, and Helpy ZIPs through `build/package-licenses.ps1`. The same helper
+is used for the test-bed source and example packages. Direct users of the
+internal `build/build.ps1` must run `build/package-licenses.ps1 -FinalizeBuild`
+after a successful build and before distributing its output.
+
+The helper includes the checked-in license bundle and collects license/notice
+files present in the local dependency and build caches. Collection is not a
+complete legal audit: maintainers must review component-specific obligations,
+including source-offer requirements for any redistributed GPL tools and
+restrictions on game/engine material. Do not distribute a bare DLL without its
+accompanying notices. Do not apply RuneSchema's root license to a standalone
+UE4SS bundle; preserve UE4SS's own notices and those of its dependencies.
+
+New packaging rules do not modify existing GitHub Release assets, Nexus
+uploads, historical tags, or other branches. Check and correct those packages
+separately before redistributing them.
+
+## Contributions
+
+New contributions follow [CONTRIBUTING.md](CONTRIBUTING.md). Licensing a
+contribution does not itself transfer its copyright to the organization.
+
+
+==============================================================================
+RuneSchema — Authors and Credits
+Upstream: https://github.com/gh0sted5456-us/RuneSchema
+Source document: AUTHORS.md
+==============================================================================
+
+# RuneSchema - RSDW Modding Community
+
+RuneSchema began within the RSDW Modding Community and is developed and
+maintained as a community project.
+
+## Credited community members
+
+- Jonesing4Space
+- NuLLZz
+- Snorkles
+- CHP
+- Abyss (RSDW Modding Community)
+
+Snorkles is credited for the original RuneSchema work within the community.
+Abyss (RSDW Modding Community) is credited for the initial corrupt-character
+bypass work on which RuneSchema's corrupt-save bypass was based.
+This roster recognizes project history and contributions; it does not imply
+that every listed member is currently active or contributed to every release.
+
+## Publication
+
+Official repository: https://github.com/gh0sted5456-us/RuneSchema
+
+Repository updates and distribution work are published under `gh0sted5456-us`
+for the RSDW Modding Community.
+
+## License and upstream acknowledgments
+
+Copyright (c) 2026 RSDW Modding Community.
+
+The project uses the MIT License for work the community owns or has authority
+to license. Member attribution is not a copyright assignment or a retroactive
+license grant; see `LICENSING.md` for scope and `CONTRIBUTING.md` for new work.
+
+PalSchema's foundation is credited to Okaetsu. UE4SS and other dependencies
+retain their authors' copyrights and applicable licenses, reproduced in
+`THIRD_PARTY_NOTICES.md` and `licenses/`.
+
+
+==============================================================================
+RuneSchema — Contributor Terms
+Upstream: https://github.com/gh0sted5456-us/RuneSchema
+Source document: CONTRIBUTING.md
+==============================================================================
+
+# Contributing to RuneSchema
+
+RuneSchema is developed and maintained by the RSDW Modding Community.
+The team coordinates updates, testing, and releases. See `AUTHORS.md` for
+community credits. Official repository and distribution work are published
+under `gh0sted5456-us`.
+
+## Contribution workflow
+
+1. Record the reported behavior, expected result, affected runtime and a small reproduction.
+2. Trace the affected code and callers. Keep the change focused on that issue.
+3. Build the changed components and run their targeted checks. Test UI changes at usable small and large sizes.
+4. Update the relevant guide and diagnostic reference when behavior or codes change.
+5. Provide a reviewable candidate with test results and remaining limits. Maintainers review and approve releases before upload.
+
+The same evidence is expected from human and AI-assisted contributions. See
+**[If Using AI](IF-USING-AI.md)** for detailed investigation, verification and
+handoff instructions. AI is optional; it does not replace contributor review.
+
+Personal instructions, machine paths and private runtime data stay local.
+Use the ignored `AGENTS.local.md` for machine-specific instructions; keep
+`AGENTS.md` limited to shared project rules.
+
+## License for new contributions
+
+By intentionally submitting a new original contribution for inclusion, you
+agree to license it under the repository's MIT License, unless a different
+arrangement is explicitly agreed in writing before acceptance. You must have
+the rights needed to make that grant. This applies prospectively; it does not
+retroactively license earlier contributions.
+
+Contributors retain copyright in their original contributions unless a
+separate valid assignment says otherwise. A pull request, project membership,
+or MIT license grant alone does not transfer copyright to the organization.
+Preserve applicable author and license notices.
+
+## Third-party material
+
+Identify copied/adapted code and its source revision, retain its complete
+license, and update `THIRD_PARTY_NOTICES.md`. Do not change an upstream
+copyright holder to RSDW Modding Community. Flag uncertain provenance before
+submission. Do not submit game or engine content without the required rights.
+
+## Release checks
+
+Keep the build version, plugin manifests, Windows resources and release tag
+consistent. Current releases use numeric versions such as `0.8.1.0`; older
+`m`/`e` suffixes remain supported for historical versions. The branch and release
+status identify the channel; do not invent a suffix for a current build.
+
+Use the supported build launcher, or finalize a direct internal build with
+`build/package-licenses.ps1 -FinalizeBuild`. Check the licenses inside the
+actual ZIPs before uploading. Run the packaging smoke test:
+
+```powershell
+powershell.exe -NoProfile -File build/test-package-licenses.ps1
+```
+
+See `LICENSING.md` for scope and `docs/NEXUS-LICENSING.txt` for matching mod-page
+wording. Existing public archives must be checked independently.
+
+## Documentation channels
+
+New experimental feature guides belong under `docs/experimental/`, with a visible
+experimental notice and a `promote_to` frontmatter path. Register them in
+`build/docs-experimental-nav.json`. Keep the normal guides aligned with main.
+
+When promoting a feature, merge its instructions into that normal destination,
+update navigation/defaults/walkthroughs and remove the duplicate experimental
+entry. Preserve historical changelogs and existing diagnostic anchors. See
+[the complete channel and promotion procedure](docs/DOCUMENTATION-CHANNELS.md).
+
+
+==============================================================================
+RuneSchema — Third-Party Inventory
+Upstream: https://github.com/gh0sted5456-us/RuneSchema
+Source document: THIRD_PARTY_NOTICES.md
+==============================================================================
+
+# RuneSchema third-party notices
+
+RuneSchema's own license and ownership statement do not replace upstream
+copyrights or licenses. This inventory distinguishes code ancestry from
+runtime/build dependencies. Preserve notices supplied with the actual
+revisions used, including historical notices not reproduced in this list.
+
+## PalSchema
+
+- Upstream: https://github.com/Okaetsu/PalSchema
+- Role: foundation for the schema framework.
+- Verified upstream notice: Copyright (c) 2026 Okaetsu.
+- License: MIT; complete text in `licenses/PalSchema-MIT.txt`.
+- Verified license blob: `8786e078b8aff85ca35b6b573354ab98f1dd82b0`.
+
+This is a copy of the verified upstream license, not a claim that all
+RuneSchema-specific historical additions were licensed by Okaetsu.
+
+## UE4SS / RE-UE4SS
+
+- Upstream: https://github.com/UE4SS-RE/RE-UE4SS
+- Role: runtime host and C++ build dependency.
+- Current CMake default pin: `f6d5f9425a31f3e3a4fd185b40148f5aa4d81a44`.
+- Notice at that pin: Copyright (c) 2022 Narknon.
+- Root license: MIT; complete text in `licenses/UE4SS-MIT.txt`.
+- Verified license blob: `eee4c931619e9ae3ccf4cd4514732653939dffbc`.
+
+The root MIT license is not a blanket license for all submodules. In
+particular, UEPseudo is identified by UE4SS's contribution documentation as
+subject to Epic Games' licensing terms. Preserve and review those terms
+separately. A copied UE4SS license does not authorize redistribution of
+otherwise restricted engine content.
+
+Reference: https://docs.ue4ss.com/dev/contributing.html
+
+## JSON for Modern C++ / nlohmann/json
+
+- Upstream: https://github.com/nlohmann/json
+- CMake version: `v3.11.3`.
+- Notice in that version: Copyright (c) 2013-2022 Niels Lohmann.
+- License: MIT; complete text in `licenses/nlohmann-json-MIT.txt`.
+- Verified license blob: `1c1f7a690d815db3a79ea3d4c9138a497e2e7702`.
+
+Preserve embedded notices in the vendored header as well. This copied notice
+records the fetched version; it does not replace any different notice in a
+vendored or future version.
+
+## Community credits
+
+Abyss (RSDW Modding Community) is credited for the initial corrupt-character
+bypass work on which RuneSchema's corrupt-save bypass was based. This credit
+records the implementation's origin; it does not replace applicable licenses.
+
+RuneSchema's community member credits, including the original work by
+Snorkles, are consolidated in `AUTHORS.md`. That roster is separate from
+this dependency inventory. See `LICENSING.md` for the scope of the project's
+grant and the treatment of existing contributions.
+
+## Other build and runtime components
+
+Helpy uses SDL **3.4.16** for mapped Xbox, PlayStation and Nintendo gamepad input.
+The Windows x64 SDK is pinned to the official
+[release archive](https://github.com/libsdl-org/SDL/releases/tag/release-3.4.16),
+SHA-256 `1a784cb2a5c64d56fe7a62090fe9d242d9865f235e4ea9678f1a6ba4e693e7de`.
+Its unmodified `SDL3.dll` accompanies Helpy. Copyright (C) 1997–2026 Sam Lantinga.
+The complete zlib license is preserved in `licenses/SDL3-zlib.txt` and the
+packaged consolidated notices. SDL is not installed into Dragonwilds' renderer
+or the RuneSchema bridge DLL.
+
+The current CMake file also references SafetyHook, Glaze, efsw, Zydis, and
+Zycore (including transitive dependencies). Their own notices and terms must
+accompany distributions where applicable; they are not covered by this
+project's copyright statement. The packaging helper collects license and
+notice files available in local build/dependency caches into
+`licenses/dependencies/` and records their original relative paths and hashes
+in `licenses/dependencies/manifest.json`.
+
+UPX's existing `source/tools/upx/LICENSE`, `COPYING`, and `README` must be
+retained with that tool. The UPX compression exception must be distinguished
+from the obligations for redistributing the UPX executable itself. Do not
+label UPX as MIT or assume that copying its GPL text alone satisfies all
+binary-distribution obligations.
+
+Game mappings, cooked containers, art, and other third-party game or engine
+material retain their separate rights and terms. This document is an
+inventory and notice-preservation policy, not a certification that every
+historical archive or transitive component has been audited.
+
+The RuneScape: Dragonwilds wordmark used for game identification on RSMK's Home
+transition is third-party game artwork, not RuneSchema MIT-licensed artwork.
+RuneScape and Dragonwilds names and marks remain with their respective owners;
+this presentation does not imply affiliation or endorsement.
+
+## Khronos graphics declarations
+
+Helpy's optional native adapters use the Vulkan C headers from
+KhronosGroup/Vulkan-Headers `v1.3.290` and Khronos OpenGL/EGL declaration headers.
+Only declarations are vendored; no GPU driver or Vulkan loader is included.
+Their original notices, license texts, source locations and hashes are retained
+under `source/helpy/vendor/vulkan/` and `source/helpy/vendor/khronos/`.
+
+
+==============================================================================
+PalSchema — MIT License
+Upstream: https://github.com/Okaetsu/PalSchema
+Source document: PalSchema-MIT.txt
+==============================================================================
+
+MIT License
+
+Copyright (c) 2026 Okaetsu
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+==============================================================================
+UE4SS / RE-UE4SS — MIT License
+Upstream: https://github.com/UE4SS-RE/RE-UE4SS
+Source document: UE4SS-MIT.txt
+==============================================================================
+
+MIT License
+
+Copyright (c) 2022 Narknon
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+==============================================================================
+JSON for Modern C++ — MIT License
+Upstream: https://github.com/nlohmann/json
+Source document: nlohmann-json-MIT.txt
+==============================================================================
+
+MIT License 
+
+Copyright (c) 2013-2022 Niels Lohmann
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+==============================================================================
+SDL 3.4.16 — zlib License
+Upstream: https://github.com/libsdl-org/SDL/tree/release-3.4.16
+Source document: SDL3-zlib.txt
+==============================================================================
+
+Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
+  
+This software is provided 'as-is', without any express or implied
+warranty.  In no event will the authors be held liable for any damages
+arising from the use of this software.
+
+Permission is granted to anyone to use this software for any purpose,
+including commercial applications, and to alter it and redistribute it
+freely, subject to the following restrictions:
+  
+1. The origin of this software must not be misrepresented; you must not
+   claim that you wrote the original software. If you use this software
+   in a product, an acknowledgment in the product documentation would be
+   appreciated but is not required. 
+2. Altered source versions must be plainly marked as such, and must not be
+   misrepresented as being the original software.
+3. This notice may not be removed or altered from any source distribution.
+
+
+
+==============================================================================
+imgui LICENSE 55e058cc
+Collected source records:
+  - helpy-vendor/imgui/LICENSE.txt (SHA-256 55e058cc5899e6077a819ad1005d6d1f4528f65ae100795c9692f9fa6525a8ce)
+==============================================================================
+
+The MIT License (MIT)
+
+Copyright (c) 2014-2025 Omar Cornut
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+==============================================================================
+json LICENSE 6f48a036
+Collected source records:
+  - helpy-vendor/json/LICENSE.MIT (SHA-256 6f48a03625699eea99e599744efea0bf9c9dd67a669e65554df1cd726b8a2477)
+==============================================================================
+
+MIT License 
+
+Copyright (c) 2013-2022 Niels Lohmann
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+==============================================================================
+khronos LICENSE 9f5cc3e7
+Collected source records:
+  - helpy-vendor/khronos/LICENSE.txt (SHA-256 9f5cc3e7b327c4872138c53fec59aa4d13db31eccbc5deba858b340895d43130)
+==============================================================================
+
+Copyright 2013-2026 The Khronos Group Inc. (OpenGL extension declarations)
+
+Copyright (c) 2008-2018 The Khronos Group Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and/or associated documentation files (the
+"Materials"), to deal in the Materials without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Materials, and to
+permit persons to whom the Materials are furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Materials.
+
+THE MATERIALS ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+MATERIALS OR THE USE OR OTHER DEALINGS IN THE MATERIALS.
+
+
+==============================================================================
+LICENSES Apache 2.0 cfc7749b
+Collected source records:
+  - helpy-vendor/vulkan/LICENSES/Apache-2.0.txt (SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30)
+==============================================================================
+
+
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+   END OF TERMS AND CONDITIONS
+
+   APPENDIX: How to apply the Apache License to your work.
+
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "[]"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
+
+   Copyright [yyyy] [name of copyright owner]
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+
+
+==============================================================================
+LICENSES MIT 1ca35022
+Collected source records:
+  - helpy-vendor/vulkan/LICENSES/MIT.txt (SHA-256 1ca3502222d967f3be5751c55f6b7ee735b5383909c3b501495f54b216dbf227)
+==============================================================================
+
+MIT License
+
+Copyright (c) 2015-2023 The Khronos Group Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+==============================================================================
+vulkan LICENSE ac24e5ea
+Collected source records:
+  - helpy-vendor/vulkan/LICENSE.md (SHA-256 ac24e5ea920e4318e4d02c4086ae51f53cfb03feed06c18df1019e7ada1ec7bc)
+==============================================================================
+
+Copyright 2015-2023 The Khronos Group Inc.
+
+Files in this repository fall under one of these licenses:
+
+- `Apache-2.0`
+- `MIT`
+
+Note: With the exception of `parse_dependency.py` the files using `MIT` license
+also fall under `Apache-2.0`. Example:
+
+```
+SPDX-License-Identifier: Apache-2.0 OR MIT
+```
+
+Full license text of these licenses is available at:
+
+  * Apache-2.0: https://opensource.org/licenses/Apache-2.0
+  * MIT: https://opensource.org/licenses/MIT
+
