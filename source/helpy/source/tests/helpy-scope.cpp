@@ -28,7 +28,7 @@ int main(int argc,char** argv){
     assert(!cache.contains("RefreshSnapshot(")&&!cache.contains("CurrentDiskStats()")&&cache.contains("Refresh usage")&&cache.contains("std::launch::async"));
     const auto settingsStart=desktop.find("void RenderSettingsPage(");assert(settingsStart!=std::string::npos);
     const auto settings=desktop.substr(settingsStart,desktop.find("void RenderWorkspace(",settingsStart)-settingsStart);
-    assert(settings.contains("##settings-categories")&&settings.contains("##settings-details"));
+    assert(settings.contains("HelpyMenu::Categories(\"settings-categories\"")&&settings.contains("##settings-details"));
     assert(!settings.contains("BeginTabItem(\"Item Cache\""));
     const auto tools=desktop.substr(desktop.find("case Page::Tools:{"));
     assert(tools.contains("case Tool::ItemCache:RenderIconCacheSettings(true,true)")&&tools.contains("case Tool::CacheBuilder:"));

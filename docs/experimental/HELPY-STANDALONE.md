@@ -3,11 +3,49 @@ channel: experimental
 promote_to: HELPY-STANDALONE.md
 ---
 
+!!! info "Local UI follow-up"
+    Settings, Tools, Mods and local Server Settings share centered category lists and
+    independently scrollable content panes. Cache-building navigation offers a
+    return action to the page that opened it. Compact Home layouts reserve
+    room for the runtime badge and social buttons.
+
+    Native panels stay centered within their bounded shared-texture dimensions
+    on very large viewports. A viewport resize retains the request to reopen
+    the overlay, rather than treating the resize as a permanent desktop fallback.
+    While the native overlay captures input, game-executable cursor queries
+    are kept outside the game for Slate hover testing. Helpy's cursor and other
+    processes keep their real coordinates; closing releases the temporary mask.
+
 !!! info "Experimental · 0.8.1.0"
     This guide describes the experimental branch. For the current public package, see
     [stable downloads](../CURRENT-RELEASE.md). [Experimental overview](index.md).
 
 # Helpy desktop app
+
+[Resource and UE4SS diagnostics](PERFORMANCE-DIAGNOSTICS.md) explains the process
+monitor, observed Lua health, configurable activity budgets and play-time reminders.
+
+Cached item names and categories use retained display-name and native type/class
+metadata. A readable replacement overwrites an internal localization key during
+cache import/learning; a later unresolved observation cannot replace it. An old
+cache that never contained the display text still needs a corrected cache or a
+live metadata observation; the UI does not invent a localized name.
+
+The **Item Bay settings** cog contains **Show internal names**. Leave it off
+for display names and personal nicknames, or turn it on for exact internal names
+(the asset leaf when no internal name is supplied). Grid/list labels and item
+detail headings switch immediately using the loaded rows. The preference is
+saved in `ui.jsonc` as `views.itemInternalNames`; it does not trigger a game query,
+clear the search or change selection, family grouping, item identity or delivery.
+Older imported labels are upgraded from the saved learned catalogue on the file
+worker, including when its content version differs; only readable presentation
+names cross that version boundary. Enabled-source checks still filter removed mods.
+
+Multi-select changes the cart selection without switching native detail
+inspection for every checkbox. Normal single-item inspection remains available.
+Search cancellation is coalesced on a worker, so cached results do not wait on
+a game RPC. The native HUD captures mouse presses, double-clicks, keyboard and
+controller input while open; normal input resumes when it hides.
 
 Helpy's interface now lives in **Helpy.exe**, in its own Windows process.
 `RuneSchema.Helpy.dll` stays in Dragonwilds as the small game bridge. Menus and
@@ -17,9 +55,60 @@ game operations behind that bridge.
 
 This is part of the 0.8.1.0 experimental build. Keep its matching core, bridge
 and executable together; the complete runtime package includes all three.
-An independent app archive is also available for replacing a matching EXE.
+The app can also be packaged separately for replacing a matching EXE; use the
+complete package for a normal installation.
+
+## Mods and UE4SS inventory
+
+**Mods** uses the same two-pane layout as Settings and Tools. Choose
+**RuneSchema mods**, **Server comparison**, or **UE4SS mods** on the left;
+the selected list and its tabs stay in the right pane. RuneSchema mod order,
+enable switches, cache tools and import actions apply only to RuneSchema mods.
+The list refreshes on a runtime change or **Refresh**, rather than rescanning
+folders every two seconds. Unsaved order edits remain a separate draft.
+
+Under **UE4SS mods**, **External** lists ordinary UE4SS installations;
+**RuneSchema loaders** lists packages under a RuneSchema mod's `ue4ss` folder.
+External entries are read-only. Helpy can open their folders, but does not
+enable, disable, reorder, import or delete them. **Configured** reflects
+`enabled.txt` / `mods.txt` or a RuneSchema parent's saved state, not proof that
+a mod loaded successfully. Native/hybrid packages inside a RuneSchema loader
+remain unsupported and should be installed through stock UE4SS separately.
+
+Optional author metadata supplies versions. Helpy reads `modmenu.json`,
+`modmenu.txt` or `mod.json`, and existing ID.txt metadata where available.
+Keep the mod's existing metadata; its optional `version` field is sufficient.
+Numeric and string version labels are displayed. Helpy never executes Lua or
+loads a DLL to obtain this information. An owned loader without its own
+version can display its parent's version, identified in the metadata tooltip.
+Missing labels appear as **Unversioned**. The UE4SS inventory is local; it
+does not enter the RuneSchema host-mod comparison or imply an advertised
+external server inventory. Use **Refresh UE4SS inventory** after file changes.
 
 ## Startup and the system tray
+
+Helpy defers its initial Item Bay query while hidden in the tray. Opening it
+restores cached rows and requests live content normally. Connection-status reads
+run away from the render thread with at most one request in progress.
+
+Use **Save Recovery** in the main navigation to review character backups. World
+snapshots and restoration require the off-by-default **World save recovery
+(experimental)** switch in **Settings → Helpy → Saves**. Refresh the recovery
+list after changing it. Review
+their recorded mods and backup reasons. Optional entry snapshots and restore
+steps are covered in the [Save Recovery guide](SAVE-RECOVERY.md). Backups include
+save data and mod annotations, never the mods themselves.
+
+In Item Bay, use the checks, **Ctrl+click**, or **Select multiple** with a
+controller to choose items, then press **Send to cart**. Selection is bounded to
+64 items and survives page or query changes within the same runtime. Drag/drop
+and right-click actions remain available. Window bounds are remembered after
+moving or resizing, and item details stay beside the pointer within the visible
+surface.
+
+Repeated cache/live rows for the same asset update one result. Different asset
+paths can still share a display name; Helpy keeps those distinct rather than
+hiding a separately authored item.
 
 Settings uses two panels: choose a category on the left and edit its controls
 on the right. **Helpy** contains startup, shortcuts, performance and cache
@@ -45,8 +134,8 @@ RuneSchema's minimal menu inside UE4SS is unchanged.
 
 1. Install `main.dll`, `RuneSchema.Helpy.dll` and `Helpy.exe` from the same build.
    The packaged app belongs beside the bridge in
-   `RuneSchema/plugins/RuneSchema.Helpy/dll/`. The running copy is staged into
-   `%LOCALAPPDATA%/RSDragonwilds/RuneSchema/<platform>/apps/<installation>/`.
+   `RuneSchema/plugins/RuneSchema.Helpy/dll/`, with `SDL3.dll` beside the EXE.
+   Helpy runs directly there; AppData holds saved settings, caches and logs.
 2. When the plugin is enabled, **Start Helpy with Dragonwilds** defaults to on.
    The default **Start in system tray** mode opens no application window.
 3. Press the configured Helpy shortcut while its game has focus, or click the
@@ -137,6 +226,24 @@ or recurring service requests. A stalled app heartbeat or full input queue
 releases capture. DX12 presentation verifies the queue through back-buffer
 transitions rather than guessing among active queues.
 
+While the Helpy overlay is open, the game-thread bridge blocks the local
+controller's movement and look input. It applies one block per opening and
+releases only that block when the overlay closes or the desktop bridge
+disconnects. It does not reset input locks owned by the game or other mods.
+This follows Unreal's [stacked controller input contract](https://dev.epicgames.com/documentation/unreal-engine/API/Runtime/Engine/GameFramework/AController/SetIgnoreMoveInput?application_version=5.6).
+Regular window mode does not request this game-side block. A missing native
+contract is reported as [RS-UI-003](../ERROR-CODES.md#rs-ui-003).
+
+Text, key releases and mouse-button events wait in a bounded queue when the
+renderer is busy. A full delivery ring retains pending events for a later frame;
+an exhausted pending queue releases the overlay instead of leaving held input
+latched. The Item Bay keeps its draft text while catalogue results refresh.
+
+Hiding the native overlay restores the game's latest requested cursor constraint
+when the game is still foreground, and recovers its previous focus/capture if
+that was lost. Alt+Tab leaves another application's cursor constraint untouched,
+following [Windows' shared-cursor guidance](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getclipcursor).
+
 The current native adapters target SDR and a shared GPU between game and Helpy.
 HDR, separate Vulkan graphics/present queue families and mismatched adapters
 produce an explicit status instead of using an unverified path. Driver-specific
@@ -152,18 +259,18 @@ of a popup or hides the panel, and shoulder buttons switch sections. Item cards,
 cart rows, search buttons and inventory cards participate in keyboard/controller
 navigation. Controller mode adds a footer with button glyphs.
 
-Choose Xbox, PlayStation or generic glyphs. XInput does not identify a physical
-PlayStation model; use Steam Input/an XInput driver and choose PlayStation glyphs.
-Text entry and Windows file dialogs still use normal desktop input. Device
-discovery runs on startup/device changes; state reads run only while Helpy renders.
+Choose automatic, Xbox, PlayStation, Nintendo or generic glyphs. The pinned SDL
+backend reads supported controllers, with XInput fallback. Helpy fields have an
+in-app controller keyboard; Windows file dialogs retain desktop input. See
+[controller navigation](CONTROLLER-NAVIGATION.md) for the controls and device limits.
 
 On its first normal launch, Helpy creates **RuneSchema Helpy (Steam)**, **RuneSchema
 Helpy (Game Pass)**, **RuneSchema Helpy (Epic Games)** or **RuneSchema Helpy (Server)**
-on the user's Windows desktop. Steam, Epic and server shortcuts point to that
-installation's `plugins/RuneSchema.Helpy/dll/Helpy.exe`. Game Pass uses its hosted
-AppData executable with the runtime folder passed explicitly: launching another
-EXE inside its Windows package can activate Gaming Services instead. Each shortcut
-keeps its runtime binding, so caches and tools work offline. Existing
+on the user's Windows desktop. Every shortcut points to that installation's
+`plugins/RuneSchema.Helpy/dll/Helpy.exe`, including Game Pass, with its assigned
+runtime passed explicitly. Helpy starts in a separate desktop process; it does not
+need an active game to browse caches or manage mods. Existing RuneSchema-owned
+links to the old AppData executable are redirected to the installed EXE. Custom
 shortcuts are preserved. Removing a shortcut does not cause it to be recreated on
 every launch; smoke tests and authoring worker jobs do not create desktop links.
 
@@ -224,14 +331,18 @@ this feature does not add a separate encrypted transport.
 For a player:
 
 1. Join the world with your character.
-2. Open **Settings > Server access**, enter the host's PIN, and select
-   **Connect to server**. Check the server's response.
+2. Open Helpy when the connection notice appears. The PIN form can also be
+   opened through **Settings > Server access**. Enter the host's PIN and select
+   **Submit PIN**. A green **Client-server authority bridged** notice confirms
+   server authentication; the panel lists the permitted actions.
 3. Use the ordinary item cart for your own character, or the map's teleport
    action for a selected position. The server validates and executes the request.
 4. Select **Disconnect** to revoke this access. Reconnect after changing
    character/world, restarting the host, rotating its PIN or an hour of inactivity.
 
 The client clears the entered PIN after submission and does not persist it.
+Host PINs, action switches and optional GUID allowlists remain in its private
+settings file for subsequent launches. See the [complete connection walkthrough](SERVER-ACCESS.md).
 Item delivery also requires verified item network IDs for that connection:
 either matching audited item lists or a verified authority-order proof. An
 unrelated extra registry lane does not reject delivery. Teleport permission
@@ -420,6 +531,9 @@ downgrade an experimental build to the latest stable release. Run repair locally
 on the server if a network installation is missing its main DLL.
 
 ## Validation boundary
+
+See [server PIN access](SERVER-ACCESS.md) for persistent host configuration,
+client prompts and self-service delivery/teleport boundaries.
 
 The migration requires matching application and runtime components. Native
 item/map gameplay and representative game-FPS/server-jitter measurements remain

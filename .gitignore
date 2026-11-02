@@ -62,3 +62,6 @@ Thumbs.db
 # Local chat attachments and immediate-mode UI state are not project sources.
 /.codex-remote-attachments/
 /imgui.ini
+
+# Optional personal instructions stay on the contributor's machine.
+/AGENTS.local.md

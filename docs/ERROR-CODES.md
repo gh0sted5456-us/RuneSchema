@@ -4,7 +4,7 @@ Find a code from your log to see what happened and what to try next. Use the mes
 
 Open Helpy's **Diagnostics** for an overview, grouped issues and Live Log. You can copy an entry or follow its reference link here. The viewer leaves the original logs unchanged; recent activity includes normal messages, while notifications focus on warnings and errors.
 
-This page contains **81 legacy reference entries**, **222 structured diagnostic entries** and **19 bridge reason codes**. RS-JRN-001, RS-JRN-002 and RS-SPAWN-001 each have an older and a structured meaning. Follow the link from your message, or check its source and namespace to choose the matching entry. Links between the two meanings are included.
+This page contains **97 legacy reference entries**, **222 structured diagnostic entries** and **19 bridge reason codes**. RS-JRN-001, RS-JRN-002 and RS-SPAWN-001 each have an older and a structured meaning. Follow the link from your message, or check its source and namespace to choose the matching entry. Links between the two meanings are included.
 
 Structured reports in `RSDiagLog.jsonl` include their source, context and outcome. Not every operation emits every code. `Unknown` means the cause has not been identified; use the severity in the actual message. `Partial` means some changes may have occurred, and `Deferred` points to later or restart handling. `Skipped` or `Blocked` can describe one step while the rest of the mod continues.
 
@@ -46,6 +46,7 @@ This shared reference covers stable and [experimental builds](experimental/index
 | [RS-JSON](#structured-family-rs-json) | Configuration and definitions |
 | [RS-LOAD](#structured-family-rs-load) | Loaders |
 | [RS-LOG](#legacy-family-rs-log) | Console |
+| [RS-LUA](#legacy-family-rs-lua) | UE4SS |
 | [RS-MAP](#legacy-family-rs-map) | Map |
 | [RS-NET](#legacy-family-rs-net) | Multiplayer |
 | [RS-NIA](#structured-family-rs-nia) | Niagara |
@@ -53,6 +54,7 @@ This shared reference covers stable and [experimental builds](experimental/index
 | [RS-OVL](#legacy-family-rs-ovl) | Helpy overlay |
 | [RS-PARTY](#legacy-family-rs-party) | Party |
 | [RS-PERF](#legacy-family-rs-perf) | Performance |
+| [RS-PLAY](#legacy-family-rs-play) | Helpy |
 | [RS-PLUG](#legacy-family-rs-plug) | Plugins |
 | [RS-QST](#legacy-family-rs-qst) | Quests |
 | [RS-RAW](#legacy-family-rs-raw) | Raw tables |
@@ -1219,6 +1221,92 @@ Export to a new filename in a separate directory. Check aliases/junctions if the
 
 </section>
 
+## UE4SS — RS-LUA {#legacy-family-rs-lua}
+
+<section class="rs-code-card" data-rs-code="RS-LUA-001" data-rs-severity="warning" markdown="1">
+
+### RS-LUA-001: RuneSchema Lua companion reported an error {#rs-lua-001}
+
+**UE4SS · Typical level: warning**
+
+An attributed RuneSchema-owned UE4SS companion reported a recognized Lua startup or execution error.
+
+**Common reasons**
+
+This identifies reported failure evidence, not proof that every function in the companion stopped. External native UE4SS mods remain managed by stock UE4SS.
+
+**What RuneSchema does**
+
+This identifies reported failure evidence, not proof that every function in the companion stopped. External native UE4SS mods remain managed by stock UE4SS.
+
+**What to do next**
+
+Review the original UE4SS message and companion installation. Check its parent mod and supported Lua loader layout.
+
+**Troubleshooting checks**
+
+Review the original UE4SS message and companion installation. Check its parent mod and supported Lua loader layout.
+
+[Direct link to RS-LUA-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-lua-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-LUA-002" data-rs-severity="info" markdown="1">
+
+### RS-LUA-002: High attributed UE4SS log activity {#rs-lua-002}
+
+**UE4SS · Typical level: info**
+
+A named UE4SS mod exceeded the configured message budget in a sampled read window.
+
+**Common reasons**
+
+This measures log output. Stock UE4SS does not expose reliable per-mod callback timing, CPU time or polling frequency through this feature.
+
+**What RuneSchema does**
+
+This measures log output. Stock UE4SS does not expose reliable per-mod callback timing, CPU time or polling frequency through this feature.
+
+**What to do next**
+
+Review the original messages and compare frame rate. Raise the budget for expected logging; do not assume the mod caused a delay.
+
+**Troubleshooting checks**
+
+Review the original messages and compare frame rate. Raise the budget for expected logging; do not assume the mod caused a delay.
+
+[Direct link to RS-LUA-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-lua-002)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-LUA-003" data-rs-severity="info" markdown="1">
+
+### RS-LUA-003: UE4SS activity overlapped slow RuneSchema work {#rs-lua-003}
+
+**UE4SS · Typical level: info**
+
+High attributed UE4SS log activity occurred near a measured RuneSchema slow-work report.
+
+**Common reasons**
+
+The configured overlap window establishes timing correlation only; it does not establish contention or which mod caused it.
+
+**What RuneSchema does**
+
+The configured overlap window establishes timing correlation only; it does not establish contention or which mod caused it.
+
+**What to do next**
+
+Compare both original messages and timestamps. Adjust the overlap window or log-message budget for expected workloads.
+
+**Troubleshooting checks**
+
+Compare both original messages and timestamps. Adjust the overlap window or log-message budget for expected workloads.
+
+[Direct link to RS-LUA-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-lua-003)
+
+</section>
+
 ## Map — RS-MAP {#legacy-family-rs-map}
 
 <section class="rs-code-card" data-rs-code="RS-MAP-001" data-rs-severity="warning" markdown="1">
@@ -1360,6 +1448,118 @@ Match the required building definitions and enable the current RuneSchema networ
 Confirm required building definitions match, including versioned Totems or other building providers. Enable RuneSchema networking on both sides and retry after the handshake. Native-prefix agreement permits native pieces despite unrelated extra mods; no building IDs are silently rewritten.
 
 [Direct link to RS-NET-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-net-003)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NET-004" data-rs-severity="info" markdown="1">
+
+### RS-NET-004: Server mod list received {#rs-net-004}
+
+**Multiplayer · Typical level: info**
+
+The client received and validated the host’s enabled RuneSchema mod list.
+
+**Common reasons**
+
+The owning-player bridge finished assembling an authority snapshot after connection.
+
+**What RuneSchema does**
+
+The complete list is available in Helpy → Mods → Server comparison. This is informational and grants no gameplay permission.
+
+**What to do next**
+
+Browse or search the server list when checking required content.
+
+**Troubleshooting checks**
+
+No repair is required. The list describes enabled mods for this host process; it is not proof that every loader succeeded or that client registries match.
+
+[Direct link to RS-NET-004](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-net-004)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NET-005" data-rs-severity="warning" markdown="1">
+
+### RS-NET-005: Server mod list unavailable {#rs-net-005}
+
+**Multiplayer · Typical level: warning**
+
+RuneSchema could not prepare its enabled-mod information within the supported bounds.
+
+**Common reasons**
+
+The roster exceeds 1,024 mods, its bounded identity fields or its 1 MiB envelope, or contains duplicate or malformed identifiers.
+
+**What RuneSchema does**
+
+Mod loading continues. The informational list is unavailable; this does not reject a registry or gameplay request.
+
+**What to do next**
+
+Read the accompanying detail and check mod identity metadata and list size.
+
+**Troubleshooting checks**
+
+Correct the named metadata issue or reduce the enabled set, then restart normally. Do not alter persistence IDs or player saves to repair this informational listing.
+
+[Direct link to RS-NET-005](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-net-005)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NET-006" data-rs-severity="info" markdown="1">
+
+### RS-NET-006: Server PIN access available {#rs-net-006}
+
+**Multiplayer · Typical level: info**
+
+The connected RuneSchema host offers PIN-gated self-service actions.
+
+**Common reasons**
+
+No access is granted by this notice. Client requests remain scoped to the owning character and authoritative world.
+
+**What RuneSchema does**
+
+No access is granted by this notice. Client requests remain scoped to the owning character and authoritative world.
+
+**What to do next**
+
+Open Helpy, enter the world PIN and submit it. The server must enable item delivery or teleportation.
+
+**Troubleshooting checks**
+
+Open Helpy, enter the world PIN and submit it. The server must enable item delivery or teleportation.
+
+[Direct link to RS-NET-006](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-net-006)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-NET-007" data-rs-severity="info" markdown="1">
+
+### RS-NET-007: Client-server authority bridged {#rs-net-007}
+
+**Multiplayer · Typical level: info**
+
+The server validated the supplied PIN for the current owning character and world.
+
+**Common reasons**
+
+Delivery and teleport requests execute on the server with existing identity, item registry, quantity and ground checks. This does not grant arbitrary administrator rights.
+
+**What RuneSchema does**
+
+Delivery and teleport requests execute on the server with existing identity, item registry, quantity and ground checks. This does not grant arbitrary administrator rights.
+
+**What to do next**
+
+Use the allowed self-service actions. Reconnect after changing character/world or if the server revokes access.
+
+**Troubleshooting checks**
+
+Use the allowed self-service actions. Reconnect after changing character/world or if the server revokes access.
+
+[Direct link to RS-NET-007](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-net-007)
 
 </section>
 
@@ -1562,6 +1762,148 @@ Inspect the phase and elapsed time; prefer compatible caches and incremental ref
 Compare the named phase, elapsed_ms, peak_ms and slow_calls. Use a compatible bundle and incremental refresh first. Report repeatable slow phases with game/storefront versions; do not erase the entire cache as a first step.
 
 [Direct link to RS-PERF-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-perf-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-PERF-002" data-rs-severity="warning" markdown="1">
+
+### RS-PERF-002: Sustained process CPU activity {#rs-perf-002}
+
+**Performance · Typical level: warning**
+
+Helpy or Dragonwilds exceeded the configured CPU-time threshold across three samples.
+
+**Common reasons**
+
+CPU is normalized to total logical-processor capacity; this is not per-mod attribution.
+
+**What RuneSchema does**
+
+CPU is normalized to total logical-processor capacity; this is not per-mod attribution.
+
+**What to do next**
+
+Compare the named process, current workload and resource panel; adjust the threshold if expected.
+
+**Troubleshooting checks**
+
+Compare the named process, current workload and resource panel; adjust the threshold if expected.
+
+[Direct link to RS-PERF-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-perf-002)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-PERF-003" data-rs-severity="warning" markdown="1">
+
+### RS-PERF-003: System memory pressure {#rs-perf-003}
+
+**Performance · Typical level: warning**
+
+Physical RAM use stayed above the configured threshold.
+
+**Common reasons**
+
+Helpy and Dragonwilds working sets are shown when Windows permits access; other processes may account for remaining use.
+
+**What RuneSchema does**
+
+Helpy and Dragonwilds working sets are shown when Windows permits access; other processes may account for remaining use.
+
+**What to do next**
+
+Check process memory and available system RAM. A high working set alone does not prove a leak.
+
+**Troubleshooting checks**
+
+Check process memory and available system RAM. A high working set alone does not prove a leak.
+
+[Direct link to RS-PERF-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-perf-003)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-PERF-004" data-rs-severity="info" markdown="1">
+
+### RS-PERF-004: Sustained GPU engine activity {#rs-perf-004}
+
+**Performance · Typical level: info**
+
+A measured GPU engine for Helpy or Dragonwilds stayed above the configured threshold.
+
+**Common reasons**
+
+High GPU use can be normal. Missing or warming Windows counters are unavailable, not zero usage.
+
+**What RuneSchema does**
+
+High GPU use can be normal. Missing or warming Windows counters are unavailable, not zero usage.
+
+**What to do next**
+
+Compare frame rate, resolution and workload. The metric uses the busiest measured engine and does not blame a mod.
+
+**Troubleshooting checks**
+
+Compare frame rate, resolution and workload. The metric uses the busiest measured engine and does not blame a mod.
+
+[Direct link to RS-PERF-004](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-perf-004)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-PERF-005" data-rs-severity="info" markdown="1">
+
+### RS-PERF-005: Process private memory increased {#rs-perf-005}
+
+**Performance · Typical level: info**
+
+Helpy or Dragonwilds private memory increased by more than 256 MiB over a minute.
+
+**Common reasons**
+
+Asset loading and retained caches can explain growth; one increase does not establish a memory leak.
+
+**What RuneSchema does**
+
+Asset loading and retained caches can explain growth; one increase does not establish a memory leak.
+
+**What to do next**
+
+Compare repeated samples during steady gameplay, after changing pages and after delivery; include the timestamps when reporting.
+
+**Troubleshooting checks**
+
+Compare repeated samples during steady gameplay, after changing pages and after delivery; include the timestamps when reporting.
+
+[Direct link to RS-PERF-005](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-perf-005)
+
+</section>
+
+## Helpy — RS-PLAY {#legacy-family-rs-play}
+
+<section class="rs-code-card" data-rs-code="RS-PLAY-001" data-rs-severity="info" markdown="1">
+
+### RS-PLAY-001: Play-time break reminder {#rs-play-001}
+
+**Helpy · Typical level: info**
+
+A gameplay session passed three observed hours, or another complete hour after that.
+
+**Common reasons**
+
+Informational only. It never pauses the game, blocks input, changes saves or disconnects a player. Menus and disconnected intervals are not counted.
+
+**What RuneSchema does**
+
+Informational only. It never pauses the game, blocks input, changes saves or disconnects a player. Menus and disconnected intervals are not counted.
+
+**What to do next**
+
+Consider a 10 minute break. Disable Play-time reminders in Quick Settings > Performance at any time.
+
+**Troubleshooting checks**
+
+Consider a 10 minute break. Disable Play-time reminders in Quick Settings > Performance at any time.
+
+[Direct link to RS-PLAY-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-play-001)
 
 </section>
 
@@ -2025,6 +2367,90 @@ Review the SECTION-SKIPPED entries. Certified sections continue independently; u
 
 </section>
 
+<section class="rs-code-card" data-rs-code="RS-SAVE-003" data-rs-severity="info" markdown="1">
+
+### RS-SAVE-003: Entry snapshot verified {#rs-save-003}
+
+**Save safety · Typical level: info**
+
+The selected character or world was copied and verified at its entry boundary.
+
+**Common reasons**
+
+The selected character or world was copied and verified at its entry boundary.
+
+**What RuneSchema does**
+
+The whole-save snapshot is available in Save Recovery. This does not copy or install mods.
+
+**What to do next**
+
+Review its identity, entry time and recorded mods in Helpy > Save Recovery.
+
+**Troubleshooting checks**
+
+Review its identity, entry time and recorded mods in Helpy > Save Recovery.
+
+[Direct link to RS-SAVE-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-save-003)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-SAVE-004" data-rs-severity="info" markdown="1">
+
+### RS-SAVE-004: Selected snapshot loaded {#rs-save-004}
+
+**Save safety · Typical level: info**
+
+A queued restore was claimed once and loaded through the exact selected native save contract.
+
+**Common reasons**
+
+A queued restore was claimed once and loaded through the exact selected native save contract.
+
+**What RuneSchema does**
+
+The previous payload is backed up. This reports loading; the game still owns subsequent persistence.
+
+**What to do next**
+
+Reinstall required mods before entry and let the game save normally. Keep the backup until the restored progress is verified.
+
+**Troubleshooting checks**
+
+Reinstall required mods before entry and let the game save normally. Keep the backup until the restored progress is verified.
+
+[Direct link to RS-SAVE-004](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-save-004)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-SAVE-005" data-rs-severity="warning" markdown="1">
+
+### RS-SAVE-005: Snapshot or recovery needs review {#rs-save-005}
+
+**Save safety · Typical level: warning**
+
+A backup preference, verification, restore request or native application step failed.
+
+**Common reasons**
+
+A backup preference, verification, restore request or native application step failed.
+
+**What RuneSchema does**
+
+The recovery action is not retried automatically after it is claimed. Existing native loading and normal backup-first cleanup continue.
+
+**What to do next**
+
+Read the original error, check free space and the selected runtime, then review or cancel the request in Save Recovery. Do not delete the prior-save backup.
+
+**Troubleshooting checks**
+
+Read the original error, check free space and the selected runtime, then review or cancel the request in Save Recovery. Do not delete the prior-save backup.
+
+[Direct link to RS-SAVE-005](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-save-005)
+
+</section>
+
 ## Spawns — RS-SPAWN {#legacy-family-rs-spawn}
 
 <section class="rs-code-card" data-rs-code="RS-SPAWN-001" data-rs-severity="warning" markdown="1">
@@ -2201,6 +2627,34 @@ Use matching candidate DLLs and Helpy.exe in the assigned installation. Check th
 Read the full startup reason and confirm the current Windows user. Select DLL window and restart to use the fallback.
 
 [Direct link to RS-UI-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-ui-002)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-UI-003" data-rs-severity="warning" markdown="1">
+
+### RS-UI-003: Helpy movement or look capture unavailable {#rs-ui-003}
+
+**Helpy UI · Typical level: warning**
+
+The game-thread controller input contract could not be applied or released for the overlay.
+
+**Common reasons**
+
+The overlay could not apply or release its local controller movement/look guard. Read the complete reflected-contract error; this is separate from save validation.
+
+**What RuneSchema does**
+
+Keyboard and pointer routing remains separate. Native movement/look suppression may be incomplete; RuneSchema retries without stacking repeated ignore-input calls.
+
+**What to do next**
+
+Close the overlay, keep the complete reason and confirm matching core, bridge and Helpy builds. If controls remain unavailable, close Helpy and return to the menu. Report the platform and controller/input method.
+
+**Troubleshooting checks**
+
+Close the overlay and verify matching core, bridge and Helpy builds. The guard releases only its own stacked input blocks and clears on bridge disconnect. If controls do not recover, close Helpy and return to the menu.
+
+[Direct link to RS-UI-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-ui-003)
 
 </section>
 

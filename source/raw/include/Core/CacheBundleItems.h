@@ -50,25 +50,26 @@ public:
                 bool nativeChecked=false;
                 // Learned rows may be absent from the older complete sidecar.
                 const bool currentPages=PagedItemCatalog::Current(PagedItemCatalog::File(local));
-                if(currentPages&&(cursor.starts_with("P:")||(cursor.empty()&&(query.empty()||!std::filesystem::exists(learned)))))try{
-                    CacheBundleIO::Safe(PagedItemCatalog::File(local));auto next=cursor;
-                    for(int slice=0;slice<8;++slice){
-                        auto page=PagedItemCatalog::Read(PagedItemCatalog::File(local),{},query,next,limit,true,locale,snapshot.NativePlugins);
-                        Json rows=Json::array();for(const auto& row:page.at("Rows")){
-                            auto reference=CacheBundle::FromRow("items",row);if(reference.is_null()||!CacheBundleStore::Browsable(reference,snapshot))continue;
-                            rows.push_back(std::move(reference["Data"]));
-                        }
-                        page["Rows"]=std::move(rows);nativeChecked=!page.value("HasMore",false);
-                        if(!page["Rows"].empty()||!page.value("HasMore",false)||slice==7){
-                            if(!page["Rows"].empty()||page.value("HasMore",false)||cursor.starts_with("P:")){
+                const auto nativePage=[&](std::string next)->std::optional<Json>{
+                    try{CacheBundleIO::Safe(PagedItemCatalog::File(local));
+                        for(int slice=0;slice<8;++slice){
+                            auto page=PagedItemCatalog::Read(PagedItemCatalog::File(local),{},query,next,limit,true,locale,snapshot.NativePlugins);
+                            Json rows=Json::array();for(const auto& row:page.at("Rows")){
+                                auto reference=CacheBundle::FromRow("items",row);if(reference.is_null()||!CacheBundleStore::Browsable(reference,snapshot))continue;
+                                rows.push_back(std::move(reference["Data"]));
+                            }
+                            page["Rows"]=std::move(rows);nativeChecked=!page.value("HasMore",false);
+                            if(!page["Rows"].empty()||!page.value("HasMore",false)||slice==7){
                                 page["CachePreview"]=true;page["CheckingChanges"]=true;page["BundleReference"]=true;
                                 page["Coverage"]="Saved presentation rows filtered by enabled sources; gameplay remains live-validated.";
-                                return Result{key,std::move(page)};
-                            }break;
+                                return page;
+                            }
+                            next=page.at("NextCursor").get<std::string>();
                         }
-                        next=page.at("NextCursor").get<std::string>();
-                    }
-                }catch(...){} // A missing or stale sidecar falls back to bounded reference metadata.
+                    }catch(...){}return {};
+                };
+                if(currentPages&&(cursor.starts_with("P:")||(cursor.empty()&&!std::filesystem::exists(published)&&(query.empty()||!std::filesystem::exists(learned)))))
+                    if(auto page=nativePage(cursor);page&&(!page->at("Rows").empty()||page->value("HasMore",false)||cursor.starts_with("P:")))return Result{key,std::move(*page)};
                 const auto index=std::filesystem::exists(published)?published:std::filesystem::exists(learned)?learned:std::filesystem::exists(legacy)?legacy:local;CacheBundleIO::Safe(index);if(!std::filesystem::exists(index))return Result{key,Json{}};
                 auto stamp=snapshot.Key+(snapshot.Provisional?"|preview|":"|live|")+locale+"|"+std::to_string(std::filesystem::last_write_time(index).time_since_epoch().count())+"|"+std::to_string(std::filesystem::file_size(index));
                 if(std::filesystem::exists(local))stamp+="|"+std::to_string(std::filesystem::last_write_time(local).time_since_epoch().count());
@@ -76,7 +77,7 @@ public:
                 if(index!=learned&&std::filesystem::exists(learned))stamp+="|observed|"+std::to_string(std::filesystem::last_write_time(learned).time_since_epoch().count());
                 if(files->Stamp!=stamp){
                     auto records=CacheBundleStore::Read(cache,root,snapshot,locale,"items");
-                    if(!nativeChecked&&(!std::filesystem::exists(learned)||!currentPages))try{
+                    if(!nativeChecked)try{
                         const auto nativeStamp=std::filesystem::last_write_time(local);
                         const auto doc=CacheBundleStore::Parse(CacheBundleIO::Read(local,64*1024*1024));const auto scope=CacheBundleStore::Parse(doc.value("Scope",std::string("{}")));
                         if(doc.value("Version",0)==1&&scope.is_array()&&scope.size()==4&&scope[0]=="item-browse-v2"&&scope[3]==locale&&doc.at("Rows").is_array()&&doc["Rows"].size()<=CacheBundle::MaxRecords){
@@ -88,24 +89,39 @@ public:
                                     std::filesystem::last_write_time(PagedItemCatalog::File(local),nativeStamp);
                                 }
                             }catch(...){} // Readable references remain available if the index cannot be repaired.
+                            if(currentPages){
+                                // Reuse only bounded labels here; other saved rows stay on the existing paged lane.
+                                std::map<std::string,Json*> unresolved;for(auto& reference:records)if(!ItemName::Resolved(reference.at("Data")))unresolved.emplace(reference.at("Path").get<std::string>(),&reference.at("Data"));
+                                for(const auto& row:doc["Rows"]){
+                                    const auto path=ItemName::Text(row,"Path");const auto found=unresolved.find(path);if(found==unresolved.end())continue;
+                                    auto name=ItemName::Clean(ItemName::Text(row,"DisplayName"));if(name.empty())name=ItemName::Clean(ItemName::Text(row,"Name"));
+                                    if(!CacheBundle::Text(name,512)||!ItemName::Resolved(Json{{"Name",name},{"Path",path},{"InternalName",ItemName::Text(row,"InternalName")}}))continue;
+                                    (*found->second)["Name"]=name;(*found->second)["DisplayName"]=name;unresolved.erase(found);if(unresolved.empty())break;
+                                }
+                            }else{
                             std::map<std::string,Json> merged;for(const auto& reference:records)merged[reference.at("Path").get<std::string>()]=reference;
                             for(const auto& row:doc["Rows"]){auto reference=CacheBundle::FromRow("items",row);if(!reference.is_null()&&CacheBundleStore::Browsable(reference,snapshot)){
                                 reference["Data"]["CacheSourceVerified"]=false;reference["Data"]["ObservedCurrent"]=false;
-                                const auto path=reference.at("Path").get<std::string>();if(scope[1]==snapshot.CatalogKey||!merged.contains(path))merged[path]=reference;
+                                const auto path=reference.at("Path").get<std::string>();if(scope[1]==snapshot.CatalogKey||!merged.contains(path)){if(merged.contains(path))reference["Data"]=ItemName::Merge(merged.at(path).at("Data"),reference.at("Data"));merged[path]=reference;}
+                                else if(!ItemName::Resolved(merged.at(path).at("Data"))&&ItemName::Resolved(reference.at("Data"))){
+                                    auto& data=merged.at(path).at("Data");data["Name"]=reference.at("Data").at("Name");data["DisplayName"]=data.at("Name");
+                                }
                             }}
                             auto combined=Json::array();for(const auto& [path,reference]:merged)combined.push_back(reference);
                             (void)CacheBundle::Records(combined);records=std::move(combined);
+                            }
                         }
                     }catch(...){} // Imported references still work if the local catalogue is unavailable.
                     files->Items=std::make_unique<Index>(records);files->Stamp=stamp;files->PageKey.clear();
                 }
                 if(files->PageKey!=key){
                     files->Window=files->Items->Page(query,cursor,limit);files->PageKey=key;
-                    if(!query.empty()&&!files->Window.value("HasMore",true)&&std::filesystem::exists(learned)&&currentPages)try{
-                        // Show learned rows first, then continue through the older native sidecar.
-                        const auto head=PagedItemCatalog::Read(PagedItemCatalog::File(local),{},"","",1,true,locale,snapshot.NativePlugins);
-                        auto next=head.at("NextCursor").get<std::string>();next.replace(next.rfind(':')+1,std::string::npos,"0");
-                        files->Window["NextCursor"]=next;files->Window["HasMore"]=true;
+                    if(!files->Window.value("HasMore",true)&&currentPages)try{
+                        // Imported rows lead; saved native pages continue without a full catalogue rebuild.
+                        if(files->Window.at("Rows").empty()){if(auto page=nativePage(""))files->Window=std::move(*page);}
+                        else{const auto head=PagedItemCatalog::Read(PagedItemCatalog::File(local),{},"","",1,true,locale,snapshot.NativePlugins);
+                            auto next=head.at("NextCursor").get<std::string>();next.replace(next.rfind(':')+1,std::string::npos,"0");
+                            files->Window["NextCursor"]=next;files->Window["HasMore"]=true;}
                     }catch(...){} // References remain browsable without a compatible sidecar.
                 }
                 return Result{key,files->Window};

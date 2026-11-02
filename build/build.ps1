@@ -515,6 +515,9 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         $desktop=Join-Path (Split-Path -Parent $HelpyDll) 'Helpy.exe'
         if(!(Test-Path -LiteralPath $desktop -PathType Leaf)){throw 'The Helpy bridge requires its matching application'}
         Copy-Item -LiteralPath $desktop -Destination (Join-Path $Destination 'Helpy.exe') -Force
+        $controller=Join-Path (Split-Path -Parent $HelpyDll) 'SDL3.dll'
+        if(-not (Test-Path -LiteralPath $controller -PathType Leaf)){throw 'Helpy controller runtime SDL3.dll is missing'}
+        Copy-Item -LiteralPath $controller -Destination (Join-Path $Destination 'SDL3.dll') -Force
         $vulkan=Join-Path (Split-Path -Parent $HelpyDll) 'RuneSchema.Helpy.Vulkan.dll'
         if(!(Test-Path -LiteralPath $vulkan -PathType Leaf)){throw 'The Helpy package requires its matching opt-in Vulkan startup selector'}
         Copy-Item -LiteralPath $vulkan -Destination (Join-Path $Destination 'RuneSchema.Helpy.Vulkan.dll') -Force

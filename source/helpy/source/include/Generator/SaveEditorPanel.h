@@ -1,4 +1,5 @@
 #pragma once
+#include "Generator/HelpyTextInput.h"
 #include "Generator/HelpyImGuiTheme.h"
 #include "Generator/MapLayerIcons.h"
 #include "Generator/AuthoringPanel.h"
@@ -142,7 +143,7 @@ inline void Inventory(bool compact=false){
     const auto offset=Items.value("Offset",size_t{}),total=Items.value("Total",size_t{});
     if(!compact&&Button("Refresh inventory names / sources","SaveEditorInventory",{{"Offset",offset}}))InventoryRequested=true;
     if(!Items.contains("Items")){ImGui::TextDisabled("Reading the saved inventory...");return;}
-    ImGui::SetNextItemWidth(compact?std::max(60.f,ImGui::GetContentRegionAvail().x-HelpyImGuiTheme::Current.X(135)):HelpyImGuiTheme::Current.X(235));ImGui::InputTextWithHint("##save-item-search","Search inventory…",ItemSearch,sizeof(ItemSearch));
+    ImGui::SetNextItemWidth(compact?std::max(60.f,ImGui::GetContentRegionAvail().x-HelpyImGuiTheme::Current.X(135)):HelpyImGuiTheme::Current.X(235));HelpyTextInput::InputTextWithHint("##save-item-search","Search inventory…",ItemSearch,sizeof(ItemSearch));
     if(compact){ImGui::SameLine();HelpyImGuiTheme::SoftButton("Search");ImGui::SameLine();if(Button("Refresh","SaveEditorInventory",{{"Offset",offset}}))InventoryRequested=true;}else ImGui::SameLine();
     std::set<std::string> sources;for(const auto& row:Items["Items"]){const auto source=ItemText(row,"SourceName");sources.insert(source.empty()?"Unresolved":source);}
     if(compact)ImGui::SetNextItemWidth(-1);
@@ -205,7 +206,7 @@ inline void Edit(){
             ImGui::PushID(path.c_str());if(ImGui::Selectable((entry.at("Name").get<std::string>()+" — "+entry.at("Storage").get<std::string>()).c_str())){AuthoringPanel::Copy(File,sizeof(File),path);Invalidate();}ImGui::PopID();}
         ImGui::EndCombo();
     }
-    if(ImGui::InputText("Character JSON path",File,sizeof(File)))Invalidate();
+    if(HelpyTextInput::InputText("Character JSON path",File,sizeof(File)))Invalidate();
     HelpyImGuiTheme::Toggle("This character is not currently loaded",&Offline);
     ImGui::BeginDisabled(!Offline);Button("Open editable copy","SaveEditorOpen",{{"Path",File},{"Offline",Offline}});ImGui::EndDisabled();
     ImGui::TextWrapped("Copy-only editing: original files, identities, ownership and unknown fields stay intact. World/SPUD and opaque WGS containers are not supported yet.");
@@ -229,7 +230,7 @@ inline void Edit(){
         }ImGui::EndTable();
     }
     if(!Selected.empty()){
-        ImGui::TextWrapped("Editing %s",Selected.c_str());ImGui::InputTextMultiline("JSON value",Value,sizeof(Value),{-1,65});
+        ImGui::TextWrapped("Editing %s",Selected.c_str());HelpyTextInput::InputTextMultiline("JSON value",Value,sizeof(Value),{-1,65});
         if(HelpyImGuiTheme::SoftButton("Stage field edit")){try{auto value=Json::parse(Value);if(AuthoringClient::Submit("SaveEditorSet",{{"Pointer",Selected},{"Value",value},{"Revision",Browser.at("Revision")}})){Invalidate();Error.clear();}}catch(const std::exception& e){Error=e.what();}}
     }
     }

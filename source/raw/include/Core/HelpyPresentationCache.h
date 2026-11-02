@@ -62,7 +62,7 @@ inline Result Commit(const fs::path& icons,const std::vector<Group>& groups,uint
             auto owner=known?old.value("Owner",group.Owner):group.Owner;std::map<std::string,Json> records;
             for(const auto& row:data["Records"])records[row.at("Kind").get<std::string>()+"|"+row.at("Path").get<std::string>()]=row;
             for(const auto& value:group.Records){auto row=CacheBundle::Parse(value);if(!Native(owner)&&row.Owner!=owner){row.Owner=owner;row=CacheBundle::Parse(CacheBundle::Document(row));}
-                const auto key=row.Kind+"|"+row.Path;const auto doc=CacheBundle::Document(row);if(!records.contains(key)||records.at(key)!=doc)++result.Records;records[key]=doc;}
+                const auto key=row.Kind+"|"+row.Path;if(records.contains(key))row.Data=ItemName::Merge(records.at(key).at("Data"),row.Data);const auto doc=CacheBundle::Document(row);if(!records.contains(key)||records.at(key)!=doc)++result.Records;records[key]=doc;}
             data["Records"]=Json::array();for(const auto& [key,row]:records)data["Records"].push_back(row);(void)CacheBundle::Records(data["Records"]);
             for(const auto& [icon,pixel]:group.Icons.items()){if(!CacheBundle::Asset(icon)||!CacheBundleIO::Digest(pixel.at("SHA256").get<std::string>()))throw std::runtime_error("[RS-CACHE-002] Invalid picture identity.");
                 if(!data["Icons"].contains(icon)||data["Icons"][icon]!=pixel)result.ChangedIcons.insert(icon);data["Icons"][icon]=pixel;}

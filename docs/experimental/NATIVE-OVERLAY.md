@@ -84,6 +84,12 @@ not register a system/user layer.
   not reported as successful presentation. No per-frame status requests are used.
 - The game receives neutral XInput state while the panel captures input. Cursor
   clipping/recentering is suspended only for the attached foreground game.
+- Interactive HUD input belongs to Helpy: keyboard, mouse buttons/wheel, raw
+  mouse/controller batches and controller navigation are withheld from the game.
+  Raw batches are drained before reporting no events, preventing queued actions
+  from replaying when the HUD closes. Held keyboard/mouse controls are released
+  when capture begins; game movement and look use the existing controller guard.
+  Notification-only cards leave gameplay input available.
 - Focus loss, a full input queue, or a heartbeat older than 1.5 seconds releases
   capture. The desktop app owns its normal close/tray/exit behavior.
 - Resize, swap-chain destruction, game shutdown and app replacement release
@@ -93,6 +99,10 @@ not register a system/user layer.
   not an accumulation per opening.
 
 ## Verification and limits
+
+See [controller navigation](CONTROLLER-NAVIGATION.md) for Xbox, DualShock and
+Nintendo device support, automatic/manual glyphs, text entry and controller map
+controls. The bundled SDL controller runtime is required beside the application.
 
 Isolated hardware tests on an NVIDIA RTX 5080 verify native pixels, premultiplied
 transparency, bounds, shared fences and hidden pass-through for DX11, DX12,

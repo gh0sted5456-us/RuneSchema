@@ -129,11 +129,17 @@ static class CacheTool
     {
         if (token is null) return "";
         if (token.Type == JTokenType.String) return token.Value<string>() ?? "";
-        if (token is JObject obj) foreach (var field in new[] { "LocalizedString", "SourceString", "Text", "Name" })
-            if (obj[field]?.Type == JTokenType.String) return obj.Value<string>(field) ?? "";
+        if (token is JObject obj) foreach (var field in new[] { "CultureInvariantString", "LocalizedString", "SourceString", "Text", "Name" })
+            if (obj[field]?.Type == JTokenType.String && !string.IsNullOrWhiteSpace(obj.Value<string>(field))) return obj.Value<string>(field) ?? "";
         return "";
     }
-    static string First(JObject props, params string[] fields) => fields.Select(f => Text(props[f])).FirstOrDefault(t => t.Length > 0) ?? "";
+    static bool NameKey(string text) => Regex.IsMatch(text, @"^(?:ITEM|JOURNAL|UI)_[^\s]+$");
+    static string ReadableText(JToken? token)
+    {
+        var values = token is JObject obj ? new[] { "CultureInvariantString", "LocalizedString", "SourceString", "Text", "Name" }.Select(f => obj[f]?.Type == JTokenType.String ? obj.Value<string>(f) ?? "" : "") : [Text(token)];
+        return values.FirstOrDefault(t => !string.IsNullOrWhiteSpace(t) && !NameKey(t)) ?? "";
+    }
+    static string First(JObject props, params string[] fields) => fields.Select(f => ReadableText(props[f])).FirstOrDefault(t => t.Length > 0) ?? "";
     static string Reference(JToken? token, IReadOnlyDictionary<string, string> paths)
     {
         if (token is null) return "";
@@ -287,6 +293,8 @@ static class CacheTool
                 using var provider = new DefaultFileProvider(new DirectoryInfo(nativeRoots[0]), extra, SearchOption.AllDirectories, new VersionContainer(EGame.GAME_UE5_6), StringComparer.OrdinalIgnoreCase) { MappingsContainer = new FileUsmapTypeMappingsProvider(mapping) };
                 provider.Initialize(); provider.Mount(); provider.PostMount(); provider.LoadVirtualPaths();
                 var report = new JArray();
+                try { provider.LoadLocalization(); }
+                catch (Exception e) { report.Add(new JObject { ["Stage"] = "Localization", ["Error"] = e.Message }); }
                 bool IsClass(string name, string parent)
                 {
                     name = name.Split('.').Last(); var seen = new HashSet<string>();
@@ -343,8 +351,10 @@ static class CacheTool
                         var export = JObject.Parse(JsonConvert.SerializeObject(obj));
                         var type = export.Value<string>("Type") ?? ""; if (export["Properties"] is not JObject props) continue;
                         var path = Asset(package, export.Value<string>("Name")); var owner = owners.GetValueOrDefault(path[..path.LastIndexOf('.')]); if (owner is null) continue;
-                        var name = First(props, "DisplayName", "ItemName", "Title", "Name"); if (name.Length == 0) name = export.Value<string>("Name") ?? "";
+                        var displayName = First(props, "DisplayName", "ItemName", "Title", "Name");
+                        var name = displayName.Length > 0 ? displayName : export.Value<string>("Name") ?? "";
                         var data = new JObject { ["Name"] = name, ["Type"] = type };
+                        if (displayName.Length > 0) data["DisplayName"] = displayName;
                         foreach (var field in new[] { "Category", "Section", "InternalName" }) { var text = Text(props[field]); if (text.Length > 0) data[field] = text; }
                         var description = First(props, "Description", "FlavourText"); if (description.Length > 0) data["Description"] = description;
                         foreach (var field in new[] { "PowerLevel", "MaxStackSize", "StackSize" }) if (props[field]?.Type is JTokenType.Integer or JTokenType.Float && props.Value<double>(field) is >= 0 and <= 1e9) data[field] = props[field]!.DeepClone();
@@ -444,6 +454,10 @@ static class CacheTool
         Need(Fingerprint("seed\n", new[] { KeyValuePair.Create("b", "2"), KeyValuePair.Create("a", "1") }) == Hash(Encoding.UTF8.GetBytes("seed\na|1\nb|2\n")), "Portable ordering and separators");
         Need(Fingerprint("rsmk-content-v2|example\n", new[] { KeyValuePair.Create(".pak", "b"), KeyValuePair.Create(".pak", "a") }) == Hash(Encoding.UTF8.GetBytes("rsmk-content-v2|example\n.pak|a\n.pak|b\n")), "Duplicate extensions sort by content digest, never folder names");
         Need(Text(JObject.Parse("{\"SourceString\":\"A readable name\"}")) == "A readable name" && Text(new JObject()) == "", "Text extraction must not invent values");
+        Need(ReadableText(JObject.Parse("{\"LocalizedString\":\"ITEM_colors_of_money_key\",\"SourceString\":\"Ranger Body (Dyed Black)\"}")) == "Ranger Body (Dyed Black)", "Readable source text must beat an unresolved localization key");
+        Need(ReadableText(JObject.Parse("{\"LocalizedString\":\"\",\"SourceString\":\"Readable\"}")) == "Readable" && ReadableText(JValue.CreateString("ITEM_key")) == "", "Empty or unresolved localized names need a readable fallback");
+        Need(Text(JValue.CreateString("ITEM_persistence_id")) == "ITEM_persistence_id", "Name cleanup must never alter persistence identities");
+        Need(ReadableText(JObject.Parse("{\"CultureInvariantString\":\"Ranger Tunic (Dyed Black)\"}")) == "Ranger Tunic (Dyed Black)", "Cooked culture-invariant display names must survive cache export");
         using var pixel = new SKBitmap(new SKImageInfo(1, 1, SKColorType.Bgra8888, SKAlphaType.Unpremul)); pixel.SetPixel(0, 0, new SKColor(10, 20, 30, 255)); var bytes = Pixels(pixel);
         Need(bytes.Length == 20 && bytes[16] == 10 && bytes[17] == 20 && bytes[18] == 30 && bytes[19] == 255, "BGRA must become RGBA");
         Need(Pixels(pixel, true).Length == 256 * 144 * 4, "Banner dimensions");

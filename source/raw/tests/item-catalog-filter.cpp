@@ -69,6 +69,11 @@ int main(int argc,char** argv){
     assert(PS::ItemCategory::Resolve(tool)=="Tools");
     auto runeSword=sword;runeSword["Name"]="Rune Sword";
     assert(PS::ItemCategory::Resolve(runeSword)=="Weapons");
+    auto runeScimitar=runeSword;runeScimitar["Name"]="Rune Scimitar";runeScimitar["Category"]="Runes";runeScimitar["Tags"]="";runeScimitar["Type"]="MeleeWeaponData";
+    assert(PS::ItemCategory::Repair(runeScimitar)&&runeScimitar["Category"]=="Weapons");
+    assert(!Query("__helpycat:runes rune")(runeScimitar)&&Query("__helpycat:weapons rune")(runeScimitar));
+    runeScimitar["Type"]="MagicWeaponData";assert(PS::ItemCategory::Resolve(runeScimitar)=="Weapons");
+    runeScimitar["Type"]="MagicAmmoData";assert(PS::ItemCategory::Resolve(runeScimitar)=="Runes");
     assert(PS::ItemCategory::Classify("/Game/Mods/RuneSchema/Armor/Snapshot.Snapshot","Snapshot","","","").empty());
     assert(PS::ItemCategory::Classify("/Mods/Armor/DA_Flower.DA_Flower","Flower","","","").empty());
     assert(PS::ItemCategory::Classify("/Mods/DA_Test.DA_Test","Test","","Item.QuestItemExtra","").empty());

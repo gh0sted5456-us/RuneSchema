@@ -17,6 +17,14 @@ A registry declaration tells RuneSchema which cooked assets to connect to the
 game. Use a small JSONC file for an existing PAK, or include the declaration in
 your cooked content.
 
+Conventional registry-root discovery collects package names only for the
+registry filenames it needs. It still validates every container index it
+examines, and an incomplete or unsupported index retains native probing as
+the fallback. This reduces temporary package-name work without treating a
+presentation cache as registration authority. The existing startup performance
+line reports census and conventional-probe time separately; a faster container
+benchmark is not a measured reduction in total game startup time.
+
 ## Step-by-step workflow
 
 1. Identify cooked content that lacks another reliable enrollment route; avoid duplicating ordinary loader registration.
@@ -83,6 +91,14 @@ conventional path for each enabled mod:
 ```
 
 For the conventional path, `RegistryOwner` must exactly match `<ModFolder>`.
+
+RuneSchema also accepts the `DA_Registry_<ModFolder>` conventional name. These
+are optional alternatives; a mod does not need both. When all mounted container
+indexes can be read, RuneSchema skips conventional packages that are absent,
+avoiding Unreal's misleading missing-package warnings for those probes. Loaded
+objects and metadata discovery remain available. If an index is unavailable,
+the native probing fallback remains active. Malformed declarations and missing
+assets explicitly referenced by a declaration still need attention.
 It may point to owned gameplay assets under another permanent content root.
 The [shared bridge walkthrough](../SHARED-REGISTRY-BRIDGE-PAK.md) explains how to
 author the data asset without replacing the shared base.

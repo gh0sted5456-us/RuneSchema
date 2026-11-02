@@ -1,4 +1,5 @@
 #pragma once
+#include "Generator/HelpyTextInput.h"
 #include "Generator/HelpyMenu.h"
 #include "Core/ProcessExitFuture.h"
 
@@ -868,7 +869,7 @@ inline void DrawIssues(DiagnosticCenterModel::Store& store,const HelpyImGuiTheme
     const float clearWidth=ImGui::CalcTextSize("Clear").x+theme.X(35.0f);
     const float queryWidth=std::max(theme.X(85.0f),availableBefore-clearWidth);
     ImGui::SetNextItemWidth(queryWidth);
-    ImGui::InputTextWithHint("##diagnostics-search","Search code, mod, file, target, property, message...",Query,sizeof(Query));
+    HelpyTextInput::InputTextWithHint("##diagnostics-search","Search code, mod, file, target, property, message...",Query,sizeof(Query));
     ImGui::SameLine();
     if(ImGui::SmallButton("Clear##diagnostics-search"))Query[0]='\0';
     const char* scopes[]={"Errors + warnings","Errors only","Warnings only",

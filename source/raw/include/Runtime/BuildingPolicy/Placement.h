@@ -78,7 +78,7 @@ public:
 private:
  static unsigned char Filter(UObject* validator,void* piece,const void* snapping,void* supporting,float* stability,bool ghost,bool cheat){
   std::unique_ptr<MaterialWaiver> waiver;
-  try{if(piece&&Live(validator)&&PolicyBool(validator->GetWorld(),L"RuneSchemaFreeBuildingMaterials",Position(piece)))waiver=std::make_unique<MaterialWaiver>(validator->GetWorld(),Position(piece),PieceDataFor(piece));}catch(const std::exception& error){if(report)report(std::string("BUILDING_MATERIAL_PREVIEW_FAILED ")+error.what());}
+  try{if(piece&&Live(validator)&&(MaterialWaiver::HasActive()||PolicyBool(validator->GetWorld(),L"RuneSchemaFreeBuildingMaterials",Position(piece))))waiver=std::make_unique<MaterialWaiver>(validator->GetWorld(),Position(piece),PieceDataFor(piece));}catch(const std::exception& error){if(report)report(std::string("BUILDING_MATERIAL_PREVIEW_FAILED ")+error.what());}
   auto state=reinterpret_cast<Validate>(trampoline)(validator,piece,snapping,supporting,stability,ghost,cheat);
   try{
   if(!piece||!Live(validator))return state;

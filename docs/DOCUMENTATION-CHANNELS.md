@@ -54,6 +54,20 @@ JSON catalogue are the shared exception and retain their existing public anchors
 Both source commit IDs are recorded in
 `assets/data/documentation-channels.json` on the site.
 
+## Candidate testing on pre-release
+
+`pre-release` is a source branch for an assembled candidate awaiting testing and
+its complete maintainer-built runtime ZIP. It is not another public website
+channel. Its `docs/experimental/` guides describe the candidate in that branch;
+the existing website continues to read `main` and `experimental`.
+
+Publishing candidate source must not replace stable release assets, move stable
+tags or relabel stable guides as released candidate features. Validate the full
+maintainer-supplied ZIP against its core, plugins, bridges, helpers, assets,
+defaults and licenses before publishing an installable download. Small binary
+follow-up bundles and GitHub's automatic source archives are not full runtime
+packages. Promotion still follows the code/package/documentation procedure above.
+
 Public deployment runs from main, matching the repository's Pages environment.
 After experimental validates its combined site, it requests a main documentation
 rebuild using the workflow's built-in GitHub token. That rebuild reads the latest

@@ -2,6 +2,15 @@
 #include "Core/DefinitionNameIndex.h"
 #include <cassert>
 int main(){
+    const std::unordered_set<std::string> roots{"siege","dye"};
+    const auto mounted=[&](std::string_view path){return PS::AssetPreload::IsMountedPackage(path,roots);};
+    for(const std::string path:{"/Game/Mods/Items", "/game/runeschema/Test", "/Siege/Items", "/DYE/Items"}){
+        assert(mounted(path+"/A"));assert(mounted(path+"/"));
+    }
+    for(const std::string path:{"/Game/Gameplay/Items", "/Engine/Items", "/SiegeExtra/Items", "/Unknown/Items"}){
+        assert(!mounted(path+"/A"));assert(!mounted(path+"/"));
+    }
+    assert(!mounted("/Siege"));assert(mounted("/Siege/"));assert(!mounted("not/a/path"));
     PS::AssetPreload::Plan<std::wstring> plan;
     assert(plan.Add(L"/Mod/Items/A.A"));assert(!plan.Add(L"/Mod/Items/A.A"));
     assert(!plan.Add(L"bare"));assert(!plan.Add(L"/Mod/Package"));

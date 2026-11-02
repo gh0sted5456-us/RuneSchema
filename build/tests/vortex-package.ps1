@@ -9,6 +9,7 @@ function Put([string]$relative,[string]$value='fixture'){$path=Join-Path $payloa
 try{
     Put 'dlls/main.dll';Put 'plugins/RuneSchema.Helpy/dll/RuneSchema.Helpy.dll'
     Put 'plugins/RuneSchema.Helpy/dll/Helpy.exe' 'optional desktop fixture'
+    Put 'plugins/RuneSchema.Helpy/dll/SDL3.dll' 'controller runtime fixture'
     Put 'plugins/RSNetworking/plugin.json' '{}';Put 'plugins/RuneSchema.RegistryBridge/plugin.json' '{}'
     foreach($extension in @('pak','ucas','utoc')){Put "plugins/RSNetworking/paks/Networking/Networking_P.$extension";Put "plugins/RuneSchema.RegistryBridge/paks/RegistryBridge/RegistryBridge_P.$extension"}
     Put 'plugins/RSNetworking/paks/RegistryBridge/RegistryBridge_P.pak' 'retired partial duplicate'

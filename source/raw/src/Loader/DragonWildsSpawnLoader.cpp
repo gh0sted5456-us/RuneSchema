@@ -2700,6 +2700,7 @@ namespace DragonWilds {
                 // Preserve authored item rules while resetting per-world state.
                 PlayerGhost::ClearWorld();
                 ToolMapTravelReset();
+                UpdateHelpyInputCapture(false);
                 m_readyWorld = nullptr;
                 if(m_inventoryMarks)m_inventoryMarks->Reset();
                 if(m_markRelay)m_markRelay->Reset();
@@ -2740,6 +2741,7 @@ namespace DragonWilds {
         m_spawnTickCallbackId = Hook::RegisterEngineTickPostCallback(
             [this](Hook::TCallbackIterationData<void>&, UEngine*, float deltaSeconds, bool) {
                 PS::GameFrameRate::Tick();
+                UpdateHelpyInputCapture(PS::HelpyActivity::WantsInputCapture());
                 PS::WorkSlice helpyWork;
                 if(m_inventoryMarks)PS::SlowWork::Measure("helpy.marks",[&]{m_inventoryMarks->Tick();});
                 if(m_markRelay)m_markRelay->Tick(m_readyWorld,PS::SpawnToolRequests::Generation.load(),[this](UObject* controller){return GetPlayerCharacterGuid(controller);},ForwardHelpyAuthority);

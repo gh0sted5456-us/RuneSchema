@@ -16,7 +16,7 @@ if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
 $RepositoryRoot = [IO.Path]::GetFullPath($RepositoryRoot)
 $required = @('LICENSE', 'AUTHORS.md', 'LICENSING.md', 'CONTRIBUTING.md', 'THIRD_PARTY_NOTICES.md',
     'licenses/PalSchema-MIT.txt', 'licenses/UE4SS-MIT.txt',
-    'licenses/nlohmann-json-MIT.txt')
+    'licenses/nlohmann-json-MIT.txt', 'licenses/SDL3-zlib.txt')
 foreach ($relative in $required) {
     $path = Join-Path $RepositoryRoot $relative
     if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or
@@ -204,7 +204,8 @@ function Write-ConsolidatedLicenseFile {
         @{ Name = 'RuneSchema — Third-Party Inventory'; File = 'THIRD_PARTY_NOTICES.md'; Upstream = 'https://github.com/gh0sted5456-us/RuneSchema' },
         @{ Name = 'PalSchema — MIT License'; File = 'PalSchema-MIT.txt'; Upstream = 'https://github.com/Okaetsu/PalSchema' },
         @{ Name = 'UE4SS / RE-UE4SS — MIT License'; File = 'UE4SS-MIT.txt'; Upstream = 'https://github.com/UE4SS-RE/RE-UE4SS' },
-        @{ Name = 'JSON for Modern C++ — MIT License'; File = 'nlohmann-json-MIT.txt'; Upstream = 'https://github.com/nlohmann/json' }
+        @{ Name = 'JSON for Modern C++ — MIT License'; File = 'nlohmann-json-MIT.txt'; Upstream = 'https://github.com/nlohmann/json' },
+        @{ Name = 'SDL 3.4.16 — zlib License'; File = 'SDL3-zlib.txt'; Upstream = 'https://github.com/libsdl-org/SDL/tree/release-3.4.16' }
     )
     foreach ($section in $sections) {
         $lines.Add('')
@@ -257,6 +258,7 @@ function Collect-DependencyNotices {
     }
     $roots = @(
         @{ Name = 'dependency-cache'; Path = (Join-Path $RepositoryRoot '.cache/dependencies') },
+        @{ Name = 'helpy-vendor'; Path = (Join-Path $RepositoryRoot 'source/helpy/vendor') },
         @{ Name = 'build-cache'; Path = $buildCache }
     )
     $records = @()

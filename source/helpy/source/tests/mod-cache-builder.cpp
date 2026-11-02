@@ -26,5 +26,11 @@ int main(int argc,char** argv){
         Check(!StartInstalled(root,root/"mods/Missing","Missing",false)&&!Current().Running);
         Check(!StartRepair(root/"Missing","0.8.1.0")&&Current().Repair&&Current().State=="Failed");
         Check(ReadyBundle().empty());Shutdown();
+        const auto row=[&](const char* name,bool enabled,bool cooked){return nlohmann::json{{"Name",name},{"Enabled",enabled},{"Present",true},{"Folder",(root/"mods"/name).string()},{"Loaders",cooked?nlohmann::json::array({"Unreal PAK"}):nlohmann::json::array()}};};
+        Check(StartEnabled(root,nlohmann::json::array({row("MissingA",true,true),row("MissingB",true,true),row("JsonOnly",true,false),row("Disabled",false,true)}),false));
+        Check(CurrentBatch().Total==3&&CurrentBatch().Skipped==1&&CurrentBatch().Active);
+        Control("pause");Poll();Check(CurrentBatch().Failed==0&&CurrentBatch().Paused);
+        Control("run");Poll();Check(CurrentBatch().Failed==1&&!Current().Running);Poll();Check(CurrentBatch().Failed==2);Poll();Check(!CurrentBatch().Active);
+        Check(StartEnabled(root,nlohmann::json::array({row("MissingA",true,true)}),false));Control("stop");Poll();Check(!CurrentBatch().Active&&CurrentBatch().Failed==0);Shutdown();
     }catch(...){fs::remove_all(root);throw;}fs::remove_all(root);
 }

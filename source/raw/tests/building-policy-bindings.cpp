@@ -4,6 +4,20 @@
 #include <array>
 using namespace PS::Buildings;
 int main(){
+ // Captured WinGDK thunks split the prologue, body and epilogue into adjacent chained unwind records.
+ for(const auto root:std::array{NativeUnwindPart{0x6697560,0x669756c,202919812},NativeUnwindPart{0x6697d30,0x6697d37,202866612},NativeUnwindPart{0x6697fb0,0x6697fb7,202929072}}){
+  const uintptr_t body=root.Begin==0x6697560?107575495:root.Begin==0x6697d30?107577197:107578017;
+  const uintptr_t finish=root.Begin==0x6697560?107575523:root.Begin==0x6697d30?107577207:107578027;
+  const std::map<uintptr_t,NativeUnwindChain> parts{{root.End,{{root.End,body,1},root}},{body,{{body,finish,2},root}}};
+  assert(NativeUnwindEnd(root,[&](uintptr_t end)->std::optional<NativeUnwindChain>{const auto at=parts.find(end);return at==parts.end()?std::nullopt:std::optional{at->second};})==finish);
+ }
+ // Steam's complete range stays intact. Neighbours from another function cannot extend it.
+ const NativeUnwindPart steam{100,900,30};
+ assert(NativeUnwindEnd(steam,[](uintptr_t)->std::optional<NativeUnwindChain>{return {};})==900);
+ assert(NativeUnwindEnd(steam,[](uintptr_t)->std::optional<NativeUnwindChain>{return NativeUnwindChain{{900,950,40},{10,20,30}};})==900);
+ for(const auto range:std::array{NativeUnwindPart{899,950,40},NativeUnwindPart{900,900,40},NativeUnwindPart{900,2200,40}}){
+  bool rejected=false;try{NativeUnwindEnd(steam,[&](uintptr_t)->std::optional<NativeUnwindChain>{return NativeUnwindChain{range,steam};});}catch(const std::exception&){rejected=true;}assert(rejected);
+ }
  using K=DestructionStepKind;
  // WinGDK's tick calls a query helper, then tail-jumps to the actual stability worker.
  const std::map<uintptr_t,DestructionStep> code{{100,{5,K::Call,400}},{105,{2,K::Other}},{107,{5,K::Jump,900}},{112,{1,K::Return}},{113,{5,K::Call,999}}};

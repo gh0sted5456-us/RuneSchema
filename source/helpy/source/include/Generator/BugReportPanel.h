@@ -1,4 +1,5 @@
 #pragma once
+#include "Generator/HelpyTextInput.h"
 #include "Core/BugReport.h"
 #include "Core/HelpyEnvironment.h"
 #include "Core/HelpyBranding.h"
@@ -27,12 +28,12 @@ inline void Render(){
     const auto& theme=HelpyImGuiTheme::Current;
     ImGui::TextWrapped("Fill out the form, choose Copy bug report, then Submit to Nexus Page. Sign in with a Nexus account, create a bug report and paste the copied text. Helpy opens the page; you submit it there.");
     ImGui::TextWrapped("Do not include passwords, account IDs, personal information or private save data. No logs or files are attached automatically.");
-    ImGui::Spacing();ImGui::TextUnformatted("Title *");ImGui::SetNextItemWidth(-1);ImGui::InputTextWithHint("##bug-title","Short summary of the problem",Title,sizeof(Title));
+    ImGui::Spacing();ImGui::TextUnformatted("Title *");ImGui::SetNextItemWidth(-1);HelpyTextInput::InputTextWithHint("##bug-title","Short summary of the problem",Title,sizeof(Title));
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::BugFields["Title"]=HelpyPreviewHooks::LastRect();
 #endif
     ImGui::TextUnformatted("Category");ImGui::SetNextItemWidth(-1);ImGui::Combo("##bug-category",&Category,BugReport::Categories.data(),int(BugReport::Categories.size()));
-    const auto field=[&](const char* label,const char* id,char* value,size_t size,float height){ImGui::TextUnformatted(label);ImGui::InputTextMultiline(id,value,size,{-1,theme.Y(height)});
+    const auto field=[&](const char* label,const char* id,char* value,size_t size,float height){ImGui::TextUnformatted(label);HelpyTextInput::InputTextMultiline(id,value,size,{-1,theme.Y(height)});
 #if defined(HELPY_PREVIEW)
         HelpyPreviewHooks::BugFields[label]=HelpyPreviewHooks::LastRect();
 #endif

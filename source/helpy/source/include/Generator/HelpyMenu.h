@@ -1,10 +1,32 @@
 #pragma once
 #include "Generator/HelpyImGuiTheme.h"
+#include "Generator/HelpyControllerInput.h"
 #include "Core/HelpyPreviewHooks.h"
 #include <array>
 #include <span>
 
 namespace PS::HelpyMenu {
+inline int ShoulderFrame=-1;
+inline bool BeginContextItem(const char* id){
+    if(ImGui::IsItemFocused()&&ImGui::IsKeyPressed(ImGuiKey_GamepadFaceLeft,false))ImGui::OpenPopup(id);
+    return ImGui::BeginPopupContextItem(id);
+}
+inline void NextControl(const char* label){ImGui::SameLine();if(ImGui::GetContentRegionAvail().x<ImGui::CalcTextSize(label).x+ImGui::GetStyle().FramePadding.x*2)ImGui::NewLine();}
+template<class Labels>inline void Categories(const char* id,const Labels& labels,int& selected){
+    const auto& theme=HelpyImGuiTheme::Current;selected=std::clamp(selected,0,int(labels.size())-1);
+    const float width=std::max(1.f,std::min(theme.X(180),ImGui::GetContentRegionAvail().x*.30f));
+    ImGui::PushStyleColor(ImGuiCol_ChildBg,theme.panel);
+    if(ImGui::BeginChild(id,{width,0},true)){
+        ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign,{.5f,.5f});
+        for(size_t i=0;i<labels.size();++i){
+            if(ImGui::Selectable(labels[i],selected==int(i),0,{0,theme.Y(32)}))selected=int(i);
+            if(selected==int(i))HelpyControllerInput::DefaultFocus();
+#if defined(HELPY_PREVIEW)
+            HelpyPreviewHooks::MenuTabs[std::string(id)+"/"+labels[i]]=HelpyPreviewHooks::LastRect();
+#endif
+        }ImGui::PopStyleVar();
+    }ImGui::EndChild();ImGui::PopStyleColor();ImGui::SameLine();
+}
 inline bool Tab(const char* label,bool selected,float& used,float width){
     const auto& theme=HelpyImGuiTheme::Current;const auto& style=ImGui::GetStyle();
     const float size=std::min(width,ImGui::CalcTextSize(label).x+style.FramePadding.x*2+theme.X(12));
@@ -13,12 +35,18 @@ inline bool Tab(const char* label,bool selected,float& used,float width){
     ImGui::PushStyleColor(ImGuiCol_Text,selected?theme.accentHover:theme.textDisabled);
     ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign,{.5f,.5f});
     const bool clicked=ImGui::Selectable(label,selected,ImGuiSelectableFlags_None,{size,ImGui::GetFrameHeight()});
+    if(selected)HelpyControllerInput::DefaultFocus();
     ImGui::PopStyleVar();ImGui::PopStyleColor(2);
     if(selected){const auto a=ImGui::GetItemRectMin(),b=ImGui::GetItemRectMax();ImGui::GetWindowDrawList()->AddLine(a,{b.x,a.y},ImGui::GetColorU32(theme.accent),theme.Y(2));}
     used+=size;return clicked;
 }
 template<class Labels> inline bool Tabs(const char* id,const Labels& labels,int& selected){
     selected=std::clamp(selected,0,int(labels.size())-1);bool changed=false;float used=0;
+    auto& handled=ShoulderFrame;const auto frame=ImGui::GetFrameCount();const auto* nav=ImGui::GetCurrentContext()->NavWindow;const auto* window=ImGui::GetCurrentWindow();
+    if(handled!=frame&&nav&&(nav==window||nav->ParentWindow==window)&&!ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId)&&!ImGui::GetIO().WantTextInput&&!ImGui::IsAnyItemActive()){
+        const int step=ImGui::IsKeyPressed(ImGuiKey_GamepadR1,false)?1:ImGui::IsKeyPressed(ImGuiKey_GamepadL1,false)?-1:0;
+        if(step){selected=(selected+step+int(labels.size()))%int(labels.size());changed=true;handled=frame;}
+    }
     const float width=std::max(1.f,ImGui::GetContentRegionAvail().x);ImGui::PushID(id);
     for(size_t i=0;i<labels.size();++i){
         if(Tab(labels[i],selected==int(i),used,width)){selected=int(i);changed=true;}

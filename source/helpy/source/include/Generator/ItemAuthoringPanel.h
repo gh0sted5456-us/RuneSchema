@@ -1,4 +1,5 @@
 #pragma once
+#include "Generator/HelpyTextInput.h"
 #include "Core/ItemAuthoringDraft.h"
 #include "Generator/ItemGridPicker.h"
 #include "Generator/ToolRequest.h"
@@ -89,15 +90,15 @@ inline void RenderDraft(Draft& draft,Mode mode,const Json& catalog,const std::st
         ImGui::TableNextColumn();ImGui::BeginChild("result",ImVec2(0,theme.Y(220)),true);
         ImGui::SeparatorText("New item");auto preview=Preview(draft,mode);
         Card("result-card",preview,"Choose a source to begin");
-        ImGui::TextUnformatted("Display name");ImGui::SetNextItemWidth(-1);if(ImGui::InputText("##name",draft.Name,sizeof(draft.Name)))draft.Changed();
-        if(ImGui::CollapsingHeader("Custom inventory icon")){ImGui::SetNextItemWidth(-1);if(ImGui::InputText("##icon",draft.Icon,sizeof(draft.Icon)))draft.Changed();
+        ImGui::TextUnformatted("Display name");ImGui::SetNextItemWidth(-1);if(HelpyTextInput::InputText("##name",draft.Name,sizeof(draft.Name)))draft.Changed();
+        if(ImGui::CollapsingHeader("Custom inventory icon")){ImGui::SetNextItemWidth(-1);if(HelpyTextInput::InputText("##icon",draft.Icon,sizeof(draft.Icon)))draft.Changed();
             if(ImGui::BeginDragDropTarget()){if(auto row=ItemGridPicker::AcceptItemDrop(draft.Error)){const auto icon=row->value("Icon",std::string{});if(icon.empty())draft.Error="This item has no resolved icon.";else{std::snprintf(draft.Icon,sizeof(draft.Icon),"%s",icon.c_str());draft.Changed();}}ImGui::EndDragDropTarget();}}
         ImGui::EndChild();ImGui::EndTable();
     }
     if(!transmog){
         ImGui::SeparatorText("Item values (JSONC)");
         ImGui::TextWrapped("Add a native field below, then change its value. Omitted fields inherit the source. Linked stats are exported with their matching /raw definitions.");
-        ImGui::SetNextItemWidth(-1);ImGui::InputTextWithHint("##field-filter","Find a native field...",draft.Filter,sizeof(draft.Filter));
+        ImGui::SetNextItemWidth(-1);HelpyTextInput::InputTextWithHint("##field-filter","Find a native field...",draft.Filter,sizeof(draft.Filter));
         if(ImGui::BeginChild("native-fields",ImVec2(0,theme.Y(120)),true)){
             if(draft.Ready&&draft.Inspection.contains("Fields"))for(const auto& field:draft.Inspection["Fields"]){
                 const auto key=field.value("Name",std::string{});std::string hay=key,needle=draft.Filter;
@@ -114,17 +115,17 @@ inline void RenderDraft(Draft& draft,Mode mode,const Json& catalog,const std::st
                 ImGui::PopID();ImGui::EndDisabled();
             }else ImGui::TextDisabled("Drop a source item to load its editable values.");
         }ImGui::EndChild();
-        if(ImGui::InputTextMultiline("##values",draft.Editor.data(),draft.Editor.size(),ImVec2(-1,theme.Y(180))))draft.Changed();
+        if(HelpyTextInput::InputTextMultiline("##values",draft.Editor.data(),draft.Editor.size(),ImVec2(-1,theme.Y(180))))draft.Changed();
         if(ImGui::SmallButton("Format JSONC"))try{const auto text=ParseValues(draft.Editor.data()).dump(2);if(text.size()>=draft.Editor.size())throw std::runtime_error("Formatted values exceed the editor limit.");std::snprintf(draft.Editor.data(),draft.Editor.size(),"%s",text.c_str());}catch(const std::exception& error){draft.Error=error.what();}
     }
     ImGui::SeparatorText("Create or export");
     ImGui::TextUnformatted("PersistenceID");char identity[65]{};std::snprintf(identity,sizeof(identity),"%s",draft.Id.c_str());ImGui::SetNextItemWidth(std::min(theme.X(300),ImGui::GetContentRegionAvail().x));
-    if(ImGui::InputTextWithHint("##clone-persistence-id","Generate or paste a 22-character ID",identity,sizeof(identity))){draft.Changed();draft.Id=identity;}
+    if(HelpyTextInput::InputTextWithHint("##clone-persistence-id","Generate or paste a 22-character ID",identity,sizeof(identity))){draft.Changed();draft.Id=identity;}
     if(ImGui::SmallButton("Generate ID")){draft.Changed();draft.Id=ClonePresentation::NewId(draft.Mod);}ImGui::SameLine();
     ImGui::BeginDisabled(draft.Id.empty());if(ImGui::SmallButton("Copy ID"))ImGui::SetClipboardText(draft.Id.c_str());ImGui::EndDisabled();
     if(!draft.Id.empty()&&!ClonePresentation::ValidId(draft.Id,draft.Mod))ImGui::TextColored(theme.error,"Invalid ID · 22 URL-safe characters, ending A / Q / g / w");
     ImGui::TextDisabled("Keep the ID stable after release. Native registration rejects collisions.");
-    ImGui::TextUnformatted("Mod folder");ImGui::SameLine();ImGui::SetNextItemWidth(theme.X(180));if(ImGui::InputText("##mod",draft.Mod,sizeof(draft.Mod))){draft.Id.clear();draft.Changed();}
+    ImGui::TextUnformatted("Mod folder");ImGui::SameLine();ImGui::SetNextItemWidth(theme.X(180));if(HelpyTextInput::InputText("##mod",draft.Mod,sizeof(draft.Mod))){draft.Id.clear();draft.Changed();}
     const bool eligible=draft.Ready&&(!transmog||!draft.Appearance.empty())&&!SpawnToolRequests::IsWaiting()&&Authoring::SafeModFolder(draft.Mod);
     ImGui::BeginDisabled(!eligible);
     if(HelpyImGuiTheme::SoftButton("Preview /assets JSONC")&&draft.Prepared.empty())try{Submit(draft,Request(draft,mode,player,true));}catch(const std::exception& error){draft.Error=error.what();}

@@ -1,4 +1,5 @@
 #pragma once
+#include "Generator/HelpyTextInput.h"
 #include "Core/ProcessExitFuture.h"
 #include "Core/LiveLog.h"
 #include "Core/DiagnosticLegacyIntake.h"
@@ -46,19 +47,21 @@ inline bool PreviewOptions=false;
 inline int PreviewStream=-1;
 inline std::function<void(const LiveLog::Entry&)> OnEntry;
 inline std::function<void(const LiveLog::Entry&)> OnBackfillEntry;
+inline std::function<void(const LiveLog::Entry&,bool)> OnUE4SSEntry;
+inline bool UE4SSLiveReady=false;
 inline bool RuneSchemaLiveReady=false;
 inline std::uint64_t RevealId=0;
 inline bool SelectRuneSchemaTab=false;
 inline auto Path(size_t index=0){return Streams[index].File.empty()?LiveLog::LogPath(HostServices::ModDirectory(),static_cast<LiveLog::Stream>(index)):Streams[index].File;}
-inline void Shutdown(){OnEntry={};OnBackfillEntry={};for(auto& stream:Streams)if(stream.Worker.valid())try{(void)stream.Worker.get();}catch(...){}if(ExportWorker.valid())try{(void)ExportWorker.get();}catch(...){};}
-inline void Poll(size_t index,bool background=false){
+inline void Shutdown(){OnEntry={};OnBackfillEntry={};OnUE4SSEntry={};for(auto& stream:Streams)if(stream.Worker.valid())try{(void)stream.Worker.get();}catch(...){}if(ExportWorker.valid())try{(void)ExportWorker.get();}catch(...){};}
+inline void Poll(size_t index,bool background=false,int intervalMs=0){
     auto& state=Streams[index];auto& Worker=state.Worker;auto& Cursor=state.Cursor;auto& History=state.History;
     auto& ReadError=state.ReadError;auto& Status=state.Status;auto& Selected=state.Selected;auto& NextRead=state.NextRead;
     if(ExportWorker.valid()&&ExportWorker.wait_for(std::chrono::seconds(0))==std::future_status::ready){try{Streams[ExportStream].Status=ExportWorker.get();}catch(...){Streams[ExportStream].Status="Export failed.";}}
     if(Preview)return;
     if(Worker.valid()&&Worker.wait_for(std::chrono::seconds(0))==std::future_status::ready){
         try{auto batch=Worker.get();Cursor=std::move(batch.Next);ReadError=std::move(batch.Error);
-            if(batch.Reset||(!state.File.empty()&&state.File!=batch.File)){History.Clear();Selected=0;Status="Log rotated or changed; showing the new file.";}
+            if(batch.Reset||(!state.File.empty()&&state.File!=batch.File)){History.Clear();Selected=0;Status="Log rotated or changed; showing the new file.";if(index==1)UE4SSLiveReady=false;}
             state.File=std::move(batch.File);
             if(batch.Skipped)Status="Showing the recent log tail; the original full log is unchanged.";
             for(auto& line:batch.Lines){
@@ -72,6 +75,7 @@ inline void Poll(size_t index,bool background=false){
                     }
                 }else{
                     History.Append(std::move(line));
+                    if(index==1&&OnUE4SSEntry)OnUE4SSEntry(History.Rows.back(),UE4SSLiveReady);
                     if(index==0){
                         const auto& entry=History.Rows.back();
                         if(RuneSchemaLiveReady){if(OnEntry)OnEntry(entry);}
@@ -80,6 +84,7 @@ inline void Poll(size_t index,bool background=false){
                 }
             }
             if(index==0&&!batch.More&&(!batch.Error.empty()||batch.Next.Started))RuneSchemaLiveReady=true;
+            if(index==1&&!batch.More&&batch.Error.empty()&&batch.Next.Started)UE4SSLiveReady=true;
         }catch(const std::exception& error){ReadError=error.what();}
     }
     if(index==0&&!state.Paused&&!state.PausedLines.empty()){
@@ -90,7 +95,7 @@ inline void Poll(size_t index,bool background=false){
     }
     const auto now=std::chrono::steady_clock::now();
     if((index==0||!state.Paused)&&!Worker.valid()&&now>=NextRead){
-        NextRead=now+std::chrono::milliseconds(background?1000:250);const auto path=Path(index),override=state.Override,mod=HostServices::ModDirectory();const auto cursor=Cursor;const auto previous=state.File;
+        NextRead=now+std::chrono::milliseconds(intervalMs?std::clamp(intervalMs,250,10000):background?1000:250);const auto path=Path(index),override=state.Override,mod=HostServices::ModDirectory();const auto cursor=Cursor;const auto previous=state.File;
         wchar_t local[32768]{};const auto length=GetEnvironmentVariableW(L"LOCALAPPDATA",local,32768);const std::filesystem::path localRoot=length&&length<32768?local:L"";
         Worker=std::async(std::launch::async,[path,override,mod,localRoot,cursor,previous,index]{
             const auto file=!override.empty()?override:index>=2?LiveLog::ResolveGameLog(mod,localRoot):path;
@@ -156,7 +161,7 @@ inline void RenderColors(){
         pendingSave|=ImGui::Checkbox("##enabled",&rule.Enabled);ImGui::SameLine();
         int kind=rule.Source?1:0;ImGui::SetNextItemWidth(100);if(ImGui::Combo("##kind",&kind,"Keyword\0Source\0")){rule.Source=kind==1;pendingSave=true;}
         ImGui::SameLine();char match[129]{};strncpy_s(match,rule.Match.c_str(),_TRUNCATE);ImGui::SetNextItemWidth(180);
-        if(ImGui::InputText("##match",match,sizeof(match))){rule.Match=match;pendingSave=true;}
+        if(HelpyTextInput::InputText("##match",match,sizeof(match))){rule.Match=match;pendingSave=true;}
         ImGui::SameLine();pendingSave|=ImGui::ColorEdit4("##color",rule.RGBA.data(),ImGuiColorEditFlags_NoInputs);
         ImGui::SameLine();const bool remove=ImGui::SmallButton("Remove");ImGui::PopID();
         if(remove){rules.erase(rules.begin()+i);pendingSave=true;}else ++i;
@@ -171,7 +176,7 @@ inline void RenderStream(size_t index){
     ImGui::TextColored(Paused?theme.warning:theme.accentHover,"%s",Paused?"PAUSED":"LIVE");ImGui::SameLine();const auto filename=Path(index).filename().string();ImGui::TextDisabled("%s",filename.c_str());
     if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("%s",Path(index).string().c_str());
     if(index==3){ImGui::TextDisabled("EOS events from the game log");if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Use Actions to choose a separate EOS log.");}
-    ImGui::SetNextItemWidth(std::max(theme.X(60),std::min(theme.X(380),ImGui::GetContentRegionAvail().x-theme.X(60))));Dirty|=ImGui::InputTextWithHint("##log-search","Search words, phrases or codes…",Search,sizeof(Search));
+    ImGui::SetNextItemWidth(std::max(theme.X(60),std::min(theme.X(380),ImGui::GetContentRegionAvail().x-theme.X(60))));Dirty|=HelpyTextInput::InputTextWithHint("##log-search","Search words, phrases or codes…",Search,sizeof(Search));
     if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("All words must match. Use quotes for a phrase, -word to exclude, or source:, code: and level:. Example: source:loganimation guid -optional");
     ImGui::SameLine();ImGui::BeginDisabled(!Search[0]);if(ImGui::SmallButton("Clear")){Search[0]=0;Dirty=true;}ImGui::EndDisabled();
     int preset=std::all_of(Levels.begin(),Levels.end(),[](bool value){return value;})?0:Levels==std::array<bool,4>{false,false,true,true}?1:Levels==std::array<bool,4>{false,false,false,true}?2:3;

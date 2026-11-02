@@ -1,4 +1,5 @@
 #pragma once
+#include "Generator/HelpyTextInput.h"
 #include "Core/ProcessExitFuture.h"
 #include "Core/JournalWorkspace.h"
 #include "Core/HelpyIconPack.h"
@@ -27,7 +28,7 @@ inline void Template(const Json& row){
     OpenRequested=true;
     Category[0]=Section[0]=CategoryName[0]=GroupId[0]=GroupName[0]=PlacementKey[0]=Recipe[0]=OutputItem[0]=StationTable[0]=StationRow[0]=TriggerAsset[0]=MapRegion[0]=0;Placement=Discovery=Trigger=0;CreateGroup=UseRegionId=false;std::snprintf(Extra,sizeof(Extra),"{}");
 }
-inline void Field(const char* label,char* buffer,size_t capacity){ImGui::TextUnformatted(label);ImGui::SetNextItemWidth(-1);ImGui::InputText((std::string("##journal-")+label).c_str(),buffer,capacity);}
+inline void Field(const char* label,char* buffer,size_t capacity){ImGui::TextUnformatted(label);ImGui::SetNextItemWidth(-1);HelpyTextInput::InputText((std::string("##journal-")+label).c_str(),buffer,capacity);}
 inline Json Fields(){
     auto result=Json::parse(Extra);if(!result.is_object())throw std::runtime_error("Advanced schema fields must be a JSON object.");
     if(Placement==1){if(!Section[0]||!CategoryName[0])throw std::runtime_error("Choose a section and category.");result["AddTo"]={{"Section",Section},{"Category",CategoryName}};}
@@ -43,9 +44,9 @@ inline void Render(){
     if(Exporter.valid()&&Exporter.wait_for(std::chrono::seconds(0))==std::future_status::ready)Status=Exporter.get();
     ImGui::TextWrapped("Create a new RuneSchema journal/lore definition. Export writes a draft only: no installed mod or character save changes.");
     const char* types[]{"Lore","People","Place","Treasure","World","Recipe"};ImGui::Combo("Entry type",&Type,types,6);
-    ImGui::TextUnformatted("Unique mod-prefixed ID");ImGui::SetNextItemWidth(-1);ImGui::InputText("##entry-id",Id,sizeof(Id));
-    ImGui::TextUnformatted("Title");ImGui::SetNextItemWidth(-1);ImGui::InputText("##entry-title",Title,sizeof(Title));
-    ImGui::TextUnformatted("Cooked image asset");ImGui::SetNextItemWidth(-1);ImGui::InputText("##entry-image",Image,sizeof(Image));
+    ImGui::TextUnformatted("Unique mod-prefixed ID");ImGui::SetNextItemWidth(-1);HelpyTextInput::InputText("##entry-id",Id,sizeof(Id));
+    ImGui::TextUnformatted("Title");ImGui::SetNextItemWidth(-1);HelpyTextInput::InputText("##entry-title",Title,sizeof(Title));
+    ImGui::TextUnformatted("Cooked image asset");ImGui::SetNextItemWidth(-1);HelpyTextInput::InputText("##entry-image",Image,sizeof(Image));
     if(ImGui::CollapsingHeader("Placement",ImGuiTreeNodeFlags_DefaultOpen)){
         const char* modes[]{"Native subcategory","Section / category"};ImGui::Combo("Place into",&Placement,modes,2);
         if(Placement==0)Field("Native subcategory",Category,sizeof(Category));else if(ImGui::BeginTable("##journal-placement-fields",2,ImGuiTableFlags_SizingStretchSame)){ImGui::TableNextColumn();Field("Section",Section,sizeof(Section));ImGui::TableNextColumn();Field("Category",CategoryName,sizeof(CategoryName));ImGui::EndTable();}
@@ -64,8 +65,8 @@ inline void Render(){
     if(ImGui::Button("Next page")&&Page+1<int(Pages.size())){Pages[Page]=Text;SetPage(Page+1);}ImGui::SameLine();
     if(ImGui::Button("Add page")&&Pages.size()<128){Pages[Page]=Text;Pages.push_back("");SetPage(int(Pages.size())-1);}
     if(ImGui::Button("Remove page")&&Pages.size()>1){Pages.erase(Page);SetPage(std::min(Page,int(Pages.size())-1));}
-    ImGui::InputTextMultiline("##journal-page",Text,sizeof(Text),{-1,HelpyImGuiTheme::Current.Y(210)});
-    if(ImGui::CollapsingHeader("Advanced schema fields")){ImGui::InputTextMultiline("##journal-extra-fields",Extra,sizeof(Extra),{-1,130});ImGui::TextDisabled("Additional schema/native fields · JSON object · draft only");}
+    HelpyTextInput::InputTextMultiline("##journal-page",Text,sizeof(Text),{-1,HelpyImGuiTheme::Current.Y(210)});
+    if(ImGui::CollapsingHeader("Advanced schema fields")){HelpyTextInput::InputTextMultiline("##journal-extra-fields",Extra,sizeof(Extra),{-1,130});ImGui::TextDisabled("Additional schema/native fields · JSON object · draft only");}
     ImGui::BeginDisabled(Exporter.valid());
     if(ImGui::Button("Export new journal/lore draft"))try{Pages[Page]=Text;const auto doc=JournalWorkspace::Draft(Id,types[Type],Title,Pages,Image,"",Fields());
         const auto stamp=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();const auto file=HostServices::ExportsDirectory()/"journal-drafts"/(std::string(Id)+"-"+std::to_string(stamp)+".json");

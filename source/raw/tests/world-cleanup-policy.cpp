@@ -1,5 +1,6 @@
 #include "Core/WorldCleanupPolicy.h"
 #include "Runtime/WorldBuildingSavePreflight.h"
+#include "Runtime/WorldBuildingRegistryValidation.h"
 #include <fstream>
 #include <iostream>
 #include <iterator>
@@ -58,6 +59,11 @@ static void Policies() {
     window.Close();Need(!window.MayWrite(start+std::chrono::seconds(1)),"write allowed after world entry/shutdown");
 }
 static void Transform() {
+    {namespace V=PS::WorldBuildingRegistryValidation;
+        const auto pending=V::Validate({{"vanilla-platform",1}},{1},{{"Dye","dye_station","dye-station",2}},{{1,0}},{{"platform",1}},V::ExpectedMode::ProtectPendingDefinition);
+        Need(P::RemoveUnresolved(World(false),pending).bytes.empty(),"An enabled but pending dye station falsely blocked a world containing other buildings");
+        Need(P::RemoveUnresolved(World(true),pending).bytes.empty(),"An enabled pending station already in the world was incorrectly removed");
+    }
     const auto original=World(true);
     Need(P::Parse(original).pieces.size()==3,"fixture parse failed");
     Need(P::RemoveUnresolved(original,{"vanilla-platform","dye-station"}).bytes.empty(),"enabled content rewritten");

@@ -1,4 +1,5 @@
 #pragma once
+#include "Generator/HelpyTextInput.h"
 #include "Generator/HelpyImGuiTheme.h"
 #include "Core/RecipeWorkspace.h"
 #include "Generator/ItemGridPicker.h"
@@ -149,7 +150,7 @@ inline ImRect StationNode(float height) {
         }
         ImGui::SetNextItemWidth(-1);
         if(ImGui::BeginCombo("##station",s.Station.value("DisplayName",s.Station.value("Name",std::string("Choose a native station"))).c_str())) {
-            ImGui::SetNextItemWidth(std::max(t.X(180),ImGui::GetContentRegionAvail().x));ImGui::InputTextWithHint("##station-search","Search name, table, row or mod path",s.StationSearch,sizeof(s.StationSearch));
+            ImGui::SetNextItemWidth(std::max(t.X(180),ImGui::GetContentRegionAvail().x));HelpyTextInput::InputTextWithHint("##station-search","Search name, table, row or mod path",s.StationSearch,sizeof(s.StationSearch));
             if(ImGui::BeginCombo("Source",s.StationRoot.empty()?"All sources":s.StationRoot.c_str())){
                 if(ImGui::Selectable("All sources",s.StationRoot.empty()))s.StationRoot.clear();
                 std::set<std::string> roots;for(const auto& station:s.Stations)if(station.value("PhysicalStation",true))roots.insert(RecipeWorkspace::StationSource(station));
@@ -175,11 +176,11 @@ inline ImRect StationNode(float height) {
         }
         if(s.Override&&s.Placements.empty())ImGui::TextWrapped("No loaded station references this recipe. Existing placements are not changed.");
         ImGui::BeginDisabled(s.Override&&!s.AddStation);
-        ImGui::SetNextItemWidth(-1);ImGui::InputTextWithHint("##category","Recipe category",s.Category,sizeof(s.Category));
+        ImGui::SetNextItemWidth(-1);HelpyTextInput::InputTextWithHint("##category","Recipe category",s.Category,sizeof(s.Category));
         ImGui::EndDisabled();
         HelpyImGuiTheme::Toggle("Set processing duration",&s.Duration);
         if(s.Duration){ImGui::TextUnformatted("Minimum seconds");ImGui::SetNextItemWidth(-1);ImGui::InputFloat("##min-seconds",&s.MinSeconds,0.5f,5.0f,"%.2f");ImGui::TextUnformatted("Maximum seconds");ImGui::SetNextItemWidth(-1);ImGui::InputFloat("##max-seconds",&s.MaxSeconds,0.5f,5.0f,"%.2f");}
-        if(HelpyImGuiTheme::Current.advancedMode){ImGui::SetNextItemWidth(-1);ImGui::InputTextWithHint("##station-icon","Custom cooked station icon path",s.StationIcon,sizeof(s.StationIcon));}
+        if(HelpyImGuiTheme::Current.advancedMode){ImGui::SetNextItemWidth(-1);HelpyTextInput::InputTextWithHint("##station-icon","Custom cooked station icon path",s.StationIcon,sizeof(s.StationIcon));}
     }ImGui::EndChild();ImGui::PopStyleColor();return bounds;
 }
 inline void Connector(const ImRect& left,const ImRect& right) {
@@ -199,7 +200,7 @@ inline void Render(const Json& catalog,uint64_t revision) {
     if(browseExisting){ImGui::BeginDisabled(s.Pending!=0);
     const float browseWidth=ImGui::CalcTextSize("Browse").x+ImGui::GetStyle().FramePadding.x*2+ImGui::GetStyle().ItemSpacing.x;
     ImGui::SetNextItemWidth(std::max(t.X(60),ImGui::GetContentRegionAvail().x-browseWidth));
-    const bool search=ImGui::InputTextWithHint("##recipe-search","Search cooked and RuneSchema recipes, names or mods",s.Search,sizeof(s.Search),ImGuiInputTextFlags_EnterReturnsTrue);ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Browse")||search)Search();
+    const bool search=HelpyTextInput::InputTextWithHint("##recipe-search","Search cooked and RuneSchema recipes, names or mods",s.Search,sizeof(s.Search),ImGuiInputTextFlags_EnterReturnsTrue);ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Browse")||search)Search();
     if(ImGui::BeginCombo("Recipes",s.LoadedRecipe.empty()?"Choose a cooked or RuneSchema recipe":s.LoadedRecipe.c_str())) {
         for(const auto& row:s.Catalog.value("Recipes",Json::array())){const auto path=row.value("Path",std::string{}),reference=row.value("Reference",path),owner=row.value("Owner",std::string{});
             ImGui::PushID((path+reference).c_str());ImGui::BeginDisabled(path.empty()||!row.value("Available",true));
@@ -212,7 +213,7 @@ inline void Render(const Json& catalog,uint64_t revision) {
     const auto recipeOffset=s.Catalog.value("Offset",0);if(recipeOffset>0&&ImGui::SmallButton("Previous recipe page"))Search(std::max(0,recipeOffset-128));
     if(s.Catalog.value("HasMore",false)){if(recipeOffset>0)ImGui::SameLine();if(ImGui::SmallButton("Next recipe page"))Search(recipeOffset+128);}
     const float loadWidth=ImGui::CalcTextSize("Load").x+ImGui::GetStyle().FramePadding.x*2+ImGui::GetStyle().ItemSpacing.x;
-    ImGui::SetNextItemWidth(std::max(t.X(60),ImGui::GetContentRegionAvail().x-loadWidth));ImGui::InputTextWithHint("##recipe-source","Or paste a cooked RecipeData object path",s.Source,sizeof(s.Source));ImGui::SameLine();
+    ImGui::SetNextItemWidth(std::max(t.X(60),ImGui::GetContentRegionAvail().x-loadWidth));HelpyTextInput::InputTextWithHint("##recipe-source","Or paste a cooked RecipeData object path",s.Source,sizeof(s.Source));ImGui::SameLine();
     if(HelpyImGuiTheme::SoftButton("Load")&&s.Source[0])Submit({{"Action","InspectRecipe"},{"SourceRecipe",s.Source}});
     if(!s.LoadedRecipe.empty())HelpyImGuiTheme::Toggle("Save as an override of the loaded recipe",&s.Override);
     ImGui::EndDisabled();}

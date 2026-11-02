@@ -19,12 +19,18 @@ try{
             'RS_PROGRESS|Reading items|1|1'
         }$global:LASTEXITCODE=0
     }
-    . $tool -ModDirectory $mod -InstallDotNet
+    $backups=Join-Path $root 'AppData/backups'
+    . $tool -ModDirectory $mod -InstallDotNet -BackupRoot $backups
     Invoke-CacheZip
     Check ([IO.File]::ReadAllText((Join-Path $cache 'offline-helpy.rsmk-cache')) -eq 'new cache') 'Installed cache was not published'
-    $backup=Get-ChildItem -LiteralPath $mod -Directory -Filter 'cache.previous-*'
+    $backup=Get-ChildItem -LiteralPath $backups -Directory -Filter 'cache-*'
     Check ($backup.Count -eq 1 -and [IO.File]::ReadAllText((Join-Path $backup[0].FullName 'old.txt')) -eq 'original cache') 'Original cache was not retained'
+    Check (@(Get-ChildItem -LiteralPath $mod -Directory -Filter 'cache.*-*').Count -eq 0) 'Old cache was left in the mod folder'
     Check ([IO.File]::ReadAllText((Join-Path $mod 'fixture.pak')) -eq 'unchanged input') 'Source PAK changed'
+    $unsafe=Join-Path $mod 'previous-caches';. $tool -ModDirectory $mod -BackupRoot $unsafe
+    $failed=$false;try{Invoke-CacheZip}catch{$failed=$true};Check ($failed -and !(Test-Path -LiteralPath $unsafe)) 'Backup inside mod folder was accepted'
+    Check ([IO.File]::ReadAllText((Join-Path $cache 'offline-helpy.rsmk-cache')) -eq 'new cache') 'Unsafe backup changed the active cache'
+    . $tool -ModDirectory $mod -BackupRoot $backups
     $script:FailBuild=$true;$failed=$false;try{Invoke-CacheZip}catch{$failed=$true}
     Check ($failed -and [IO.File]::ReadAllText((Join-Path $cache 'offline-helpy.rsmk-cache')) -eq 'new cache') 'Failure overwrote cache'
     $metadata=@{'latest-sdk'='10.0.403';releases=@(@{sdk=@{version='10.0.403';files=@(@{rid='win-x64';url='https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.403/sdk.zip';hash=('a'*128)})}})}

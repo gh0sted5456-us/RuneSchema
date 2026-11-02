@@ -1,4 +1,5 @@
 #pragma once
+#include "Generator/HelpyTextInput.h"
 #include "Generator/ItemGridPicker.h"
 #include <functional>
 namespace PS::ItemBayBrowser {
@@ -13,7 +14,7 @@ inline void Controls(ItemGridPicker::State& state,char* filter,size_t capacity,c
     }
     const auto& t=HelpyImGuiTheme::Current;
     ImGui::SetNextItemWidth(std::max(60.f,ImGui::GetContentRegionAvail().x-t.X(135)));
-    const bool enter=ImGui::InputTextWithHint("##item-bay-search","Search items…",filter,capacity,ImGuiInputTextFlags_EnterReturnsTrue);
+    const bool enter=HelpyTextInput::InputTextWithHint("##item-bay-search","Search items…",filter,capacity,ImGuiInputTextFlags_EnterReturnsTrue);
     ImGui::SameLine();const bool search=HelpyImGuiTheme::SoftButton("Search");ImGui::SameLine();
     if(HelpyImGuiTheme::SoftButton("Refresh")){if(refreshOverride)refresh();else{LazyCatalog::Retry(0);state.CatalogRevision=0;}}
     if(search||enter){state.Query=filter;refresh();}

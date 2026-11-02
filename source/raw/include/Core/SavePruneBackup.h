@@ -2,6 +2,7 @@
 #include "Core/CacheBundleIO.h"
 #include "Core/CharacterSaveEditor.h"
 #include "Core/RuneSchemaDataRoot.h"
+#include "../../../shared/SaveBackupStore.h"
 #include <cstring>
 
 namespace PS::SavePruneBackup {
@@ -20,14 +21,12 @@ inline fs::path Directory(const std::string& runtime){
     if(key!="steam"&&key!="gamepass"&&key!="epic"&&key!="server")throw std::runtime_error("Save backup requires an identified runtime");
     return RuneSchemaData::Directory()/"core"/"backups"/key/"characters";
 }
-inline fs::path Write(const fs::path& directory,const std::string& original,const std::string& expectedGuid){
+inline fs::path Write(const fs::path& directory,const std::string& original,const std::string& expectedGuid,bool enteringWorld=false){
     const auto source=Decode(original);const auto guid=CharacterSaveEditor::Identity(source);
     if(guid.empty()||guid!=CharacterSaveEditor::Guid(expectedGuid)||!source.contains("GameProgress")||!source["GameProgress"].is_object())
         throw std::runtime_error("Backup is not the exact native gameplay character");
-    const auto file=directory/guid/(CacheBundleIO::Hash(original)+".json.bak");CacheBundleIO::Safe(file);
-    if(!fs::exists(file))CacheBundleIO::Publish(file,original);
-    if(CacheBundleIO::Read(file,MaximumBytes)!=original)throw std::runtime_error("Pre-prune save backup did not verify; save unchanged");
-    return file;
+    Json context={{"Mods",SaveBackups::ActiveMods()}};if(enteringWorld)context["LastPlayedUtc"]=SaveBackups::Now();
+    return SaveBackups::Store(directory,original,expectedGuid,"Before cleanup",std::move(context));
 }
 inline size_t Provider(const fs::path& directory,const std::vector<fs::path>& candidates,const std::string& expectedGuid){
     if(candidates.size()>8192)throw std::runtime_error("Character backup candidate bound exceeded");
@@ -38,7 +37,7 @@ inline size_t Provider(const fs::path& directory,const std::vector<fs::path>& ca
         const auto original=CacheBundleIO::Read(file,MaximumBytes);Json source;
         try{source=Decode(original);}catch(...){continue;}
         if(CharacterSaveEditor::Identity(source)!=CharacterSaveEditor::Guid(expectedGuid)||!source.contains("GameProgress")||!source["GameProgress"].is_object())continue;
-        Write(directory,original,expectedGuid);
+        Write(directory,original,expectedGuid,true);
         if(CacheBundleIO::Read(file,MaximumBytes)!=original)throw std::runtime_error("Character save changed during backup; pruning deferred");
         ++matched;
     }

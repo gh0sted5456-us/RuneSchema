@@ -2,6 +2,8 @@
 #include <windows.h>
 #include <algorithm>
 #include <chrono>
+#include <climits>
+#include <cmath>
 
 namespace PS {
 // Reuses Helpy's own window and renderer; never hooks the game's presentation.
@@ -56,10 +58,11 @@ public:
     void Suspend(HWND window){
         if(m_topmost){Companion(window,false);m_topmost=false;}
     }
-    static RECT Bounds(const RECT& game,float scale){
-        scale=std::clamp(scale,.45f,.98f);const LONG width=game.right-game.left,height=game.bottom-game.top;
-        const LONG panelWidth=std::min(width,std::max(std::min(760L,width),LONG(width*scale)));
-        const LONG panelHeight=std::min(height,std::max(std::min(560L,height),LONG(height*scale)));
+    static RECT Bounds(const RECT& game,float scale,LONG maxWidth=LONG_MAX,LONG maxHeight=LONG_MAX){
+        scale=std::clamp(std::isfinite(scale)?scale:.9f,.45f,.98f);const LONG width=game.right-game.left,height=game.bottom-game.top;
+        if(width<=0||height<=0||maxWidth<=0||maxHeight<=0)return {};
+        const LONG panelWidth=std::min({width,maxWidth,std::max(std::min(760L,width),LONG(width*scale))});
+        const LONG panelHeight=std::min({height,maxHeight,std::max(std::min(560L,height),LONG(height*scale))});
         const LONG x=game.left+(width-panelWidth)/2,y=game.top+(height-panelHeight)/2;return {x,y,x+panelWidth,y+panelHeight};
     }
     void Update(HWND window,HWND game,bool enabled,bool visible,bool focused,float opacity,float scale=.9f){

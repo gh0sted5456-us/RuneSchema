@@ -307,6 +307,10 @@
     "The optional standalone desktop could not start or attach. Use matching DLLs and Helpy.exe in the assigned installation.",
     "Read the full startup reason and confirm the current Windows user. Select DLL window and restart to use the fallback."
   ],
+  "RS-UI-003": [
+    "The overlay could not apply or release its local controller movement/look guard. Read the complete reflected-contract error; this is separate from save validation.",
+    "Close the overlay and verify matching core, bridge and Helpy builds. The guard releases only its own stacked input blocks and clears on bridge disconnect. If controls do not recover, close Helpy and return to the menu."
+  ],
   "RS-CACHE-015": [
     "A creation/conversion input includes a native UE4SS DLL mod. Its byte content and native ue4ss/Mods placement are preserved; this is not a DLL compatibility failure.",
     "Review the job warnings and packaged native companion. Do not assume its relative file lookups or native bridge can reach inside RuneSchema. Verify that integration with the DLL author. Helpy does not execute or rewrite the DLL."
@@ -322,5 +326,65 @@
   "RS-OVL-003": [
     "The native presentation bridge is prepared or attached to the game renderer.",
     "Open Helpy with its configured shortcut. RS-OVL-001 confirms an actual visible presentation."
+  ],
+  "RS-SAVE-003": [
+    "The selected character or world was copied and verified at its entry boundary.",
+    "Review its identity, entry time and recorded mods in Helpy > Save Recovery."
+  ],
+  "RS-SAVE-004": [
+    "A queued restore was claimed once and loaded through the exact selected native save contract.",
+    "Reinstall required mods before entry and let the game save normally. Keep the backup until the restored progress is verified."
+  ],
+  "RS-SAVE-005": [
+    "A backup preference, verification, restore request or native application step failed.",
+    "Read the original error, check free space and the selected runtime, then review or cancel the request in Save Recovery. Do not delete the prior-save backup."
+  ],
+  "RS-NET-004": [
+    "The owning-player bridge finished assembling an authority snapshot after connection.",
+    "No repair is required. The list describes enabled mods for this host process; it is not proof that every loader succeeded or that client registries match."
+  ],
+  "RS-NET-005": [
+    "The roster exceeds 1,024 mods, its bounded identity fields or its 1 MiB envelope, or contains duplicate or malformed identifiers.",
+    "Correct the named metadata issue or reduce the enabled set, then restart normally. Do not alter persistence IDs or player saves to repair this informational listing."
+  ],
+  "RS-PERF-002": [
+    "CPU is normalized to total logical-processor capacity; this is not per-mod attribution.",
+    "Compare the named process, current workload and resource panel; adjust the threshold if expected."
+  ],
+  "RS-PERF-003": [
+    "Helpy and Dragonwilds working sets are shown when Windows permits access; other processes may account for remaining use.",
+    "Check process memory and available system RAM. A high working set alone does not prove a leak."
+  ],
+  "RS-PERF-004": [
+    "High GPU use can be normal. Missing or warming Windows counters are unavailable, not zero usage.",
+    "Compare frame rate, resolution and workload. The metric uses the busiest measured engine and does not blame a mod."
+  ],
+  "RS-PERF-005": [
+    "Asset loading and retained caches can explain growth; one increase does not establish a memory leak.",
+    "Compare repeated samples during steady gameplay, after changing pages and after delivery; include the timestamps when reporting."
+  ],
+  "RS-LUA-001": [
+    "This identifies reported failure evidence, not proof that every function in the companion stopped. External native UE4SS mods remain managed by stock UE4SS.",
+    "Review the original UE4SS message and companion installation. Check its parent mod and supported Lua loader layout."
+  ],
+  "RS-LUA-002": [
+    "This measures log output. Stock UE4SS does not expose reliable per-mod callback timing, CPU time or polling frequency through this feature.",
+    "Review the original messages and compare frame rate. Raise the budget for expected logging; do not assume the mod caused a delay."
+  ],
+  "RS-LUA-003": [
+    "The configured overlap window establishes timing correlation only; it does not establish contention or which mod caused it.",
+    "Compare both original messages and timestamps. Adjust the overlap window or log-message budget for expected workloads."
+  ],
+  "RS-PLAY-001": [
+    "Informational only. It never pauses the game, blocks input, changes saves or disconnects a player. Menus and disconnected intervals are not counted.",
+    "Consider a 10 minute break. Disable Play-time reminders in Quick Settings > Performance at any time."
+  ],
+  "RS-NET-006": [
+    "No access is granted by this notice. Client requests remain scoped to the owning character and authoritative world.",
+    "Open Helpy, enter the world PIN and submit it. The server must enable item delivery or teleportation."
+  ],
+  "RS-NET-007": [
+    "Delivery and teleport requests execute on the server with existing identity, item registry, quantity and ground checks. This does not grant arbitrary administrator rights.",
+    "Use the allowed self-service actions. Reconnect after changing character/world or if the server revokes access."
   ]
 }

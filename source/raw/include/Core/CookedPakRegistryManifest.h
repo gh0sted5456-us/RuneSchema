@@ -4,6 +4,7 @@
 #include <array>
 #include <cctype>
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <string>
@@ -36,7 +37,9 @@ namespace PS::CookedPakRegistryManifest {
 
     namespace Detail {
         inline std::mutex Mutex;
-        inline std::vector<Manifest> Manifests;
+        inline std::vector<std::shared_ptr<const Manifest>> Manifests;
+        inline const Manifest& Value(const Manifest& value){return value;}
+        inline const Manifest& Value(const std::shared_ptr<const Manifest>& value){return *value;}
 
         inline bool ValidAssetPath(const std::string& value)
         {
@@ -278,62 +281,81 @@ namespace PS::CookedPakRegistryManifest {
     inline std::vector<Manifest> Snapshot()
     {
         std::scoped_lock lock(Detail::Mutex);
-        return Detail::Manifests;
+        std::vector<Manifest> result;result.reserve(Detail::Manifests.size());
+        for(const auto& manifest:Detail::Manifests)result.push_back(*manifest);
+        return result;
     }
 
     struct Definition {std::string Owner,Source,Path;nlohmann::json Body;bool Explicit=false;};
-    inline std::vector<Definition> MergeDefinitions(const std::vector<Manifest>& manifests,const std::string& lane) {
+    template<class Manifests> inline std::vector<Definition> MergeDefinitions(const Manifests& manifests,const std::string& lane,bool validateOnly=false) {
         if(lane!="Recipes"&&lane!="Journals"&&lane!="Lore"&&lane!="Buildings"&&lane!="DataTables")throw std::runtime_error("Unsupported cooked definition lane");
-        std::map<std::string,Definition> merged;
-        const auto add=[&](Definition value){
-            if(lane!="DataTables"&&!value.Body.contains("Unlock"))value.Body["Unlock"]=false;
-            auto [entry,inserted]=merged.emplace(Detail::Fold(value.Path),value);
-            if(inserted)return;
-            if(lane=="Buildings"&&Detail::Fold(entry->second.Owner)!=Detail::Fold(value.Owner))
-                throw std::runtime_error("Conflicting cooked building owner: "+value.Path);
-            if(value.Explicit&&!entry->second.Explicit){entry->second=std::move(value);return;}
-            if(!value.Explicit)return;
-            if(entry->second.Body!=value.Body)throw std::runtime_error("Conflicting cooked "+lane+" declaration: "+value.Path);
+        struct View {const Manifest* Origin;const std::string* Path;const nlohmann::json* Body;bool Explicit;};
+        std::map<std::string,View> merged;
+        const auto bodyFor=[&](const View& value){
+            auto body=value.Body?*value.Body:nlohmann::json::object();
+            if(lane!="DataTables"&&!body.contains("Unlock"))body["Unlock"]=false;
+            return body;
         };
-        for(const auto& manifest:manifests){
+        const auto add=[&](const Manifest& manifest,const std::string& path,const nlohmann::json* body,bool explicitBody){
+            const View value{&manifest,&path,body,explicitBody};
+            auto [entry,inserted]=merged.emplace(Detail::Fold(path),value);
+            if(inserted)return;
+            if(lane=="Buildings"&&Detail::Fold(entry->second.Origin->Owner)!=Detail::Fold(manifest.Owner))
+                throw std::runtime_error("Conflicting cooked building owner: "+path);
+            if(value.Explicit&&!entry->second.Explicit){entry->second=value;return;}
+            if(!value.Explicit)return;
+            if(*entry->second.Body!=*value.Body&&bodyFor(entry->second)!=bodyFor(value))
+                throw std::runtime_error("Conflicting cooked "+lane+" declaration: "+path);
+        };
+        for(const auto& source:manifests){const auto& manifest=Detail::Value(source);
             for(const auto& assets:manifest.AssetLanes)if(assets.Name==lane)for(const auto& path:assets.Paths){
                 // A loose /recipes or /journal loader owns construction and
                 // policy for its runtime asset. Do not synthesize a second,
                 // cooked-style definition before that asset exists.
                 if(manifest.SchemaPaths.contains(Detail::Fold(path)))continue;
-                add({manifest.Owner,manifest.Source,path,nlohmann::json::object(),false});
+                add(manifest,path,nullptr,false);
             }
             if(manifest.LoaderDefinitions.contains(lane))for(const auto& [path,body]:manifest.LoaderDefinitions.at(lane).items())
-                add({manifest.Owner,manifest.Source,path,body,true});
+                add(manifest,path,&body,true);
         }
         // One native journal asset must not receive competing policies from
         // the journal and lore services during the same initialization.
         if(lane=="Journals"||lane=="Lore"){
             const std::string other=lane=="Journals"?"Lore":"Journals";
-            for(const auto& manifest:manifests){
+            for(const auto& source:manifests){const auto& manifest=Detail::Value(source);
                 for(const auto& assets:manifest.AssetLanes)if(assets.Name==other)for(const auto& path:assets.Paths)
                     if(merged.contains(Detail::Fold(path)))throw std::runtime_error("Cooked journal path declared in both Journals and Lore: "+path);
                 if(manifest.LoaderDefinitions.contains(other))for(const auto& [path,body]:manifest.LoaderDefinitions.at(other).items())
                     if(merged.contains(Detail::Fold(path)))throw std::runtime_error("Cooked journal path declared in both Journals and Lore: "+path);
             }
         }
-        std::vector<Definition> result;for(auto& [path,value]:merged)result.push_back(std::move(value));return result;
+        std::vector<Definition> result;
+        if(!validateOnly){result.reserve(merged.size());for(const auto& [path,value]:merged)
+            result.push_back({value.Origin->Owner,value.Origin->Source,*value.Path,bodyFor(value),value.Explicit});}
+        return result;
     }
-    inline std::vector<Definition> Definitions(const std::string& lane) {return MergeDefinitions(Snapshot(),lane);}
+    inline std::vector<Definition> Definitions(const std::string& lane) {std::scoped_lock lock(Detail::Mutex);return MergeDefinitions(Detail::Manifests,lane);}
 
     // Declaration publication only: every native class/reference still has to
     // pass the normal registrar/loader checks before it can authorize cleanup.
     inline void PublishBatch(const std::vector<Manifest>& batch) {
         std::scoped_lock lock(Detail::Mutex);
         auto next=Detail::Manifests;
-        for(const auto& manifest:batch)Upsert(next,manifest);
+        for(const auto& manifest:batch){
+            auto found=std::ranges::find_if(next,[&](const auto& value){return value->Owner==manifest.Owner&&value->Source==manifest.Source;});
+            auto updated=std::make_shared<const Manifest>(manifest);
+            if(found==next.end())next.push_back(std::move(updated));else *found=std::move(updated);
+        }
         std::map<std::string,std::pair<std::string,std::string>> ownership;
-        for(const auto& manifest:next)for(const auto& lane:manifest.AssetLanes)if(lane.Name=="Skills"||lane.Name=="SkillPerks"||lane.Name=="Enums")
-            for(const auto& path:lane.Paths){const auto claim=std::pair{Detail::Fold(manifest.Owner),lane.Name};
+        for(const auto& manifest:next)for(const auto& lane:manifest->AssetLanes)if(lane.Name=="Skills"||lane.Name=="SkillPerks"||lane.Name=="Enums")
+            for(const auto& path:lane.Paths){const auto claim=std::pair{Detail::Fold(manifest->Owner),lane.Name};
                 const auto [found,inserted]=ownership.emplace(Detail::Fold(path),claim);
                 if(!inserted&&found->second!=claim)throw std::runtime_error("Conflicting owner or native lane for cooked object: "+path);
             }
-        for(const auto* lane:{"Recipes","Journals","Lore","Buildings"})(void)MergeDefinitions(next,lane);
+        for(const auto* lane:{"Recipes","Journals","Lore","Buildings"})(void)MergeDefinitions(next,lane,true);
+        // Existing immutable manifests are shared. Only incoming data is copied;
+        // every allocation and conflict check finishes before the no-throw commit.
+        static_assert(noexcept(Detail::Manifests.swap(next)));
         Detail::Manifests.swap(next);
     }
     inline bool Publish(const nlohmann::json& document, const std::string& owner,

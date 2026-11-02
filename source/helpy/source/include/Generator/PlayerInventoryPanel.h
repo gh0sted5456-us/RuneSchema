@@ -1,4 +1,5 @@
 #pragma once
+#include "Generator/HelpyTextInput.h"
 #include "Core/RuneSchemaProfile.h"
 #include "Generator/ToolRequest.h"
 #include "Generator/HelpyWindowChrome.h"
@@ -103,7 +104,7 @@ inline void Inventory(float height){
         }ImGui::EndTabBar();
     }
     ImGui::SetNextItemWidth(std::max(60.f,ImGui::GetContentRegionAvail().x-t.X(135)));
-    const bool enter=ImGui::InputTextWithHint("##live-inventory-search","Search inventory…",Search,sizeof(Search),ImGuiInputTextFlags_EnterReturnsTrue);ImGui::SameLine();
+    const bool enter=HelpyTextInput::InputTextWithHint("##live-inventory-search","Search inventory…",Search,sizeof(Search),ImGuiInputTextFlags_EnterReturnsTrue);ImGui::SameLine();
     if(HelpyImGuiTheme::SoftButton("Search")||enter)SearchQuery=ItemGridPicker::Lower(Search);
     ImGui::SameLine();ImGui::BeginDisabled(Pending!=0);if(HelpyImGuiTheme::SoftButton("Refresh"))Reload();ImGui::EndDisabled();
     ImGui::SetNextItemWidth(-1);if(ImGui::BeginCombo("##inventory-source",ItemSource::Label(Source))){

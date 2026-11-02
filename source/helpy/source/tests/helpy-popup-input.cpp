@@ -1,4 +1,5 @@
 #include "Core/HelpyPopupInput.h"
+#include "Runtime/HelpyCursorRestore.h"
 #include "Core/HelpyFramePacing.h"
 #include "Core/HelpyUiMotion.h"
 #include <fstream>
@@ -9,6 +10,22 @@
 static void Require(bool value){if(!value)throw std::runtime_error("Helpy popup input regression");}
 static std::string Read(const char* path){std::ifstream input(path);Require(input.good());return {std::istreambuf_iterator<char>(input),{}};}
 int main(int argc,char** argv){
+    {
+        PS::HelpyCursorRestore cursor;const RECT original{100,100,900,700},latest{200,150,1000,750};
+        std::optional<RECT> actual=original;unsigned changes=0;
+        const auto apply=[&](const RECT* clip){++changes;actual=clip?std::optional<RECT>(*clip):std::nullopt;return true;};
+        const auto read=[&](RECT& clip){clip=*actual;return true;};
+        cursor.Begin(read,apply);Require(!actual&&changes==1);
+        cursor.Begin(read,apply);Require(changes==1);
+        Require(cursor.Request(&latest,apply)&&!actual&&changes==1);
+        Require(cursor.End(true,apply)&&actual&&actual->left==200&&actual->bottom==750&&changes==2);
+        Require(cursor.End(true,apply)&&changes==2);
+        cursor.Begin(read,apply);cursor.Request(nullptr,apply);cursor.End(true,apply);Require(!actual);
+        actual=original;cursor.Begin(read,apply);const auto before=changes;
+        actual=latest;cursor.End(false,apply);Require(actual&&actual->left==200&&changes==before); // Leave another app's constraint alone.
+        cursor.End(true,apply);Require(changes==before);
+        Require(cursor.Request(&original,apply)&&actual&&actual->left==100);
+    }
     PS::HelpyPushPacing push;
     Require(push.Delay(100)==0);push.Polled(100);
     Require(push.Delay(101)==39&&push.Delay(139)==1&&push.Delay(140)==0&&push.Delay(600)==0);
@@ -76,4 +93,7 @@ int main(int argc,char** argv){
     const auto detached=Read((std::filesystem::path(argv[1]).parent_path()/"DetachedWorkspaces.inl").string().c_str());
     for(const auto* owned:{"m_publishedWindow.load()","m_publishedBayWindow.load()","m_publishedCacheWindow.load()","m_publishedWorkspaces"})Require(detached.find(owned)!=std::string::npos);
     Require(source.find("if(m_visible.load()&&GetForegroundWindow()!=m_gameWindow)ClosePopup()")==std::string::npos);
+    const auto bridge=Read((std::filesystem::path(argv[1]).parent_path().parent_path().parent_path()/"plugins/helpy/HelpyNativeOverlayBridge.cpp").string().c_str());
+    for(const auto* input:{"GetRawInputBuffer","GetAsyncKeyState","GetKeyboardState","GetKeyState","XInputGetState","WM_APPCOMMAND","ReleaseHeldGameInput","CapturesInput"})Require(bridge.find(input)!=std::string::npos);
+    Require(bridge.find("&state.RawBuffer,&state.SwapGl")!=std::string::npos); // Raw capture must unload with the other input hooks.
 }

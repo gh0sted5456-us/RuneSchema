@@ -1,4 +1,4 @@
-#include "Utility/ConfigCodec.h"
+#include "Utility/ConfigIni.h"
 #include "Core/ConfigFiles.h"
 #include <cassert>
 #include <chrono>
@@ -39,6 +39,11 @@ int RunConfigSettings() {
     Rejects([&]{DecodeSettings(R"({"helpyAuthority":{"allowPinAccess":true,"accessPin":"123"}})");});
     const auto pinPolicy=DecodeSettings(R"({"helpyAuthority":{"allowPinAccess":true,"accessPin":"world-2398482","allowClientTeleport":true}})");
     assert(DecodeSettings(EncodeSettings(pinPolicy)).helpyAuthority.accessPin=="world-2398482");
+    const auto persisted=DecodeSettings(R"({"helpyAuthority":{"allowPinAccess":true,"accessPin":"world-2398482","allowClientItemGrants":true,"allowClientTeleport":true,"maximumItemCount":250,"permittedPlayerGuids":["0123456789abcdef0123456789abcdef"]}})");
+    ConfigFiles::Write(root/"server-settings.ini",EncodeIniDocument(SettingsDocument(persisted)));
+    const auto restarted=DecodeSettings(DecodeIniDocument(ConfigFiles::Read(root/"server-settings.ini")).dump()).helpyAuthority;
+    assert(restarted.allowPinAccess&&restarted.accessPin=="world-2398482"&&restarted.allowClientItemGrants&&restarted.allowClientTeleport
+        &&restarted.maximumItemCount==250&&restarted.permittedPlayerGuids==persisted.helpyAuthority.permittedPlayerGuids);
     assert(DecodeSettings("{}").helpyHotkey=="F2");
     assert(DecodeSettings(R"({"helpyHotkey":"f5"})").helpyHotkey=="F5");
     assert(DecodeSettings(R"({"helpyHotkey":"X"})").helpyHotkey=="X");

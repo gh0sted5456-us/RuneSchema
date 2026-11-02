@@ -1,9 +1,18 @@
 #include "Core/DiagnosticToastPresentation.h"
+#include "Core/DiagnosticLegacyIntake.h"
 #include <cassert>
 #include <chrono>
 #include <string>
 int main(){
     using namespace PS;
+    {DiagnosticToastFeed::Notice joined;joined.Text="[RuneSchema] [RS-NET-004] Server supplied 5 enabled RuneSchema mods.";
+        const auto notice=DiagnosticToastPresentation::Format(joined);assert(notice.WorldMods&&notice.Level=="Connected"&&notice.Title=="Entering a RuneSchema world"&&notice.Subtitle.find("Click")!=std::string::npos);
+        assert(notice.Alignment==ServerModVersions::Tone::Neutral);
+        ServerModVersions::Summary versions;versions.Ready=true;versions.Matched=2;versions.Unversioned=9;versions.ClientOnly=3;
+        auto aligned=DiagnosticToastPresentation::Format(joined,versions);assert(aligned.Alignment==ServerModVersions::Tone::Aligned&&aligned.Level=="Versions match"&&aligned.Detail.find("9 unversioned; excluded")!=std::string::npos);
+        versions.Different=1;auto changed=DiagnosticToastPresentation::Format(joined,versions);assert(changed.Alignment==ServerModVersions::Tone::Differences&&changed.Level=="Review versions");
+        versions.Matched=0;versions.Different=0;auto unversioned=DiagnosticToastPresentation::Format(joined,versions);assert(unversioned.Alignment==ServerModVersions::Tone::Neutral&&unversioned.Detail.find("No versioned mods")!=std::string::npos);
+        joined.Text="[RuneSchema] [error] [RS-NET-005] List unavailable";assert(!DiagnosticToastPresentation::Format(joined).WorldMods);}
     using namespace std::chrono;
     using namespace DiagnosticToastPresentation;
     {
@@ -211,6 +220,11 @@ int main(){
     DiagnosticToastFeed::Notice ordinary;
     ordinary.Text="[RuneSchema] IMPORT MAP trace";
     assert(Format(ordinary).Subtitle.empty()); // Don't repeat RuneSchema in footer.
+    ordinary.Text="[RuneSchema] [info] [RS-NET-007] Client-server authority bridged.";
+    assert(Format(ordinary).Success&&Format(ordinary).Title=="Client-server authority bridged");
+    assert(DiagnosticLegacyIntake::Eligible(LiveLog::Parse(ordinary.Text)));
+    assert(DiagnosticLegacyIntake::Eligible(LiveLog::Parse("[RuneSchema] [info] [RS-NET-006] PIN access available.")));
+    assert(!DiagnosticLegacyIntake::Eligible(LiveLog::Parse("[RuneSchema] [info] [RS-PLAY-001] Reminder already delivered by the monitor.")));
     // Disabling notifications clears both visible and aggregated work.
     cfg.Enabled=false;feed.Tick(cfg,start+seconds(8));assert(feed.Empty());
     cfg.Enabled=true;feed.Tick(cfg,start+seconds(9));assert(feed.Empty());

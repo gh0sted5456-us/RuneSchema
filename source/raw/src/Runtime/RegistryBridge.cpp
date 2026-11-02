@@ -1,5 +1,6 @@
 #include "Runtime/RegistryBridge.h"
 #include "Core/HelpyRemoteAccess.h"
+#include "../../../shared/HelpyAuthorityStatus.h"
 #include "Runtime/SlowWork.h"
 
 #include <algorithm>
@@ -302,7 +303,7 @@ UClass* RegistryBridge::ResolvePresentationClass() const {
 void RegistryBridge::ResetWorld() {
     PS::HelpyRemoteAccess::Server.Reset();PS::HelpyRemoteAccess::ClientAllowed=false;PS::HelpyRemoteAccess::ClientTeleport=false;
     PS::SpawnToolRequests::CatalogProgress({{"RemoteAccess",{{"Allowed",false},{"Detail","Connect again after joining this world."}}}});
-    m_helpyAccessRevision=0;m_helpyAccessComponent.Reset();
+    m_helpyAccessRevision=0;m_helpyAccessComponent.Reset();m_helpyAccessStatusRequested=false;
     m_helpyMutationRevision=0;m_helpyMutationComponent.Reset();m_helpyResultParts.Reset();
     PS::SpawnToolRequests::SetNetworkCompletion(0,{});
     for(const auto& pending:m_pendingClientActions)Trace("consumable.authority",pending.Caster.Get(),pending.Key,"consume",pending.Revision,pending.Correlation,
@@ -331,6 +332,10 @@ void RegistryBridge::ResetWorld() {
     m_consumptionPermits.clear();m_pendingAuthorityActions.clear();m_pendingClientActions.clear();m_lastAuthorityDeferred=false;
     m_authorityGraphRoutes.clear();
     m_modDataRelay.Reset();m_relayPeers.clear();m_relayElapsed=0;
+    m_serverModAssembly.Clear();m_serverModComponent.Reset();m_serverModsAvailable=false;
+    m_serverModsPublished=false;m_serverModSequence=0;
+    m_receivedServerModSequence=0;
+    m_serverModNotice.Clear();
     m_buildingPeers.clear();m_buildingAuthorityWorld.Reset();m_buildingAuthority={};m_buildingHandshake={};m_buildingAckFingerprint.clear();m_buildingAckAt={};m_buildingRejections.clear();
     m_presentationConsumers.clear();m_presentationAuthorityRevisions.clear();m_presentationClientRevisions.clear();
     m_diagnosticOwners.clear();m_nextDiagnosticOwner=0;
@@ -345,6 +350,11 @@ std::map<std::string, std::string> RegistryBridge::RegistryOwnerFingerprints() c
         : PS::RegistryManifestSummary::Owners(m_registrySnapshot);
 }
 
+void RegistryBridge::SetEnabledMods(const nlohmann::json& mods) {
+    m_enabledMods=PS::ServerModList::Encode(mods);
+    m_serverModsReady=true;
+}
+
 void RegistryBridge::SetRegistrySnapshot(std::string snapshot) {
     if(snapshot.size()>4*1024*1024)throw std::runtime_error("Merged mod registry exceeds 4 MiB");
     const auto parsed=nlohmann::json::parse(snapshot);
@@ -354,7 +364,10 @@ void RegistryBridge::SetRegistrySnapshot(std::string snapshot) {
         throw std::runtime_error("Merged mod registry contract is invalid");
     std::vector<PS::ModDataRelay::Channel> relayChannels;
     for(const auto& entry:parsed["entries"])if(entry.value("kind",std::string{})=="DataRelay")relayChannels.push_back(PS::ModDataRelay::Declaration(entry.at("owner").get<std::string>(),entry.at("relay")));
-    m_modDataRelay.Configure(relayChannels);
+    for(const auto& channel:relayChannels)if(channel.Key==PS::ServerModList::Route.Key)
+        throw std::runtime_error("Server mod-list channel is reserved by RuneSchema");
+    m_modDataRelay.Configure(relayChannels,&PS::ServerModList::Route);
+    m_serverModsPublished=false;
     m_registrySnapshot=std::move(snapshot);
     m_manifestFingerprint=EffectiveRegistryFingerprint(m_registrySnapshot);
     Trace("registry.discovery",nullptr,"manifest","validate",0,{},"cooked_registry_validated","accepted","accepted");
@@ -368,7 +381,7 @@ void RegistryBridge::SetRegistrySnapshot(std::string snapshot) {
 std::string RegistryBridge::CompactPayload(UObject* buildingContext) const {
     const auto& mapping=LocalMapping();
     nlohmann::json payload={{"kind","RuneSchemaRegistryBridgeState"},{"protocolVersion",Protocol},
-        {"build",BuildIdentity},{"channels",{"system.compat","registry.action","quest.control","quest.state","dialogue.session","event.state","spawn.state","npc.state","vendor.state","player.profile","nameplate.profile","world.state","notify.player"}},
+        {"build",BuildIdentity},{"serverMods",m_serverModsReady},{"channels",{"system.compat","registry.action","quest.control","quest.state","dialogue.session","event.state","spawn.state","npc.state","vendor.state","player.profile","nameplate.profile","world.state","notify.player"}},
         {"registryFingerprint",m_manifestFingerprint},{"mappingFingerprint",mapping.Fingerprint},{"registryRevision",m_registryRevision},
         {"activationRevision",m_activationRevision},{"persistentStateRevision",m_persistentRevision}};
     payload["sessionPolicy"]={{"mode","server-baseline-permissive"},
@@ -901,8 +914,15 @@ void RegistryBridge::HandleGenericRequest(UObject* source,UFunction* function,vo
                 ||!notify||!notify->HasAnyFunctionFlags(FUNC_Net)||!notify->HasAnyFunctionFlags(FUNC_NetClient))throw std::runtime_error("Native mod-data RPC contract is unavailable");
             const PS::WeakObjectHandle identity(source);if(identity.Get()!=source)throw std::runtime_error("Relay player component identity is unavailable");
             const auto peer="peer-"+std::to_string(identity.ObjectIndex)+"-"+std::to_string(identity.ObjectSerialNumber);
-            if(action=="subscribe"||action=="resync")m_modDataRelay.Subscribe(peer,entity,payload.at("version").get<uint32_t>(),action=="resync");
+            if(action=="subscribe"||action=="resync"){
+                if(entity==PS::ServerModList::Route.Key&&!m_serverModsPublished){
+                    if(!m_serverModsReady)throw std::runtime_error("Enabled server mod list is unavailable");
+                    m_modDataRelay.Publish(entity,m_enabledMods,++m_serverModSequence);m_serverModsPublished=true;
+                }
+                m_modDataRelay.Subscribe(peer,entity,payload.at("version").get<uint32_t>(),action=="resync");
+            }
             else if(action=="chunk"){
+                if(entity==PS::ServerModList::Route.Key)throw std::runtime_error("Only RuneSchema authority can publish the server mod list");
                 if(payload.at("channel")!=entity)throw std::runtime_error("Relay entity/channel mismatch");
                 DragonWilds::ActorHelper::FunctionCall local(caster,TEXT("/Script/Engine.Pawn:IsLocallyControlled"));local.Invoke();
                 const auto complete=m_modDataRelay.Receive(peer,payload,local.Result<bool>(),PS::ModDataRelay::Clock::now());
@@ -1008,13 +1028,17 @@ void RegistryBridge::ObserveClientTransport(UObject* source,UFunction* function,
             if(revision==m_helpyAccessRevision&&m_helpyAccessComponent.Get()==source
                 &&m_helpyAccessGeneration==PS::SpawnToolRequests::Generation.load()){
                 const auto access=nlohmann::json::parse(detail,nullptr,false);
-                const bool valid=success&&access.is_object()&&access.value("Kind",std::string{})=="HelpyRemoteAccess1";
+                const bool valid=success&&PS::HelpyAuthorityStatus::Valid(access);
                 PS::HelpyRemoteAccess::ClientAllowed=valid&&access.value("Allowed",false);
                 PS::HelpyRemoteAccess::ClientTeleport=PS::HelpyRemoteAccess::ClientAllowed&&access.value("Teleport",false);
                 PS::HelpyRemoteAccess::ClientGeneration=m_helpyAccessGeneration;
                 const auto message=valid?access.value("Detail",std::string{}):detail;
-                fields["RemoteAccess"]={{"Allowed",PS::HelpyRemoteAccess::ClientAllowed},{"Detail",message}};
+                fields["RemoteAccess"]=valid?access:nlohmann::json{{"Allowed",false},{"PinRequired",true},{"Detail",message}};
                 fields["Status"]=message;
+                if(valid&&access.value("Authenticated",false)&&PS::HelpyRemoteAccess::ClientAllowed)
+                    PS::Log<LogLevel::Normal>(STR("[RS-NET-007] Client-server authority bridged. Self-service requests are validated and executed by the server for your current character.\n"));
+                else if(valid&&access.value("PinRequired",false))
+                    PS::Log<LogLevel::Normal>(STR("[RS-NET-006] This RuneSchema world offers PIN access. Open Helpy to connect to server authority.\n"));
                 m_helpyAccessRevision=0;m_helpyAccessComponent.Reset();
             }
             if(revision==m_helpyMutationRevision&&m_helpyMutationComponent.Get()==source
@@ -1036,6 +1060,19 @@ void RegistryBridge::ObserveClientTransport(UObject* source,UFunction* function,
     } else {
         const auto payload=ParameterString(function,parameters,TEXT("Payload"),MaxActionPayloadBytes);(void)nlohmann::json::parse(payload);
         DragonWilds::ActorHelper::FunctionCall owner(source,TEXT("/Script/Engine.ActorComponent:GetOwner"));owner.Invoke();
+        if(channel=="mod.data"&&entity==PS::ServerModList::Route.Key){
+            if(source!=m_serverModComponent.Get())return;
+            const auto packet=nlohmann::json::parse(payload);
+            if(packet.value("sender",std::string{})!="authority")throw std::runtime_error("Server mod list sender is invalid");
+            if(packet.at("sequence").get<int64_t>()<=m_receivedServerModSequence)return;
+            if(auto complete=m_serverModAssembly.Push(PS::ServerModList::Route,"authority",packet,PS::ModDataRelay::Clock::now())){
+                const auto mods=PS::ServerModList::Decode(complete->Data);
+                m_receivedServerModSequence=complete->Sequence;
+                m_serverModNotice.Receive(owner.Result<UObject*>(),mods);
+                PS::Log<LogLevel::Normal>(STR("[RS-NET-004] Server supplied {} enabled RuneSchema mods. View the list in Helpy > Mods > Server comparison.\n"),mods.size());
+            }
+            return;
+        }
         if(channel=="helpy.result"){
             if(ParameterInt64(function,parameters,TEXT("Revision"))!=m_helpyMutationRevision
                 ||m_helpyMutationComponent.Get()!=source||m_helpyMutationGeneration!=PS::SpawnToolRequests::Generation.load())return;
@@ -1252,6 +1289,21 @@ void RegistryBridge::SendCompatibilityAck(const std::string& remoteFingerprint,b
         m_buildingHandshake.SentReady=buildings.Valid();m_buildingHandshake.Revision=revision;
         DragonWilds::ActorHelper::FunctionCall request(components[0],rpc);request.Arg(TEXT("Channel"),std::string("system.compat")).Arg(TEXT("EntityId"),std::string("client"))
             .Arg(TEXT("ActionKey"),std::string("hello")).Arg(TEXT("Payload"),payload.dump()).Arg(TEXT("Revision"),revision).Invoke();
+        if(m_serverModsAvailable&&m_serverModComponent.Get()!=components[0]){
+            m_serverModAssembly.Clear();m_serverModComponent.Assign(components[0]);
+            m_receivedServerModSequence=0;
+            DragonWilds::ActorHelper::FunctionCall mods(components[0],rpc);mods.Arg(TEXT("Channel"),std::string("mod.data"))
+                .Arg(TEXT("EntityId"),PS::ServerModList::Route.Key).Arg(TEXT("ActionKey"),std::string("subscribe"))
+                .Arg(TEXT("Payload"),std::string("{\"version\":1}")).Arg(TEXT("Revision"),++m_outboundRevision).Invoke();
+        }
+        if(!m_helpyAccessStatusRequested&&!m_helpyAccessRevision){
+            m_helpyAccessStatusRequested=true;m_helpyAccessComponent.Assign(components[0]);
+            m_helpyAccessRevision=++m_outboundRevision;m_helpyAccessGeneration=PS::SpawnToolRequests::Generation.load();
+            DragonWilds::ActorHelper::FunctionCall access(components[0],rpc);access.Arg(TEXT("Channel"),std::string("helpy.authority"))
+                .Arg(TEXT("EntityId"),std::string("access-status")).Arg(TEXT("ActionKey"),std::string("HelpyRemoteAccess"))
+                .Arg(TEXT("Payload"),std::string("{\"Action\":\"HelpyRemoteAccess\",\"Query\":true}"))
+                .Arg(TEXT("Revision"),m_helpyAccessRevision).Invoke();
+        }
         if(!resync)return;
         DragonWilds::ActorHelper::FunctionCall resync(components[0],rpc);resync.Arg(TEXT("Channel"),std::string("quest.state")).Arg(TEXT("EntityId"),std::string("all"))
             .Arg(TEXT("ActionKey"),std::string("resync")).Arg(TEXT("Payload"),std::string("{}")).Arg(TEXT("Revision"),++m_outboundRevision).Invoke();
@@ -1369,6 +1421,7 @@ bool RegistryBridge::Attach(AGameModeBase* mode) {
     DragonWilds::ActorHelper::FunctionCall(component,TEXT("/Script/Engine.ActorComponent:SetIsReplicated"))
         .Arg(TEXT("ShouldReplicate"),true).Invoke();
     m_authorityComponent=component;
+    if(m_serverModsReady&&Storefront::IsDedicatedServer())m_serverModNotice.Receive(actor,PS::ServerModList::Decode(m_enabledMods));
     m_pendingMode.Reset();
     Trace("bridge.lifecycle",actor,"world","attach",0,{},"player_bridge_attachment_ready","accepted","accepted");
     // One bounded world-ready scan covers pawns whose BeginPlay preceded the
@@ -1649,6 +1702,7 @@ void RegistryBridge::Observe(UObject* source,UFunction* function) {
         if(!state.is_object() || state.value("kind",std::string{})!="RuneSchemaRegistryBridgeState"
             || state.value("protocolVersion",0)!=Protocol)throw std::runtime_error("Compact registry bridge state is invalid");
         const auto registry=state.value("registryRevision",0u);
+        m_serverModsAvailable=state.value("serverMods",false);
         const auto buildings=PS::BuildingNetworkGuard::Decode(state.value("buildingRegistry",nlohmann::json::object()));
         if(m_buildingAuthorityWorld.Get()!=source->GetWorld()||registry>m_seenRegistryRevision
             ||(!buildings.Valid()&&m_buildingAuthority.Valid()))m_buildingHandshake.Begin();
@@ -1924,6 +1978,7 @@ void RegistryBridge::Start() {
     options.HookName=TEXT("RegistryBridgeRepNotify");
     m_processEvent=Hook::RegisterProcessEventPostCallback([this](Hook::TCallbackIterationData<void>&,UObject* source,UFunction* function,void* parameters){
         if(!source||!function)return;const auto name=function->GetFName();
+        try{m_serverModNotice.Observe(source,function,parameters);}catch(const std::exception& error){PS::Log<LogLevel::Verbose>(STR("[NETWORK][MOD-NOTICE] Native warning text left unchanged: {}. Server list remains available in Helpy.\n"),PS::ToWideSafe(error.what()));}
         if(!Names().Post(name)&&!AuthorityEntry(name))return;
         try{ObservePlayerLifecycle(source,function);ObserveAuthorityPost(source,function,parameters);Observe(source,function);ObserveClientTransport(source,function,parameters);ObservePresentationTransport(source,function,parameters);}catch(const std::exception& error){PS::LogStructuredFallback<LogLevel::Warning>(
             PS::StructuredDiagnosticB3D::Report("RS-CORE-053","Warning","Partial",

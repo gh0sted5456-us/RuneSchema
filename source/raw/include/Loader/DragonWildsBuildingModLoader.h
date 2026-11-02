@@ -30,7 +30,7 @@ namespace DragonWilds {
         std::vector<std::string> PlanNetworkOrder(const std::vector<std::size_t>& order);
         void SetNetworkOrder(std::vector<std::string> order) noexcept;
         void ImportCookedDefinitions();
-        std::vector<PS::WorldBuildingRegistryValidation::Expected> CleanupExpectations();
+        std::vector<PS::WorldBuildingRegistryValidation::Expected> CleanupExpectations(const std::unordered_set<std::string>* present=nullptr);
         void RejectCleanup(const std::string& reason);
         std::function<void(const nlohmann::json&,const RC::StringType&)> ImportPlacements;
         nlohmann::json PlanToolImport(const nlohmann::json& data);

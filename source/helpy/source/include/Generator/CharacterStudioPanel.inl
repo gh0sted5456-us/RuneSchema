@@ -99,7 +99,7 @@ inline void StudioHeader(){
     ImGui::SetNextItemWidth(std::max(200.f,ImGui::GetContentRegionAvail().x*.6f));
     const auto current=File[0]?(StudioSaveName.empty()?std::filesystem::path(File).filename().string():StudioSaveName):std::string("Choose a character save");
     if(ImGui::BeginCombo("##character-studio-save",current.c_str())){
-        ImGui::InputTextWithHint("##filter-saves","Find a character…",StudioSaveSearch,sizeof(StudioSaveSearch));
+        HelpyTextInput::InputTextWithHint("##filter-saves","Find a character…",StudioSaveSearch,sizeof(StudioSaveSearch));
         if(list.contains("Files"))for(const auto& file:list["Files"]){const auto path=file.at("Path").get<std::string>(),name=file.at("Name").get<std::string>();
             const auto text=HelpyCacheSources::Lower(name+" "+file.value("Storage",std::string{})+" "+file.value("FileName",std::string{}));if(text.find(HelpyCacheSources::Lower(StudioSaveSearch))==text.npos)continue;
             ImGui::PushID(path.c_str());ProviderIcon(file);if(ImGui::Selectable(name.c_str(),path==File)){FollowCurrentCharacter=false;StudioSelectSave(path,name);}
@@ -194,7 +194,7 @@ inline void StudioSlotPicker(){
     if(ImGui::Begin(("Fit "+StudioSlot+"###native-slot-picker").c_str(),&StudioSlotOpen)){
         ImGui::TextDisabled("Preview only · saved loadout and live player are unchanged");
         ImGui::SetNextItemWidth(std::max(60.f,ImGui::GetContentRegionAvail().x-theme.X(135)));
-        const bool enter=ImGui::InputTextWithHint("##slot-search","Search compatible items…",StudioSlotSearch,sizeof(StudioSlotSearch),ImGuiInputTextFlags_EnterReturnsTrue);
+        const bool enter=HelpyTextInput::InputTextWithHint("##slot-search","Search compatible items…",StudioSlotSearch,sizeof(StudioSlotSearch),ImGuiInputTextFlags_EnterReturnsTrue);
         ImGui::SameLine();ImGui::BeginDisabled(StudioSlotPending);const bool search=HelpyImGuiTheme::SoftButton("Search");ImGui::SameLine();const bool refresh=HelpyImGuiTheme::SoftButton("Refresh");ImGui::EndDisabled();
         if((search||refresh||enter)&&!StudioSlotPending){StudioSlotQuery=StudioSlotSearch;StudioRefreshSlot();}
         if(!StudioSlotPending&&StudioSlotMore&&(StudioSlotOffset==0||StudioSlotRows.size()<48)&&!AuthoringClient::Busy())StudioSlotPending=StudioRequestSlot();
@@ -273,7 +273,7 @@ inline void Studio(const Json& catalog,uint64_t revision,bool inventoryOnly=fals
         if(!CharacterPreviewPanel::DroppedItem.empty()){StudioSelected=CharacterPreviewPanel::DroppedItem;CharacterPreviewPanel::DroppedItem=Json::object();StudioPreviewMode="Item";StudioRequestedView.clear();}
         if(HelpyImGuiTheme::SoftButton("Refresh native preview"))StudioRequestedView.clear();
         if(wide)ImGui::TableNextColumn();}
-        ImGui::TextUnformatted("Character name");ImGui::SetNextItemWidth(-1);ImGui::InputTextWithHint("##character-name","Character name",StudioName,sizeof(StudioName));
+        ImGui::TextUnformatted("Character name");ImGui::SetNextItemWidth(-1);HelpyTextInput::InputTextWithHint("##character-name","Character name",StudioName,sizeof(StudioName));
         if(StudioAppearance.contains("Revision"))if(Button("Stage character name","SaveEditorRename",{{"Name",StudioName},{"Revision",StudioAppearance.at("Revision")}}))Invalidate();
         if(ImGui::BeginTabBar("##character-tools")){
             if(ImGui::BeginTabItem("Appearance")){StudioAppearanceControls();ImGui::EndTabItem();}

@@ -2,7 +2,7 @@
 #include <cassert>
 using namespace PS;using Json=nlohmann::json;
 int main(int argc,char** argv){
-    assert(argc==2);namespace P=RuneSchemaProfile;const auto root=std::filesystem::path(argv[1])/std::to_string(GetCurrentProcessId());const auto legacy=root/"HELPY";
+    assert(argc==2);namespace P=RuneSchemaProfile;const auto root=std::filesystem::path(argv[1])/P::Guid();const auto legacy=root/"HELPY";
     const auto labels=Json{{"Format",1},{"Entries",Json::object()}}.dump();ConfigFiles::Write(legacy/"personalization.json",labels);
     ConfigFiles::Write(legacy/"runtime/saved/portraits/1234567890abcdef1234567890abcdef.rsicon","old-picture");ConfigFiles::Write(legacy/"runtime/Helpy/kits/kit.json","kit");
     assert(P::Load(legacy));P::Shutdown();const auto doc=P::Read();const auto id=doc.at("ProfileId").get<std::string>();assert(HelpyPersonalization::Guid(id)==id);

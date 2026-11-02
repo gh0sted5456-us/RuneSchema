@@ -5,6 +5,22 @@ The team coordinates updates, testing, and releases. See `AUTHORS.md` for
 community credits. Official repository and distribution work are published
 under `gh0sted5456-us`.
 
+## Contribution workflow
+
+1. Record the reported behavior, expected result, affected runtime and a small reproduction.
+2. Trace the affected code and callers. Keep the change focused on that issue.
+3. Build the changed components and run their targeted checks. Test UI changes at usable small and large sizes.
+4. Update the relevant guide and diagnostic reference when behavior or codes change.
+5. Provide a reviewable candidate with test results and remaining limits. Maintainers review and approve releases before upload.
+
+The same evidence is expected from human and AI-assisted contributions. See
+**[If Using AI](IF-USING-AI.md)** for detailed investigation, verification and
+handoff instructions. AI is optional; it does not replace contributor review.
+
+Personal instructions, machine paths and private runtime data stay local.
+Use the ignored `AGENTS.local.md` for machine-specific instructions; keep
+`AGENTS.md` limited to shared project rules.
+
 ## License for new contributions
 
 By intentionally submitting a new original contribution for inclusion, you

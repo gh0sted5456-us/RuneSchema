@@ -25,9 +25,9 @@ int main(int argc,char** argv){try{
     Check(ui.contains("destinationReady=Data.Operation==2||groundReady"),"Only teleport may prepare unloaded ground; spawn/build retain ground gates");
     Check(ui.contains("Data.ProbeWanted=Data.Operation!=2")&&ui.contains("previewReady=Data.Operation==2||"),"Repeated teleport selection still waits for a placement-only preview");
     Check(ui.contains("const bool context=ImGui::IsMouseReleased(ImGuiMouseButton_Right)")
-        &&ui.contains("if(context||(ImGui::IsMouseReleased(ImGuiMouseButton_Left)&&!Data.Dragged))")
+        &&ui.contains("if(context||(ImGui::IsMouseReleased(ImGuiMouseButton_Left)&&!Data.Dragged)||(controllerMap&&ImGui::IsKeyPressed(ImGuiKey_GamepadFaceDown,false)))")
         &&ui.contains("if(context||Data.BuildingPick)")
-        &&ui.contains("Data.MapPopupAnchor=io.MousePos;Data.Popup=true;Data.BuildingPick=false;ImGui::OpenPopup")
+        &&ui.contains("Data.MapPopupAnchor=pointer;Data.Popup=true;Data.BuildingPick=false;ImGui::OpenPopup")
         &&ui.contains("Teleport member to...")&&ui.contains("Confirm party travel"),
         "Map must separate ordinary left selection from right context, permit explicit building picks and confirm party mutations");
     Check(ui.contains("ProgressBar(-")&&ui.contains("duration_cast<std::chrono::seconds>")&&ui.contains("Cancel travel"),"Travel must show an indeterminate phase indicator, elapsed time and pre-departure cancel");

@@ -26,7 +26,7 @@ inline constexpr int SidebarDivider=65535;
 inline std::vector<int> SidebarDefaults(){
     using HelpyNavigation::Page;
     // Honor existing primary-route ordering without treating the formerly fixed rows as movable history.
-    auto result=Ordered("sidebar",{int(Page::Items),int(Page::Map),int(Page::Mods),int(Page::Tools),int(Page::Settings),int(Page::LiveLog),int(Page::DedicatedServer)});
+    auto result=Ordered("sidebar",{int(Page::Items),int(Page::Map),int(Page::Mods),int(Page::SaveRecovery),int(Page::Tools),int(Page::Settings),int(Page::LiveLog),int(Page::DedicatedServer)});
     result.insert(result.end(),{SidebarDivider,int(Page::Home),int(Page::Profile),int(Page::BugReport)});return result;
 }
 inline std::vector<int> Sidebar(){return Ordered(SidebarSurface,SidebarDefaults());}

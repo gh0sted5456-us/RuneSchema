@@ -43,9 +43,10 @@ inline bool ReceiveCheck(const nlohmann::json& window){
     if(window.value("RuntimeGeneration",uint64_t{})==state.RuntimeGeneration&&window.contains("Rows")&&window["Rows"].is_array()){
         const ItemCatalogFilter::Query match(state.Query);
         for(const auto& row:window["Rows"]){if(!row.is_object())continue;++job.Found;if(!match(row))continue;const auto path=row.value("Path",std::string{});if(path.empty())continue;
-            auto found=std::find_if(state.Rows.begin(),state.Rows.end(),[&](const auto& current){return current.value("Path",std::string{})==path;});
+            const auto key=HelpyCacheSources::Lower(path);
+            auto found=std::find_if(state.Rows.begin(),state.Rows.end(),[&](const auto& current){return HelpyCacheSources::Lower(current.value("Path",std::string{}))==key;});
             if(found==state.Rows.end()){if(state.Rows.size()<4096){state.Rows.push_back(row);changed=true;}}
-            else if(row.value("Loaded",true)){auto merged=*found;merged.update(row);if(merged!=*found){*found=std::move(merged);changed=true;}}
+            else if(row.value("Loaded",true)){auto merged=ItemName::Merge(*found,row);if(merged!=*found){*found=std::move(merged);changed=true;}}
         }
     }
     if(changed){state.RowsRevision=++LazyCatalog::RowsClock;LazyCatalog::SaveCache(0);}

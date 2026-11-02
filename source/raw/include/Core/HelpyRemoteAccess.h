@@ -4,6 +4,7 @@
 #include <map>
 #include <string>
 #include <string_view>
+#include <nlohmann/json.hpp>
 
 namespace PS::HelpyRemoteAccess {
 // Game-thread only. Native RPC ownership supplies peer/world identities.
@@ -56,6 +57,11 @@ private:
     }
 };
 inline Sessions Server;
+inline nlohmann::json AccessStatus(bool enabled,bool allowed,bool authenticated,bool items,bool teleport,const std::string& guid,std::string detail){
+    return {{"Kind","HelpyRemoteAccess1"},{"Available",enabled},{"Allowed",allowed},{"PinRequired",enabled&&!allowed},
+        {"Authenticated",allowed&&authenticated},{"ItemDelivery",allowed&&items},{"Teleport",allowed&&teleport},
+        {"CharacterGuid",guid},{"Detail",std::move(detail)}};
+}
 inline constexpr auto ItemLane="network:ITEM:/Script/Dominion.ItemSubsystem";
 inline bool ItemIdsMatch(const std::map<std::string,std::string>& client,const std::map<std::string,std::string>& authority,bool authorityProof){
     const auto own=authority.find(ItemLane),peer=client.find(ItemLane);

@@ -1,4 +1,5 @@
 #pragma once
+#include "Generator/HelpyTextInput.h"
 #include "Generator/HelpyMenu.h"
 #include "Runtime/HelpyWikiIcons.h"
 #include "Generator/HelpyImGuiTheme.h"
@@ -11,7 +12,7 @@ inline void Wiki(){
     if(!HelpyWikiIcons::Status().empty())ImGui::TextDisabled("%s",HelpyWikiIcons::Status().c_str());
     const bool wide=ImGui::GetContentRegionAvail().x>=t.X(650);const bool table=wide&&ImGui::BeginTable("##journal-layout",2,ImGuiTableFlags_SizingStretchProp);
     if(table){ImGui::TableSetupColumn("Entries",ImGuiTableColumnFlags_WidthStretch,.65f);ImGui::TableSetupColumn("Journal",ImGuiTableColumnFlags_WidthStretch,1.35f);ImGui::TableNextColumn();}
-    ImGui::SetNextItemWidth(-1);ImGui::InputTextWithHint("##journal-search","Search cached entries...",Search,sizeof(Search));
+    ImGui::SetNextItemWidth(-1);HelpyTextInput::InputTextWithHint("##journal-search","Search cached entries...",Search,sizeof(Search));
     auto names=HelpyWikiIcons::Names();std::erase_if(names,[&](const auto& name){return !MapFilters::Matches(MapFilters::Fold(name),Search);});
     ImGui::BeginChild("##journal-list",{0,wide?t.Y(450):t.Y(160)},true);ImGuiListClipper clip;clip.Begin(int(names.size()));
     while(clip.Step())for(int i=clip.DisplayStart;i<clip.DisplayEnd;++i)if(ImGui::Selectable(names[i].c_str(),Selected==names[i]))Selected=names[i];

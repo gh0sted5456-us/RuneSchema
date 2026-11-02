@@ -23,7 +23,7 @@ These optional callbacks accept `Position: Vector` and return a Blueprint boolea
 | --- | --- |
 | `RuneSchemaPlayerPhasing` | Living authoritative or locally controlled players in range can pass through geometry using native flying movement. Space rises and Left Control descends. Leaving the area, disabling the policy, death and cleanup restore the previous capsule collision and movement mode. |
 | `RuneSchemaFreeBuildingMaterials` | Temporarily waives recipe requirements during native preview, selection and construction calls. Requirements are restored after each synchronous call. Native spatial checks and multiplayer building identity checks remain active. |
-| `RuneSchemaFreeCraftingMaterials` | Temporarily waives only a crafting recipe's `ItemsConsumed` for the actual crafter in range. Recipe unlocks, skills, station requirements, outputs and XP retain native handling. |
+| `RuneSchemaFreeCraftingMaterials` | Temporarily waives crafting materials for the actual crafter in range. Recipe unlocks, skills, station requirements, outputs and XP retain native handling. |
 
 Free crafting wraps native `InventoryController:CraftRecipe` and
 `Server_CraftRecipe`, plus `CanCraftRecipe`,
@@ -34,12 +34,25 @@ storage alone and ambiguous player inventories cannot grant the waiver. Client
 UI checks apply only to the owning player; authority checks use the server's
 current pawn position.
 
+The candidate also covers direct native C++ menu checks, which do not pass through
+Blueprint hooks. Building slots calculate their normal buildable appearance with
+the material waiver in scope. Crafting uses the native eligibility, quantity and
+ingredient checks; it does not replace their unlock or station decisions.
+
 Recipe arrays are borrowed only during synchronous game-thread calls and restored
-afterward. Nested calls from an ineligible player temporarily see the original
-costs, even if another player has a waiver for that same recipe. No additional
-polling loop or global free-crafting flag is used. Passive processors, repair
+afterward. For AnyOf recipes, `bConsumeItemsIndividually` is scoped and restored
+with the ingredients so an empty temporary array does not incorrectly mean no
+crafting choice is available. Nested calls from an ineligible player temporarily
+see the original costs and flag, even if another player has a waiver for that
+same recipe. Passive processors, repair
 requirements and fuel remain outside this callback. The native crafting and
 owning-client tests must pass before a combined content release uses the candidate.
+
+An open local menu refreshes when its material policy changes. Crafting keeps the
+selected recipe and quantity; building updates are spread across frames rather
+than refreshing the whole catalogue in one frame. These checks use the existing
+slow update only while the relevant native menu is active. Closing the menu stops
+its refresh work. No global difficulty or free-crafting setting is changed.
 
 An individual building actor can additionally opt in with
 `RuneSchemaCanDismantleOwnBuilding(Player: Pawn) -> bool`. The argument is the
@@ -76,7 +89,54 @@ unrelated player buffs. Profile modifiers still compose using the game's native
 effect rules; a cooked effect does not promise an exact final value after other
 mods apply their modifiers.
 
+### Player profiles and native bonuses — local follow-up
+
+This follow-up is being verified locally; it is not in the published ZIP yet.
+Health, stamina and carry-capacity player rules use their own native Add effects.
+They leave equipment and world-policy effect handles alone. An unchanged profile
+refresh keeps its existing handle; a changed rule replaces its own modifier.
+Respawn and possession changes retire the previous pawn's owned state.
+
+The baseline comes from the player's resolved default attribute table and the
+world's native difficulty scale. It is captured once for that pawn, rather than
+reading a maximum that may already include a totem or equipment bonus. The
+current adapter accepts finite numeric `StartingValue` strings. An unfamiliar
+expression or changed native contract is reported as unsupported instead of
+being treated as an unbuffed value.
+
+For example, with a base capacity of `400`, a profile capacity of `900` adds a
+native `500` modifier. A cooked Override effect can still set capacity to `4000`.
+Changing the profile to `1200` inside that zone leaves the native Override in
+control; leaving restores the new profile capacity, plus any native equipment
+bonuses. These interactions follow native stacking rules. Other player-rule
+attribute families keep their existing implementation.
+
+Creating or changing a profile examines only that player's bounded native effect
+arrays. This adds no periodic search or global effect scan. Normal authority,
+replication and world-policy checks still apply; use matching framework builds
+on server and clients when testing the follow-up.
+
 ## Native behavior and work limits
+
+The native crafting resolver handles Game Pass thunks whose prologue, body and
+epilogue occupy separate chained Windows unwind records. It follows only
+adjacent ranges with the exact same primary unwind identity, within fixed
+byte/range limits. Steam's complete function ranges retain their boundaries.
+Unknown metadata still disables only the affected adapter and reports
+`CRAFTING_MENU_BIND_FAILED` with its function name. Fresh isolated Steam checks
+passed all eight native menu groups on this follow-up; a live Game Pass menu
+check after restarting with the rebuilt DLL remains necessary.
+
+The follow-up also accepts indirect bytecode/parameter helper calls inside the
+WinGDK exec wrapper. Those calls cannot become detour targets: the resolver still
+requires a direct call whose unchanged AL/EAX result is stored through the exec
+result pointer, followed by an exact executable/unwind-boundary check. Unknown,
+rewritten or ambiguous result producers remain unsupported. The full captured
+Game Pass CanCraftRecipe, maximum-quantity and required-items wrappers pass the
+decoder and native-target boundary checks. Live acceptance after restart is
+still required. Configure `RUNESCHEMA_ZYDIS_SOURCE_DIR` with the project's pinned
+Zydis checkout to include the native decoder regression in standalone core tests;
+its compiler output remains in the selected CMake binary directory.
 
 Farming protection uses private transient plant/stage copies rather than editing the source assets. Harvest parameters are restored after the borrowed native call. Resource durations are restored when their policy ends. Bonus enemies use transient, non-persistent actors and a recursion guard.
 

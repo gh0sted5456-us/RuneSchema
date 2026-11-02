@@ -5,14 +5,19 @@
 #include "Generator/PlayerInventoryPanel.h"
 #include "Core/MapProjection.h"
 #include "Core/MapSpawnRequest.h"
+#include "Core/ServerModVersions.h"
+#include "Core/HelpyServerAccess.h"
+#include "Runtime/HelpyRuntimeMonitor.h"
 #include "Generator/HelpyOverlayInput.h"
+#include "Runtime/HelpyCursorRestore.h"
 #include <imgui_internal.h>
 #include <cassert>
 namespace {
 using json=nlohmann::json;
-json LastQuery,LastSubmission,HostSnapshot={{"Players",json::array({{{"Path","/Player/Local"},{"Name","Local player"}}})}};
+json LastQuery,LastSubmission,LastHostRead,HostSnapshot={{"Players",json::array({{{"Path","/Player/Local"},{"Name","Local player"}}})}};
 uint64_t HostGeneration=41,HostRevision=8;
-bool ThrowHost=false;
+std::atomic<bool> ThrowHost=false;
+std::mutex HostMutex;std::atomic<int> BlockAction=0;std::atomic<bool> BlockEntered=false;std::shared_future<void> HostRelease;
 unsigned SettingsWrites=0;std::map<std::string,unsigned> HostCalls;
 unsigned IconManifestReads=0;
 unsigned CrashOptionReads=0;
@@ -23,7 +28,9 @@ int32_t RS_PLUGIN_CALL HostCall(const char*,const char* service,const char* inpu
     if(ThrowHost)throw std::runtime_error("host read failed");
     assert(std::string(service)=="runeschema.tools");
     const auto request=json::parse(input);json reply;
-    const auto action=request.value("Action",std::string{});++HostCalls[action];
+    const auto action=request.value("Action",std::string{});
+    if((BlockAction==1&&action=="QuerySubmit")||(BlockAction==2&&action=="Read")||(BlockAction==3&&action=="IconSubmit")||(BlockAction==4&&action=="Submit")){BlockEntered=true;HostRelease.wait();}
+    std::lock_guard lock(HostMutex);++HostCalls[action];
     if(action=="HelpyNativeOverlay"){
         if(!output||capacity<8192){*size=8192;return RS_PLUGIN_BUFFER_TOO_SMALL;}
         ++GuardedCalls[action];reply={{"Ready",true},{"Api","D3D12"}};
@@ -53,12 +60,16 @@ int32_t RS_PLUGIN_CALL HostCall(const char*,const char* service,const char* inpu
     else if(request["Action"]=="AuthoringSubmit")reply=AuthoringHost.Submit(request.at("Request"));
     else if(request["Action"]=="AuthoringActivate")reply=AuthoringHost.Activate();
     else if(request["Action"]=="Read"){
+        LastHostRead=request;
         reply={{"Available",true},{"Waiting",false},{"Generation",HostGeneration},{"Revision",HostRevision}};
-        if(request.value("Revision",uint64_t{})!=HostRevision)reply["Snapshot"]=HostSnapshot;
+        if(request.value("Revision",uint64_t{})!=HostRevision){
+            reply["Snapshot"]=request.value("Category",-1)==-2?json::object():HostSnapshot;
+            if(request.value("Category",-1)==-2)for(const auto* key:{"ServerMods","RemoteAccess"})if(HostSnapshot.contains(key))reply["Snapshot"][key]=HostSnapshot[key];
+        }
     }else{
         if(request["Action"]=="QuerySubmit")LastQuery=request.at("Request");
         if(request["Action"]=="Submit")LastSubmission=request.at("Request");
-        reply={{"Accepted",true}};
+        reply={{"Accepted",action!="QuerySubmit"||!request.at("Request").value("Query",std::string{}).starts_with("reject-")}};
     }
     const auto bytes=reply.dump();*size=static_cast<uint32_t>(bytes.size()+1);
     if(!output||capacity<*size)return RS_PLUGIN_BUFFER_TOO_SMALL;
@@ -66,6 +77,65 @@ int32_t RS_PLUGIN_CALL HostCall(const char*,const char* service,const char* inpu
 }
 }
 int main(){
+    {PS::HelpyOverlayFrames::Page page;page.PadSequence=2;XINPUT_GAMEPAD pad{};pad.wButtons=XINPUT_GAMEPAD_A;std::memcpy(page.Pad.data(),&pad,sizeof(pad));
+        const auto fresh=PS::HelpyOverlayInput::FreshPad(page,1000);assert(fresh&&(fresh->wButtons&XINPUT_GAMEPAD_A));
+        assert(!PS::HelpyOverlayInput::FreshPad(page,1251));page.PadSequence=4;std::memset(page.Pad.data(),0,sizeof(pad));
+        assert(PS::HelpyOverlayInput::FreshPad(page,1260)->wButtons==0);page.PadSequence=5;assert(!PS::HelpyOverlayInput::FreshPad(page,1261));}
+    {
+        const auto folder=std::filesystem::temp_directory_path()/("helpy-diagnostic-sink-"+std::to_string(GetTickCount64()));std::filesystem::create_directories(folder/"Mods"/"RuneSchema");
+        const auto root=folder/"Mods"/"RuneSchema";const auto original=PS::DiagnosticLogPaths::UseUE4SS;
+        PS::DiagnosticLogPaths::UseUE4SS=false;
+        assert(PS::HelpyRuntimeMonitor::Write(root,{PS::Diagnostics::Id::PlayTimeReminder,"one\nline"}));
+        std::ifstream input(root/"RuneSchema.log");const std::string contents((std::istreambuf_iterator<char>(input)),{});input.close();
+        assert(contents.find("[RS-PLAY-001]")!=std::string::npos&&contents.find("one line")!=std::string::npos&&!std::filesystem::exists(root/"UE4SS.log"));
+        PS::DiagnosticLogPaths::UseUE4SS=true;assert(PS::HelpyRuntimeMonitor::Write(root,{PS::Diagnostics::Id::ProcessCpuHigh,"sample"}));
+        assert(std::filesystem::exists(folder/"RuneSchema.log")&&!std::filesystem::exists(folder/"UE4SS.log"));
+        PS::DiagnosticLogPaths::UseUE4SS=original;std::filesystem::remove_all(folder);
+    }
+    {std::vector<UINT> released;PS::ReleaseHeldGameInput([](UINT key){return key==VK_LBUTTON||key==VK_RBUTTON||key==VK_MBUTTON||key=='W';},[&](UINT message,WPARAM key,LPARAM){released.push_back(message);if(message==WM_KEYUP)assert(key=='W');});
+        assert((released==std::vector<UINT>{WM_LBUTTONUP,WM_RBUTTONUP,WM_MBUTTONUP,WM_KEYUP}));
+        assert(PS::CapturedGameCall(true,100,100,20)&&!PS::CapturedGameCall(false,100,100,20)&&!PS::CapturedGameCall(true,120,100,20));
+        for(const auto count:{0u,1u,64u,UINT(-1)}){
+            assert(PS::MaskBufferedGameInput(false,100,100,20,count)==count);
+            assert(PS::MaskBufferedGameInput(true,120,100,20,count)==count);
+            assert(PS::MaskBufferedGameInput(true,100,100,20,count)==(count==UINT(-1)?count:0));
+        }
+        for(const auto message:{WM_LBUTTONDBLCLK,WM_RBUTTONDBLCLK,WM_MBUTTONDBLCLK}){PS::HelpyOverlayFrames::Input event;assert(PS::HelpyOverlayFrames::WindowInput(message,0,0,event));assert(event.Kind==PS::HelpyOverlayFrames::InputKind::Button&&event.Code==(message==WM_LBUTTONDBLCLK?WM_LBUTTONDOWN:message==WM_RBUTTONDBLCLK?WM_RBUTTONDOWN:WM_MBUTTONDOWN));}}
+    {PS::ItemGridPicker::State selected;char primary[1025]="/Game/Previous.Previous";selected.SelectedPath=primary;selected.SelectedRevision=123;
+        for(unsigned i=0;i<64;++i){const std::string path="/Game/Selected"+std::to_string(i)+".Selected";const json row={{"Path",path},{"Name","Selected"}};assert(PS::ItemGridPicker::ApplySelection(selected,path,primary,sizeof(primary),true,true,&row,false));}
+        assert(selected.SelectedPaths.size()==64&&selected.SelectedRows.size()==64&&std::string(primary)=="/Game/Previous.Previous"&&selected.SelectedRevision==123);
+        for(unsigned i=0;i<64;++i)assert(PS::ItemGridPicker::ApplySelection(selected,"/Game/Selected"+std::to_string(i)+".Selected",primary,sizeof(primary),true,true,nullptr,false));
+        assert(selected.SelectedPaths.empty()&&selected.SelectedRows.empty()&&!primary[0]);PS::ItemGridPicker::SyncLegacySelection(selected,primary);assert(selected.SelectedPaths.empty());}
+    {POINT point{100,200};assert(!PS::MaskGameHover(false,1100,1000,500,point)&&point.x==100);
+        assert(!PS::MaskGameHover(true,2000,1000,500,point)&&point.x==100);
+        assert(PS::MaskGameHover(true,1100,1000,500,point)&&point.x==-32000&&point.y==-32000);
+        point={100,200};assert(!PS::MaskGameHover(false,1100,1000,500,point)&&point.x==100&&point.y==200);}
+    {
+        using namespace PS::ServerModVersions;using VersionState=PS::ServerModVersions::State;
+        const json remote=json::array({{{"Id","ServerFolder"},{"ModId","Siege"},{"Version","1"}}});
+        json local=json::array({{{"Name","RenamedLocalFolder"},{"Present",true},{"Enabled",true},{"Metadata",{{"modId","siege"},{"version","1"}}}}});
+        assert(Compare(remote,local,false)[0].Status==VersionState::Unknown);
+        assert(Compare(remote,local,true)[0].Status==VersionState::Match);
+        local[0]["Metadata"]["version"]="2";assert(Compare(remote,local,true)[0].Status==VersionState::Different);
+        local[0]["Metadata"]["version"]="";assert(Compare(remote,local,true)[0].Status==VersionState::Unknown);
+        local[0]["Enabled"]=false;assert(Compare(remote,local,true)[0].Status==VersionState::Disabled);
+        local.push_back(local[0]);assert(Compare(remote,local,true)[0].Status==VersionState::Ambiguous);
+        local.clear();assert(Compare(remote,local,true)[0].Status==VersionState::Missing);
+        json host=json::array({{{"Id","siege"},{"ModId","siege"},{"Version","1"}},{{"Id","labels"},{"Version",""}},{{"Id","unlabelled-local"},{"Version","2"}}});
+        local=json::array({{{"Name","Renamed"},{"Present",true},{"Enabled",true},{"Metadata",{{"modId","siege"},{"version"," 1 "}}}},{{"Name","labels"},{"Present",true},{"Enabled",true},{"Metadata",{{"version",""}}}},{{"Name","unlabelled-local"},{"Present",true},{"Enabled",true},{"Metadata",{{"version","  "}}}},{{"Name","client-extra"},{"Present",true},{"Enabled",true},{"Metadata",{{"version","9"}}}},{{"Name","client-unversioned"},{"Present",true},{"Enabled",false},{"Metadata",json::object()}},{{"Name","removed-folder"},{"Present",false},{"Enabled",true},{"Metadata",json::object()}}});
+        auto report=Build(host,local,true);assert(report.Counts.Matched==1&&report.Counts.Unversioned==2&&report.Counts.ClientOnly==2&&report.Counts.Alignment()==Tone::Aligned);
+        assert(report.Host[1].Excluded&&report.Host[2].Excluded&&report.ClientOnly==std::vector<size_t>({3,4}));
+        auto text=Text(host,local,report);assert(text.find("Unversioned - excluded")!=text.npos&&text.find("client-extra")!=text.npos&&text.find("removed-folder")==text.npos&&text.find("Renamed")==text.npos);
+        local[0]["Metadata"]["version"]="3";report=Build(host,local,true);assert(report.Counts.Different==1&&report.Counts.Alignment()==Tone::Differences);
+        local[0]["Metadata"]["version"]="1";local[0]["Enabled"]=false;report=Build(host,local,true);assert(report.Counts.Disabled==1&&report.Counts.Alignment()==Tone::Differences);
+        local.erase(local.begin());report=Build(host,local,true);assert(report.Counts.Missing==1&&report.Counts.Unversioned==2&&report.Counts.Alignment()==Tone::Differences);
+        host.erase(host.begin());report=Build(host,local,true);assert(report.Counts.Unversioned==2&&report.Counts.Alignment()==Tone::Neutral);
+        report=Build(host,local,false);assert(!report.Counts.Ready&&report.Counts.Alignment()==Tone::Neutral&&report.ClientOnly.empty());
+        assert(Text(host,local,report).find("not ready")!=std::string::npos);
+        host=json::array({{{"Id","siege"},{"ModId","siege"},{"Version","1"}}});local=json::array({{{"Name","one"},{"Present",true},{"Enabled",true},{"Metadata",{{"modId","siege"},{"version","1"}}}},{{"Name","two"},{"Present",true},{"Enabled",true},{"Metadata",{{"modId","siege"},{"version","1"}}}}});
+        report=Build(host,local,true);assert(report.Counts.Ambiguous==1&&report.ClientOnly.empty()&&report.Counts.Alignment()==Tone::Differences);
+        local[0]["Metadata"]["version"]="";local[1]["Metadata"]["version"]="";report=Build(host,local,true);assert(report.Counts.Unversioned==1&&report.Counts.Ambiguous==0&&report.Counts.Alignment()==Tone::Neutral&&report.Host[0].Status==VersionState::Ambiguous);
+    }
     {
         ImGui::CreateContext();PS::HelpyOverlayFrames::Page page;page.Left=20;page.Top=15;
         const auto window=CreateWindowW(L"STATIC",L"Private overlay pointer fixture",WS_OVERLAPPEDWINDOW,0,0,400,300,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);assert(window);
@@ -83,10 +153,16 @@ int main(){
         auto preferences=PS::HelpyImGuiTheme::Theme{};preferences.runtimeTimeUnit=3;preferences.backgroundFile="Scene.png";preferences.backgroundStrength=.2f;
         preferences.showFps=true;preferences.helpyFpsLimit=45;preferences.fpsRefreshMs=500;
         preferences.showGameFps=true;preferences.fpsHotkey="F11";
-        preferences.gameOverlay=true;preferences.overlayOpacity=.77f;preferences.diagnosticRegistryActivity=true;
+        preferences.gameOverlay=true;preferences.overlayOpacity=.77f;preferences.diagnosticRegistryActivity=true;preferences.itemInternalNames=true;
+        preferences.playTimeReminders=false;preferences.resourceDiagnostics=false;preferences.gpuResourceDiagnostics=false;preferences.ue4ssDiagnostics=false;
+        preferences.startupResourceAlerts=true;
+        preferences.controllerShortcut=2;preferences.reserveControllerGuide=false;
+        preferences.navigationCollapsed=true;preferences.navigationPinned=true;
+        preferences.resourceCpuThreshold=85;preferences.resourceMemoryThreshold=91;preferences.resourceGpuThreshold=99;preferences.ue4ssLogBudget=234;preferences.ue4ssOverlapSeconds=7;
         preferences.diagnosticToastsEnabled=false;preferences.diagnosticToastLimit=2;preferences.diagnosticHistoryDays=7;preferences.diagnosticSplitRatio=.6f;preferences.diagnosticDeveloperMode=true;
         PS::HelpyRuntimePreferences::CacheFirst=false;PS::HelpyRuntimePreferences::PassiveRefresh=false;
         const auto document=PS::HelpyImGuiTheme::DocumentFrom(preferences,200);
+        assert(document["navigation"]["collapsed"]==true&&document["navigation"]["pinned"]==true&&!PS::HelpyImGuiTheme::DefaultDocument()["navigation"]["collapsed"].get<bool>());
         assert(document["cache"]["loadOrder"]=="gameFirst"&&document["cache"]["passiveRefresh"]==false);
         assert(PS::HelpyImGuiTheme::DefaultDocument()["cache"]["loadOrder"]=="cacheFirst");
         const auto roundTrip=PS::HelpyBrowsePolicy::Read(document["cache"]);assert(!roundTrip.CacheFirst&&!roundTrip.PassiveRefresh);
@@ -95,6 +171,12 @@ int main(){
         assert(document["runtime"]["showFps"]==true&&document["runtime"]["helpyFpsLimit"]==45&&document["runtime"]["fpsRefreshMs"]==500);
         assert(document["runtime"]["showGameFps"]==true&&document["runtime"]["fpsHotkey"]=="F11");
         assert(document["runtime"]["gameOverlay"]==true&&document["runtime"]["overlayOpacity"].get<float>()==.77f);
+        assert(document["views"]["itemInternalNames"]==true&&!PS::HelpyImGuiTheme::DefaultDocument()["views"]["itemInternalNames"].get<bool>());
+        assert(document["monitoring"]["resources"]==false&&document["monitoring"]["gpu"]==false&&document["monitoring"]["ue4ss"]==false&&document["monitoring"]["playTimeReminders"]==false);
+        assert(document["monitoring"]["startupResourceAlerts"]==true&&!PS::HelpyImGuiTheme::DefaultDocument()["monitoring"]["startupResourceAlerts"].get<bool>());
+        assert(document["input"]["shortcut"]==2&&document["input"]["reserveGuide"]==false);
+        assert(PS::HelpyImGuiTheme::DefaultDocument()["input"]["shortcut"]==1&&PS::HelpyImGuiTheme::DefaultDocument()["input"]["reserveGuide"]==true);
+        assert(document["monitoring"]["cpuThreshold"]==85&&document["monitoring"]["memoryThreshold"]==91&&document["monitoring"]["gpuThreshold"]==99&&document["monitoring"]["luaMessages"]==234&&document["monitoring"]["overlapSeconds"]==7);
         assert(document["notifications"]["registryActivity"]==true);
         const auto defaults=PS::HelpyImGuiTheme::DefaultDocument()["runtime"];
         assert(defaults["showFps"]==false&&defaults["helpyFpsLimit"]==60&&defaults["fpsRefreshMs"]==1000);
@@ -113,6 +195,8 @@ int main(){
         assert(picker.ActiveCategory=="All"&&picker.PageIndex==0&&picker.SourceProvider=="mods/dye"&&picker.ResetScroll);
     }
     RuneSchemaHostApi host{};host.CallService=HostCall;State state{&host};ConfigureTransport(&state);
+    const auto syncHost=[&](bool metadata=false){SyncHost(&state,true,metadata);state.NextHostRead=state.NextMetadataRead=std::chrono::steady_clock::time_point::max();};syncHost();
+    const auto flushCatalog=[&]{while(state.CatalogSubmit.valid()||!state.CatalogQueue.empty()){if(state.CatalogSubmit.valid())state.CatalogSubmit.wait();PumpCatalog(&state);}};
     for(const auto* action:{"Prepare","Open","Show","Hide","Status"}){
         const auto before=HostCalls["HelpyNativeOverlay"];json reply;
         assert(PS::RuneSchemaSettingsPanel::Remote({{"Action","HelpyNativeOverlay"},{"Payload",{{"Action",action}}}},reply)&&reply.at("Ready")==true&&reply.at("Api")=="D3D12");
@@ -128,7 +212,7 @@ int main(){
         json reply;assert(CallCore(&state,{{"Action",action}},reply)&&reply.at("Ok")==true&&reply.at("Root")=="D:/XboxGames/Active/RuneSchema");assert(GuardedCalls[action]==1);
     }
     assert(state.ToolsGeneration==41&&state.ToolsAvailable&&state.Players.size()==1); // No bootstrap push required.
-    const auto unchangedRevision=state.ToolsRevision;SyncHost(&state,true);SyncHost(&state,true);
+    const auto unchangedRevision=state.ToolsRevision;syncHost();syncHost();
     assert(state.ToolsRevision==unchangedRevision); // Heartbeats do not invalidate row/order caches.
     const auto serverGrant=json{{"Action","GiveItems"},{"Player","/Server/Player/Remote"},{"Items",json::array({{{"Item","/Game/Items/Log.Log"},{"Quantity",1}}})}};
     assert(PS::SpawnToolRequests::TrySubmit(serverGrant)&&LastSubmission==serverGrant);
@@ -142,10 +226,10 @@ int main(){
     PS::RuneSchemaSettingsPanel::Save();assert(SettingsWrites==1&&!PS::RuneSchemaSettingsPanel::Dirty&&SettingsDoc["advancedLogging"]==true);
     PS::RuneSchemaSettingsPanel::Save();assert(SettingsWrites==1); // no duplicate write to fetch a large reply
     using namespace PS::LazyCatalog;
-    ResetForGeneration(41);FirstOpen(41);
+    ResetForGeneration(41);FirstOpen(41);flushCatalog();
     assert(LastQuery["Operation"]=="CatalogWindow"&&LastQuery["Category"]==0&&LastQuery["ClientGeneration"]==41&&LastQuery["Mode"]=="Alphabetical");
     const auto push=[&](json rows,bool more,std::string cursor){
-        const auto request=LastQuery;
+        flushCatalog();const auto request=LastQuery;
         json window={{"RequestId",request["RequestId"]},{"CancelGeneration",request["CancelGeneration"]},{"RuntimeGeneration",HostGeneration},
             {"Category",0},{"Mode",request["Mode"]},{"Reset",request["Reset"]},{"Rows",rows},{"HasMore",more},{"NextCursor",cursor},
             {"Dictionary",{{"Icons",json::array({{{"Id",uint64_t(7)},{"Value","/Game/Icons/Log.Log"}}})}}}};
@@ -156,7 +240,7 @@ int main(){
     };
     PS::ItemGridPicker::State filterState;filterState.SourceFilter=PS::ItemSource::Kind::Modded;filterState.ActiveCategory="Armor";filterState.FamilyKey="fallen_hoplite_dyed_chrome";
     const auto sourceQuery=PS::ItemGridPicker::BackendQuery(filterState);
-    assert(Search(0,sourceQuery)&&LastQuery["Query"]=="__helpysource:modded __helpycat:armor __helpyfamily:fallen_hoplite_dyed_chrome");
+    assert(Search(0,sourceQuery));flushCatalog();assert(LastQuery["Query"]=="__helpysource:modded __helpycat:armor __helpyfamily:fallen_hoplite_dyed_chrome");
     auto sourceSnapshot=push(json::array({{{"Path","/Dye/Helm.Helm"},{"Name","Fallen Hoplite's Helm (Dyed Chrome)"},{"Category","Armor"},{"SourceKind","modded"},{"SourceName","Dye"}}}),false,"done");
     PS::ItemGridPicker::Rebuild(sourceSnapshot,filterState,1);
     assert(filterState.Matches.size()==1&&PS::ItemSource::Row(sourceSnapshot["Items"][0]).Name=="Dye");
@@ -189,8 +273,8 @@ int main(){
     assert(Retry(0));snapshot=push(json::array({{{"Path","/Game/Items/Stone.Stone"},{"Name","Stone"}}}),false,"done");
     assert(snapshot["Items"][0]["Name"]=="Stone");
     // A missed world-change push is recovered by the read-only state read.
-    HostGeneration=42;++HostRevision;HostSnapshot["Players"]=json::array();SyncHost(&state,true);
-    assert(state.ToolsGeneration==42&&state.Players.empty());ResetForGeneration(42);FirstOpen(42);assert(LastQuery["ClientGeneration"]==42);
+    flushCatalog();HostGeneration=42;++HostRevision;HostSnapshot["Players"]=json::array();syncHost();
+    assert(state.ToolsGeneration==42&&state.Players.empty());ResetForGeneration(42);FirstOpen(42);flushCatalog();assert(LastQuery["ClientGeneration"]==42);
     PS::SpawnToolsPanel::RefreshSnapshot(-1);
     PS::SpawnToolsPanel::DefinitionPending=777;
     state.Completed[777]={{"SpawnDefinition",{{"Key","npc:test"},{"Name","Test NPC"}}}};
@@ -198,7 +282,7 @@ int main(){
     assert(PS::SpawnToolsPanel::InspectedDefinitions.at("npc:test")["Name"]=="Test NPC");
     PS::SpawnToolsPanel::DefinitionPending=778;state.Completed[778]={{"SpawnDefinition",{{"Key",nullptr}}}};
     PS::SpawnToolsPanel::RefreshSnapshot(-1);assert(!PS::SpawnToolsPanel::DefinitionStatus.empty());
-    PS::ItemDetails::Request("/Game/Items/Stone.Stone");const auto detailId=PS::ItemDetails::Pending;
+    PS::ItemDetails::Request("/Game/Items/Stone.Stone");const auto detailId=PS::ItemDetails::Pending;flushCatalog();
     assert(detailId&&PS::ItemDetails::PendingPath=="/Game/Items/Stone.Stone");
     assert(LastSubmission["Action"]=="InspectClone"&&LastSubmission["InspectDetails"]==true&&!LastSubmission.contains("Player"));
     // Read-only item details travel over the same production request/receipt path.
@@ -219,7 +303,7 @@ int main(){
     assert(std::string(PS::ItemGridPicker::Bay.Selected)=="/Game/Items/Stone.Stone"&&PS::ItemGridPicker::Bay.DetailsExpanded);
     assert(PS::ItemPresentation::Description(PS::ItemDetails::Find(PS::ItemGridPicker::Bay.Selected)->Native)=="Native description");
     PS::ItemGridPicker::DetachedBay=false;assert(PS::ItemGridPicker::Bay.DetailsRow==staleIcon);
-    HostGeneration=43;SyncHost(&state,true);PS::ItemDetails::Poll();assert(!PS::ItemDetails::Find("/Game/Items/Stone.Stone"));
+    flushCatalog();HostGeneration=43;syncHost();PS::ItemDetails::Poll();assert(!PS::ItemDetails::Find("/Game/Items/Stone.Stone"));
     // Same cart, two authoritative recipients: one serialized request at a
     // time, immutable target snapshot, and clear only after BOTH confirmations.
     PS::SpawnToolsPanel::PollCartDelivery();state.ToolsWaiting=false;
@@ -288,9 +372,31 @@ int main(){
         assert(ToolsPush(&state,wire.c_str(),nullptr,0,&responseSize)==RS_PLUGIN_OK);PS::SpawnToolsPanel::RefreshSnapshot(-1);};
     pushRoles(json::array({roleRow}));assert(PS::PlayerBadges::Find(roleRow)->at("Role")=="admin");
     pushRoles(json::array());assert(!PS::PlayerBadges::Find(roleRow));assert(PS::SpawnToolsPanel::UiSnapshot["Players"].empty());
+    const auto serverMods=json::array({{{"Id","Siege"},{"Name","Siege Equipment"},{"Version","0.4.26"}}});
+    auto modPush=json{{"Kind","catalog"},{"Available",true},{"Waiting",false},{"Generation",HostGeneration},{"Payload",{{"ServerMods",serverMods}}}}.dump();
+    assert(ToolsPush(&state,modPush.c_str(),nullptr,0,&responseSize)==RS_PLUGIN_OK);
+    state.QueryResults.push_back({{"MetadataMustNotConsume",true}});const auto pendingQueries=state.QueryResults.size();
+    uint64_t modRevision=~uint64_t{};json modView;assert(PS::SpawnToolRequests::ReadQuickIfChanged(modRevision,-2,modView)&&modView["ServerMods"]==serverMods);
+    const json challenge={{"Available",true},{"PinRequired",true},{"Allowed",false},{"CharacterGuid","my-character"}};
+    const auto accessPush=json{{"Kind","catalog"},{"Available",true},{"Waiting",false},{"Generation",HostGeneration},{"Payload",{{"RemoteAccess",challenge}}}}.dump();
+    assert(ToolsPush(&state,accessPush.c_str(),nullptr,0,&responseSize)==RS_PLUGIN_OK);
+    assert(PS::SpawnToolRequests::ReadQuickIfChanged(modRevision,-2,modView)&&modView["RemoteAccess"]==challenge);
+    PS::HelpyServerAccess::Prompt accessPrompt;
+    assert(accessPrompt.Observe(HostGeneration,modView["RemoteAccess"])&&!accessPrompt.Observe(HostGeneration,modView["RemoteAccess"]));
+    auto granted=challenge;granted["Allowed"]=true;granted["PinRequired"]=false;
+    assert(!accessPrompt.Observe(HostGeneration,granted)&&!accessPrompt.Observe(HostGeneration,challenge));
+    assert(accessPrompt.Observe(HostGeneration+1,challenge));auto another=challenge;another["CharacterGuid"]="another-character";
+    assert(accessPrompt.Observe(HostGeneration+1,another));another["Available"]=false;assert(!accessPrompt.Observe(HostGeneration+2,another));
+    {
+        const auto oldSnapshot=HostSnapshot,oldResult=state.ToolsResult;const auto oldHostRevision=state.HostRevision;
+        HostSnapshot["RemoteAccess"]=challenge;HostSnapshot["Items"]=json::array({{{"Name",std::string(20000,'x')}}});++HostRevision;
+        syncHost(true);assert(LastHostRead["Category"]==-2&&LastHostRead["Revision"]==0&&state.HostRevision==oldHostRevision&&state.ToolsResult==oldResult);
+        const auto calls=HostCalls["Read"];SyncHost(&state,false,true);assert(HostCalls["Read"]==calls);HostSnapshot=oldSnapshot;
+    }
+    assert(state.QueryResults.size()==pendingQueries&&!modView.contains("_QueryResults")&&!modView.contains("Items"));state.QueryResults.pop_back();
     // An empty dedicated roster still permits metadata-only AI/resource queries.
-    assert(Search(1,"goblin")&&LastQuery["Category"]==1);
-    assert(Search(2,"silver")&&LastQuery["Category"]==2);
+    assert(Search(1,"goblin"));flushCatalog();assert(LastQuery["Category"]==1);
+    assert(Search(2,"silver"));flushCatalog();assert(LastQuery["Category"]==2);
     // Recipient editing never touches item quantities, including the legacy
     // single-player fallback. Clearing is explicit, not a hidden re-selection.
     namespace Cart=PS::SpawnToolsPanel;
@@ -323,7 +429,7 @@ int main(){
     // Generation changes cancel UI batches, keep items, and reject old receipts.
     Cart::CartBatch.Begin(staged,{{"/Player/B","Bob"}});const auto interrupted=++Cart::CartSequence;
     assert(PS::ItemGridPicker::SharedCart.BeginDelivery(interrupted));state.ToolsWaiting=false;assert(Cart::SubmitNextCartRecipient(interrupted));
-    HostGeneration=44;++HostRevision;HostSnapshot={{"Status","Menu"}};SyncHost(&state,true);Cart::RefreshSnapshot(-1);Cart::PollCartDelivery();
+    HostGeneration=44;++HostRevision;HostSnapshot={{"Status","Menu"}};syncHost();Cart::RefreshSnapshot(-1);Cart::PollCartDelivery();
     assert(state.Players.empty()&&Cart::SelectedPlayer.empty()&&Cart::CartRecipients.empty()&&Cart::EffectiveCartRecipients().empty());
     assert(!PS::ItemGridPicker::SharedCart.Delivery()&&Cart::CartBatch.Receipts().empty()&&Cart::CartNeedsReview);
     assert(PS::ItemGridPicker::SharedCart.Payload()==staged);
@@ -388,6 +494,45 @@ int main(){
         state.ToolsWaiting=false;P::RestoreGear(player,item);assert(P::RepairPending);P::RepairGeneration=PS::SpawnToolRequests::CurrentGeneration()+1;P::Poll();assert(!P::RepairPending&&P::RepairStatus.find("World changed")!=std::string::npos&&!P::Open);state.ToolsWaiting=false;
     }
     {uint32_t bytes=0;const auto revision=state.ToolsRevision;state.RelayOnly=true;assert(ToolsPush(&state,"not parsed by the game-side relay",nullptr,0,&bytes)==RS_PLUGIN_OK&&state.ToolsRevision==revision);state.RelayOnly=false;assert(ToolsPush(&state,"not JSON",nullptr,0,&bytes)==RS_PLUGIN_FAILED);}
+    flushCatalog();if(state.HostRead.valid())state.HostRead.wait();ThrowHost=false;
+    {
+        std::promise<void> release;HostRelease=release.get_future().share();BlockEntered=false;BlockAction=1;
+        auto search=std::async(std::launch::async,[]{return Search(0,"reject-stale");});
+        const bool responsive=search.wait_for(std::chrono::milliseconds(100))==std::future_status::ready;
+        if(!responsive)release.set_value();const bool accepted=search.get();
+        if(responsive){
+            for(int i=0;i<32;++i)assert(Search(0,"latest-"+std::to_string(i)));
+            const auto queued=state.CatalogQueue.size();release.set_value();assert(queued<=1);
+        }
+        flushCatalog();BlockAction=0;DrainCancellations();assert(responsive&&accepted&&BlockEntered);
+        assert(LastQuery["Query"]=="latest-31"&&For(0).LastError.empty()&&For(0).Pending);
+        assert(Search(0,"reject-current"));flushCatalog();assert(!For(0).Pending&&!For(0).LastError.empty());
+    }
+    {
+        std::promise<void> release;HostRelease=release.get_future().share();BlockEntered=false;BlockAction=2;
+        state.NextHostRead={};const auto lastPlayers=state.Players;
+        auto refresh=std::async(std::launch::async,[&]{SyncHost(&state);});
+        const bool responsive=refresh.wait_for(std::chrono::milliseconds(100))==std::future_status::ready;
+        if(!responsive)release.set_value();refresh.get();
+        if(responsive){uint32_t size=0;const auto message=json{{"Kind","bootstrap"},{"Generation",HostGeneration},{"Available",true},{"Payload",{{"Result",{{"Status","newer push"}}}}}}.dump();
+            assert(ToolsPush(&state,message.c_str(),nullptr,0,&size)==RS_PLUGIN_OK);release.set_value();}
+        if(state.HostRead.valid())state.HostRead.wait();SyncHost(&state);BlockAction=0;
+        assert(responsive&&BlockEntered&&state.ToolsResult["Status"]=="newer push"&&state.Players==lastPlayers);
+    }
+    {
+        std::promise<void> release;HostRelease=release.get_future().share();BlockEntered=false;BlockAction=3;
+        auto icon=std::async(std::launch::async,[]{return PS::ItemIconCache::RemoteSubmit("/Game/UI/Async.Async");});
+        const bool responsive=icon.wait_for(std::chrono::milliseconds(100))==std::future_status::ready;
+        release.set_value();assert(icon.get()&&responsive);if(state.IconSubmit.valid())state.IconSubmit.wait();PumpIcons(&state);BlockAction=0;assert(BlockEntered);
+    }
+    {
+        std::promise<void> release;HostRelease=release.get_future().share();BlockEntered=false;BlockAction=4;
+        const json inspect={{"Action","InspectClone"},{"InspectDetails",true},{"Source","/Game/Items/Stone.Stone"},{"_Source","HelpyHover"},{"_RequestId",uint64_t(99001)}};
+        assert(ItemInspection(inspect)&&!ItemInspection(serverGrant));
+        auto details=std::async(std::launch::async,[&]{return PS::SpawnToolRequests::RemoteSubmit(inspect);});
+        const bool responsive=details.wait_for(std::chrono::milliseconds(100))==std::future_status::ready;
+        release.set_value();assert(details.get()&&responsive);flushCatalog();BlockAction=0;assert(BlockEntered&&LastSubmission==inspect);
+    }
     PS::ItemIconCache::ClearRemote();ClearRemote();PS::SpawnToolRequests::ClearRemote();
     PS::RuneSchemaSettingsPanel::Remote={};
 }

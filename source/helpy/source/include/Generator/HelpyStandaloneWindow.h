@@ -53,6 +53,7 @@ private:
     bool OwnsWindow(HWND window)const;
     bool SyncWorkspacePanel(size_t index);
     void DestroyWorkspacePanel(size_t index);
+    void RememberPlacement(HWND window);
 
     HelpyTrayIcon::Icon m_tray;
     HelpyGameOverlay m_gameOverlay;

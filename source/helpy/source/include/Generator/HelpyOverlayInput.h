@@ -2,6 +2,7 @@
 #include "HelpyOverlayFrames.h"
 #include <imgui.h>
 #include <xinput.h>
+#include <optional>
 
 extern ImGuiKey ImGui_ImplWin32_KeyEventToImGuiKey(WPARAM,LPARAM);
 namespace PS::HelpyOverlayInput {
@@ -28,5 +29,11 @@ inline void Feed(HelpyOverlayFrames::Page& page,HWND game){
 inline XINPUT_GAMEPAD Pad(HelpyOverlayFrames::Page& page){
     XINPUT_GAMEPAD pad{};const auto before=HelpyOverlayFrames::Read(page.PadSequence);if(before&1)return pad;
     std::memcpy(&pad,page.Pad.data(),sizeof(pad));MemoryBarrier();if(before!=HelpyOverlayFrames::Read(page.PadSequence))pad={};return pad;
+}
+inline std::optional<XINPUT_GAMEPAD> FreshPad(HelpyOverlayFrames::Page& page,uint64_t now=GetTickCount64()){
+    static const HelpyOverlayFrames::Page* previous=nullptr;static LONG sequence=0;static uint64_t changed=0;
+    const auto current=HelpyOverlayFrames::Read(page.PadSequence);if(previous!=&page){previous=&page;sequence=0;changed=0;}
+    if(!current||(current&1))return {};if(current!=sequence){sequence=current;changed=now;}
+    if(now<changed||now-changed>250)return {};return Pad(page);
 }
 }

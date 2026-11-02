@@ -112,7 +112,11 @@ bool PersistencePruner::PruneBeforeCharacterLoad(
     // Optional cleanup must not inspect/copy a character payload while its
     // authority is unavailable. Leave the original native event untouched.
     const auto registry = SaveCleanup::ReadRegistry();
-    if (!registry || !registry->AnyCleanable()) {
+    const auto runtime=std::string(Storefront::MappingCachePlatform(Storefront::CurrentDetection()));
+    std::filesystem::path backups;
+    bool backupWork=false;
+    try{backups=SavePruneBackup::Directory(runtime);backupWork=SaveBackups::Automatic(backups)||std::filesystem::exists(backups/"requests");}catch(const std::exception& error){Log<LogLevel::Warning>(STR("[RS-SAVE-005] Backup preferences unavailable: {}. Native load continues.\n"),ToWideSafe(error.what()));}
+    if ((!registry || !registry->AnyCleanable())&&!backupWork) {
         if(!m_cleanupDeferredReported){m_cleanupDeferredReported=true;
             CodedLog<LogLevel::Warning>(Diagnostics::Id::PersistenceUncertified,STR(
                 "[PERSISTENCE-PRUNER][DEFERRED] Awaiting certified registration; pending={} healthy={}. Non-blocking: native character loading continues; save unchanged.\n"),
@@ -150,6 +154,24 @@ bool PersistencePruner::PruneBeforeCharacterLoad(
         }
         if (!jsonProperty) return false;
         auto value = jsonProperty->GetPropertyValue(jsonAddress);
+        if(CharacterLoadAudit::Token()&&!backups.empty())try{
+            auto original=RC::to_string(RC::StringType(*value));
+            const auto guid=SaveBackups::Identity(SaveBackups::Decode(original));
+            if(!guid.empty()){
+                if(SaveBackups::ApplyQueued(backups,original,[&](const std::string& bytes){
+                    FString restored(RC::to_generic_string(bytes).c_str());
+                    if(RC::to_string(RC::StringType(*restored))!=bytes)throw std::runtime_error("Restored JSON did not survive native conversion");
+                    jsonProperty->SetPropertyValue(jsonAddress,restored);
+                    const auto written=jsonProperty->GetPropertyValue(jsonAddress);
+                    if(RC::to_string(RC::StringType(*written))!=bytes)throw std::runtime_error("Native restore readback did not match");
+                    value=std::move(restored);
+                }))Log<LogLevel::Normal>(STR("[RS-SAVE-004] Selected character snapshot loaded once through the native save contract. Its prior payload is backed up; persistence waits for the game's next save.\n"));
+                if(SaveBackups::Automatic(backups)){
+                    SaveBackups::Store(backups,RC::to_string(RC::StringType(*value)),guid,"Automatic",{{"Mods",SaveBackups::ActiveMods()},{"LastPlayedUtc",SaveBackups::Now()}});
+                    Log<LogLevel::Normal>(STR("[RS-SAVE-003] Selected character entry snapshot verified.\n"));
+                }
+            }
+        }catch(const std::exception& error){Log<LogLevel::Warning>(STR("[RS-SAVE-005] Save recovery needs review: {}. Native loading and normal backup-first cleanup continue.\n"),ToWideSafe(error.what()));}
         bool prepared=false;
         const auto pruned=PruneCharacterJson(value,&prepared);
         jsonProperty->SetPropertyValue(jsonAddress, value);
@@ -275,7 +297,7 @@ std::size_t PersistencePruner::PruneCharacterJson(FString& characterJson,bool* p
             "clean character JSON did not survive native writeback");
         std::size_t removed=0;for(const auto& row:cleaned.Removed)if(row.value("Kind",std::string{})!="Appearance")++removed;
         const auto runtime=Storefront::MappingCachePlatform(Storefront::CurrentDetection());
-        const auto backup=SavePruneBackup::Write(SavePruneBackup::Directory(runtime),utf8,characterId);
+        const auto backup=SavePruneBackup::Write(SavePruneBackup::Directory(runtime),utf8,characterId,true);
         Log<LogLevel::Normal>(STR("[PERSISTENCE-BACKUP][VERIFIED] Whole original character load payload saved before pruning: '{}'.\n"),backup.wstring());
         characterJson=std::move(replacement);applied=true;committedRemovals=removed;
         LoadProtectionNotice::Record(characterId,removed,0,false);

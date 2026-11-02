@@ -25,6 +25,17 @@ mod definitions.
 
 ## Use an existing cache immediately
 
+Item Bay runs cache lookup, live catalogue submission, native item inspection,
+snapshot recovery and native-icon submission outside the UI thread. You can keep typing, selecting
+items and navigating while the game responds. Queued searches are bounded;
+superseded searches and replies from an older connection do not replace the
+current results. Unchanged item rows reuse their existing list and sort order.
+
+After **Send to cart**, successfully added items are unchecked. Items that could
+not be added remain selected, including when the cart is full. Sending again
+therefore retries those remaining items rather than adding the completed batch
+a second time.
+
 The loading-order and passive-update controls below are included in
 **0.8.0.3**. Existing caches and preferences remain usable when updating.
 

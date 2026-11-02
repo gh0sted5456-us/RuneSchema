@@ -83,7 +83,7 @@ inline size_t Commit(const fs::path& cache,const fs::path& root,const HelpySourc
             const auto digest=previous->value("SHA256",std::string{});
             if(CacheBundleIO::Digest(digest))try{const auto old=CacheBundleIO::Read(folder/(digest+".json"),CacheBundle::MaxMetadata);if(CacheBundleIO::Hash(old)==digest)for(const auto& row:CacheBundle::Records(Parse(old)))merged[row.Path]=CacheBundle::Document(row);}catch(...){}
         }
-        for(const auto& row:rows){const auto doc=CacheBundle::Document(row);if(!merged.contains(row.Path)||merged.at(row.Path)!=doc)++changed;merged[row.Path]=doc;}
+        for(const auto& row:rows){auto doc=CacheBundle::Document(row);if(merged.contains(row.Path))doc["Data"]=ItemName::Merge(merged.at(row.Path).at("Data"),doc.at("Data"));if(!merged.contains(row.Path)||merged.at(row.Path)!=doc)++changed;merged[row.Path]=doc;}
         auto data=Json::array();for(const auto& [path,row]:merged)data.push_back(row);(void)CacheBundle::Records(data);
         const auto text=data.dump(),digest=CacheBundleIO::Hash(text);
         if(!fs::exists(folder/(digest+".json")))CacheBundleIO::Publish(folder/(digest+".json"),text);

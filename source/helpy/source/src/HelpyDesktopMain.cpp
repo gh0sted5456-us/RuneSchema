@@ -18,7 +18,7 @@ namespace {
 using PS::HelpyDesktop::Json;
 struct Service{RuneSchemaServiceFn Callback{};void* Context{};};
 std::mutex ServicesMutex,RpcMutex;std::map<std::string,Service> Services;
-PS::HelpyDesktop::Client Bridge;std::atomic<bool> Visible=true;
+PS::HelpyDesktop::Client Bridge;std::atomic<bool> Visible=true,CaptureInput=false;
 uint32_t ConnectedPid=0;
 Json OfflineEnvironment;
 std::filesystem::path AssignedRoot,AssignedCache;
@@ -55,7 +55,7 @@ int32_t RS_PLUGIN_CALL Call(const char* caller,const char* service,const char* i
     try{
         if(strnlen_s(input,RUNESCHEMA_PLUGIN_MAX_MESSAGE+1)>RUNESCHEMA_PLUGIN_MAX_MESSAGE)return RS_PLUGIN_INVALID_ARGUMENT;
         const auto request=PS::HelpyDesktop::Parse(input);const auto action=request.value("Action",std::string{});
-        if(action=="HelpyVisibility")Visible=request.at("Visible").get<bool>();
+        if(action=="HelpyVisibility"){Visible=request.at("Visible").get<bool>();CaptureInput=request.value("CaptureInput",false);}
         std::lock_guard lock(RpcMutex);Json result;
         const bool attempted=Bridge.Pid.load()!=0;
         const bool online=attempted&&Bridge.Exchange({{"Version",1},{"Op","Call"},{"Request",request},{"Capacity",capacity}},result);
@@ -123,8 +123,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR,int){
         PS::DiagnosticLogPaths::UseUE4SS=settings.value("Ok",false)&&settings.at("Document").value("logsInUE4SS",false);
         AssignedCache=PS::RuneSchemaData::PlatformDirectory(platform.c_str())/"cache";
         LogFile=(PS::DiagnosticLogPaths::UseUE4SS?PS::DiagnosticLogPaths::UE4SS(root):PS::RuneSchemaData::PlatformDirectory(platform.c_str())/"diagnostics")/"Helpy-Desktop.log";
-        const auto hosted=PS::HelpyDesktopLaunch::Application(root,platform,PS::RuneSchemaData::LocalDirectory());
-        if(!std::filesystem::exists(hosted)||!std::filesystem::equivalent(executable,hosted)){
+        const auto installed=PS::HelpyDesktopLaunch::Application(root);
+        if(!std::filesystem::equivalent(executable,installed)){
             PS::HelpyDesktopLaunch::Start(root,platform,startHidden);return 0;
         }
         if(PS::HelpyDesktopLaunch::InGameContext())throw std::runtime_error("Helpy still belongs to a game session; exit it and open it from Windows Explorer");
@@ -133,7 +133,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR,int){
         singleton=CreateMutexW(nullptr,FALSE,local.c_str());
         if(!singleton)throw std::runtime_error("Cannot reserve this runtime's Helpy window");
         if(GetLastError()==ERROR_ALREADY_EXISTS){if(!startHidden)SetEvent(activate);CloseHandle(activate);CloseHandle(singleton);return 0;}
-        if(!smoke)try{PS::HelpyDesktopShortcut::Ensure(root/"plugins/RuneSchema.Helpy/dll/Helpy.exe",platform,executable.parent_path());}catch(const std::exception& error){Log(RS_LOG_WARNING,"RuneSchema.Helpy",error.what());}
+        if(!smoke)try{PS::HelpyDesktopShortcut::Ensure(installed,platform,PS::RuneSchemaData::PlatformDirectory(platform));}catch(const std::exception& error){Log(RS_LOG_WARNING,"RuneSchema.Helpy",error.what());}
         OfflineEnvironment={{"Storefront",platform=="gamepass"?"Game Pass/WinGDK":"Steam/Epic"},{"Platform",platform=="epic"?"Epic Games":"Steam"},{"DedicatedServer",platform=="server"},{"NativeIconCaptureAvailable",false},{"UpdateChecksAvailable",true},{"DesktopStartHidden",startHidden}};
         Bridge.Connect(root);
         PS::HelpyPaths::Configure(root/"plugins/RuneSchema.Helpy");
@@ -153,7 +153,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR,int){
                     if(!attached||update||!notifications||now-last>=heartbeat){
                         std::lock_guard lock(RpcMutex);
                         if(!Bridge.Pid.load()&&Bridge.Connect(root)){
-                            Connection(Bridge.Pid.load());Json ignored;if(Bridge.Exchange({{"Op","Call"},{"Request",{{"Action","HelpyVisibility"},{"Visible",Visible.load()}}},{"Capacity",4096}},ignored))Deliver(ignored);
+                            Connection(Bridge.Pid.load());Json ignored;if(Bridge.Exchange({{"Op","Call"},{"Request",{{"Action","HelpyVisibility"},{"Visible",Visible.load()},{"CaptureInput",CaptureInput.load()}}},{"Capacity",4096}},ignored))Deliver(ignored);
                         }
                         Json reply;if(Bridge.Pid.load()&&Bridge.Exchange({{"Op","Poll"}},reply)){Deliver(reply);pushPacing.Polled(GetTickCount64());}else Connection(0);
                     }

@@ -73,8 +73,9 @@ int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,ui
         }
         if(action=="HelpyVisibility"){
             if(!request.contains("Visible")||!request.at("Visible").is_boolean())return RS_PLUGIN_INVALID_ARGUMENT;
+            if(request.contains("CaptureInput")&&!request.at("CaptureInput").is_boolean())return RS_PLUGIN_INVALID_ARGUMENT;
             const auto code=JsonResponse({{"Accepted",true}},response,capacity,size);
-            if(code==RS_PLUGIN_OK)HelpyActivity::Visible=request.at("Visible").get<bool>();
+            if(code==RS_PLUGIN_OK){HelpyActivity::CaptureInput=request.value("CaptureInput",false)&&!Storefront::IsDedicatedServer();HelpyActivity::Visible=request.at("Visible").get<bool>();}
             return code;
         }
         if(action=="HelpyProfileChanged"){
@@ -142,8 +143,8 @@ int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,ui
         }
         else if(action=="AuthoringSnapshot")result=HelpyAuthoring::Bridge.Snapshot(request.value("Revision",uint64_t{}));
         else if(action=="Read") {
-            SpawnToolRequests::RequestPlayerRoles();
-            const auto prior=request.value("Revision",uint64_t{});const auto category=request.value("Category",-1);std::lock_guard lock(SpawnToolRequests::Mutex);
+            const auto prior=request.value("Revision",uint64_t{});const auto category=request.value("Category",-1);
+            if(category!=-2)SpawnToolRequests::RequestPlayerRoles();std::lock_guard lock(SpawnToolRequests::Mutex);
             result={{"Available",SpawnToolRequests::Available.load()},{"Waiting",SpawnToolRequests::Waiting.load()},
                 {"Generation",SpawnToolRequests::Generation.load()},{"Revision",SpawnToolRequests::Revision},
                 {"Changed",prior!=SpawnToolRequests::Revision}};
@@ -153,7 +154,8 @@ int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,ui
                     if(SpawnToolRequests::QuickCatalogData.contains(key))snapshot[key]=SpawnToolRequests::QuickCatalogData[key];
                     else if(SpawnToolRequests::Result.contains(key))snapshot[key]=SpawnToolRequests::Result[key];
                 };
-                if(category==0){copy("Items");copy("CookedVisuals");copy("CatalogIssues");}
+                if(category==-2){snapshot=nlohmann::json::object();copy("ServerMods");copy("RemoteAccess");}
+                else if(category==0){copy("Items");copy("CookedVisuals");copy("CatalogIssues");}
                 else if(category==1||category==2) {
                     const auto* source=SpawnToolRequests::QuickCatalogData.contains("Definitions")?&SpawnToolRequests::QuickCatalogData:
                         SpawnToolRequests::Result.contains("Definitions")?&SpawnToolRequests::Result:nullptr;
@@ -168,7 +170,7 @@ int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,ui
                     snapshot=SpawnToolRequests::Result;
                     for(auto it=SpawnToolRequests::QuickCatalogData.begin();it!=SpawnToolRequests::QuickCatalogData.end();++it)snapshot[it.key()]=it.value();
                 }
-                for(const auto* key:{"Players","PlayerRoles","CatalogReady","_CatalogIndexing","CatalogStatus","RegistryRecords","UnresolvedAssets",
+                if(category!=-2)for(const auto* key:{"Players","PlayerRoles","ServerMods","RemoteAccess","CatalogReady","_CatalogIndexing","CatalogStatus","RegistryRecords","UnresolvedAssets",
                         "MetadataUnavailable","UnclassifiedRecords","CatalogAI","CatalogResources","CatalogCoverage",
                         "IndexStage","IndexDone","IndexTotal","IndexHasTotal","IndexFinished","IndexDetail"})copy(key);
                 result["Snapshot"]=std::move(snapshot);
@@ -412,7 +414,7 @@ void PluginHost::OnUnrealInit(){
             nlohmann::json reply={{"Code",code},{"Size",size}};
             if(code==RS_PLUGIN_OK&&size&&size<=output.size()){if(output[size-1]=='\0')--size;reply["Body"]=nlohmann::json::parse(output.data(),output.data()+size);}
             return reply;
-        },[]{HelpyActivity::Visible=false;});}catch(...){m_state->Desktop.Stop();DesktopBridgeReady=false;}
+        },[]{HelpyActivity::Visible=false;HelpyActivity::CaptureInput=false;});}catch(...){m_state->Desktop.Stop();DesktopBridgeReady=false;}
         if(!DesktopBridgeReady)HostLog(RS_LOG_WARNING,"RuneSchema.Helpy","[RS-UI-002] Helpy game bridge unavailable; the application can still browse its cache offline.");
     }
     for(auto& plugin:m_state->LoadedPlugins){
@@ -446,7 +448,7 @@ void PluginHost::OnUnrealInit(){
 }
 void PluginHost::Shutdown() noexcept {
     if(m_state)m_state->Desktop.Stop();DesktopBridgeReady=false;
-    HelpyActivity::Visible=false;HelpySourceCache::Requested=false;HelpySourceCache::Shutdown();
+    HelpyActivity::Visible=false;HelpyActivity::CaptureInput=false;HelpySourceCache::Requested=false;HelpySourceCache::Shutdown();
     AssetSearch::ShutdownItemCatalog();
     HelpyQueryService::Clear();
     if(!m_state)return;

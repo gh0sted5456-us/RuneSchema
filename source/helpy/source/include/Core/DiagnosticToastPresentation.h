@@ -1,5 +1,6 @@
 #pragma once
 #include "Core/DiagnosticToastFeed.h"
+#include "Core/ServerModVersions.h"
 #include <algorithm>
 #include <cctype>
 #include <string>
@@ -15,6 +16,9 @@ struct Display {
     std::string Level;
     bool Summary = false;
     bool Truncated = false;
+    bool WorldMods = false;
+    bool Success = false;
+    ServerModVersions::Tone Alignment=ServerModVersions::Tone::Neutral;
     std::uint32_t Repetitions = 1;
     enum class Icon { Information, Diagnostic, Debug, Warning, Error, Activity } Type=Icon::Information;
 };
@@ -58,7 +62,7 @@ inline bool LimitDetail(std::string& message){
     message.resize(limit);message+=" ...";
     return true;
 }
-inline Display Format(const DiagnosticToastFeed::Notice& card) {
+inline Display Format(const DiagnosticToastFeed::Notice& card,const ServerModVersions::Summary& versions={}) {
     Display result;
     result.Summary=card.Summary;
     result.Repetitions=card.Repetitions;
@@ -83,6 +87,27 @@ inline Display Format(const DiagnosticToastFeed::Notice& card) {
         result.Detail=card.Text; // The feed builds this bounded summary.
         result.Subtitle="Full details in HELPY > Diagnostics > Live Log";
         return result;
+    }
+    if(Body(card.Text).starts_with("[RS-NET-004] Server supplied ")){
+        result.WorldMods=true;result.Level="Connected";result.Title="Entering a RuneSchema world";
+        result.Alignment=versions.Alignment();
+        if(!versions.Ready)result.Detail="The host's mod list is ready. Checking installed client versions...";
+        else{
+            result.Level=result.Alignment==ServerModVersions::Tone::Aligned?"Versions match":result.Alignment==ServerModVersions::Tone::Differences?"Review versions":"Connected";
+            result.Detail=std::to_string(versions.Matched)+" matching, "+std::to_string(versions.Different)+" different, "+std::to_string(versions.Missing)+" missing, "+std::to_string(versions.Disabled)+" disabled.";
+            if(versions.Ambiguous)result.Detail+=" "+std::to_string(versions.Ambiguous)+" ambiguous.";
+            if(versions.Unversioned)result.Detail+=" "+std::to_string(versions.Unversioned)+" unversioned; excluded.";
+            if(!versions.Matched&&result.Alignment==ServerModVersions::Tone::Neutral)result.Detail="No versioned mods to compare. "+std::to_string(versions.Unversioned)+" unversioned; excluded.";
+        }
+        result.Subtitle="Click to view this world's mods.";return result;
+    }
+    if(Body(card.Text).starts_with("[RS-NET-007]")){
+        result.Success=true;result.Level="Connected";result.Title="Client-server authority bridged";
+        result.Detail="Requests for your current character are validated and executed by the server.";
+        result.Subtitle="Host action limits and registry checks still apply.";return result;
+    }
+    if(Body(card.Text).starts_with("[RS-NET-006]")){
+        result.Title="Server PIN access available";result.Detail="Open Helpy to enter this world's PIN for self-service items and travel.";return result;
     }
     if(card.ImportReport){
         result.Title=!card.ImportHasStatus?"Import dry-run report":

@@ -38,7 +38,8 @@ struct Producer {
         for(auto& target:Targets)target.Reset();for(auto& texture:Textures)texture.Reset();Ready.Reset();Done.Reset();Context.Reset();Device.Reset();Sequence=0;Key.clear();
     }
     void Create(ID3D11Device* device,uint32_t game,const std::string& nonce,uint32_t width,uint32_t height){
-        Reset();Key=Name(game,GetCurrentProcessId(),nonce);if(width<160||height<120||width>HelpyOverlayFrames::MaxWidth||height>HelpyOverlayFrames::MaxHeight)throw std::runtime_error("Overlay surface exceeds its dimensions");
+        if(width<160||height<120||width>HelpyOverlayFrames::MaxWidth||height>HelpyOverlayFrames::MaxHeight)throw std::runtime_error("Overlay surface exceeds its dimensions");
+        const auto key=Name(game,GetCurrentProcessId(),nonce);Reset();Key=key;
         Need(device->QueryInterface(IID_PPV_ARGS(&Device)),"Shared overlay fences require Direct3D 11.4");ComPtr<ID3D11DeviceContext> context;device->GetImmediateContext(&context);Need(context.As(&Context),"Overlay context fences unavailable");
         PSECURITY_DESCRIPTOR descriptor{};if(!HelpyDesktop::SameUserPipeSecurity(descriptor))throw std::runtime_error("Overlay user security unavailable");
         const auto freeSecurity=[](void* value){if(value)LocalFree(value);};std::unique_ptr<void,decltype(freeSecurity)> security(descriptor,freeSecurity);SECURITY_ATTRIBUTES attributes{sizeof(attributes),descriptor,FALSE};

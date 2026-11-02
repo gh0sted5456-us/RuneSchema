@@ -772,6 +772,16 @@
       "action": "Use matching candidate DLLs and Helpy.exe in the assigned installation. Check the plugin settings, local Windows user and complete error. Switch to DLL window and restart if needed."
     },
     {
+      "id": "HelpyInputCaptureUnavailable",
+      "code": "RS-UI-003",
+      "title": "Helpy movement or look capture unavailable",
+      "severity": "warning",
+      "subsystem": "Helpy UI",
+      "summary": "The game-thread controller input contract could not be applied or released for the overlay.",
+      "impact": "Keyboard and pointer routing remains separate. Native movement/look suppression may be incomplete; RuneSchema retries without stacking repeated ignore-input calls.",
+      "action": "Close the overlay, keep the complete reason and confirm matching core, bridge and Helpy builds. If controls remain unavailable, close Helpy and return to the menu. Report the platform and controller/input method."
+    },
+    {
       "title": "Native UE4SS companion retained",
       "impact": "The native mod is packaged under ue4ss/Mods instead of being silently subloaded through RuneSchema. Other convertible payloads continue.",
       "severity": "warning",
@@ -810,6 +820,156 @@
       "summary": "The native presentation bridge is prepared or attached to the game renderer.",
       "impact": "Preparation alone does not confirm a visible overlay frame.",
       "action": "Open Helpy with its configured shortcut. RS-OVL-001 confirms an actual visible presentation."
+    },
+    {
+      "id": "SaveEntrySnapshot",
+      "code": "RS-SAVE-003",
+      "title": "Entry snapshot verified",
+      "severity": "info",
+      "subsystem": "Save safety",
+      "summary": "The selected character or world was copied and verified at its entry boundary.",
+      "impact": "The whole-save snapshot is available in Save Recovery. This does not copy or install mods.",
+      "action": "Review its identity, entry time and recorded mods in Helpy > Save Recovery."
+    },
+    {
+      "id": "SaveRestoreLoaded",
+      "code": "RS-SAVE-004",
+      "title": "Selected snapshot loaded",
+      "severity": "info",
+      "subsystem": "Save safety",
+      "summary": "A queued restore was claimed once and loaded through the exact selected native save contract.",
+      "impact": "The previous payload is backed up. This reports loading; the game still owns subsequent persistence.",
+      "action": "Reinstall required mods before entry and let the game save normally. Keep the backup until the restored progress is verified."
+    },
+    {
+      "id": "SaveRecoveryReview",
+      "code": "RS-SAVE-005",
+      "title": "Snapshot or recovery needs review",
+      "severity": "warning",
+      "subsystem": "Save safety",
+      "summary": "A backup preference, verification, restore request or native application step failed.",
+      "impact": "The recovery action is not retried automatically after it is claimed. Existing native loading and normal backup-first cleanup continue.",
+      "action": "Read the original error, check free space and the selected runtime, then review or cancel the request in Save Recovery. Do not delete the prior-save backup."
+    },
+    {
+      "id": "ServerModListReceived",
+      "code": "RS-NET-004",
+      "title": "Server mod list received",
+      "severity": "info",
+      "subsystem": "Multiplayer",
+      "summary": "The client received and validated the host’s enabled RuneSchema mod list.",
+      "impact": "The complete list is available in Helpy → Mods → Server comparison. This is informational and grants no gameplay permission.",
+      "action": "Browse or search the server list when checking required content."
+    },
+    {
+      "id": "ServerModListUnavailable",
+      "code": "RS-NET-005",
+      "title": "Server mod list unavailable",
+      "severity": "warning",
+      "subsystem": "Multiplayer",
+      "summary": "RuneSchema could not prepare its enabled-mod information within the supported bounds.",
+      "impact": "Mod loading continues. The informational list is unavailable; this does not reject a registry or gameplay request.",
+      "action": "Read the accompanying detail and check mod identity metadata and list size."
+    },
+    {
+      "id": "ProcessCpuHigh",
+      "code": "RS-PERF-002",
+      "title": "Sustained process CPU activity",
+      "severity": "warning",
+      "subsystem": "Performance",
+      "summary": "Helpy or Dragonwilds exceeded the configured CPU-time threshold across three samples.",
+      "impact": "CPU is normalized to total logical-processor capacity; this is not per-mod attribution.",
+      "action": "Compare the named process, current workload and resource panel; adjust the threshold if expected."
+    },
+    {
+      "id": "SystemMemoryPressure",
+      "code": "RS-PERF-003",
+      "title": "System memory pressure",
+      "severity": "warning",
+      "subsystem": "Performance",
+      "summary": "Physical RAM use stayed above the configured threshold.",
+      "impact": "Helpy and Dragonwilds working sets are shown when Windows permits access; other processes may account for remaining use.",
+      "action": "Check process memory and available system RAM. A high working set alone does not prove a leak."
+    },
+    {
+      "id": "ProcessGpuHigh",
+      "code": "RS-PERF-004",
+      "title": "Sustained GPU engine activity",
+      "severity": "info",
+      "subsystem": "Performance",
+      "summary": "A measured GPU engine for Helpy or Dragonwilds stayed above the configured threshold.",
+      "impact": "High GPU use can be normal. Missing or warming Windows counters are unavailable, not zero usage.",
+      "action": "Compare frame rate, resolution and workload. The metric uses the busiest measured engine and does not blame a mod."
+    },
+    {
+      "id": "ProcessMemoryGrowth",
+      "code": "RS-PERF-005",
+      "title": "Process private memory increased",
+      "severity": "info",
+      "subsystem": "Performance",
+      "summary": "Helpy or Dragonwilds private memory increased by more than 256 MiB over a minute.",
+      "impact": "Asset loading and retained caches can explain growth; one increase does not establish a memory leak.",
+      "action": "Compare repeated samples during steady gameplay, after changing pages and after delivery; include the timestamps when reporting."
+    },
+    {
+      "id": "LuaCompanionError",
+      "code": "RS-LUA-001",
+      "title": "RuneSchema Lua companion reported an error",
+      "severity": "warning",
+      "subsystem": "UE4SS",
+      "summary": "An attributed RuneSchema-owned UE4SS companion reported a recognized Lua startup or execution error.",
+      "impact": "This identifies reported failure evidence, not proof that every function in the companion stopped. External native UE4SS mods remain managed by stock UE4SS.",
+      "action": "Review the original UE4SS message and companion installation. Check its parent mod and supported Lua loader layout."
+    },
+    {
+      "id": "LuaLogActivity",
+      "code": "RS-LUA-002",
+      "title": "High attributed UE4SS log activity",
+      "severity": "info",
+      "subsystem": "UE4SS",
+      "summary": "A named UE4SS mod exceeded the configured message budget in a sampled read window.",
+      "impact": "This measures log output. Stock UE4SS does not expose reliable per-mod callback timing, CPU time or polling frequency through this feature.",
+      "action": "Review the original messages and compare frame rate. Raise the budget for expected logging; do not assume the mod caused a delay."
+    },
+    {
+      "id": "LuaActivityOverlap",
+      "code": "RS-LUA-003",
+      "title": "UE4SS activity overlapped slow RuneSchema work",
+      "severity": "info",
+      "subsystem": "UE4SS",
+      "summary": "High attributed UE4SS log activity occurred near a measured RuneSchema slow-work report.",
+      "impact": "The configured overlap window establishes timing correlation only; it does not establish contention or which mod caused it.",
+      "action": "Compare both original messages and timestamps. Adjust the overlap window or log-message budget for expected workloads."
+    },
+    {
+      "id": "PlayTimeReminder",
+      "code": "RS-PLAY-001",
+      "title": "Play-time break reminder",
+      "severity": "info",
+      "subsystem": "Helpy",
+      "summary": "A gameplay session passed three observed hours, or another complete hour after that.",
+      "impact": "Informational only. It never pauses the game, blocks input, changes saves or disconnects a player. Menus and disconnected intervals are not counted.",
+      "action": "Consider a 10 minute break. Disable Play-time reminders in Quick Settings > Performance at any time."
+    },
+    {
+      "id": "HelpyAuthorityPinRequired",
+      "code": "RS-NET-006",
+      "title": "Server PIN access available",
+      "severity": "info",
+      "subsystem": "Multiplayer",
+      "summary": "The connected RuneSchema host offers PIN-gated self-service actions.",
+      "impact": "No access is granted by this notice. Client requests remain scoped to the owning character and authoritative world.",
+      "action": "Open Helpy, enter the world PIN and submit it. The server must enable item delivery or teleportation."
+    },
+    {
+      "id": "HelpyAuthorityBridged",
+      "code": "RS-NET-007",
+      "title": "Client-server authority bridged",
+      "severity": "info",
+      "subsystem": "Multiplayer",
+      "summary": "The server validated the supplied PIN for the current owning character and world.",
+      "impact": "Delivery and teleport requests execute on the server with existing identity, item registry, quantity and ground checks. This does not grant arbitrary administrator rights.",
+      "action": "Use the allowed self-service actions. Reconnect after changing character/world or if the server revokes access."
     }
   ]
 }

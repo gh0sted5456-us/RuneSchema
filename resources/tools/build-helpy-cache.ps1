@@ -1,5 +1,5 @@
 ﻿[CmdletBinding()]
-param([Parameter(Position=0)][string]$ZipPath,[string]$ModDirectory,[string]$Game,[string]$Mapping,[string]$Oodle,[string]$ModId,[string]$OutputDirectory,[string]$ProgressFile,[string]$ControlFile,[switch]$InstallDotNet,[string]$CreationRequest,[string]$PackagePath,[string]$Platform='Win64')
+param([Parameter(Position=0)][string]$ZipPath,[string]$ModDirectory,[string]$Game,[string]$Mapping,[string]$Oodle,[string]$ModId,[string]$OutputDirectory,[string]$ProgressFile,[string]$ControlFile,[switch]$InstallDotNet,[string]$CreationRequest,[string]$PackagePath,[string]$Platform='Win64',[string]$BackupRoot)
 $ErrorActionPreference='Stop'
 Add-Type -AssemblyName System.IO.Compression,System.IO.Compression.FileSystem
 
@@ -98,6 +98,23 @@ function Assert-CachePath([string]$Path,[string]$Parent) {
     }
     return $resolved
 }
+function Get-CacheTreeManifest([string]$Folder) {
+    $root=[IO.Path]::GetFullPath($Folder).TrimEnd('\');$prefix=$root+'\';$null=Assert-CachePath $root ([IO.Path]::GetDirectoryName($root))
+    $entries=[Collections.Generic.List[IO.FileSystemInfo]]::new();$pending=[Collections.Generic.Stack[string]]::new();$pending.Push($root)
+    while($pending.Count){foreach($entry in Get-ChildItem -LiteralPath $pending.Pop() -Force){
+        $null=Assert-CachePath $entry.FullName $root;$entries.Add($entry)
+        if($entries.Count -gt 16384){throw 'Previous cache has too many entries to back up safely.'}
+        if($entry.PSIsContainer){$pending.Push($entry.FullName)}
+    }}
+    foreach($entry in $entries | Sort-Object FullName){
+        $null=Assert-CachePath $entry.FullName $root
+        if(!$entry.PSIsContainer){
+            $hash=(Get-FileHash -LiteralPath $entry.FullName -Algorithm SHA256).Hash;$after=Get-Item -LiteralPath $entry.FullName
+            if($after.Length -ne $entry.Length -or $after.LastWriteTimeUtc -ne $entry.LastWriteTimeUtc){throw 'Previous cache changed during verification.'}
+            [pscustomobject]@{Path=$entry.FullName.Substring($prefix.Length);Bytes=$entry.Length;SHA256=$hash}
+        }
+    }
+}
 function Get-CacheArchivePlan($Archive) {
     if($Archive.Entries.Count -gt 16384){throw 'ZIP contains too many entries (limit 16384).'}
     $seen=[Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
@@ -168,7 +185,7 @@ function Invoke-CacheZip {
     $parent=[IO.Path]::GetDirectoryName($output);if(!$parent -or [IO.Path]::GetPathRoot($output) -eq $output){throw 'Choose a cache output folder, not a drive root.'}
     $null=Assert-CachePath $output $parent
     $token=[Guid]::NewGuid().ToString('N');$tempParent=[IO.Path]::GetTempPath();$stage=Join-Path $tempParent ('RuneSchema.Cache.'+$token)
-    $publish=Join-Path $parent ('.RuneSchema.Cache.'+$token);$backup=$null
+    $publish=Join-Path $parent ('.RuneSchema.Cache.'+$token);$backup=$null;$swap=$null
     $null=Assert-CachePath $stage $tempParent;$null=Assert-CachePath $publish $parent
     try {
         Write-Host 'RuneSchema mod cache builder' -ForegroundColor Yellow
@@ -313,11 +330,17 @@ static class CacheTool
     {
         if (token is null) return "";
         if (token.Type == JTokenType.String) return token.Value<string>() ?? "";
-        if (token is JObject obj) foreach (var field in new[] { "LocalizedString", "SourceString", "Text", "Name" })
-            if (obj[field]?.Type == JTokenType.String) return obj.Value<string>(field) ?? "";
+        if (token is JObject obj) foreach (var field in new[] { "CultureInvariantString", "LocalizedString", "SourceString", "Text", "Name" })
+            if (obj[field]?.Type == JTokenType.String && !string.IsNullOrWhiteSpace(obj.Value<string>(field))) return obj.Value<string>(field) ?? "";
         return "";
     }
-    static string First(JObject props, params string[] fields) => fields.Select(f => Text(props[f])).FirstOrDefault(t => t.Length > 0) ?? "";
+    static bool NameKey(string text) => Regex.IsMatch(text, @"^(?:ITEM|JOURNAL|UI)_[^\s]+$");
+    static string ReadableText(JToken? token)
+    {
+        var values = token is JObject obj ? new[] { "CultureInvariantString", "LocalizedString", "SourceString", "Text", "Name" }.Select(f => obj[f]?.Type == JTokenType.String ? obj.Value<string>(f) ?? "" : "") : [Text(token)];
+        return values.FirstOrDefault(t => !string.IsNullOrWhiteSpace(t) && !NameKey(t)) ?? "";
+    }
+    static string First(JObject props, params string[] fields) => fields.Select(f => ReadableText(props[f])).FirstOrDefault(t => t.Length > 0) ?? "";
     static string Reference(JToken? token, IReadOnlyDictionary<string, string> paths)
     {
         if (token is null) return "";
@@ -471,6 +494,8 @@ static class CacheTool
                 using var provider = new DefaultFileProvider(new DirectoryInfo(nativeRoots[0]), extra, SearchOption.AllDirectories, new VersionContainer(EGame.GAME_UE5_6), StringComparer.OrdinalIgnoreCase) { MappingsContainer = new FileUsmapTypeMappingsProvider(mapping) };
                 provider.Initialize(); provider.Mount(); provider.PostMount(); provider.LoadVirtualPaths();
                 var report = new JArray();
+                try { provider.LoadLocalization(); }
+                catch (Exception e) { report.Add(new JObject { ["Stage"] = "Localization", ["Error"] = e.Message }); }
                 bool IsClass(string name, string parent)
                 {
                     name = name.Split('.').Last(); var seen = new HashSet<string>();
@@ -527,8 +552,10 @@ static class CacheTool
                         var export = JObject.Parse(JsonConvert.SerializeObject(obj));
                         var type = export.Value<string>("Type") ?? ""; if (export["Properties"] is not JObject props) continue;
                         var path = Asset(package, export.Value<string>("Name")); var owner = owners.GetValueOrDefault(path[..path.LastIndexOf('.')]); if (owner is null) continue;
-                        var name = First(props, "DisplayName", "ItemName", "Title", "Name"); if (name.Length == 0) name = export.Value<string>("Name") ?? "";
+                        var displayName = First(props, "DisplayName", "ItemName", "Title", "Name");
+                        var name = displayName.Length > 0 ? displayName : export.Value<string>("Name") ?? "";
                         var data = new JObject { ["Name"] = name, ["Type"] = type };
+                        if (displayName.Length > 0) data["DisplayName"] = displayName;
                         foreach (var field in new[] { "Category", "Section", "InternalName" }) { var text = Text(props[field]); if (text.Length > 0) data[field] = text; }
                         var description = First(props, "Description", "FlavourText"); if (description.Length > 0) data["Description"] = description;
                         foreach (var field in new[] { "PowerLevel", "MaxStackSize", "StackSize" }) if (props[field]?.Type is JTokenType.Integer or JTokenType.Float && props.Value<double>(field) is >= 0 and <= 1e9) data[field] = props[field]!.DeepClone();
@@ -628,6 +655,10 @@ static class CacheTool
         Need(Fingerprint("seed\n", new[] { KeyValuePair.Create("b", "2"), KeyValuePair.Create("a", "1") }) == Hash(Encoding.UTF8.GetBytes("seed\na|1\nb|2\n")), "Portable ordering and separators");
         Need(Fingerprint("rsmk-content-v2|example\n", new[] { KeyValuePair.Create(".pak", "b"), KeyValuePair.Create(".pak", "a") }) == Hash(Encoding.UTF8.GetBytes("rsmk-content-v2|example\n.pak|a\n.pak|b\n")), "Duplicate extensions sort by content digest, never folder names");
         Need(Text(JObject.Parse("{\"SourceString\":\"A readable name\"}")) == "A readable name" && Text(new JObject()) == "", "Text extraction must not invent values");
+        Need(ReadableText(JObject.Parse("{\"LocalizedString\":\"ITEM_colors_of_money_key\",\"SourceString\":\"Ranger Body (Dyed Black)\"}")) == "Ranger Body (Dyed Black)", "Readable source text must beat an unresolved localization key");
+        Need(ReadableText(JObject.Parse("{\"LocalizedString\":\"\",\"SourceString\":\"Readable\"}")) == "Readable" && ReadableText(JValue.CreateString("ITEM_key")) == "", "Empty or unresolved localized names need a readable fallback");
+        Need(Text(JValue.CreateString("ITEM_persistence_id")) == "ITEM_persistence_id", "Name cleanup must never alter persistence identities");
+        Need(ReadableText(JObject.Parse("{\"CultureInvariantString\":\"Ranger Tunic (Dyed Black)\"}")) == "Ranger Tunic (Dyed Black)", "Cooked culture-invariant display names must survive cache export");
         using var pixel = new SKBitmap(new SKImageInfo(1, 1, SKColorType.Bgra8888, SKAlphaType.Unpremul)); pixel.SetPixel(0, 0, new SKColor(10, 20, 30, 255)); var bytes = Pixels(pixel);
         Need(bytes.Length == 20 && bytes[16] == 10 && bytes[17] == 20 && bytes[18] == 30 && bytes[19] == 255, "BGRA must become RGBA");
         Need(Pixels(pixel, true).Length == 256 * 144 * 4, "Banner dimensions");
@@ -1400,11 +1431,22 @@ $builderSource=@'
         if(Test-Path -LiteralPath (Join-Path $built 'mod.png')){Copy-Item -LiteralPath (Join-Path $built 'mod.png') -Destination $publish}
         if(Test-Path -LiteralPath $output){
             if(!(Test-Path -LiteralPath $output -PathType Container)){throw 'Cache output is an existing file.'}
-            $backup=$output+'.previous-'+$token;$null=Assert-CachePath $output $parent;$null=Assert-CachePath $backup $parent
-            Move-Item -LiteralPath $output -Destination $backup
+            $backupBase=if($BackupRoot){[IO.Path]::GetFullPath($BackupRoot)}else{Join-Path $env:LOCALAPPDATA 'RSDragonwilds/RuneSchema/core/tools/cache-builder/backups'}
+            $null=Assert-CachePath $backupBase ([IO.Path]::GetDirectoryName($backupBase))
+            $outside=if($ModDirectory){$mod}else{$output}
+            if(($backupBase.TrimEnd('\')+'\').StartsWith(([IO.Path]::GetFullPath($outside).TrimEnd('\')+'\'),[StringComparison]::OrdinalIgnoreCase)){throw 'Previous caches must be backed up outside the mod/output folder.'}
+            $backup=Join-Path $backupBase ('cache-'+$token);$null=Assert-CachePath $backup $backupBase
+            $manifest=@(Get-CacheTreeManifest $output);$expected=ConvertTo-Json -InputObject $manifest -Compress
+            New-Item -ItemType Directory -Path $backupBase -Force | Out-Null;Copy-Item -LiteralPath $output -Destination $backup -Recurse
+            if((ConvertTo-Json -InputObject @(Get-CacheTreeManifest $backup) -Compress) -cne $expected -or (ConvertTo-Json -InputObject @(Get-CacheTreeManifest $output) -Compress) -cne $expected){throw 'Previous-cache backup verification failed; current cache retained.'}
+            [IO.File]::WriteAllText(($backup+'.json'),(@{Original=$output;Files=$manifest}|ConvertTo-Json -Depth 5),[Text.UTF8Encoding]::new($false))
+            $swap=$output+'.swap-'+$token;$null=Assert-CachePath $swap $parent;Move-Item -LiteralPath $output -Destination $swap
         }
-        try {$null=Assert-CachePath $publish $parent;$null=Assert-CachePath $output $parent;Move-Item -LiteralPath $publish -Destination $output}
-        catch {if($backup -and !(Test-Path -LiteralPath $output)){$null=Assert-CachePath $backup $parent;Move-Item -LiteralPath $backup -Destination $output};throw}
+        try {
+            if($swap -and (ConvertTo-Json -InputObject @(Get-CacheTreeManifest $swap) -Compress) -cne $expected){throw 'Previous cache changed before publication.'}
+            $null=Assert-CachePath $publish $parent;$null=Assert-CachePath $output $parent;Move-Item -LiteralPath $publish -Destination $output
+        }catch {if($swap -and !(Test-Path -LiteralPath $output)){$null=Assert-CachePath $swap $parent;Move-Item -LiteralPath $swap -Destination $output};throw}
+        if($swap){$null=Assert-CachePath $swap $parent;Remove-Item -LiteralPath $swap -Recurse -Force}
         if($CreationRequest){
             $preparedCache=Join-Path $mod 'cache';$null=Assert-CachePath $preparedCache $stage
             if(Test-Path -LiteralPath $preparedCache){Remove-Item -LiteralPath $preparedCache -Recurse -Force}

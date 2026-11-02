@@ -1,12 +1,16 @@
 #include "HelpyDesktopLaunch.h"
+#include "HelpyDesktopShortcut.h"
 #include "Core/RsmkResources.h"
 #include <winver.h>
 #include <cstring>
 #include <cassert>
 #include <iostream>
 int main(int argc,char** argv)try{
-    if(argc==5&&std::string_view(argv[1])=="--stage"){
-        const auto file=PS::HelpyDesktopLaunch::Stage(std::filesystem::u8path(argv[2]),argv[3],std::filesystem::u8path(argv[4])).u8string();
+    if(argc==4&&std::string_view(argv[1])=="--shortcut-runtime"){
+        const auto root=std::filesystem::u8path(argv[2]);const bool changed=PS::HelpyDesktopShortcut::Ensure(PS::HelpyDesktopLaunch::Application(root),argv[3],PS::RuneSchemaData::PlatformDirectory(argv[3]));std::cout<<PS::HelpyDesktop::Json{{"Changed",changed}}.dump()<<'\n';return 0;
+    }
+    if(argc==3&&std::string_view(argv[1])=="--application"){
+        const auto file=PS::HelpyDesktopLaunch::Application(std::filesystem::u8path(argv[2])).u8string();
         std::cout<<PS::HelpyDesktop::Json{{"Executable",std::string(file.begin(),file.end())}}.dump()<<'\n';return 0;
     }
     assert(argc==3);namespace fs=std::filesystem;using namespace PS;using namespace HelpyDesktopLaunch;
@@ -23,9 +27,10 @@ int main(int argc,char** argv)try{
     struct Cleanup{fs::path Root;~Cleanup(){std::error_code error;fs::remove_all(Root,error);}} cleanup{fixture};
     const auto root=fixture/"Game O'Brien/RSDragonwilds/Binaries/WinGDK/ue4ss/Mods/RuneSchema",local=fixture/"User";
     const auto source=root/"plugins/RuneSchema.Helpy/dll/Helpy.exe";fs::create_directories(source.parent_path());fs::copy_file(argv[1],source);
-    const auto app=Stage(root,"gamepass",local);assert(app!=source&&ConfigFiles::Read(app)==ConfigFiles::Read(source));
-    const auto stamp=fs::last_write_time(app);assert(Stage(root,"gamepass",local)==app&&fs::last_write_time(app)==stamp);
-    assert(Application(root,"steam",local)!=app);const auto binding=HelpyDesktop::Json::parse(ConfigFiles::Read(app.parent_path()/"runtime.json"));assert(binding.at("Platform")=="gamepass");
+    fs::copy_file(executable.parent_path()/"SDL3.dll",source.parent_path()/"SDL3.dll");
+    const auto app=Application(root);assert(app==source);
+    const auto stamp=fs::last_write_time(app);assert(Application(root)==app&&fs::last_write_time(app)==stamp&&!fs::exists(local)&&!fs::exists(app.parent_path()/"runtime.json"));
+    fs::remove(source.parent_path()/"SDL3.dll");bool missing=false;try{Application(root);}catch(...){missing=true;}assert(missing);fs::copy_file(executable.parent_path()/"SDL3.dll",source.parent_path()/"SDL3.dll");
     assert(Arguments(root,"gamepass",true).find(L"--start-hidden")!=std::wstring::npos);
     const auto name=InstanceName(root);const auto instance=CreateMutexW(nullptr,FALSE,name.c_str()),activate=CreateEventW(nullptr,FALSE,FALSE,(name+L".activate").c_str());assert(instance&&activate);
     assert(ActivateExisting(root,false)&&WaitForSingleObject(activate,0)==WAIT_TIMEOUT);assert(ActivateExisting(root,true)&&WaitForSingleObject(activate,0)==WAIT_OBJECT_0);CloseHandle(instance);CloseHandle(activate);

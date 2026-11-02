@@ -6,7 +6,7 @@ namespace PS::HelpyLoadingIndicator {
 // Uploaded once with the other local UI assets. Never requests an engine icon.
 inline ImTextureRef Texture;
 inline void Details(const std::string& stage,const std::string& detail,ImVec2 minimum,ImVec2 maximum){
-    HelpyImGuiTheme::BeginDetailsTooltip(minimum,maximum);
+    HelpyImGuiTheme::BeginDetailsTooltip(minimum,maximum,300.f,false);
     HelpyImGuiTheme::DetailsTextUnformatted(stage.c_str());ImGui::Separator();
     HelpyImGuiTheme::DetailsText("%s",detail.empty()?"Working in the background. A reliable completion percentage is not available yet.":detail.c_str());
 #if defined(HELPY_PREVIEW)

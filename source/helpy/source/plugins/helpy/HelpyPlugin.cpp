@@ -34,11 +34,17 @@ HMODULE Module{};
 constexpr RuneSchemaPluginDescriptor Descriptor{sizeof(RuneSchemaPluginDescriptor),RUNESCHEMA_PLUGIN_API_VERSION,
     "RuneSchema.Helpy","RSMK (RuneSchema Modding Kit)",PS::HelpyBranding::Version};
 struct State {const RuneSchemaHostApi* Host{};std::unique_ptr<PS::HelpyStandaloneWindow> Window;
+    struct CatalogReply {nlohmann::json Request;bool Accepted=false;uint64_t Connection=0,Generation=0;};
+    PS::ProcessExitFuture<CatalogReply> CatalogSubmit;std::deque<nlohmann::json> CatalogQueue;
+    struct IconRequest {std::string Icon;uint64_t Connection,Generation;};
+    PS::ProcessExitFuture<nlohmann::json> IconSubmit;std::deque<IconRequest> IconQueue;
+    PS::ProcessExitFuture<nlohmann::json> HostRead;bool ReadingMetadata=false;uint64_t ReadingRevision=0,ReadingConnection=0;
+    std::atomic<uint64_t> ConnectionEpoch=0;
     std::atomic<bool> RelayOnly=false;
     std::atomic<bool> ToolsAvailable=false,ToolsWaiting=false;std::atomic<uint64_t> ToolsGeneration=1;
     std::mutex ToolsMutex;uint64_t ToolsRevision=0; nlohmann::json ToolsResult=nlohmann::json::object(),ToolsCatalog=nlohmann::json::object(),Players=nlohmann::json::array();std::deque<nlohmann::json> IconResults;
     std::map<uint64_t,nlohmann::json> Completed;std::map<uint64_t,std::string> IconDictionary;std::deque<nlohmann::json> QueryResults;uint64_t HostRevision=0;std::chrono::steady_clock::time_point NextHostRead{};
-    nlohmann::json MapGroundReply=nlohmann::json::object();
+    nlohmann::json MapGroundReply=nlohmann::json::object();std::chrono::steady_clock::time_point NextMetadataRead{};
     bool LoggedQuery=false,LoggedRows=false,LoggedIcon=false;std::atomic<bool> InventoryReady=false;};
 bool CallCore(State* state,const nlohmann::json& request,nlohmann::json& response) {
     try {
@@ -104,7 +110,7 @@ void ResetToolsSession(State* state){
 int32_t RS_PLUGIN_CALL DesktopConnection(void* context,const char* input,char*,uint32_t,uint32_t* size){
     auto* state=static_cast<State*>(context);if(!state||!input||!size)return RS_PLUGIN_INVALID_ARGUMENT;
     try{const auto value=nlohmann::json::parse(input);PS::PluginRuntimeServices::GameProcessId=value.at("Pid").get<uint32_t>();
-        {std::lock_guard lock(state->ToolsMutex);ResetToolsSession(state);state->ToolsAvailable=false;state->ToolsWaiting=false;state->ToolsGeneration=1;++state->ToolsRevision;}
+        {std::lock_guard lock(state->ToolsMutex);++state->ConnectionEpoch;ResetToolsSession(state);state->ToolsAvailable=false;state->ToolsWaiting=false;state->ToolsGeneration=1;++state->ToolsRevision;}
         PS::PluginRuntimeServices::ConnectionChanged=true;PS::LazyCatalog::BackendSignal(1);*size=0;return RS_PLUGIN_OK;
     }catch(...){return RS_PLUGIN_INVALID_ARGUMENT;}
 }
@@ -174,14 +180,86 @@ int32_t RS_PLUGIN_CALL ToolsPush(void* context,const char* requestJson,char*,uin
         PS::LazyCatalog::BackendSignal(generation);*size=0;return RS_PLUGIN_OK;
     }catch(...){return RS_PLUGIN_FAILED;}
 }
-void SyncHost(State* state,bool force=false) {
-    const auto now=std::chrono::steady_clock::now();if(!force&&now<state->NextHostRead)return;
-    state->NextHostRead=now+std::chrono::seconds(2);
+void PumpIcons(State* state){
+    if(state->IconSubmit.valid()){
+        if(state->IconSubmit.wait_for(std::chrono::milliseconds(0))!=std::future_status::ready)return;
+        auto failure=state->IconSubmit.get();if(!failure.empty()&&failure.value("_Connection",uint64_t{})==state->ConnectionEpoch.load()&&failure.value("_Generation",uint64_t{})==state->ToolsGeneration.load()){
+            failure.erase("_Connection");failure.erase("_Generation");std::lock_guard lock(state->ToolsMutex);state->IconResults.push_back(std::move(failure));}
+    }
+    std::erase_if(state->IconQueue,[&](const auto& item){return item.Connection!=state->ConnectionEpoch.load()||item.Generation!=state->ToolsGeneration.load();});
+    if(state->IconQueue.empty())return;
+    auto item=std::move(state->IconQueue.front());state->IconQueue.pop_front();auto icon=std::move(item.Icon);const auto connection=item.Connection,generation=item.Generation;
+    state->IconSubmit=std::async(std::launch::async,[state,icon=std::move(icon),connection,generation]{
+        nlohmann::json reply;if(connection!=state->ConnectionEpoch.load()||generation!=state->ToolsGeneration.load())return nlohmann::json::object();
+        if(CallCore(state,{{"Action","IconSubmit"},{"Icon",icon}},reply)&&reply.value("Accepted",false))return nlohmann::json::object();
+        return nlohmann::json{{"Icon",icon},{"Status","Error"},{"Error","Native icon request was not accepted."},{"_Connection",connection},{"_Generation",generation}};
+    });
+}
+bool ItemInspection(const nlohmann::json& request){return request.value("Action",std::string{})=="InspectClone"&&request.value("InspectDetails",false)&&request.value("_Source",std::string{})=="HelpyHover";}
+void PumpCatalog(State* state){
+    PumpIcons(state);
+    if(state->CatalogSubmit.valid()){
+        if(state->CatalogSubmit.wait_for(std::chrono::milliseconds(0))!=std::future_status::ready)return;
+        auto result=state->CatalogSubmit.get();
+        if(result.Connection!=state->ConnectionEpoch.load()||result.Generation!=state->ToolsGeneration.load())result.Accepted=true;
+        if(!result.Accepted&&ItemInspection(result.Request)){
+            std::lock_guard lock(state->ToolsMutex);StoreReceipt(state,{{"_RequestId",result.Request.at("_RequestId")},{"Status","Native details are unavailable; retry when the runtime is ready."}});state->ToolsWaiting=false;
+        }else if(!result.Accepted){auto& request=result.Request;request["RuntimeGeneration"]=request.value("ClientGeneration",uint64_t{});
+            request["Reset"]=false;request["HasMore"]=false;request["Error"]="The runtime did not accept this request. Retry when the world is ready.";
+            PS::LazyCatalog::ApplyWindow(request,0);}
+    }
+    while(!state->CatalogQueue.empty()){
+        auto request=std::move(state->CatalogQueue.front());state->CatalogQueue.pop_front();
+        const bool inspect=ItemInspection(request);const int category=request.value("Category",-1);
+        if(!inspect&&(category<0||category>2))continue;
+        if(request.value("_Connection",uint64_t{})!=state->ConnectionEpoch.load()||request.value("_Generation",uint64_t{})!=state->ToolsGeneration.load())continue;
+        if(!inspect&&(request.value("ClientGeneration",uint64_t{})!=state->ToolsGeneration.load()||request.value("CancelGeneration",uint64_t{})!=PS::LazyCatalog::For(category).CancelGeneration))continue;
+        request.erase("_Connection");request.erase("_Generation");
+        const auto connection=state->ConnectionEpoch.load(),generation=state->ToolsGeneration.load();
+        state->CatalogSubmit=std::async(std::launch::async,[state,request=std::move(request),connection,generation,inspect]()mutable{
+            nlohmann::json reply;const bool accepted=connection!=state->ConnectionEpoch.load()||generation!=state->ToolsGeneration.load()||
+                (CallCore(state,{{"Action",inspect?"Submit":"QuerySubmit"},{"Request",request}},reply)&&reply.value("Accepted",false));
+            return State::CatalogReply{std::move(request),accepted,connection,generation};
+        });return;
+    }
+}
+bool QueueCatalog(State* state,nlohmann::json request){
+    PumpCatalog(state);
+    request["_Connection"]=state->ConnectionEpoch.load();request["_Generation"]=state->ToolsGeneration.load();
+    std::erase_if(state->CatalogQueue,[&](const auto& queued){return queued.value("Category",-1)==request.value("Category",-1)
+        &&(queued.value("_Connection",uint64_t{})!=request.value("_Connection",uint64_t{})||queued.value("ClientGeneration",uint64_t{})!=request.value("ClientGeneration",uint64_t{})||queued.value("CancelGeneration",uint64_t{})<request.value("CancelGeneration",uint64_t{}));});
+    if(state->CatalogQueue.size()>=8)return false;
+    const auto priority=request.value("Priority",2);const auto at=std::find_if(state->CatalogQueue.begin(),state->CatalogQueue.end(),[&](const auto& queued){return queued.value("Priority",2)>priority;});
+    state->CatalogQueue.insert(at,std::move(request));PumpCatalog(state);return true;
+}
+void SyncHost(State* state,bool force=false,bool metadata=false) {
     nlohmann::json reply;
-    if(!CallCore(state,{{"Action","Read"},{"Revision",state->HostRevision},{"Category",-1}},reply)||!reply.is_object())return;
+    if(state->HostRead.valid()){
+        if(!force&&state->HostRead.wait_for(std::chrono::milliseconds(0))!=std::future_status::ready)return;
+        reply=state->HostRead.get();metadata=state->ReadingMetadata;
+        std::lock_guard lock(state->ToolsMutex);
+        if(state->ReadingConnection!=state->ConnectionEpoch.load()||state->ReadingRevision!=state->ToolsRevision)return;
+    }else{
+        const auto now=std::chrono::steady_clock::now();auto& next=metadata?state->NextMetadataRead:state->NextHostRead;if(!force&&now<next)return;
+        next=now+std::chrono::seconds(metadata?5:2);
+        uint64_t revision;{std::lock_guard lock(state->ToolsMutex);revision=metadata?0:state->HostRevision;state->ReadingRevision=state->ToolsRevision;state->ReadingConnection=state->ConnectionEpoch.load();}
+        const auto read=[state,revision,metadata]{nlohmann::json value;CallCore(state,{{"Action","Read"},{"Revision",revision},{"Category",metadata?-2:-1}},value);return value;};
+        if(!force){state->ReadingMetadata=metadata;state->HostRead=std::async(std::launch::async,read);return;}
+        reply=read();
+    }
+    if(!reply.is_object())return;
     std::lock_guard lock(state->ToolsMutex);
     const auto generation=reply.value("Generation",state->ToolsGeneration.load());
     if(generation<state->ToolsGeneration.load())return;
+    if(metadata){
+        const bool newWorld=generation!=state->ToolsGeneration.load();if(newWorld)ResetToolsSession(state);
+        bool changed=newWorld||state->ToolsAvailable.load()!=reply.value("Available",false)||state->ToolsWaiting.load()!=reply.value("Waiting",false);
+        state->ToolsGeneration=generation;state->ToolsAvailable=reply.value("Available",false);state->ToolsWaiting=reply.value("Waiting",false);
+        if(reply.contains("Snapshot"))for(const auto* key:{"ServerMods","RemoteAccess"})if(reply["Snapshot"].contains(key)){
+            const auto& value=reply["Snapshot"][key];if(!state->ToolsCatalog.contains(key)||state->ToolsCatalog[key]!=value){state->ToolsCatalog[key]=value;changed=true;}
+        }
+        if(changed)++state->ToolsRevision;return;
+    }
     // An unchanged read is a heartbeat, not new catalogue data. Avoid a
     // pointless rebuild/sort of every visible row every two seconds.
     if(generation==state->ToolsGeneration.load()&&reply.value("Revision",state->HostRevision)==state->HostRevision
@@ -208,17 +286,19 @@ void ConfigureTransport(State* state) {
         PS::SpawnToolRequests::RemoteMapGroundSubmit=[state](nlohmann::json request){nlohmann::json result;return CallCore(state,{{"Action","MapGroundSubmit"},{"Request",std::move(request)}},result)&&result.value("Accepted",false);};
         PS::SpawnToolRequests::RemoteSearch=[state](std::string query){nlohmann::json ignored;CallCore(state,{{"Action","Search"},{"Query",std::move(query)}},ignored);};
         PS::SpawnToolRequests::RemoteSubmit=[state](nlohmann::json request){
+            if(ItemInspection(request)){const bool accepted=QueueCatalog(state,std::move(request));if(accepted)state->ToolsWaiting=true;return accepted;}
             nlohmann::json result;const bool accepted=CallCore(state,{{"Action","Submit"},{"Request",std::move(request)}},result)&&result.value("Accepted",false);
             if(accepted)state->ToolsWaiting=true;return accepted;
         };
         PS::SpawnToolRequests::RemoteCompleted=[state](uint64_t id,nlohmann::json& receipt){std::lock_guard lock(state->ToolsMutex);const auto found=state->Completed.find(id);if(found==state->Completed.end())return false;receipt=std::move(found->second);state->Completed.erase(found);return true;};
         PS::SpawnToolRequests::RemoteReadQuick=[state](uint64_t& revision,int category,nlohmann::json& snapshot){
-            SyncHost(state);std::lock_guard lock(state->ToolsMutex);if(revision==state->ToolsRevision)return false;
+            PumpCatalog(state);SyncHost(state,false,category==-2);std::lock_guard lock(state->ToolsMutex);if(revision==state->ToolsRevision)return false;
+            if(category==-2){snapshot=nlohmann::json::object();for(const auto* key:{"ServerMods","RemoteAccess"})if(state->ToolsCatalog.contains(key))snapshot[key]=state->ToolsCatalog[key];revision=state->ToolsRevision;return true;}
             snapshot=state->ToolsResult;snapshot["_Category"]=category;
             if(!state->MapGroundReply.empty())snapshot["MapGround"]=state->MapGroundReply;
             if(!state->QueryResults.empty()) {snapshot["_QueryResults"]=nlohmann::json::array();for(auto& row:state->QueryResults)snapshot["_QueryResults"].push_back(std::move(row));state->QueryResults.clear();}
             const auto copy=[&](const char* key){if(state->ToolsCatalog.contains(key))snapshot[key]=state->ToolsCatalog[key];};
-            snapshot["Players"]=state->Players;copy("PlayerRoles");
+            snapshot["Players"]=state->Players;copy("PlayerRoles");copy("ServerMods");copy("RemoteAccess");
             if(category==0){copy("Items");copy("CookedVisuals");copy("CatalogIssues");}
             else if(category==1||category==2){if(state->ToolsCatalog.contains("Definitions")&&state->ToolsCatalog["Definitions"].is_array()){
                 snapshot["Definitions"]=nlohmann::json::array();for(const auto& row:state->ToolsCatalog["Definitions"]){const auto type=row.value("Type",std::string{});if((category==1&&(type=="AI"||type=="NPC"))||(category==2&&type=="Resource"))snapshot["Definitions"].push_back(row);}}}
@@ -230,11 +310,11 @@ void ConfigureTransport(State* state) {
         PS::SpawnToolRequests::RemoteWaiting=[state]{return state->ToolsWaiting.load();};
         PS::SpawnToolRequests::RemoteGeneration=[state]{return state->ToolsGeneration.load();};
         PS::LazyCatalog::ConfigureRemote(
-            [state](nlohmann::json request){nlohmann::json result;return CallCore(state,{{"Action","QuerySubmit"},{"Request",std::move(request)}},result)&&result.value("Accepted",false);},
+            [state](nlohmann::json request){return QueueCatalog(state,std::move(request));},
             [state](int category,uint64_t cancelGeneration){nlohmann::json ignored;CallCore(state,{{"Action","QueryCancel"},{"Category",category},{"CancelGeneration",cancelGeneration}},ignored);});
         PS::ItemIconCache::ConfigureRemote(
-            [state](const std::string& icon){nlohmann::json result;return CallCore(state,{{"Action","IconSubmit"},{"Icon",icon}},result)&&result.value("Accepted",false);},
-            [state](nlohmann::json& icon){std::lock_guard lock(state->ToolsMutex);if(state->IconResults.empty())return false;icon=std::move(state->IconResults.front());state->IconResults.pop_front();return true;});
+            [state](const std::string& icon){PumpIcons(state);if(state->IconQueue.size()>=32)return false;state->IconQueue.push_back({icon,state->ConnectionEpoch.load(),state->ToolsGeneration.load()});PumpIcons(state);return true;},
+            [state](nlohmann::json& icon){PumpIcons(state);std::lock_guard lock(state->ToolsMutex);if(state->IconResults.empty())return false;icon=std::move(state->IconResults.front());state->IconResults.pop_front();return true;});
         SyncHost(state,true);
 }
 
@@ -295,6 +375,8 @@ extern "C" __declspec(dllexport) void RS_PLUGIN_CALL RuneSchemaPlugin_Shutdown(v
     state->InventoryReady=false;
     PS::RuneSchemaProfile::Shutdown();
     if(state->Window)state->Window->Shutdown();
+    state->CatalogQueue.clear();state->IconQueue.clear();
+    if(!PS::ProcessExitInProgress.load()){if(state->CatalogSubmit.valid())state->CatalogSubmit.wait();if(state->IconSubmit.valid())state->IconSubmit.wait();if(state->HostRead.valid())state->HostRead.wait();}
     PS::HelpyUpdates::Shutdown();
     PS::HelpyDownloads::Shutdown();
     PS::HelpyMapCache::Shutdown();

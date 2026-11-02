@@ -12,6 +12,8 @@
 #include "SDK/WeakObjectHandle.h"
 #include "Runtime/BridgeDiagnostics.h"
 #include "Core/ModDataRelay.h"
+#include "Core/ServerModList.h"
+#include "Runtime/ServerModNotice.h"
 #include "Core/BuildingNetworkGuard.h"
 #include "Unreal/Hooks.hpp"
 
@@ -41,6 +43,7 @@ public:
     // Receives the validated, merged mod-owned registry contract directly
     // from the registry loader. No runtime manifest file is involved.
     void SetRegistrySnapshot(std::string snapshot);
+    void SetEnabledMods(const nlohmann::json& mods);
     std::map<std::string, std::string> RegistryOwnerFingerprints() const;
     ~RegistryBridge() { Stop(); }
 
@@ -79,6 +82,7 @@ public:
 private:
     int64_t m_helpyAccessRevision=0;
     uint64_t m_helpyAccessGeneration=0;
+    bool m_helpyAccessStatusRequested=false;
     PS::WeakObjectHandle m_helpyAccessComponent;
     int64_t m_helpyMutationRevision=0;
     uint64_t m_helpyMutationGeneration=0;
@@ -129,6 +133,15 @@ private:
     uint32_t m_seenPersistentRevision = 0;
     bool m_started = false;
     PS::ModDataRelay::Server m_modDataRelay;
+    std::string m_enabledMods=PS::ServerModList::Encode(nlohmann::json::array());
+    PS::ModDataRelay::Assembler m_serverModAssembly;
+    PS::WeakObjectHandle m_serverModComponent;
+    bool m_serverModsAvailable=false;
+    bool m_serverModsReady=false;
+    bool m_serverModsPublished=false;
+    int64_t m_serverModSequence=0;
+    int64_t m_receivedServerModSequence=0;
+    ServerModNotice m_serverModNotice;
     std::unordered_map<std::string,PS::WeakObjectHandle> m_relayPeers;
     float m_relayElapsed=0;
     void TickModDataRelay(float deltaSeconds);

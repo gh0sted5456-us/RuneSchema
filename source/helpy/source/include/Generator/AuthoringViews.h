@@ -1,4 +1,5 @@
 #pragma once
+#include "Generator/HelpyTextInput.h"
 #include "Generator/HelpyImGuiTheme.h"
 #include "Generator/AuthoringClient.h"
 #include <imgui.h>
@@ -21,7 +22,7 @@ inline bool TraceControls(Json& options){
         bool on=options.value(key,std::string_view(key)=="SuppressTicks");if(ImGui::Checkbox(label,&on)){options[key]=on;changed=true;}
     }
     char filter[129]{};std::snprintf(filter,sizeof(filter),"%s",options.value("Filter",std::string{}).c_str());
-    if(ImGui::InputText("Function path contains",filter,sizeof(filter))){options["Filter"]=filter;changed=true;}
+    if(HelpyTextInput::InputText("Function path contains",filter,sizeof(filter))){options["Filter"]=filter;changed=true;}
     if(changed){options["Seconds"]=seconds;options["MaxEvents"]=events;options["Categories"]=mask;}
     ImGui::TextWrapped("IncludeAny / ExcludeAny filter lists and EventCaptures field paths are editable in the JSONC below. Parameter or field capture requires a specific function filter. Native limits and validation are unchanged.");
     return changed;

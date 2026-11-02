@@ -141,7 +141,7 @@ int main(int argc, char** argv)
         && protocol.find("if(!enabled||!ready||!active)")!=std::string::npos
         && panel.find("AuthoringClient::Activate()")!=std::string::npos,
         "desktop uses explicit session activation after native readiness; requests cannot bypass it");
-    Check(panel.find("ImGui::Combo(\"Workflow\"")!=std::string::npos
+    Check(panel.find("HelpyMenu::Tabs(\"authoring-workflows\"")!=std::string::npos
         && panel.find("Export all loader schemas")!=std::string::npos
         && panel.find("SchemaExport")!=std::string::npos,
         "desktop authoring keeps workflow navigation and full schema export");
@@ -205,6 +205,14 @@ int main(int argc, char** argv)
         &&has(crafting,"ScopedCostSwap")&&has(crafting,"frames.pop_back()")
         &&has(policies,"crafting.Before(")&&has(policies,"crafting.After(")&&has(policies,"crafting.Clear()"),
         "crafting must retain exact player ownership, game-thread isolation and nested recipe restoration");
+    Check(has(crafting,"NativeMethod(fn,i==1?4:1)")&&has(crafting,"bConsumeItemsIndividually")&&has(crafting,"savedIndividual")
+        &&has(crafting,"NativeCan")&&has(crafting,"NativeMax")&&has(crafting,"NativeHas")&&has(policies,"crafting.InstallNative()"),
+        "native direct crafting and AnyOf restoration must use the same scoped owner checks");
+    const auto menus=Read(policyRoot/"MaterialMenus.h");
+    Check(has(materials,"NativeMethod(fn,0)")&&has(materials,"ContainedItemDataRow")&&has(materials,"ScopedCostSwap")
+        &&has(menus,"CurrentStation")&&has(menus,"IsActivated")&&has(menus,"IsVisible")&&has(menus,"allowed!=state.Allowed")
+        &&has(policies,"menus.Update(")&&has(policies,"menus.Clear()"),
+        "native material menus must refresh only active local menus on policy transitions");
     for(const auto* forbidden:{"FindAllOf","PreventOriginalFunctionCall","FuelConsumedOverride","RecipesUnlocked","XPMultiplier","BonusCount"})
         Check(!has(crafting,forbidden),"free crafting must not scan players, replace native validation or edit progression/output/fuel data");
     std::cout << "Native binding resolution contract passed.\n";

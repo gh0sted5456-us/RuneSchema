@@ -1,6 +1,7 @@
 #pragma once
 #include "Core/DiagnosticToastPresentation.h"
 #include "Core/HelpyOverlayGeometry.h"
+#include "Core/RsmkResources.h"
 #include "Generator/HelpyImGuiTheme.h"
 #include <windows.h>
 #include <algorithm>
@@ -23,10 +24,12 @@ class HelpyDiagnosticOverlay {
     HWND m_game{};HMONITOR m_monitor{};UINT m_dpi=96;
     std::chrono::steady_clock::time_point m_nextUpdate{};
     std::vector<DiagnosticToastFeed::Notice> m_cards;
+    ServerModVersions::Summary m_versions;
     std::string m_fps;
     HelpyImGuiTheme::Theme m_theme{};
     float m_scale=1.0f;
     int m_width=390,m_gap=8;
+    HICON m_logo{};bool m_viewMods=false;
     struct Layout {int DetailHeight=0,FooterHeight=0,Height=0;};
     std::vector<Layout> m_layouts;
 
@@ -85,13 +88,13 @@ class HelpyDiagnosticOverlay {
         const int stripeWidth=std::max(3,Spacing(4));
         const int textWidth=std::max(60,m_width-2*Spacing(16)-stripeWidth-8);
         for(const auto& card:m_cards){
-            const auto display=DiagnosticToastPresentation::Format(card);
+            const auto display=DiagnosticToastPresentation::Format(card,m_versions);
             Layout item;
             item.DetailHeight=WrapHeight(dc,fonts.Regular,Wide(display.Detail),textWidth);
             item.FooterHeight=display.Subtitle.empty()?0:WrapHeight(dc,fonts.Small,Wide(display.Subtitle),textWidth);
             // Measure the same font and gap geometry that Paint uses. Reserve
             // bottom padding *after* the last wrapped glyph, at every DPI.
-            const int header=std::max({fonts.SmallSize+Spacing(6),Spacing(16),std::max(12,Spacing(15))});
+            const int header=std::max({fonts.SmallSize+Spacing(6),Spacing(16),std::max(12,Spacing(display.WorldMods?24:15))});
             const int title=fonts.TitleSize+Spacing(6);
             item.Height=Spacing(11)+header+Spacing(5)+title+Spacing(6)+item.DetailHeight
                 +(item.FooterHeight?Spacing(5)+item.FooterHeight:0)+Spacing(15);
@@ -162,22 +165,23 @@ class HelpyDiagnosticOverlay {
         }
         for(size_t n=0;n<m_cards.size()&&n<m_layouts.size();++n){
             const auto& card=m_cards[n];const auto& layout=m_layouts[n];
-            const auto formatted=DiagnosticToastPresentation::Format(card);
+            const auto formatted=DiagnosticToastPresentation::Format(card,m_versions);
             const int height=layout.Height;
             RECT shadow{4,top+4,m_width-1,top+height-1};
             RoundedBox(dc,shadow,radius,Blend(bg,RGB(0,0,0),0.55f),Blend(baseBorder,RGB(0,0,0),0.65f));
-            RECT body{1,top+1,m_width-5,top+height-5};
-            RoundedBox(dc,body,radius,bg,baseBorder);
-            const auto severity=card.Summary?m_theme.accent:card.Severity==LiveLog::Level::Error?m_theme.error:card.Severity==LiveLog::Level::Warning?m_theme.warning:card.Severity==LiveLog::Level::Diagnostic?m_theme.accent:m_theme.info;
+            const auto severity=formatted.Success?ImVec4(.35f,.8f,.48f,1):formatted.WorldMods?(formatted.Alignment==ServerModVersions::Tone::Aligned?ImVec4(.35f,.8f,.48f,1):formatted.Alignment==ServerModVersions::Tone::Differences?m_theme.warning:m_theme.info):card.Summary?m_theme.accent:card.Severity==LiveLog::Level::Error?m_theme.error:card.Severity==LiveLog::Level::Warning?m_theme.warning:card.Severity==LiveLog::Level::Diagnostic?m_theme.accent:m_theme.info;
             const COLORREF tint=Color(severity);
+            RECT body{1,top+1,m_width-5,top+height-5};
+            RoundedBox(dc,body,radius,bg,(formatted.WorldMods||formatted.Success)?tint:baseBorder);
             const HBRUSH stripe=CreateSolidBrush(tint);
             RECT side{body.left+3,body.top+radius,body.left+3+stripeWidth,body.bottom-radius};
             FillRect(dc,&side,stripe);DeleteObject(stripe);
             const int left=body.left+Spacing(16)+stripeWidth;
             const int right=body.right-Spacing(16);
             const int headerY=top+Spacing(11);
-            const int iconSize=std::max(12,Spacing(15));
-            Icon(dc,formatted.Type,left,headerY,iconSize,tint);
+            const int iconSize=std::max(12,Spacing(formatted.WorldMods?24:15));
+            if(formatted.WorldMods&&m_logo)DrawIconEx(dc,left,headerY,m_logo,iconSize,iconSize,0,nullptr,DI_NORMAL);
+            else Icon(dc,formatted.Type,left,headerY,iconSize,tint);
             const int headerHeight=std::max({fonts.SmallSize+Spacing(6),Spacing(16),iconSize});
             // The icon has its own fixed slot, so the severity badge cannot
             // push a long translated brand/title into the adjacent region.
@@ -202,10 +206,19 @@ class HelpyDiagnosticOverlay {
             top+=height+m_gap;
         }
     }
+    bool ModsAt(POINT point)const{
+        int top=m_fps.empty()?0:Spacing(32)+m_gap;
+        for(size_t i=0;i<m_cards.size()&&i<m_layouts.size();++i){const int bottom=top+m_layouts[i].Height;
+            if(point.x>=0&&point.x<m_width&&point.y>=top&&point.y<bottom)return DiagnosticToastPresentation::Format(m_cards[i]).WorldMods;
+            top=bottom+m_gap;
+        }return false;
+    }
     static LRESULT CALLBACK WindowProc(HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam){
         auto* self=reinterpret_cast<HelpyDiagnosticOverlay*>(GetWindowLongPtrW(hwnd,GWLP_USERDATA));
         if(message==WM_NCCREATE){auto* create=reinterpret_cast<CREATESTRUCTW*>(lParam);self=static_cast<HelpyDiagnosticOverlay*>(create->lpCreateParams);SetWindowLongPtrW(hwnd,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(self));}
-        if(message==WM_NCHITTEST)return HTTRANSPARENT;
+        if(message==WM_NCHITTEST){POINT point{static_cast<short>(LOWORD(lParam)),static_cast<short>(HIWORD(lParam))};ScreenToClient(hwnd,&point);return self&&self->ModsAt(point)?HTCLIENT:HTTRANSPARENT;}
+        if(message==WM_LBUTTONUP&&self){POINT point{static_cast<short>(LOWORD(lParam)),static_cast<short>(HIWORD(lParam))};if(self->ModsAt(point))self->m_viewMods=true;return 0;}
+        if(message==WM_SETCURSOR&&LOWORD(lParam)==HTCLIENT){SetCursor(LoadCursorW(nullptr,IDC_HAND));return TRUE;}
         if(message==WM_MOUSEACTIVATE)return MA_NOACTIVATE;
         if(message==WM_DPICHANGED&&self){self->m_dpi=HIWORD(wParam);self->m_nextUpdate={};return 0;}
         if(message==WM_ERASEBKGND)return 1;
@@ -221,25 +234,32 @@ class HelpyDiagnosticOverlay {
         m_window=CreateWindowExW(WS_EX_NOACTIVATE|WS_EX_TOOLWINDOW|WS_EX_TOPMOST|WS_EX_TRANSPARENT|WS_EX_LAYERED,
             ClassName,L"RuneSchema diagnostic notifications",WS_POPUP,0,0,420,90,nullptr,nullptr,module,this);
         if(!m_window)return false;
+        m_logo=static_cast<HICON>(LoadImageW(module,MAKEINTRESOURCEW(IDI_RSMK),IMAGE_ICON,32,32,0));
         SetLayeredWindowAttributes(m_window,ColorKey,244,LWA_COLORKEY|LWA_ALPHA);
         return true;
     }
 public:
     void Hide(){if(m_window&&m_showing)ShowWindow(m_window,SW_HIDE);m_showing=false;}
-    void Close(){if(m_window){DestroyWindow(m_window);m_window=nullptr;}if(m_registered){UnregisterClassW(ClassName,m_module);m_registered=false;}m_showing=false;m_game=nullptr;m_monitor=nullptr;m_nextUpdate={};}
-    void Update(HINSTANCE module,HWND game,const DiagnosticToastFeed::Feed& feed,const HelpyImGuiTheme::Theme& theme,bool show,std::string_view fps={}){
+    void Close(){if(m_window){DestroyWindow(m_window);m_window=nullptr;}if(m_logo){DestroyIcon(m_logo);m_logo=nullptr;}if(m_registered){UnregisterClassW(ClassName,m_module);m_registered=false;}m_showing=false;m_game=nullptr;m_monitor=nullptr;m_nextUpdate={};}
+    bool TakeModsRequest(){const bool requested=m_viewMods;m_viewMods=false;return requested;}
+    void Update(HINSTANCE module,HWND game,const DiagnosticToastFeed::Feed& feed,const HelpyImGuiTheme::Theme& theme,bool show,std::string_view fps={},const ServerModVersions::Summary& versions={}){
         if(!show||!game||!IsWindow(game)||(feed.Empty()&&fps.empty())){Hide();return;}
         const bool fpsChanged=m_fps!=fps;
-        const auto now=std::chrono::steady_clock::now();if(m_showing&&now<m_nextUpdate&&!fpsChanged&&m_cards.size()==feed.Visible().size())return;
+        const bool versionsChanged=m_versions!=versions;
+        const auto now=std::chrono::steady_clock::now();if(m_showing&&now<m_nextUpdate&&!fpsChanged&&!versionsChanged&&m_cards.size()==feed.Visible().size())return;
         m_nextUpdate=now+std::chrono::milliseconds(feed.Empty()?std::clamp(theme.fpsRefreshMs,500,2000):100);
         if(!Ensure(module))return;
         m_fps=fps;
+        m_versions=versions;
         bool cardsChanged=m_cards.size()!=feed.Visible().size();
         if(!cardsChanged){size_t i=0;for(const auto& item:feed.Visible()){
             const auto& prior=m_cards[i++];
             if(prior!=item){cardsChanged=true;break;}
         }}
         if(cardsChanged)m_cards.assign(feed.Visible().begin(),feed.Visible().end());
+        const bool clickable=std::any_of(m_cards.begin(),m_cards.end(),[](const auto& card){return DiagnosticToastPresentation::Format(card).WorldMods;});
+        const auto style=GetWindowLongPtrW(m_window,GWL_EXSTYLE),wanted=clickable?style&~WS_EX_TRANSPARENT:style|WS_EX_TRANSPARENT;
+        if(style!=wanted)SetWindowLongPtrW(m_window,GWL_EXSTYLE,wanted);
         const float priorScale=m_scale;
         const float priorFont=m_theme.fontScale,priorDensity=m_theme.density;
         const std::string priorFamily=m_theme.fontFamily;
@@ -267,7 +287,7 @@ public:
         const int maxHeight=HelpyOverlayGeometry::MaxHeight(bounds,margin);
         const bool resized=oldWidth!=m_width||std::abs(priorScale-m_scale)>0.001f||priorFont!=m_theme.fontScale||
             priorDensity!=m_theme.density||priorFamily!=m_theme.fontFamily;
-        if(cardsChanged||resized||m_layouts.empty()){
+        if(cardsChanged||versionsChanged||resized||m_layouts.empty()){
             const HDC dc=CreateCompatibleDC(nullptr);
             if(!dc){Hide();return;}
             MeasureCards(dc);DeleteDC(dc);
@@ -310,7 +330,7 @@ public:
         const bool frameChanged=!windowWasVisible||old.left!=x||old.top!=y||static_cast<int>(old.right-old.left)!=m_width||static_cast<int>(old.bottom-old.top)!=actualHeight;
         if(frameChanged)SetWindowPos(m_window,HWND_TOPMOST,x,y,m_width,actualHeight,SWP_NOACTIVATE|SWP_SHOWWINDOW);
         m_showing=true;
-        if(cardsChanged||fpsChanged||resized||frameChanged||themeChanged){
+        if(cardsChanged||versionsChanged||fpsChanged||resized||frameChanged||themeChanged){
             InvalidateRect(m_window,nullptr,FALSE);UpdateWindow(m_window);
         }
     }

@@ -44,7 +44,26 @@ int main(int argc,char** argv){
     HelpyIconPack::Progress progress;HelpySourceCache::Snapshot unavailable;
     auto active=unavailable;active.Authoritative=true;active.Key="active-sources";active.CatalogKey="active-items";active.SourceKeys={{"example","0123456789abcdef"},{"game","fedcba9876543210"}};active.Owners={{"example",{"published-name"}}};active.DeclaredOwners=active.Owners;
     const auto import=[&](const fs::path& f){progress.Cancel=false;return HelpyIconPack::Import(f,fixture/"renamed runtime",cache,unavailable,1024*1024,progress,HelpyIconPack::ImportPolicy::Presentation);};
+    {const auto nameCache=fixture/"name-upgrade"/"item-icons";HelpyPresentationCache::Group group;group.Owner="mods/example";group.Fingerprint=std::string(64,'a');group.Locale=locale;group.PublishedVersion=2;
+        Json row={{"Kind","items"},{"Owner","mods/example"},{"Path","/Example/Items/RuneScimitar.RuneScimitar"},{"PersistenceID","unchanged-id"},{"Data",{{"Name","ITEM_Rune_Scimitar"},{"Type","MeleeWeaponData"},{"Category","Runes"}}}};
+        group.Records=Json::array({row});const auto commit=[&]{return HelpyPresentationCache::Commit(nameCache,{group},1024*1024,[](const std::string&){return std::vector<char>{};});};commit();
+        row["Data"]["DisplayName"]="Rune Scimitar";group.Records=Json::array({row});assert(commit().Records>0);
+        auto stored=HelpyPresentationCache::Records(nameCache,locale,"items");assert(stored.size()==1&&stored[0]["Data"]["Name"]=="Rune Scimitar"&&stored[0]["Data"]["Category"]=="Weapons"&&stored[0]["PersistenceID"]=="unchanged-id");
+        row["Data"].erase("DisplayName");group.Records=Json::array({row});commit();stored=HelpyPresentationCache::Records(nameCache,locale,"items");assert(stored[0]["Data"]["Name"]=="Rune Scimitar");}
     auto result=import(file);assert(result.Imported==1&&result.RecordsImported==1);
+    {const auto saved=fixture/"cached-labels"/"item-icons",native=saved.parent_path()/"item-catalogues"/"native-items.json";
+        auto reference=row;reference["Data"]["Name"]="ITEM_Ranger_Body_Black";reference["Data"]["InternalName"]="armour_ranger_body_black";
+        HelpyPresentationCache::Group group;group.Owner="mods/published-name";group.Fingerprint=std::string(64,'a');group.Locale=locale;group.Records=Json::array({reference});
+        HelpyPresentationCache::Commit(saved,{group},1024*1024,[](const auto&){return std::vector<char>{};});
+        CacheBundleIO::Publish(CacheBundleStore::Directory(saved,saved.parent_path())/"index.json",Json{{"Version",1},{"Routes",Json::object()}}.dump());
+        auto known=reference.at("Data");known["Path"]=path;known["Name"]="Ranger Body (Dyed Black)";known["SourceKind"]="modded";known["SourceName"]="published-name";known["Icon"]=art;
+        const auto scope=Json::array({"item-browse-v2","older-content-version",Json::array(),locale}).dump();
+        CacheBundleIO::Publish(native,Json{{"Version",1},{"Scope",scope},{"Rows",Json::array({known})}}.dump());PagedItemCatalog::Save(native,scope,{std::make_shared<const Json>(known)});
+        assert(PagedItemCatalog::Current(PagedItemCatalog::File(native)));
+        const auto load=[&](CacheBundleItems::Store& reader){std::optional<Json> page;for(unsigned i=0;i<2000;++i){page=reader.Lookup(saved,fixture,active,locale,"ranger","",28);if(page||!reader.Awaiting())break;std::this_thread::sleep_for(std::chrono::milliseconds(1));}assert(page&&!page->at("Rows").empty());return page->at("Rows")[0];};
+        CacheBundleItems::Store reader;auto first=load(reader);assert(first["Name"]==known["Name"]&&first["InternalName"]=="armour_ranger_body_black"&&first["Path"]==path);
+        // A fresh file-reader instance recovers the same label without a game or a live check.
+        reader.Shutdown();CacheBundleItems::Store reopened;assert(load(reopened)["Name"]==known["Name"]);reopened.Shutdown();}
     const auto records=CacheBundleStore::Read(cache,fixture/"different install",active,locale,"items");assert(records.size()==1&&!records[0]["Data"].at("ObservedCurrent").get<bool>()&&!records[0]["Data"].contains("Grant"));
     auto offlineSources=active;offlineSources.Authoritative=false;offlineSources.Provisional=true;offlineSources.PresentationOnly=true;
     assert(CacheBundleStore::Read(cache,fixture,offlineSources,locale,"items").size()==1);
@@ -89,10 +108,11 @@ int main(int argc,char** argv){
     assert(PagedItemCatalog::Read(PagedItemCatalog::File(native),{},"cannon","",28,true,locale)["Rows"].size()==1);
     const auto savedScope=Json::array({"item-browse-v2","older-game-version",Json::array(),locale}).dump();
     PagedItemCatalog::Save(native,savedScope,{std::make_shared<const Json>(discovered)});
+    const auto heldIndex=fixture/"published-index-held.json";fs::rename(index,heldIndex);
     const auto paged=lookup(active);assert(paged&&paged->at("Rows").size()==1&&paged->at("NextCursor").get<std::string>().starts_with("P:"));
     {CacheBundleItems::Store store;std::optional<Json> end;for(unsigned i=0;i<1000;++i){
         end=store.Lookup(cache,fixture,active,locale,"cannon",paged->at("NextCursor"),28);if(end)break;std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }assert(end&&end->at("Rows").empty()&&!end->value("HasMore",true));store.Shutdown();}
+    }assert(end&&end->at("Rows").empty()&&!end->value("HasMore",true));store.Shutdown();}fs::rename(heldIndex,index);
     HelpyCachedCatalog::Configure();HelpyRuntimePreferences::PassiveRefresh=true;HelpyCachedCatalog::NextPassive={};
     unsigned warmRequests=0;LazyCatalog::RemoteSubmit=[&](const Json& q){assert(q.at("Mode")=="Alphabetical"&&q.at("Limit")==1);++warmRequests;return true;};
     LazyCatalog::For(0).CacheHit=false;LazyCatalog::For(0).Pending=false;HelpyCachedCatalog::Pump();

@@ -1,6 +1,8 @@
 #pragma once
+#include "Generator/HelpyTextInput.h"
 #include "Generator/HelpyImGuiTheme.h"
 #include "Generator/HelpyMenu.h"
+#include "Core/HelpyControllerDevice.h"
 #include "Runtime/HelpySettings.h"
 #include "Runtime/HelpyPaths.h"
 #include "Runtime/PluginRuntimeServices.h"
@@ -10,6 +12,7 @@
 #include "Core/HelpyPreviewHooks.h"
 #include "Core/HelpyVulkanSetup.h"
 #include "Core/RuneSchemaDataRoot.h"
+#include "SaveBackupStore.h"
 #include <nlohmann/json.hpp>
 #include <functional>
 #include <map>
@@ -141,8 +144,9 @@ inline void QuickSettings(){
     if(ImGui::TreeNode("Controller navigation")){
         ImGui::TextUnformatted("Input mode");ImGui::SetNextItemWidth(-1);bool inputChanged=ImGui::Combo("##input-mode",&theme.inputMode,"Automatic\0Mouse & keyboard\0Controller\0");
         hint("Automatic follows your latest input. Controller mode keeps the navigation hints visible. Device discovery runs on device changes; state reads run only while Helpy renders.");
-        ImGui::TextUnformatted("Controller glyphs");ImGui::SetNextItemWidth(-1);inputChanged|=ImGui::Combo("##controller-glyphs",&theme.controllerGlyphs,"Automatic (XInput)\0Xbox\0PlayStation\0Generic\0");
-        hint("XInput-compatible controllers navigate the normal interface. For PlayStation controllers, use Steam Input/an XInput driver and choose PlayStation glyphs.");
+        ImGui::TextUnformatted("Controller glyphs");ImGui::SetNextItemWidth(-1);inputChanged|=ImGui::Combo("##controller-glyphs",&theme.controllerGlyphs,"Automatic (device labels)\0Xbox\0PlayStation\0Generic\0Nintendo\0");
+        hint("Xbox, DualShock/DualSense and supported Nintendo controllers use the same navigation. Automatic follows the device button labels; choose a manual layout when a mapper hides its identity.");
+        ImGui::TextWrapped("%s",HelpyControllerDevice::Status().c_str());
         if(inputChanged)HelpyImGuiTheme::SaveCurrent();ImGui::TreePop();
     }
     }
@@ -180,6 +184,19 @@ inline void QuickSettings(){
     ImGui::EndDisabled();ImGui::EndDisabled();
     if(!editable){ImGui::TextDisabled("Shortcut unavailable. Hover for details.");hint(Loaded&&!Patch().empty()?"Finish or discard the Settings draft before changing this shortcut.":"Update RuneSchema and Helpy together, then reload RuneSchema settings.");}
     if(!hotkeyStatus.empty())ImGui::TextWrapped("%s",hotkeyStatus.c_str());
+    auto& controllerTheme=HelpyImGuiTheme::Current;
+    ImGui::TextUnformatted("Controller shortcut");ImGui::SetNextItemWidth(-1);
+    bool controllerChanged=ImGui::Combo("##controller-shortcut",&controllerTheme.controllerShortcut,"Disabled\0Xbox / PS / Home button\0View + Menu\0");
+    hint("An alternate to your keyboard shortcut. Works while your assigned game or Helpy has focus, including when Helpy is in its tray. View + Menu is Share + Options on PlayStation or Minus + Plus on Nintendo. Held buttons do not repeatedly open and close it.");
+    ImGui::BeginDisabled(controllerTheme.controllerShortcut!=1||HelpyEnvironment::Server());
+    controllerChanged|=HelpyImGuiTheme::Toggle("Reserve Guide button in game",&controllerTheme.reserveControllerGuide);
+    ImGui::EndDisabled();
+    hint("Requests exclusive Guide input from Windows GameInput while Dragonwilds has focus. Released when Helpy exits or its five-second bridge lease expires. Steam can read controllers independently; this cannot guarantee a global Guide-button lock.");
+    if(controllerChanged)HelpyImGuiTheme::SaveCurrent();
+    if(controllerTheme.controllerShortcut==1){
+        ImGui::TextWrapped("If Steam or Game Bar also opens, disable its Guide-button action or choose the View + Menu shortcut. Helpy does not change their settings.");
+        if(!HelpyImGuiTheme::ControllerShortcutStatus.empty())ImGui::TextWrapped("%s",HelpyImGuiTheme::ControllerShortcutStatus.c_str());
+    }
     if(HelpyImGuiTheme::SoftButton("Reload theme"))HelpyImGuiTheme::RequestReload();
     hint("Reload the current theme from disk. This does not reload mods or game content.");
     if(PluginRuntimeServices::ExternalDesktop&&HelpyImGuiTheme::SoftButton("Exit Helpy"))PostQuitMessage(0);
@@ -188,7 +205,18 @@ inline void QuickSettings(){
     const bool performanceOpen=QuickSection==3;
     if(performanceOpen){
         auto& theme=HelpyImGuiTheme::Current;
-        bool save=HelpyImGuiTheme::Toggle("Show FPS in Helpy's window",&theme.showFps);
+        bool save=HelpyImGuiTheme::Toggle("Play-time reminders",&theme.playTimeReminders);
+        hint("Informational reminder after three observed hours of gameplay, then hourly. Menus, disconnected intervals and suspend gaps are excluded. Turning this off stops reminders; it never pauses the game.");
+        save|=HelpyImGuiTheme::Toggle("Resource diagnostics",&theme.resourceDiagnostics);
+        hint("Samples Helpy and Dragonwilds CPU/RAM and optional GPU counters on a worker every five seconds. Thresholds and current measurements are in Settings > Diagnostics > Performance.");
+        ImGui::BeginDisabled(!theme.resourceDiagnostics);
+        save|=HelpyImGuiTheme::Toggle("Resource alerts during startup",&theme.startupResourceAlerts);
+        hint("Off by default: measurements continue, but resource alerts wait two minutes after monitoring starts or a new game attaches. Enable to report startup activity too. Later alerts still use your CPU/RAM/GPU thresholds.");
+        ImGui::EndDisabled();
+        save|=HelpyImGuiTheme::Toggle("UE4SS activity diagnostics",&theme.ue4ssDiagnostics);
+        hint("Read-only attribution of log bursts and known Lua errors. Stock UE4SS is unchanged; this does not measure per-mod callback timing or prove contention.");
+        ImGui::SeparatorText("Frame rate");
+        save|=HelpyImGuiTheme::Toggle("Show FPS in Helpy's window",&theme.showFps);
         hint("Shows engine tick FPS and Helpy's own rendered FPS in the window frame. The counter reads cached game timing only while visible; it does not scan game objects. Dedicated servers show server tick rate.");
         save|=HelpyImGuiTheme::Toggle("Show game FPS in game",&theme.showGameFps);
 #if defined(HELPY_PREVIEW)
@@ -282,13 +310,24 @@ inline void QuickSettings(){
             hint("Enabled: use bypass by default. Disabled: Normal, Quick Launch and dedicated servers use relaxed native loading first, then fallback only after native rejection. Native loading runs once. Does not repair unreadable data; keep backups and disable any standalone bypass. Next launch only.\n\nCurrent session: "+Snapshot.value("BypassStatus",std::string("Not reported")));}
         ImGui::TextDisabled("Backup-first save pruning");
         hint("RuneSchema verifies a whole-save backup before removing orphaned mod data. Active quests from disabled mods are removed when their IDs no longer resolve in the certified quest registry. Backups are restored manually; old Recovery archives are not loaded or deleted.");
+        ImGui::SeparatorText("Experimental recovery");
+        std::string recoveryRuntime;using Kind=HelpyEnvironment::Kind;
+        switch(HelpyEnvironment::Current){case Kind::Steam:recoveryRuntime="steam";break;case Kind::Epic:recoveryRuntime="epic";break;case Kind::GamePass:recoveryRuntime="gamepass";break;case Kind::Dedicated:recoveryRuntime="server";break;default:break;}
+        if(!recoveryRuntime.empty()){
+            static std::filesystem::path checked;static bool enabled=false;static std::string message;
+            const auto directory=SaveBackups::Directory(RuneSchemaData::Directory(),recoveryRuntime);
+            if(checked!=directory){checked=directory;try{enabled=SaveBackups::ExperimentalWorldRecovery(directory);message.clear();}catch(const std::exception& error){enabled=false;message=error.what();}}
+            if(HelpyImGuiTheme::Toggle("World save recovery (experimental)",&enabled))try{SaveBackups::SetWorldRecovery(directory,enabled);message.clear();}catch(const std::exception& error){enabled=!enabled;message=error.what();}
+            hint("Off by default for each runtime. Unlocks world snapshots and restoration in Save Recovery. Applies at the next world entry; refresh the recovery list after changing it. Character backups and the existing backup before world cleanup remain enabled. No periodic save scan is added.");
+            if(!message.empty())ImGui::TextWrapped("%s",message.c_str());
+        }else ImGui::TextDisabled("Choose a runtime to configure world recovery.");
         if(QuickToggleError||!Loaded){ImGui::TextColored(HelpyImGuiTheme::Current.error,"RuneSchema settings need attention. Hover for details.");hint(Status);}
         if(ImGui::TreeNode("Advanced")){
             ImGui::BeginDisabled(quick.empty()||quick.value("DedicatedServer",false));
             if(!quick.value("DedicatedServer",false)){
             bool vanilla=mode==0;if(HelpyImGuiTheme::Toggle("Vanilla Load",&vanilla)){mode=vanilla?0:1;dirty=true;saved=false;}
             hint("Native strictness; automatic fallback is off. Orphan pruning remains active. The Save Bypass switch can still force bypass by default. Applies next launch.");
-            const auto choices=[&](const char* label,const char* key,char* text){ImGui::PushID(key);ImGui::SetNextItemWidth(HelpyImGuiTheme::Current.X(250));dirty|=ImGui::InputText(label,text,257);ImGui::PopID();};
+            const auto choices=[&](const char* label,const char* key,char* text){ImGui::PushID(key);ImGui::SetNextItemWidth(HelpyImGuiTheme::Current.X(250));dirty|=HelpyTextInput::InputText(label,text,257);ImGui::PopID();};
             choices("Character name","Characters",character);hint("Manual native character display name. Ambiguous names are refused at launch.");
             choices("World slot name","Worlds",world);hint("Manual native world slot name, not a save-file path.");
             if(HelpyImGuiTheme::SoftButton("Refresh choices")){load(false);choicePolls=3;nextChoicePoll=ImGui::GetTime()+.5;}hint("Refresh native character/world choices in the main menu without discarding your selection.");ImGui::SameLine();
@@ -313,12 +352,12 @@ inline void Field(const std::string& key,json& value,const std::string& path){
     else if(value.is_string()){
         const auto current=value.get<std::string>();if(current.size()>8192){ImGui::TextWrapped("%s: value is too large for this field; edit the INI externally.",label.c_str());ImGui::PopID();return;}
         std::vector<char> text(8193);std::snprintf(text.data(),text.size(),"%s",current.c_str());ImGui::TextWrapped("%s",label.c_str());ImGui::SetNextItemWidth(-1);
-        if(ImGui::InputText("##value",text.data(),text.size(),path=="/helpyAuthority/accessPin"?ImGuiInputTextFlags_Password:0)){value=std::string(text.data());changed=true;}
+        if(HelpyTextInput::InputText("##value",text.data(),text.size(),path=="/helpyAuthority/accessPin"?ImGuiInputTextFlags_Password:0)){value=std::string(text.data());changed=true;}
     }else if(value.is_array()){
         auto [it,inserted]=ArrayText.try_emplace(path,value.dump());if(it->second.size()>16384){ImGui::TextWrapped("%s: list is too large for this field; edit the INI externally.",label.c_str());ImGui::PopID();return;}
         std::vector<char> text(16385);std::snprintf(text.data(),text.size(),"%s",it->second.c_str());
         ImGui::TextUnformatted(label.c_str());ImGui::SetNextItemWidth(-1);
-        if(ImGui::InputText("##array",text.data(),text.size())){it->second=text.data();const auto parsed=json::parse(it->second,nullptr,false);
+        if(HelpyTextInput::InputText("##array",text.data(),text.size())){it->second=text.data();const auto parsed=json::parse(it->second,nullptr,false);
             ArrayErrors[path]=!parsed.is_array();if(parsed.is_array()){value=parsed;changed=true;}}
         if(ArrayErrors[path])ImGui::TextColored(HelpyImGuiTheme::Current.error,"Enter a JSON list, for example [\"value\"].");
     }
@@ -366,7 +405,7 @@ inline void Render(){
     if(!Status.empty())ImGui::TextWrapped("%s",Status.c_str());
     if(!Loaded)return;
     ImGui::TextDisabled("%s",Snapshot.value("Path",std::string("settings/settings.ini")).c_str());
-    ImGui::InputTextWithHint("##settings-filter","Filter settings...",Filter,sizeof(Filter));const auto filter=Lower(Filter);
+    HelpyTextInput::InputTextWithHint("##settings-filter","Filter settings...",Filter,sizeof(Filter));const auto filter=Lower(Filter);
     if(!HelpyMenu::BeginBody("RuneSchema settings body",ConfigSection)){HelpyMenu::EndBody();return;}
     const auto matches=[&](const std::string& path){return filter.empty()||Lower(path+" "+Label(path.substr(path.find_last_of('/')+1))).find(filter)!=std::string::npos;};
     const auto& editable=Snapshot.at("Editable");

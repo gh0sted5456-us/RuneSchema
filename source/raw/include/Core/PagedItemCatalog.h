@@ -86,7 +86,7 @@ inline Json Read(const fs::path& file,const std::string& scope,const std::string
             const auto info=ItemSource::Reattribute(row,{},nativeProviders);
             if(info.Group==ItemSource::Kind::Vanilla||info.Group==ItemSource::Kind::Expansion)row.update(ItemSource::Fields(info));
         }
-        ItemCategory::Repair(row);if(match(row))rows.push_back(std::move(row));
+        ItemName::Repair(row);ItemCategory::Repair(row);if(match(row))rows.push_back(std::move(row));
     }
     if(fs::file_size(file)!=size||fs::last_write_time(file)!=stamp)throw std::runtime_error("Item pages changed while reading");
     const bool filtering=at<count&&scanned==2048&&rows.size()<limit;

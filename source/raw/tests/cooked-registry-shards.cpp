@@ -33,6 +33,10 @@ int main()try{
         const auto expanded=Resolve(alias,compatible,[&](const std::string& path){return Make(Payload(path==renamed?recipeA:recipeB));});
         Check(expanded.Owner=="Dye"&&expanded.References==2&&expanded.Paths.front()==alias);
         Check(RegistryFolderOwner(alias)=="Dye"&&RegistryFolderOwner("/Game/Elsewhere/Registry/DA_Registry_Main.DA_Registry_Main").empty());
+        for(const std::string directory:{"/Game/Mods/Dye/Registry/","/game/mods/Dye/registry/Shards/"})
+            Check(RegistryFolderOwner(directory)==RegistryFolderOwner(directory+"DA_Registry_Test.DA_Registry_Test"));
+        for(const std::string directory:{"/Game/Mods/Dye/RegistryExtra/","/Game/Gameplay/Registry/","/Plugin/Registry/"})
+            Check(RegistryFolderOwner(directory).empty()&&RegistryFolderOwner(directory+"DA_Registry_Test.DA_Registry_Test").empty());
         Reject([&]{Resolve("/Game/Mods/Other/Registry/DA_Registry_Main.DA_Registry_Main",compatible,load);});
         Reject([&]{Resolve(alias,compatible,[&](const std::string&){return Make(Payload(recipeA),"Ritualist");});});
         Reject([&]{Resolve("/Game/Mods/Dye/Registry/../DA_Registry_Main.DA_Registry_Main",compatible,load);});

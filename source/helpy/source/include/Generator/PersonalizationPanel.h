@@ -1,4 +1,5 @@
 #pragma once
+#include "Generator/HelpyTextInput.h"
 #include "Core/HelpyPersonalization.h"
 #include "Core/ItemPresentation.h"
 #include "Generator/HelpyImGuiTheme.h"
@@ -57,8 +58,8 @@ inline void Render(){
     if(!Open)return;const auto& theme=HelpyImGuiTheme::Current;HelpyImGuiTheme::Scope skin(theme);ImGui::SetNextWindowSize({theme.X(460),0},ImGuiCond_Appearing);
     HelpyImGuiTheme::CenterNextWindow();
     if(ImGui::Begin("Helpy labels###personalization",&Open,ImGuiWindowFlags_AlwaysAutoResize)){
-        ImGui::TextWrapped("Original: {%s}",Original.c_str());ImGui::SetNextItemWidth(theme.X(380));ImGui::InputText("Nickname",Nickname,sizeof(Nickname));
-        if(Item){ImGui::SetNextItemWidth(theme.X(380));ImGui::InputText("Tags",Tags,sizeof(Tags));ImGui::TextDisabled("Comma-separated tags; use junk for removal review.");HelpyImGuiTheme::Toggle("Favorite",&Favorite);HelpyImGuiTheme::Toggle("Protect every copy from Helpy removal",&Locked);}
+        ImGui::TextWrapped("Original: {%s}",Original.c_str());ImGui::SetNextItemWidth(theme.X(380));HelpyTextInput::InputText("Nickname",Nickname,sizeof(Nickname));
+        if(Item){ImGui::SetNextItemWidth(theme.X(380));HelpyTextInput::InputText("Tags",Tags,sizeof(Tags));ImGui::TextDisabled("Comma-separated tags; use junk for removal review.");HelpyImGuiTheme::Toggle("Favorite",&Favorite);HelpyImGuiTheme::Toggle("Protect every copy from Helpy removal",&Locked);}
         ImGui::TextWrapped("Display labels only. Game IDs, folders and saves are not renamed.");
         if(HelpyImGuiTheme::SoftButton("Save")){try{Json patch={{"Nickname",std::string(Nickname)}};if(Item){Json tags=Json::array();std::string text=Tags;size_t begin=0;while(begin<text.size()){const auto end=text.find(',',begin);auto tag=HelpyPersonalization::Trim(text.substr(begin,end==text.npos?text.npos:end-begin));if(!tag.empty())tags.push_back(tag);if(end==text.npos)break;begin=end+1;}patch["Tags"]=tags;patch["Favorite"]=Favorite;patch["Locked"]=Locked;}
             if(HelpyPersonalization::Set(Key,patch))Open=false;else Message=HelpyPersonalization::Status;}catch(const std::exception& error){Message=error.what();}}

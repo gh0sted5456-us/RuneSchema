@@ -7,6 +7,11 @@ int main(){
     using namespace PS::LazyCatalog;
     const auto resetFixture=[] {for(auto& state:Windows){const auto cancel=state.CancelGeneration;state=State{};state.CancelGeneration=cancel;}};
     PS::SpawnToolRequests::Generation=10;
+    {const auto uiThread=std::this_thread::get_id();std::atomic<bool> offThread=false,release=false;
+        ConfigureRemote([](json){return true;},[&](int,uint64_t){offThread=std::this_thread::get_id()!=uiThread;const auto until=std::chrono::steady_clock::now()+std::chrono::milliseconds(500);while(!release&&std::chrono::steady_clock::now()<until)std::this_thread::sleep_for(std::chrono::milliseconds(1));});
+        auto& state=For(0);state.Started=true;state.RuntimeGeneration=10;state.Query="cached";state.Rows=json::array({{{"Path","/Game/Cached.Cached"},{"Name","Cached"}}});SaveCache(0);
+        assert(Search(0,"cached")&&state.CacheHit&&state.Rows.size()==1);release=true;ClearRemote();assert(offThread);For(0)=State{};
+    }
     unsigned submissions=0;
     ConfigureRemote([&](json){++submissions;return true;},[](int,uint64_t){});
     FirstOpenPendingGeneration=10;For(0)=State{};
@@ -18,6 +23,15 @@ int main(){
         {{"Path","/Game/ITEM_Stone.ITEM_Stone"},{"Name","Stone"},{"Category","Building"},{"Tags","Item.BuildingResource"}}})},{"HasMore",false}},1);
     assert(stoneState.Rows.size()==1&&stoneState.Rows[0]["Category"]=="Resources");
     For(0)=State{};
+    {auto& state=For(0);state.Started=true;state.RuntimeGeneration=10;
+        state.Rows=json::array({{{"Path","/Game/Weapons/Rifle.Rifle"},{"Name","Rifle"},{"Icon","keep-icon"},{"SourceKind","vanilla"}},{{"Path","/Game/Weapons/Rifle.Rifle"},{"Name","Rifle"},{"SourceKind","modded"}}});
+        ApplyWindow({{"Category",0},{"CancelGeneration",state.CancelGeneration},{"Rows",json::array({
+            {{"Path","/game/weapons/rifle.rifle"},{"Name","Rifle"},{"SourceKind","modded"},{"SourceName","Flintlocks"}},
+            {{"Path","/Game/Other/Rifle.Rifle"},{"Name","Rifle"},{"PersistenceID","different-item"}}})},{"HasMore",false}},2);
+        assert(state.Rows.size()==2&&state.Rows[0]["SourceName"]=="Flintlocks"&&state.Rows[0]["Icon"]=="keep-icon");
+        assert(state.Rows[1]["PersistenceID"]=="different-item");
+        assert(state.Cache.begin()->second.Rows.size()==2);
+    }For(0)=State{};
     PumpBackendSignal();assert(submissions==1);assert(For(0).Pending);
     BackendSignal(10);PumpBackendSignal();assert(submissions==1);
     ResetForGeneration(11);assert(For(0).RuntimeGeneration==11 && For(0).Rows.empty());
@@ -64,10 +78,10 @@ int main(){
     ApplyWindow({{"Category",0},{"CancelGeneration",cancelled},{"Rows",json::array({{{"Path","stale-source"}}})}},101);assert(For(0).Rows.empty());
     // Source inspection may complete after the UI's first browse. Its cancel
     // fence must survive FirstOpen and world-generation resets on either lane.
-    uint64_t fence=0;unsigned accepted=0;
+    std::atomic<uint64_t> fence=0;unsigned accepted=0;
     ConfigureRemote([&](json request){const auto cancel=request.at("CancelGeneration").get<uint64_t>();if(cancel<fence)return false;++accepted;return true;},
-        [&](int category,uint64_t cancel){if(category==0)fence=std::max(fence,cancel);});
-    InvalidateSources(false);assert(fence>1);accepted=0;
+        [&](int category,uint64_t cancel){if(category==0)fence=std::max(fence.load(),cancel);});
+    InvalidateSources(false);DrainCancellations();assert(fence>1);accepted=0;
     PS::SpawnToolRequests::Generation=12;FirstOpen(12);
     assert(accepted==1&&For(0).Pending&&For(0).CancelGeneration>=fence);
     ResetForGeneration(13);PS::SpawnToolRequests::Generation=13;FirstOpen(13);
@@ -95,7 +109,8 @@ int main(){
     assert(RestoreCache(0,"empty",13)&&cached.Rows.empty()&&!cached.HasMore);
     assert(!RestoreCache(0,"query0",14));
     cached.Query.clear();cached.Rows=json::array({{{"Path","/FutureExpansion/Items/X.X"},{"SourceKind","unknown"}}});cached.HasMore=false;SaveCache(0);
-    const auto metadataRequests=accepted;RefreshSourceMetadata({},{"futureexpansion"});
+    const auto metadataRequests=accepted;const auto metadataRevision=For(0).RowsRevision;RefreshSourceMetadata({},{"futureexpansion"});
+    assert(For(0).RowsRevision!=metadataRevision);
     assert(accepted==metadataRequests&&cached.Rows[0]["SourceKind"]=="expansion"&&cached.Cache.at("11:@alphabetical").Rows[0]["SourceKind"]=="expansion");
     InvalidateSources(true);assert(RestoreCache(0,"query0",13)&&cached.CheckingChanges);
     assert(Search(0,"query0")&&cached.Pending&&cached.Rows.size()==1); // Stale search remains visible while refreshing.

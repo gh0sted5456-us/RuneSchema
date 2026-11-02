@@ -20,8 +20,24 @@ promote_to: ADVANCED-AUTHORING-TOOLS.md
    icon processing and publication. **Pause**, **Resume** and **Stop** control
    the worker; pausing or stopping is separate from closing the panel.
 5. A successful build publishes the mod's **cache/** folder. The previous output
-   is retained if the build fails. Read the report for partial discovery or
+   is SHA-256 verified in the assigned platform's AppData cache-builder backups
+   before replacement; old cache folders are not retained beside the mod.
+   A failed build retains the current cache. Read the report for partial discovery or
    unavailable icons before distributing it.
+
+**Back to Mods** returns to the page that opened the cache builder, preserving
+its draft and search. Tools uses the same category-and-content panes as Settings;
+the cache input and progress panes stack when the content area is narrow.
+
+For several mods, use **Mods → Installed mods → Cache enabled mods**. Enabled
+installed mods with cooked PAK/LogicMods inputs are queued in the displayed
+order. One worker runs at a time, and each completed bundle is offered to Helpy
+before the next job. JSON-only, disabled and missing entries are not built.
+The progress pane reports completed, failed and skipped jobs. Pause applies to
+the active worker and the queue; Stop cancels the remaining queue at safe
+checkpoints. Switching pages does not cancel a build. Keep Helpy open for queue
+advancement; an active worker can finish while hidden, but the next job waits
+until the application is visible again. Keep the assigned game closed for offline authoring.
 
 The advanced authoring preference can detect and install the required .NET
 10 SDK when missing. It is an explicit tool job, not a background
@@ -29,6 +45,15 @@ installation check. The [offline cache guide](modders/offline-helpy-cache.md)
 explains the standalone BAT route and dependencies. The current experimental
 [authoring tools ZIP](https://github.com/gh0sted5456-us/RuneSchema/raw/refs/heads/experimental/resources/tools/authoring-tools/b357a6538135e98184702bbf2ef663aaf4171c69b6a980cc851c78cc8c1769d6.zip)
 is also available directly from this branch.
+
+The local follow-up reads cooked culture-invariant display text as well as
+localized/source text. An unresolved localization key is not treated as a
+display name. Rebuild an older mod cache once to replace names written by the
+older exporter. The Dye validation produced 2,241 records and 2,176 icons with
+zero `ITEM_` display-name fallbacks, including **Ranger Tunic (Dyed Black)**.
+There were 15 reported skips; the cache remains a partial presentation index.
+The builder uses the pinned provider's localization API before export
+([CUE4Parse source](https://github.com/FabianFG/CUE4Parse/blob/master/CUE4Parse/FileProvider/AbstractFileProvider.cs)).
 
 ## Create or convert a package
 

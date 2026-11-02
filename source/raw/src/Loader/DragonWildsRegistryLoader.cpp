@@ -1,10 +1,14 @@
 #include "Loader/DragonWildsRegistryLoader.h"
 #include "Core/HelpyCacheSources.h"
+#include "Core/NativeAssetLoadTiming.h"
+#include "Core/PakDiscovery.h"
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <fstream>
 #include <stdexcept>
+#include <unordered_map>
 #include "Core/ConfigFiles.h"
 #include "Core/CookedPakRegistryManifest.h"
 #include "Core/CookedRegistryShards.h"
@@ -303,10 +307,13 @@ void DragonWildsRegistryLoader::OnLoad(const std::filesystem::path& path,const R
 }
 
 void DragonWildsRegistryLoader::LoadCookedRegistries() {
+    const auto started=std::chrono::steady_clock::now();
+    PS::NativeAssetLoadTiming::Batch loads;
     TArray<FAssetData> assets;bool metadataReady=false;
     try{auto interface=UAssetRegistryHelpers::GetAssetRegistry();auto* registry=static_cast<UAssetRegistry*>(interface.ObjectPointer);
         metadataReady=registry&&registry->GetAllAssets(assets,true)&&assets.Num()>=0&&assets.Num()<=262144;
     }catch(...){metadataReady=false;}
+    const auto queryComplete=std::chrono::steady_clock::now();
     if(!metadataReady) {
         (void)PS::LogStructuredFallback<RC::LogLevel::Warning>(
             PS::StructuredDiagnosticB3C::Report("RS-RGST-005","Warning","Partial","RegistryLoader",
@@ -390,6 +397,10 @@ void DragonWildsRegistryLoader::LoadCookedRegistries() {
         }
         PS::Log<RC::LogLevel::Normal>(STR("Registry: discovered cooked registry asset '{}' owned by '{}'.\n"),PS::ToWideSafe(path.c_str()),PS::ToWideSafe(root.Owner.c_str()));
     };
+    std::set<std::string> registryFiles;
+    for(const auto& owner:owners)for(const auto* prefix:{"DA_RuneSchemaRegistry_","DA_Registry_"})registryFiles.insert(PS::CookedRegistryShards::Fold(std::string(prefix)+owner+".uasset"));
+    const auto packages=owners.empty()?PS::PakDiscovery::Result{}:PS::PakDiscovery::ReadMountedPackages(PS::PakDiscovery::ReadRoots(),"RSDragonwilds",&registryFiles);
+    const auto censusComplete=std::chrono::steady_clock::now();
     std::size_t conventional=0;
     // Conventional roots run first, independent of Asset Registry enumeration.
     for(const auto& owner:PS::MountedModRegistryOwners::Snapshot()) {
@@ -397,19 +408,33 @@ void DragonWildsRegistryLoader::LoadCookedRegistries() {
         const auto name=std::string(prefix)+owner;
         const auto path="/Game/Mods/"+owner+"/Registry/"+name+"."+name;
         if(handled.contains(PS::CookedRegistryShards::Fold(path)))continue;
-        try {auto* object=ActorHelper::ResolveObject(PS::ToWideSafe(path.c_str()));
+        try {const auto nativePath=PS::ToWideSafe(path.c_str());
+            auto* object=UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,nativePath.c_str());
+            if(!object&&packages.Complete&&!packages.Packages.contains(PS::CookedRegistryShards::Fold(path.substr(0,path.find('.')))))continue;
+            if(!object)object=ActorHelper::ResolveObject(nativePath);
             if(!object)continue;
             consume(object,path,owner);++conventional;}
         catch(const std::exception& error){failedOwners.insert(owner);reject(path,error,owner);}
       }
     }
     std::size_t candidates=0;
+    const auto rootsComplete=std::chrono::steady_clock::now();
+    std::unordered_map<FName,std::string> directoryOwners;
     if(metadataReady)for(auto& asset:assets) {
         const auto name=RC::to_string(asset.AssetName().ToString());
-        const auto package=RC::to_string(asset.PackageName().ToString()),path=package+"."+name;
         const bool legacy=name.starts_with("DA_RuneSchemaRegistry")||name.starts_with("RSREG_");
-        const auto folderOwner=PS::CookedRegistryShards::RegistryFolderOwner(path);
+        std::string folderOwner;
+        const auto directory=asset.PackagePath();
+        if(directory!=NAME_None){
+            auto found=directoryOwners.find(directory);
+            if(found==directoryOwners.end()){
+                auto path=RC::to_string(directory.ToString());if(!path.ends_with('/'))path+='/';
+                found=directoryOwners.emplace(directory,PS::CookedRegistryShards::RegistryFolderOwner(path)).first;
+            }
+            folderOwner=found->second;
+        }else folderOwner=PS::CookedRegistryShards::RegistryFolderOwner(RC::to_string(asset.PackageName().ToString())+"."+name);
         if(!legacy&&folderOwner.empty())continue;
+        const auto package=RC::to_string(asset.PackageName().ToString()),path=package+"."+name;
         const auto ownerKey=PS::CookedRegistryShards::Fold(folderOwner);
         const auto enabled=folderOwner.empty()?owners.end():std::find_if(owners.begin(),owners.end(),[&](const auto& value){return PS::CookedRegistryShards::Fold(value)==ownerKey;});
         if(!folderOwner.empty()&&enabled==owners.end())continue;
@@ -433,6 +458,11 @@ void DragonWildsRegistryLoader::LoadCookedRegistries() {
         &&!failedOwners.contains(owner)&&unindexedOwners.insert(owner).second)
         reject(path,std::runtime_error("Unindexed registry shards were not enrolled; a complete enabled root is required"),owner);
     if(conventional)PS::Log<RC::LogLevel::Normal>(STR("Registry: directly loaded {} conventional cooked declaration{} missing from Asset Registry metadata.\n"),conventional,conventional==1?TEXT(""):TEXT("s"));
+    const auto finished=std::chrono::steady_clock::now();
+    PS::Log<RC::LogLevel::Normal>(STR("[PERF][REGISTRY][DECLARATION-LOAD-COST] calls={} wrapper_ms={} native_ms={}; native includes engine loading and ProcessEvent callbacks.\n"),loads.Cost.Calls,loads.Cost.WrapperMs(),loads.Cost.NativeMs());
+    const auto ms=[](auto from,auto to){return std::chrono::duration_cast<std::chrono::milliseconds>(to-from).count();};
+    PS::Log<RC::LogLevel::Normal>(STR("[PERF][REGISTRY][DECLARATIONS] query_ms={} roots_ms={} metadata_ms={} directories={} candidates={} census_ms={} conventional_ms={} filename_targets={} census_packages={}; conventional and legacy discovery retained.\n"),
+        ms(started,queryComplete),ms(queryComplete,rootsComplete),ms(rootsComplete,finished),directoryOwners.size(),candidates,ms(queryComplete,censusComplete),ms(censusComplete,rootsComplete),registryFiles.size(),packages.Packages.size());
 }
 
 void DragonWildsRegistryLoader::WriteMerged() {

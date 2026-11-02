@@ -41,7 +41,7 @@ int main(int argc,char** argv){
         &&selectedSource.find("directory_iterator")==selectedSource.npos
         &&selectedSource.find("LocalSlotEligible")!=selectedSource.npos
         &&selectedSource.find("Window->Close()")!=selectedSource.npos
-        &&selectedSource.find("RunLocalWorldBuildingPreflight(target,live,window)")!=selectedSource.npos,
+        &&selectedSource.find("RunLocalWorldBuildingPreflight(target,live,window,true)")!=selectedSource.npos,
         "selected-world cleanup must visit exactly one safe slot and prevent late writes");
     const auto worldSetup=mainLoader.find("void DragonWildsMainLoader::SetupWorldBuildingCleanup");
     const auto worldSetupEnd=mainLoader.find("void DragonWildsMainLoader::SetupSelectedWorldBuildingCleanup",worldSetup);
@@ -76,7 +76,7 @@ int main(int argc,char** argv){
         "game-thread core fallback can retire before item registration and save pruning start");
     need(registrar.find("CleanLocalCharacterSaves")!=registrar.npos
         && registrar.find("ConfigFiles::Write(path, encoded)")!=registrar.npos
-        && registrar.find("BackupCharacterSave(path, original)")!=registrar.npos
+        && registrar.find("BackupCharacterSave(path, original,enteringWorld)")!=registrar.npos
         && registrar.find("failed post-write verification")!=registrar.npos,
         "startup cleanup is missing verified backup-first atomic replacement");
     need(registrar.find("CharacterBackupRetention = 5")!=registrar.npos
@@ -268,9 +268,10 @@ int main(int argc,char** argv){
     const auto combatFilter=registrar.substr(registrar.find("static bool IsCombatComponentReadyFunction"),registrar.find("static void RememberRecoveryBinding")-registrar.find("static bool IsCombatComponentReadyFunction"));
     need(combatFilter.find("if(name!=restart&&name!=inventory&&name!=personal)return false")<combatFilter.find("GetPathName()"),"unrelated Lua/UI events must not allocate a full function path in the combat hook");
     const auto directPreflight=pruner.find("std::size_t PersistencePruner::PruneCharacterJson");
-    const auto registryGuard=pruner.find("if (!registry || !registry->AnyCleanable())",reflectedPreflight);
-    need(registryGuard!=pruner.npos&&registryGuard<pruner.find("ReflectedContract::Frame(function)",reflectedPreflight),
-        "uncertified cleanup walks native parameters before allowing the original load through");
+    const auto registryGuard=pruner.find("if ((!registry || !registry->AnyCleanable())&&!backupWork)",reflectedPreflight);
+    need(registryGuard!=pruner.npos&&registryGuard<pruner.find("ReflectedContract::Frame(function)",reflectedPreflight)
+        &&pruner.find("if(CharacterLoadAudit::Token()&&!backups.empty())",reflectedPreflight)!=pruner.npos,
+        "uncertified cleanup must return before reflection unless selected-entry backup/recovery work is requested");
     need(pruner.find("if (!registry || !registry->AnyCleanable())",directPreflight)<pruner.find("json::parse(utf8",directPreflight),
         "uncertified cleanup parses a character payload even though it cannot modify it");
     need(registrar.find("Non-blocking: native loading continues")!=registrar.npos

@@ -3,6 +3,9 @@
     "Overview": "experimental/index.md"
   },
   {
+    "Pre-release candidate": "experimental/PRE-RELEASE.md"
+  },
+  {
     "Install and platforms": [
       {
         "Install or update": "experimental/INSTALLATION.md"
@@ -24,6 +27,9 @@
         "Native overlay and controllers": "experimental/NATIVE-OVERLAY.md"
       },
       {
+        "Controller navigation": "experimental/CONTROLLER-NAVIGATION.md"
+      },
+      {
         "Authoring, cache and repair": "experimental/AUTHORING-AND-REPAIR.md"
       },
       {
@@ -31,11 +37,23 @@
       },
       {
         "Cache bundles": "experimental/CACHE-BUNDLES.md"
+      },
+      {
+        "Save recovery": "experimental/SAVE-RECOVERY.md"
+      },
+      {
+        "Resource and UE4SS diagnostics": "experimental/PERFORMANCE-DIAGNOSTICS.md"
       }
     ]
   },
   {
     "Registries and world policies": [
+      {
+        "Server mod list": "experimental/SERVER-MOD-LIST.md"
+      },
+      {
+        "Server PIN access": "experimental/SERVER-ACCESS.md"
+      },
       {
         "Cooked declarations": "experimental/COOKED-PAK-REGISTRY-MANIFEST.md"
       },

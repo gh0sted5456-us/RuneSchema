@@ -58,6 +58,15 @@ grant and the treatment of existing contributions.
 
 ## Other build and runtime components
 
+Helpy uses SDL **3.4.16** for mapped Xbox, PlayStation and Nintendo gamepad input.
+The Windows x64 SDK is pinned to the official
+[release archive](https://github.com/libsdl-org/SDL/releases/tag/release-3.4.16),
+SHA-256 `1a784cb2a5c64d56fe7a62090fe9d242d9865f235e4ea9678f1a6ba4e693e7de`.
+Its unmodified `SDL3.dll` accompanies Helpy. Copyright (C) 1997–2026 Sam Lantinga.
+The complete zlib license is preserved in `licenses/SDL3-zlib.txt` and the
+packaged consolidated notices. SDL is not installed into Dragonwilds' renderer
+or the RuneSchema bridge DLL.
+
 The current CMake file also references SafetyHook, Glaze, efsw, Zydis, and
 Zycore (including transitive dependencies). Their own notices and terms must
 accompany distributions where applicable; they are not covered by this

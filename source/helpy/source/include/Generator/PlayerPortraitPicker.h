@@ -1,4 +1,5 @@
 #pragma once
+#include "Generator/HelpyTextInput.h"
 #include "Core/ProcessExitFuture.h"
 #include "Core/PlayerPortraits.h"
 #include "Core/RuneSchemaProfile.h"
@@ -144,7 +145,7 @@ inline void Render(){
     }
     ImGui::BeginDisabled(!Loaded);if(HelpyImGuiTheme::SoftButton("Use default")){Choices.Set(Player,"");SaveWanted=true;ImGui::CloseCurrentPopup();}ImGui::EndDisabled();ImGui::SameLine();
     if(HelpyImGuiTheme::SoftButton("Refresh cache list"))Refresh();ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Close"))ImGui::CloseCurrentPopup();
-    ImGui::SetNextItemWidth(-1);ImGui::InputTextWithHint("##portrait-search","Search icon path / mod...",Search,sizeof(Search));
+    ImGui::SetNextItemWidth(-1);HelpyTextInput::InputTextWithHint("##portrait-search","Search icon path / mod...",Search,sizeof(Search));
     if(Scan.valid())ImGui::TextDisabled("Checking disk cache; shared Item Bay and journal artwork is already available.");
     if(!Error.empty())ImGui::TextWrapped("%s",Error.c_str());
     if(LastFilter!=Search){LastFilter=Search;auto query=HelpyCacheSources::Lower(LastFilter);Filtered.clear();for(const auto& icon:Icons)if(HelpyCacheSources::Lower((Labels.contains(icon)?Labels.at(icon):HelpyWikiIcons::Label(icon))+" "+icon).find(query)!=std::string::npos)Filtered.push_back(icon);}

@@ -246,16 +246,23 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
     const auto identity=[](const auto& value){return std::to_string(value.ObjectIndex)+":"+std::to_string(value.ObjectSerialNumber);};
     const auto peerKey=identity(controllerIdentity)+"|"+playerGuid,worldKey=identity(worldIdentity);
     if(action=="HelpyRemoteAccess"){
-        if(playerGuid.empty())throw std::runtime_error("Remote access requires an initialized character identity");
         if(payload.size()>256)throw std::runtime_error("Remote access request exceeds its size limit");
-        if(request.value("Disconnect",false)){PS::HelpyRemoteAccess::Server.Revoke(peerKey);return nlohmann::json{{"Kind","HelpyRemoteAccess1"},{"Allowed",false},{"Detail","Remote access disconnected."}}.dump();}
+        const bool enabled=policy.allowPinAccess&&PS::HelpyRemoteAccess::Sessions::ValidPin(policy.accessPin);
+        const auto status=[&](bool allowed,bool authenticated,std::string detail){return PS::HelpyRemoteAccess::AccessStatus(enabled,allowed,authenticated,
+            policy.allowClientItemGrants,policy.allowClientTeleport,playerGuid,std::move(detail)).dump();};
+        if(request.value("Disconnect",false)){PS::HelpyRemoteAccess::Server.Revoke(peerKey);return status(false,false,"Remote access disconnected.");}
+        if(request.value("Query",false)){
+            const bool allowed=PS::HelpyRemoteAccess::Server.Allowed(peerKey,worldKey,enabled,policy.accessPin);
+            return status(allowed,false,allowed?"Server authority access is active for your current character.":enabled
+                ?"This world requires a PIN for self-service item delivery and teleportation.":"PIN self-service is disabled by this host.");
+        }
+        if(playerGuid.empty())throw std::runtime_error("Remote access requires an initialized character identity");
         const auto pin=request.value("Pin",std::string{});
         const auto result=PS::HelpyRemoteAccess::Server.Authenticate(peerKey,worldKey,policy.allowPinAccess,policy.accessPin,pin);
         if(result!=PS::HelpyRemoteAccess::Sessions::Result::Granted)
             throw std::runtime_error(result==PS::HelpyRemoteAccess::Sessions::Result::RateLimited
                 ?"Too many PIN attempts. Wait one minute before retrying.":"Remote access denied. Check the PIN and the server's opt-in settings.");
-        return nlohmann::json{{"Kind","HelpyRemoteAccess1"},{"Allowed",true},{"ItemDelivery",policy.allowClientItemGrants},
-            {"Teleport",policy.allowClientTeleport},{"Detail","PIN access enabled for your current character and world. Server action limits still apply."}}.dump();
+        return status(true,true,"Client-server authority bridged. Requests for your current character are validated and executed by the server.");
     }
     if(action=="InventoryMarks"){
         const auto normalize=[](std::string value){std::string out;for(unsigned char c:value){if(c=='-'||c=='{'||c=='}')continue;if(!std::isxdigit(c))return std::string{};out+=static_cast<char>(std::tolower(c));}return out.size()==32&&out!=std::string(32,'0')?out:std::string{};};
@@ -464,6 +471,32 @@ std::pair<bool,std::string> DragonWildsSpawnLoader::VerifyToolBuildingCandidate(
     return {true,"Verified cooked building defaults and deferred native data-binding contract"};
 }
 
+void DragonWildsSpawnLoader::UpdateHelpyInputCapture(bool enabled){
+    if(!enabled&&!m_helpyInputCapture.Applied())return;
+    const auto now=std::chrono::steady_clock::now();if(enabled&&now<m_nextHelpyInputAttempt)return;
+    try{
+        auto* controller=m_helpyInputController.Get();
+        if(!controller){m_helpyInputCapture.Forget();m_helpyInputController.Reset();}
+        const auto apply=[&](bool move,bool block){
+            ActorHelper::FunctionCall call(controller,move?TEXT("/Script/Engine.Controller:SetIgnoreMoveInput"):TEXT("/Script/Engine.Controller:SetIgnoreLookInput"));
+            call.Arg(move?TEXT("bNewMoveInput"):TEXT("bNewLookInput"),block);call.Invoke();
+        };
+        if(controller&&(!enabled||controller->GetWorld()!=m_readyWorld)){
+            m_helpyInputCapture.Update(false,apply);m_helpyInputController.Reset();controller=nullptr;
+        }
+        if(enabled&&!controller){
+            if(!m_readyWorld||!IsWorldStillLoaded(m_readyWorld)){m_nextHelpyInputAttempt=now+std::chrono::milliseconds(250);return;}
+            controller=FindLocalPlayerController();
+            if(!controller||controller->GetWorld()!=m_readyWorld){m_nextHelpyInputAttempt=now+std::chrono::milliseconds(250);return;}
+            m_helpyInputController.Assign(controller);
+        }
+        if(controller)m_helpyInputCapture.Update(enabled,apply);
+        m_helpyInputError.clear();
+    }catch(const std::exception& error){
+        m_nextHelpyInputAttempt=now+std::chrono::seconds(1);
+        if(m_helpyInputError!=error.what()){m_helpyInputError=error.what();PS::DiagnosticLog::Formatted(STR("[RuneSchema] [warning] [RS-UI-003] Helpy movement/look capture needs attention: {}. Close the overlay and check the matching runtime build.\n"),true,PS::ToWideSafe(error.what()));}
+    }
+}
 void DragonWildsSpawnLoader::PumpSpawnTools(PS::WorkSlice& work) {
     // A coalesced read-only hint from Helpy's existing Read service. Never owns
     // or completes the mutation mailbox, even during a grant or travel action.

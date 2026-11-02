@@ -1,4 +1,5 @@
 #pragma once
+#include "Generator/HelpyTextInput.h"
 #include "Generator/NativeJournalCache.h"
 #include "Generator/JournalAuthorPanel.h"
 #include "Generator/PlayerPortraitPicker.h"
@@ -21,7 +22,7 @@ inline void Render(){
     if(ImGui::Button("Refresh from game")){NativeJournalCache::Refresh=true;NativeJournalCache::Scanning=false;}
     ImGui::EndDisabled();
     ImGui::SetNextItemWidth(-1);ImGui::Combo("##journal-source",&Source,"All sources\0Vanilla\0Modded\0Other / unverified\0");
-    ImGui::SetNextItemWidth(-1);ImGui::InputTextWithHint("##journal-search","Search title, type, ID or source...",Search,sizeof(Search));
+    ImGui::SetNextItemWidth(-1);HelpyTextInput::InputTextWithHint("##journal-search","Search title, type, ID or source...",Search,sizeof(Search));
     const bool wide=ImGui::GetContentRegionAvail().x>=t.X(650);const bool table=wide&&ImGui::BeginTable("##native-journal",2,ImGuiTableFlags_SizingStretchProp);
     if(table){ImGui::TableSetupColumn("Entries",ImGuiTableColumnFlags_WidthStretch,.65f);ImGui::TableSetupColumn("Journal",ImGuiTableColumnFlags_WidthStretch,1.35f);ImGui::TableNextColumn();}
     ImGui::BeginChild("##native-journal-list",{0,wide?t.Y(430):t.Y(150)},true);

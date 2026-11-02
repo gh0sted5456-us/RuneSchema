@@ -31,4 +31,12 @@ int main(){
  assert(!waived&&live.size()==3&&saved.empty());
  for(unsigned i=0;i<10000;++i){PS::ScopedCostSwap repeated(waived,true,exchange);assert(live.empty());}
  assert(!waived&&live.size()==3&&saved.empty());
+ // AnyOf ingredients need their selection mode restored with the same nested scope.
+ bool individual=true,savedIndividual=false;
+ auto anyOf=[&]{live.swap(saved);std::swap(individual,savedIndividual);};
+ {PS::ScopedCostSwap inside(waived,true,anyOf);assert(live.empty()&&!individual&&savedIndividual);
+  {PS::ScopedCostSwap outside(waived,false,anyOf);assert(live.size()==3&&individual&&!savedIndividual);}
+  assert(live.empty()&&!individual&&savedIndividual);
+ }
+ assert(live.size()==3&&individual&&!savedIndividual&&saved.empty());
 }

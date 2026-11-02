@@ -2,6 +2,7 @@
 #include "Generator/HelpyImGuiTheme.h"
 #include "Generator/RuneSchemaSettingsPanel.h"
 #include "Generator/RuntimeConnectionPanel.h"
+#include "Generator/ItemGridPicker.h"
 #include "Generator/DragFeedback.h"
 #include "Generator/HelpyLoadingIndicator.h"
 #include <cassert>
@@ -65,11 +66,65 @@ int Run() {
         SpawnToolRequests::Generation=42;assert(!connection::Read(now).Host);SpawnToolRequests::Generation=41;
         connection::Snapshot["Role"]="client";assert(!connection::Read(now).Host&&connection::Read(now).Session=="Multiplayer client");
         connection::Snapshot=nlohmann::json::object();connection::Generation=0;}
+    {namespace connection=RuntimeConnectionPanel;std::promise<void> release;const auto ready=release.get_future().share();
+        RuneSchemaSettingsPanel::Remote=[ready](const nlohmann::json&,nlohmann::json& reply){ready.wait();reply={{"Generation",41},{"Available",true},{"Fresh",true},{"Role","listen-server"},{"AgeMs",0}};return true;};
+        connection::Next={};SpawnToolRequests::Generation=41;
+        auto poll=std::async(std::launch::async,[]{connection::Poll();});const bool responsive=poll.wait_for(std::chrono::milliseconds(100))==std::future_status::ready;
+        release.set_value();poll.get();assert(responsive);RuneSchemaSettingsPanel::Remote={};SpawnToolRequests::Generation=42;
+        if(connection::Pending.valid())connection::Pending.wait();connection::Poll();assert(!connection::Read().Host);
+        connection::Snapshot=nlohmann::json::object();connection::Generation=0;connection::Next={};SpawnToolRequests::Generation=41;}
+    {namespace picker=ItemGridPicker;const auto previous=picker::SharedCart;picker::SharedCart.Clear();picker::State selection;char primary[1025]{};
+        const nlohmann::json first={{"Path","/Game/Test/One.One"},{"Name","First"}},second={{"Path","/Game/Test/Two.Two"},{"Name","Second"}};
+        assert(picker::ApplySelection(selection,first.at("Path").get<std::string>(),primary,sizeof(primary),false,true,&first));
+        assert(picker::ApplySelection(selection,second.at("Path").get<std::string>(),primary,sizeof(primary),true,true,&second));assert(selection.SelectedPaths.size()==2);
+        assert(picker::SendSelectionToCart({{"Items",nlohmann::json::array({first})}},selection,primary,sizeof(primary))==2);assert(picker::SharedCart.Entries().size()==2);
+        assert(selection.SelectedPaths.empty()&&selection.SelectedRows.empty()&&selection.SelectedPath.empty()&&!primary[0]);
+        picker::SyncLegacySelection(selection,primary);assert(selection.SelectedPaths.empty());
+        assert(picker::SendSelectionToCart(nlohmann::json::object(),selection,primary,sizeof(primary))==0&&picker::SharedCart.Entries()[0].Quantity==1);
+        assert(picker::ApplySelection(selection,second.at("Path").get<std::string>(),primary,sizeof(primary),true,true,&second));assert(selection.SelectedPaths.size()==1&&selection.SelectedRows.size()==1);
+        assert(picker::ApplySelection(selection,second.at("Path").get<std::string>(),primary,sizeof(primary),true,false,&second));assert(selection.SelectedPaths.size()==1&&selection.SelectedPaths.front()==second.at("Path").get<std::string>());
+        picker::SharedCart.Clear();for(size_t i=0;i<ItemCart::Model::Limit;++i)assert(picker::SharedCart.Add({{"Path","/Game/Full"+std::to_string(i)}}));
+        const nlohmann::json existing={{"Path","/Game/Full0"},{"Name","Existing"}};
+        assert(picker::ApplySelection(selection,existing.at("Path"),primary,sizeof(primary),true,true,&existing));
+        assert(picker::SendSelectionToCart(nlohmann::json::object(),selection,primary,sizeof(primary))==1);
+        assert(selection.SelectedPaths.size()==1&&selection.SelectedPaths.front()==second.at("Path").get<std::string>()&&primary==second.at("Path").get<std::string>()&&selection.SelectedRows.size()==1);
+        picker::SharedCart=previous;}
     auto& state=icons::detail::State();state.Generation=41;
     unsigned submissions=0;std::deque<nlohmann::json> replies;
     icons::ConfigureRemote([&](const std::string&){++submissions;return true;},[&](nlohmann::json& result){if(replies.empty())return false;result=std::move(replies.front());replies.pop_front();return true;});
     const auto begin=[] {ImGui::NewFrame();ImGui::SetNextWindowPos({0,0});ImGui::SetNextWindowSize({640,480});ImGui::Begin("test");};
     const auto end=[] {ImGui::End();ImGui::EndFrame();assert(GImGui->ErrorCountCurrentFrame==0);};
+    {const auto previousBay=ItemGridPicker::Bay;const auto previousWindow=LazyCatalog::For(0);const auto previousTheme=HelpyImGuiTheme::Current;
+        ItemGridPicker::Bay=ItemGridPicker::SharedBay{};auto& window=LazyCatalog::For(0);window=LazyCatalog::State{};window.Started=true;window.RuntimeGeneration=41;window.HasMore=false;
+        window.Rows=nlohmann::json::array({{{"Path","/Game/UIFixture/Row.Row"},{"Name","Row"}}});window.RowsRevision=++LazyCatalog::RowsClock;
+        HelpyImGuiTheme::Current.itemSource="all";HelpyImGuiTheme::Current.itemCategory="All";
+        const auto drawBay=[&](uint64_t revision){begin();ItemGridPicker::RenderShared({{"Status","metadata"}},revision);end();};
+        drawBay(1);const auto rowsRevision=ItemGridPicker::Bay.Revision;const auto* storage=&ItemGridPicker::Bay.Catalog["Items"].get_ref<const nlohmann::json::array_t&>();
+        drawBay(1);assert(ItemGridPicker::Bay.Revision==rowsRevision&& &ItemGridPicker::Bay.Catalog["Items"].get_ref<const nlohmann::json::array_t&>()==storage);
+        drawBay(2);assert(ItemGridPicker::Bay.Revision==rowsRevision&&ItemGridPicker::Bay.Picker.CatalogRevision==rowsRevision);
+        LazyCatalog::RecordNativeIcon("/Game/UIFixture/Row.Row","");drawBay(2);
+        assert(ItemGridPicker::Bay.Revision>rowsRevision&&ItemGridPicker::Bay.Catalog["Items"][0]["Icon"]=="");
+        ItemGridPicker::Bay=previousBay;LazyCatalog::For(0)=previousWindow;HelpyImGuiTheme::Current=previousTheme;LazyCatalog::NativeIcons.erase("/Game/UIFixture/Row.Row");}
+    for(const float paneWidth:{192.f,240.f,480.f})for(int frame=0;frame<3;++frame){
+        begin();ImGui::BeginChild("pagination",{paneWidth,120});ItemGridPicker::State page;page.PageIndex=1;
+        const float right=ImGui::GetWindowPos().x+ImGui::GetWindowContentRegionMax().x;
+        ItemGridPicker::PageControls(page,80,false,false);assert(ImGui::GetItemRectMax().x<=right+1.f);
+        ImGui::EndChild();end();
+    }
+    {
+        ItemGridPicker::State picker;char filter[257]{},selected[1025]{};uint64_t revision=1;
+        const auto liveTyping=ItemGridPicker::SearchAsYouType;ItemGridPicker::SearchAsYouType=false;
+        LazyCatalog::State local;local.Started=true;const nlohmann::json catalog={{"Items",nlohmann::json::array()}};
+        const auto draw=[&](bool focus=false){begin();if(focus)ImGui::SetKeyboardFocusHere();
+            ItemGridPicker::Render("typing-regression",catalog,filter,sizeof(filter),selected,sizeof(selected),picker,revision++,true,false,false,false,true,0,&local);end();};
+        io.AddFocusEvent(true);draw(true);draw();std::string expected;
+        for(const auto c:std::string("fuel")){io.AddInputCharacter(c);draw();expected+=c;assert(filter==expected);}
+        io.AddKeyEvent(ImGuiKey_Backspace,true);draw();assert(std::string(filter)=="fue");
+        io.AddKeyEvent(ImGuiKey_Backspace,false);draw();io.AddInputCharacter('l');draw();assert(std::string(filter)=="fuel");
+        for(int frame=0;frame<120;++frame){draw();assert(std::string(filter)=="fuel");}
+        io.ClearInputKeys();io.ClearInputMouse();draw();assert(std::string(filter)=="fuel");
+        ItemGridPicker::SearchAsYouType=liveTyping;
+    }
     {namespace quick=RuneSchemaSettingsPanel;unsigned reads=0;
         quick::Remote=[&](const nlohmann::json&,nlohmann::json&){++reads;return false;};
         quick::Loaded=false;quick::Status.clear();

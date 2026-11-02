@@ -316,19 +316,21 @@ namespace DragonWilds {
     }
 
     std::vector<PS::WorldBuildingRegistryValidation::Expected>
-    DragonWildsBuildingModLoader::CleanupExpectations()
+    DragonWildsBuildingModLoader::CleanupExpectations(const std::unordered_set<std::string>* present)
     {
         if (!PS::PSConfig::Get()->IsLoaderEnabled("buildings") || !HasInitialized())
             throw std::runtime_error("building loader is disabled or uninitialized; enabled building identities cannot be certified");
         if (!m_cleanupDiscoveryFailure.empty()) throw std::runtime_error(m_cleanupDiscoveryFailure);
         std::vector<PS::WorldBuildingRegistryValidation::Expected> result;
         for (const auto& definition : m_definitions) {
+            if(present&&definition.Declared&&!present->contains(definition.DeclaredPersistenceID))continue;
             const auto identity = Identity(definition.Owner, definition.Key);
             auto* object = GetValidBuilding(identity);
             const auto label = "owner='" + RC::to_string(definition.Owner)
                 + "' key='" + RC::to_string(definition.Key) + "'";
-            if (!m_applied.contains(identity) || !object)
-                throw std::runtime_error("enabled building definition was not applied: " + label);
+            // World preflight precedes menu application; a verified enabled object must be protected meanwhile.
+            if (!object)
+                throw std::runtime_error("enabled building identity is unresolved: " + label);
             auto* property = CastField<FStrProperty>(PropertyHelper::GetPropertyByName(
                 object->GetClassPrivate(), TEXT("PersistenceID")));
             if (!property) throw std::runtime_error("enabled building PersistenceID field is unavailable: " + label);
@@ -336,6 +338,7 @@ namespace DragonWilds {
                 property->ContainerPtrToValuePtr<void>(object)));
             if (id.empty() || (definition.Declared && id != definition.DeclaredPersistenceID))
                 throw std::runtime_error("enabled building cooked identity did not validate: " + label);
+            if(present&&!present->contains(id))continue;
             result.push_back({ RC::to_string(definition.Owner), RC::to_string(definition.Key),
                 id, reinterpret_cast<std::uintptr_t>(object) });
         }

@@ -1,4 +1,5 @@
 #pragma once
+#include "Generator/HelpyTextInput.h"
 #include "Generator/HelpyImGuiTheme.h"
 #include "Core/SpawnPresentation.h"
 #include "Core/SpawnNames.h"
@@ -91,7 +92,7 @@ inline void Render(const nlohmann::json& snapshot,uint64_t revision,bool resourc
     if(table){ImGui::TableSetupColumn("Browse",ImGuiTableColumnFlags_WidthStretch,1.15f);ImGui::TableSetupColumn("Placement",ImGuiTableColumnFlags_WidthStretch,1);ImGui::TableNextColumn();}
     ImGui::SeparatorText("Choose spawn");
     if(resource){int mode=0;for(const auto* label:{"Trees","Ore / stone","Other resources"}){if(mode&&ImGui::GetContentRegionAvail().x>t.X(125))ImGui::SameLine();if(ImGui::RadioButton(label,s.Mode==mode)){s.Mode=mode;s.Selected.clear();s.Confirmed=false;s.Rebuild=true;}++mode;}}
-    ImGui::SetNextItemWidth(std::max(t.X(120),ImGui::GetContentRegionAvail().x-t.X(80)));const bool search=ImGui::InputTextWithHint("##spawn-search","Search name or source...",s.Search,sizeof(s.Search),ImGuiInputTextFlags_EnterReturnsTrue);ImGui::SameLine();
+    ImGui::SetNextItemWidth(std::max(t.X(120),ImGui::GetContentRegionAvail().x-t.X(80)));const bool search=HelpyTextInput::InputTextWithHint("##spawn-search","Search name or source...",s.Search,sizeof(s.Search),ImGuiInputTextFlags_EnterReturnsTrue);ImGui::SameLine();
     if(HelpyImGuiTheme::SoftButton("Search")||search){s.Query=s.Search;s.Confirmed=false;s.Rebuild=true;LazyCatalog::Search(category,s.Query);}
     if(HelpyImGuiTheme::Toggle("Show hidden",&s.ShowHidden)){s.Rebuild=true;s.Confirmed=false;}
     if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("Include hidden results. Right-click an entry or select it to restore it.\nOnly your local Helpy browser preferences change; no cache entry is deleted.");
@@ -143,7 +144,7 @@ inline void Render(const nlohmann::json& snapshot,uint64_t revision,bool resourc
     float metres=s.Radius/100;if(ImGui::SliderFloat("Radius",&metres,0,50,"%.1f m")){s.Radius=metres*100;s.Confirmed=false;}
     if(HelpyImGuiTheme::Toggle("Permanent placement",&s.Permanent))s.Confirmed=false;ImGui::TextWrapped("%s",s.Permanent?"Installed RuneSchema placement, restored on load.":"Temporary actors; native save-exclusion checks still apply.");
     if(ImGui::CollapsingHeader("Advanced placement")){
-        if(ImGui::InputText("Name override",s.Name,sizeof(s.Name)))s.Confirmed=false;
+        if(HelpyTextInput::InputText("Name override",s.Name,sizeof(s.Name)))s.Confirmed=false;
         if(ImGui::InputFloat("Yaw (degrees)",&s.Yaw))s.Confirmed=false;if(ImGui::InputFloat("Height offset (cm)",&s.Height))s.Confirmed=false;
         if(!resource&&!npc){if(HelpyImGuiTheme::Toggle("Override power level",&s.OverridePower))s.Confirmed=false;if(s.OverridePower&&ImGui::SliderInt("Power level",&s.Power,1,100))s.Confirmed=false;}
     }

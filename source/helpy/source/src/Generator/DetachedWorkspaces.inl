@@ -1,5 +1,11 @@
 // Native presentation surfaces only. Both share the existing map/recipe models
 // and authority-checked bridge rather than making copies of game state.
+void HelpyStandaloneWindow::RememberPlacement(HWND window){
+    if(window==m_hwnd){if(!m_gameOverlay.Active()&&!m_nativeOverlay.Wanted())HelpyWindowPlacement::Remember(window,"main");return;}
+    if(window==m_bayWindow){HelpyWindowPlacement::Remember(window,"item-bay");return;}
+    if(window==m_cacheWindow){HelpyWindowPlacement::Remember(window,"icon-cache");return;}
+    for(size_t i=0;i<m_workspaces.size();++i)if(m_workspaces[i].Window==window){HelpyWindowPlacement::Remember(window,"workspace-"+std::to_string(i));return;}
+}
 bool HelpyStandaloneWindow::OwnsWindow(HWND window)const{
     if(!window)return false;
     if(window==m_publishedWindow.load()||window==m_publishedBayWindow.load()||window==m_publishedCacheWindow.load())return true;
@@ -7,6 +13,7 @@ bool HelpyStandaloneWindow::OwnsWindow(HWND window)const{
 }
 void HelpyStandaloneWindow::DestroyWorkspacePanel(size_t index){
     auto& panel=m_workspaces.at(index);m_publishedWorkspaces.at(index)=nullptr;
+    if(panel.Window)RememberPlacement(panel.Window);
     HelpyTaskbar::Current.Forget(WorkspaceTask(index));
     if(m_context)m_context->OMSetRenderTargets(0,nullptr,nullptr);
     if(panel.Window&&GetCapture()==panel.Window)ReleaseCapture();
@@ -26,7 +33,7 @@ bool HelpyStandaloneWindow::SyncWorkspacePanel(size_t index){
         const int y=std::clamp(int((parent.top+parent.bottom-height)/2),int(monitor.rcWork.top),std::max(int(monitor.rcWork.top),int(monitor.rcWork.bottom)-height));
         wchar_t windowClass[256]{};GetClassNameW(m_hwnd,windowClass,256);
         panel.Window=CreateWindowExW(WS_EX_TOOLWINDOW,windowClass,WorkspaceCaption(index),WS_OVERLAPPEDWINDOW,x,y,width,height,m_hwnd,nullptr,m_module,this);
-        if(panel.Window)DragAcceptFiles(panel.Window,TRUE);
+        HelpyWindowPlacement::Restore(panel.Window,"workspace-"+std::to_string(index),420,320);if(panel.Window)DragAcceptFiles(panel.Window,TRUE);
         using Microsoft::WRL::ComPtr;ComPtr<IDXGIDevice> device;ComPtr<IDXGIAdapter> adapter;ComPtr<IDXGIFactory> factory;
         DXGI_SWAP_CHAIN_DESC description{};description.BufferCount=2;description.BufferDesc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
         description.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT;description.OutputWindow=panel.Window;description.SampleDesc.Count=1;description.Windowed=TRUE;description.SwapEffect=DXGI_SWAP_EFFECT_DISCARD;

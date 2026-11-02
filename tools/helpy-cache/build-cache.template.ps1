@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([Parameter(Position=0)][string]$ZipPath,[string]$ModDirectory,[string]$Game,[string]$Mapping,[string]$Oodle,[string]$ModId,[string]$OutputDirectory,[string]$ProgressFile,[string]$ControlFile,[switch]$InstallDotNet,[string]$CreationRequest,[string]$PackagePath,[string]$Platform='Win64')
+param([Parameter(Position=0)][string]$ZipPath,[string]$ModDirectory,[string]$Game,[string]$Mapping,[string]$Oodle,[string]$ModId,[string]$OutputDirectory,[string]$ProgressFile,[string]$ControlFile,[switch]$InstallDotNet,[string]$CreationRequest,[string]$PackagePath,[string]$Platform='Win64',[string]$BackupRoot)
 $ErrorActionPreference='Stop'
 Add-Type -AssemblyName System.IO.Compression,System.IO.Compression.FileSystem
 
@@ -33,6 +33,23 @@ function Assert-CachePath([string]$Path,[string]$Parent) {
         $next=[IO.Path]::GetDirectoryName($at);if($next -eq $at){break};$at=$next
     }
     return $resolved
+}
+function Get-CacheTreeManifest([string]$Folder) {
+    $root=[IO.Path]::GetFullPath($Folder).TrimEnd('\');$prefix=$root+'\';$null=Assert-CachePath $root ([IO.Path]::GetDirectoryName($root))
+    $entries=[Collections.Generic.List[IO.FileSystemInfo]]::new();$pending=[Collections.Generic.Stack[string]]::new();$pending.Push($root)
+    while($pending.Count){foreach($entry in Get-ChildItem -LiteralPath $pending.Pop() -Force){
+        $null=Assert-CachePath $entry.FullName $root;$entries.Add($entry)
+        if($entries.Count -gt 16384){throw 'Previous cache has too many entries to back up safely.'}
+        if($entry.PSIsContainer){$pending.Push($entry.FullName)}
+    }}
+    foreach($entry in $entries | Sort-Object FullName){
+        $null=Assert-CachePath $entry.FullName $root
+        if(!$entry.PSIsContainer){
+            $hash=(Get-FileHash -LiteralPath $entry.FullName -Algorithm SHA256).Hash;$after=Get-Item -LiteralPath $entry.FullName
+            if($after.Length -ne $entry.Length -or $after.LastWriteTimeUtc -ne $entry.LastWriteTimeUtc){throw 'Previous cache changed during verification.'}
+            [pscustomobject]@{Path=$entry.FullName.Substring($prefix.Length);Bytes=$entry.Length;SHA256=$hash}
+        }
+    }
 }
 function Get-CacheArchivePlan($Archive) {
     if($Archive.Entries.Count -gt 16384){throw 'ZIP contains too many entries (limit 16384).'}
@@ -104,7 +121,7 @@ function Invoke-CacheZip {
     $parent=[IO.Path]::GetDirectoryName($output);if(!$parent -or [IO.Path]::GetPathRoot($output) -eq $output){throw 'Choose a cache output folder, not a drive root.'}
     $null=Assert-CachePath $output $parent
     $token=[Guid]::NewGuid().ToString('N');$tempParent=[IO.Path]::GetTempPath();$stage=Join-Path $tempParent ('RuneSchema.Cache.'+$token)
-    $publish=Join-Path $parent ('.RuneSchema.Cache.'+$token);$backup=$null
+    $publish=Join-Path $parent ('.RuneSchema.Cache.'+$token);$backup=$null;$swap=$null
     $null=Assert-CachePath $stage $tempParent;$null=Assert-CachePath $publish $parent
     try {
         Write-Host 'RuneSchema mod cache builder' -ForegroundColor Yellow
@@ -171,11 +188,22 @@ function Invoke-CacheZip {
         if(Test-Path -LiteralPath (Join-Path $built 'mod.png')){Copy-Item -LiteralPath (Join-Path $built 'mod.png') -Destination $publish}
         if(Test-Path -LiteralPath $output){
             if(!(Test-Path -LiteralPath $output -PathType Container)){throw 'Cache output is an existing file.'}
-            $backup=$output+'.previous-'+$token;$null=Assert-CachePath $output $parent;$null=Assert-CachePath $backup $parent
-            Move-Item -LiteralPath $output -Destination $backup
+            $backupBase=if($BackupRoot){[IO.Path]::GetFullPath($BackupRoot)}else{Join-Path $env:LOCALAPPDATA 'RSDragonwilds/RuneSchema/core/tools/cache-builder/backups'}
+            $null=Assert-CachePath $backupBase ([IO.Path]::GetDirectoryName($backupBase))
+            $outside=if($ModDirectory){$mod}else{$output}
+            if(($backupBase.TrimEnd('\')+'\').StartsWith(([IO.Path]::GetFullPath($outside).TrimEnd('\')+'\'),[StringComparison]::OrdinalIgnoreCase)){throw 'Previous caches must be backed up outside the mod/output folder.'}
+            $backup=Join-Path $backupBase ('cache-'+$token);$null=Assert-CachePath $backup $backupBase
+            $manifest=@(Get-CacheTreeManifest $output);$expected=ConvertTo-Json -InputObject $manifest -Compress
+            New-Item -ItemType Directory -Path $backupBase -Force | Out-Null;Copy-Item -LiteralPath $output -Destination $backup -Recurse
+            if((ConvertTo-Json -InputObject @(Get-CacheTreeManifest $backup) -Compress) -cne $expected -or (ConvertTo-Json -InputObject @(Get-CacheTreeManifest $output) -Compress) -cne $expected){throw 'Previous-cache backup verification failed; current cache retained.'}
+            [IO.File]::WriteAllText(($backup+'.json'),(@{Original=$output;Files=$manifest}|ConvertTo-Json -Depth 5),[Text.UTF8Encoding]::new($false))
+            $swap=$output+'.swap-'+$token;$null=Assert-CachePath $swap $parent;Move-Item -LiteralPath $output -Destination $swap
         }
-        try {$null=Assert-CachePath $publish $parent;$null=Assert-CachePath $output $parent;Move-Item -LiteralPath $publish -Destination $output}
-        catch {if($backup -and !(Test-Path -LiteralPath $output)){$null=Assert-CachePath $backup $parent;Move-Item -LiteralPath $backup -Destination $output};throw}
+        try {
+            if($swap -and (ConvertTo-Json -InputObject @(Get-CacheTreeManifest $swap) -Compress) -cne $expected){throw 'Previous cache changed before publication.'}
+            $null=Assert-CachePath $publish $parent;$null=Assert-CachePath $output $parent;Move-Item -LiteralPath $publish -Destination $output
+        }catch {if($swap -and !(Test-Path -LiteralPath $output)){$null=Assert-CachePath $swap $parent;Move-Item -LiteralPath $swap -Destination $output};throw}
+        if($swap){$null=Assert-CachePath $swap $parent;Remove-Item -LiteralPath $swap -Recurse -Force}
         if($CreationRequest){
             $preparedCache=Join-Path $mod 'cache';$null=Assert-CachePath $preparedCache $stage
             if(Test-Path -LiteralPath $preparedCache){Remove-Item -LiteralPath $preparedCache -Recurse -Force}

@@ -1,4 +1,5 @@
 #pragma once
+#include "Generator/HelpyTextInput.h"
 #include "Core/ProcessExitFuture.h"
 #include "Core/RuneSchemaProfile.h"
 #include "Generator/ToolRequest.h"
@@ -46,7 +47,7 @@ inline bool SearchOnEnter(const char* label,const char* hint,char* buffer,size_t
     const auto& theme=HelpyImGuiTheme::Current;const float button=ImGui::GetFrameHeight(),spacing=ImGui::GetStyle().ItemSpacing.x;
     ImGui::PushID(label);ImGui::TextUnformatted(label);
     ImGui::SetNextItemWidth(std::max(theme.X(140.0f),ImGui::GetContentRegionAvail().x-button-spacing));
-    const bool enter=ImGui::InputTextWithHint("##query",hint,buffer,capacity,ImGuiInputTextFlags_EnterReturnsTrue);
+    const bool enter=HelpyTextInput::InputTextWithHint("##query",hint,buffer,capacity,ImGuiInputTextFlags_EnterReturnsTrue);
     ImGui::SameLine();const bool click=HelpyImGuiTheme::SearchIconButton("search");ImGui::PopID();
     if(enter||click){committed=buffer;return true;}return false;
 }
@@ -221,7 +222,7 @@ inline void RenderKitLibrary() {
 #endif
         ImGui::TextWrapped("Save item paths and quantities. Player, delivery and equip actions are not stored.");
         ImGui::TextWrapped("Preset folder: %s",directory.string().c_str());
-        ImGui::SetNextItemWidth(theme.X(350));if(ImGui::InputText("Preset name",exportName,sizeof(exportName)))replace=false;
+        ImGui::SetNextItemWidth(theme.X(350));if(HelpyTextInput::InputText("Preset name",exportName,sizeof(exportName)))replace=false;
         ImGui::BeginDisabled(cart.Selection().empty());HelpyImGuiTheme::Toggle("Selected cart items only",&selectedOnly);ImGui::EndDisabled();
         HelpyImGuiTheme::Toggle("JSONC (includes comments)",&asJsonc);HelpyImGuiTheme::Toggle("Replace existing preset (preserve backup)",&replace);
         if(!error.empty())ImGui::TextWrapped("%s",error.c_str());
@@ -674,8 +675,8 @@ inline void Render(View view) {
     if(!npc&&ImGui::Checkbox(kind==0?"Ad-hoc AI class":"Ad-hoc resource class",&custom))confirmed=false;
     if(npc)custom=false;
     if(custom) {
-        if(ImGui::InputText("Blueprint class path",ai,sizeof(ai)))confirmed=false;
-        if(ImGui::InputText("Spawn name (optional)",name,sizeof(name)))confirmed=false;
+        if(HelpyTextInput::InputText("Blueprint class path",ai,sizeof(ai)))confirmed=false;
+        if(HelpyTextInput::InputText("Spawn name (optional)",name,sizeof(name)))confirmed=false;
         if(!resource && HelpyImGuiTheme::Toggle("Use custom name for boss title too",&boss))confirmed=false;
     }else {
         if(SearchOnEnter("Search loaded AI/resources","name, class, type or mod id",definitionFilter,sizeof(definitionFilter),definitionQuery))
@@ -702,7 +703,7 @@ inline void Render(View view) {
         } else {
             if(ImGui::BeginCombo("Loaded spawn",state.SelectedLabel.c_str())) {if(result.contains("Definitions")&&result["Definitions"].is_array()){const auto& definitionRows=result["Definitions"];ImGuiListClipper clipper;clipper.Begin(static_cast<int>(definitionMatches.Rows.size()));while(clipper.Step()){if(clipper.DisplayEnd>=static_cast<int>(definitionMatches.Rows.size())-4)LazyCatalog::More(kind==0?1:2);for(int visible=clipper.DisplayStart;visible<clipper.DisplayEnd;++visible){const auto index=definitionMatches.Rows[static_cast<size_t>(visible)];if(index>=definitionRows.size())continue;const auto& row=definitionRows[index];const auto key=row.value("Key",std::string{}),type=row.value("Type",std::string("AI")),title=row.value("Name",key),path=row.value("Class",std::string{});const auto display="["+type+"] "+title+" — "+key;ImGui::PushID(key.c_str());if(ImGui::Selectable(display.c_str(),key==definition)){definition=key;confirmed=false;}if(HelpyImGuiTheme::TooltipReady(std::string("spawn:")+key,ImGui::IsItemHovered()))PS::HelpyImGuiTheme::Tooltip("%s",path.c_str());ImGui::PopID();}}}if(definitionMatches.Rows.empty()){const auto& lazy=LazyCatalog::For(kind==0?1:2);if(lazy.Pending)ImGui::TextDisabled("Loading runtime definitions...");else if(!lazy.LastError.empty())ImGui::TextWrapped("Definition query failed: %s",lazy.LastError.c_str());else ImGui::TextDisabled("No loaded AI or resource matches this search.");}ImGui::EndCombo();}
         }
-        if(ImGui::InputText("Spawn name override (optional)",name,sizeof(name)))confirmed=false;
+        if(HelpyTextInput::InputText("Spawn name override (optional)",name,sizeof(name)))confirmed=false;
         if(kind==0&&!npc && HelpyImGuiTheme::Toggle("Use name for boss title too",&boss))confirmed=false;
     }
     std::string selectedClass;bool selectedAvailable=custom,selectedModeAllowed=custom;std::string selectedReason;
@@ -744,7 +745,7 @@ inline void Render(View view) {
             ImGui::TextDisabled("%s",item);
         }
         if(ui.advancedMode&&ImGui::CollapsingHeader("Advanced item path override")) {
-            ImGui::InputText("Item asset path##additional-drop",item,sizeof(item));
+            HelpyTextInput::InputText("Item asset path##additional-drop",item,sizeof(item));
             ImGui::TextDisabled("Use this only for a valid loaded item path that is not available in the current catalog.");
         }
         ImGui::InputInt("Minimum quantity",&dropMin);ImGui::InputInt("Maximum quantity",&dropMax);
