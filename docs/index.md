@@ -14,25 +14,20 @@ hide:
   <h1 id="rs-home-title">Your mods.<br>Your world.</h1>
   <p>A shared runtime for Dragonwilds mods. Install content, create something new, or bring your community together.</p>
   <div class="rs-actions">
-    <a class="md-button md-button--primary" href="INSTALLATION/">Get started <span aria-hidden="true">→</span></a>
-    <a class="rs-text-link" href="CURRENT-RELEASE/">Current release · 0.8.0.3</a>
+    <a class="md-button md-button--primary" href="INSTALLATION/">Install stable <span aria-hidden="true">→</span></a>
+    <a class="rs-text-link" href="experimental/PRE-RELEASE/">Pre-release &amp; pending changelog</a>
     <a class="rs-text-link" href="MOD-HOSTS-AND-GETTING-STARTED/">What is RuneSchema? <span aria-hidden="true">↗</span></a>
   </div>
 </section>
 
-<aside class="rs-release" aria-label="Current release">
-  <span class="rs-release__tag">Current download</span>
-  <p><strong>0.8.0.3</strong> adds selected-save cleanup, nested Lua discovery for Mod Menu, improved item families and optional FPS controls.</p>
-  <a href="RELEASE-0.8.0.3/">Release notes and verification <span aria-hidden="true">→</span></a>
-</aside>
-
-<p>Looking for the latest improvements? The <a href="CHANGELOG-0.8.0.3/">changelog</a>
-includes the October 28 update, with safer cleanup timing, Mod Menu integration
-and Helpy refinements. Check <a href="CURRENT-RELEASE/">download and source status</a>
-to see which changes are in the release package.</p>
-
-<p>Trying an upcoming feature? Visit the <a href="experimental/">Experimental area</a>
-for its setup, defaults, testing status and changelog. The guides below follow main.</p>
+<div class="rs-hub-links rs-versions" aria-label="Choose a release">
+  <a href="CURRENT-RELEASE/">Stable · 0.8.0.3 <span aria-hidden="true">→</span>
+    <small>The stable download, released changes and installation guides.</small>
+  </a>
+  <a href="experimental/PRE-RELEASE/">Pre-release · 0.8.1.0 <span aria-hidden="true">→</span>
+    <small>Test the candidate. Read the pending changelog, setup and known limits.</small>
+  </a>
+</div>
 
 <h2 class="rs-section-heading">Choose your path</h2>
 <div class="rs-paths">

@@ -190,17 +190,18 @@ nav:
       - Ask RuneSchema: ASK-RUNESCHEMA.md
       - Licensing: LICENSING.md
   - Updates:
-      - Release 0.8.0.3: RELEASE-0.8.0.3.md
-      - 0.8.0.3 changelog: CHANGELOG-0.8.0.3.md
-      - Release 0.8.0.2: RELEASE-0.8.0.2.md
-      - 0.8.0.2 changelog: CHANGELOG-0.8.0.2.md
-      - 0.8.0.1b quick bug fixes: CHANGELOG-0.8.0.1b.md
-      - Release 0.8.0.1: RELEASE-0.8.0.1.md
-      - Implemented / removed since 0.8.0.0: CHANGELOG-0.8.0.1.md
-      - Release 0.8.0.0: RELEASE-0.8.0.0.md
-      - Full 0.8.0.0 changelog: CHANGELOG-0.8.0.0.md
-      - Development history: ALPHA-CHANGELOG.md
-      - Current release: CURRENT-RELEASE.md
+      - Downloads and channels: CURRENT-RELEASE.md
+      - Stable 0.8.0.3: RELEASE-0.8.0.3.md
+      - Stable changelog: CHANGELOG-0.8.0.3.md
+      - Release history:
+          - 0.8.0.2 release: RELEASE-0.8.0.2.md
+          - 0.8.0.2 changelog: CHANGELOG-0.8.0.2.md
+          - 0.8.0.1b fixes: CHANGELOG-0.8.0.1b.md
+          - 0.8.0.1 release: RELEASE-0.8.0.1.md
+          - Changes since 0.8.0.0: CHANGELOG-0.8.0.1.md
+          - 0.8.0.0 release: RELEASE-0.8.0.0.md
+          - 0.8.0.0 changelog: CHANGELOG-0.8.0.0.md
+          - Development history: ALPHA-CHANGELOG.md
 
   - Experimental:
       - Overview: experimental/index.md

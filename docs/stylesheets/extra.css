@@ -227,6 +227,7 @@
 .rs-hub-links a { display: block; padding: 1rem 1.1rem; border: 1px solid var(--rs-line); border-radius: var(--rs-radius-sm); background: var(--rs-surface); text-decoration: none; font-weight: 650; transition: border-color .2s ease, background-color .2s ease; }
 .rs-hub-links a:hover { border-color: var(--rs-accent); background: var(--rs-surface-soft); }
 .rs-hub-links small { display: block; margin-top: .2rem; color: var(--rs-muted); font-weight: 400; }
+.rs-hub-links.rs-versions { margin: 0 0 2rem; }
 
 .rs-ask { margin: 1.2rem 0 2rem; padding: 1.2rem; border: 1px solid var(--rs-line); border-radius: var(--rs-radius); background: var(--rs-surface); }
 .rs-ask__label { display: block; margin-bottom: .5rem; font-weight: 650; }

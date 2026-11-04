@@ -3,9 +3,9 @@
 The site is organized by what you are doing. Choose a role first; use the
 loader reference only when you need exact folder fields.
 
-These are the normal guides from main. See [Experimental](experimental/index.md)
-for upcoming features, or [documentation channels](DOCUMENTATION-CHANNELS.md)
-for how guides move into this area after promotion.
+These guides describe stable RuneSchema. For candidate changes, use the
+[pre-release page and pending changelog](experimental/PRE-RELEASE.md) or
+[feature guides](experimental/index.md).
 
 ## Users: install and play
 
@@ -16,7 +16,7 @@ for how guides move into this area after promotion.
 5. [Safe removal and character saves](SAFE-SAVE-AND-LEDGER.md)
 6. [Steam, Epic, Game Pass, and co-op](COMPATIBILITY.md)
 7. [Troubleshooting](TROUBLESHOOTING.md)
-8. [Report a bug from Helpy](HELPY-BUG-REPORTS.md)
+8. [Report a bug on Nexus](HELPY-BUG-REPORTS.md)
 
 ## Modders: create content
 
