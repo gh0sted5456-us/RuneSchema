@@ -386,5 +386,9 @@
   "RS-NET-007": [
     "Delivery and teleport requests execute on the server with existing identity, item registry, quantity and ground checks. This does not grant arbitrary administrator rights.",
     "Use the allowed self-service actions. Reconnect after changing character/world or if the server revokes access."
+  ],
+  "RS-SAVE-006": [
+    "A verified cleanup removed character records or world building instances. Notifications wait for the native player-ready check and use only removal counts plus a reliably attributed absent mod owner.",
+    "No action is required. Technical details remain in RuneSchema.log. This message does not assert that a transformed load payload has already been saved to disk."
   ]
 }

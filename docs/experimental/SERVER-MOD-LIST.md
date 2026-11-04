@@ -3,9 +3,8 @@ channel: experimental
 promote_to: SERVER-MOD-LIST.md
 ---
 
-!!! info "Experimental · local candidate"
-    This feature is being tested locally. It is not part of an uploaded package.
-    See [experimental features](index.md) and [stable downloads](../CURRENT-RELEASE.md).
+!!! info "Pre-release · 0.8.1.0"
+    Included in 0.8.1.0. See the [candidate download and limits](PRE-RELEASE.md).
 
 # View a world's RuneSchema mods
 
@@ -14,7 +13,7 @@ enabled RuneSchema mod names, IDs, versions and optional download-page links
 after the player connects.
 Open **Helpy → Mods → Server comparison** in the left category pane to browse
 or search the complete list. **RuneSchema mods** manages your own installation;
-**UE4SS mods** is a separate read-only inventory.
+**UE4SS mods** provides a separate inventory with opt-in external management; see [loader controls](MOD-METADATA-AND-CONTROLS.md).
 A notice with the RuneSchema logo says **Entering a RuneSchema world** after a
 validated list arrives. Its border and accent show **green / Versions match**
 when the compared versioned entries align, **amber / Review versions** for

@@ -45,14 +45,14 @@ inline void Object(const Json& object,ImGuiTextFilter& filter){
     }ImGui::PopID();
 }
 inline void Snapshot(const Json& report,ImGuiTextFilter& filter){
-    ImGui::BeginChild("##captured-fields",ImVec2(0,260),true);
+    HelpyImGuiTheme::BeginPanel("##captured-fields",ImVec2(0,260),true);
     if(report.contains("object")&&report["object"].is_object())Object(report["object"],filter);
     if(report.contains("components")&&report["components"].is_array())for(const auto& component:report["components"]){
         const auto path=component.value("path",std::string{});if(ImGui::TreeNode(path.c_str())){Object(component,filter);ImGui::TreePop();}
     }
     if(report.contains("controller")&&report["controller"].is_object()&&ImGui::TreeNode("Controller fields")){Object(report["controller"],filter);ImGui::TreePop();}
     if(report.contains("functions")&&ImGui::TreeNode("Function signatures")){for(const auto& fn:report["functions"]){const auto line=fn.dump();if(filter.PassFilter(line.c_str()))ImGui::TextWrapped("%s",line.c_str());}ImGui::TreePop();}
-    ImGui::EndChild();
+    PS::HelpyImGuiTheme::EndPanel();
 }
 inline void SavedReport(const Json& report,bool world){
     ImGui::TextWrapped("%s",report.value("Coverage",std::string{}).c_str());

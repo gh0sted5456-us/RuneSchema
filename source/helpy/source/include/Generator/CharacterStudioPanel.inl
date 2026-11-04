@@ -144,7 +144,7 @@ inline void StudioPaintKit(){
         const auto title=key=="SkinTone"?"Skin":key=="EyeColor"?"Eyes":key=="HairColor"?"Hair":"Eyebrows";
         if(ImGui::BeginTabItem(title)){StudioPaletteField=key;const auto current=StudioAppearance["Appearance"].at(key).at("rowName").get<std::string>();ImGui::TextWrapped("%s · %s",field.at("Label").get_ref<const std::string&>().c_str(),current.c_str());
             const float size=theme.Y(38),gap=ImGui::GetStyle().ItemSpacing.x,available=ImGui::GetContentRegionAvail().x;const int columns=std::max(1,int((available+gap)/(size+gap)));int i=0;
-            for(const auto& value:field.at("Rows")){const auto row=value.get<std::string>();ImGui::PushID(row.c_str());const auto a=ImGui::GetCursorScreenPos();const bool clicked=ImGui::InvisibleButton("##paint-well",{size,size});const bool selected=row==current,hovered=ImGui::IsItemHovered();const ImVec2 center(a.x+size*.5f,a.y+size*.5f);auto* draw=ImGui::GetWindowDrawList();
+            for(const auto& value:field.at("Rows")){const auto row=value.get<std::string>();ImGui::PushID(row.c_str());const auto a=ImGui::GetCursorScreenPos();const bool clicked=ImGui::InvisibleButton("##paint-well",{size,size},ImGuiButtonFlags_EnableNav);const bool selected=row==current,hovered=ImGui::IsItemHovered();const ImVec2 center(a.x+size*.5f,a.y+size*.5f);auto* draw=ImGui::GetWindowDrawList();
                 const auto swatches=StudioAppearance["Choices"].value("Swatches",Json::object());const auto colors=swatches.value(key,Json::object());const auto color=colors.value(row,Json{});ImU32 fill=ImGui::GetColorU32(theme.panelAlt);if(color.is_array()&&color.size()==4)fill=IM_COL32(color[0].get<int>(),color[1].get<int>(),color[2].get<int>(),255);
                 draw->AddCircleFilled(center,size*.39f,fill);draw->AddCircle(center,size*.45f,ImGui::GetColorU32(selected||hovered?theme.accentHover:theme.border),0,theme.X(selected?2.f:1.f));if(selected){draw->AddLine({center.x-size*.12f,center.y},{center.x-size*.02f,center.y+size*.1f},IM_COL32(255,255,255,255),2);draw->AddLine({center.x-size*.02f,center.y+size*.1f},{center.x+size*.15f,center.y-size*.13f},IM_COL32(255,255,255,255),2);}
                 if(clicked)if(AuthoringClient::Submit("SaveEditorAppearanceSet",{{"Field",key},{"Row",row},{"Revision",StudioAppearance.at("Revision")}}))Invalidate();
@@ -199,21 +199,21 @@ inline void StudioSlotPicker(){
         if((search||refresh||enter)&&!StudioSlotPending){StudioSlotQuery=StudioSlotSearch;StudioRefreshSlot();}
         if(!StudioSlotPending&&StudioSlotMore&&(StudioSlotOffset==0||StudioSlotRows.size()<48)&&!AuthoringClient::Busy())StudioSlotPending=StudioRequestSlot();
         if(!StudioSlotError.empty())ImGui::TextWrapped("%s",StudioSlotError.c_str());
-        ImGui::BeginChild("##compatible-slot-items",{0,theme.Y(340)},true);
+        HelpyImGuiTheme::BeginPanel("##compatible-slot-items",{0,theme.Y(340)},true);
         const float gap=ImGui::GetStyle().ItemSpacing.x,available=ImGui::GetContentRegionAvail().x;
         const int columns=ItemBayLayout::Columns(available,theme.X(theme.gridMinCardWidth),gap,theme.itemGridColumns);
         const float width=std::max(1.f,(available-gap*(columns-1))/columns),height=theme.Y(theme.gridCardHeight);
         ImGuiListClipper clip;clip.Begin(int((StudioSlotRows.size()+columns-1)/columns),height+ImGui::GetStyle().ItemSpacing.y);
         while(clip.Step())for(int line=clip.DisplayStart;line<clip.DisplayEnd;++line)for(int col=0;col<columns;++col){
             const auto index=size_t(line*columns+col);if(index>=StudioSlotRows.size())break;const auto& row=StudioSlotRows[index];const auto path=row.value("Path",std::string{});
-            ImGui::PushID(path.c_str());const auto a=ImGui::GetCursorScreenPos();const bool click=ImGui::InvisibleButton("##slot-item",{width,height}),hovered=ImGui::IsItemHovered();
+            ImGui::PushID(path.c_str());const auto a=ImGui::GetCursorScreenPos();const bool click=ImGui::InvisibleButton("##slot-item",{width,height},ImGuiButtonFlags_EnableNav),hovered=ImGui::IsItemHovered()||ImGui::IsItemFocused();
             ItemGridPicker::DrawPlacard(row,a,{a.x+width,a.y+height},StudioSelected.value("Path",std::string{})==path,hovered);
             if(click)StudioFit(row,StudioSlot);ItemGridPicker::DragItem(row);
             if(HelpyImGuiTheme::TooltipReady("slot:"+path,hovered))ItemGridPicker::VerboseTooltip(row,ItemPresentation::Name(row),path,false,true);
             ImGui::PopID();if(col+1<columns&&index+1<StudioSlotRows.size())ImGui::SameLine();
         }
         if(StudioSlotRows.empty())ImGui::TextWrapped("%s",StudioSlotPending||StudioSlotMore?"Reading compatible native items…":"No compatible loaded items. Load additional content and refresh.");
-        ImGui::EndChild();
+        PS::HelpyImGuiTheme::EndPanel();
         ImGui::TextDisabled("%zu compatible items",StudioSlotRows.size());
         ImGui::BeginDisabled(StudioSlotPending||!StudioSlotMore||StudioSlotRows.size()>=2048);if(HelpyImGuiTheme::SoftButton("More"))StudioSlotPending=StudioRequestSlot();ImGui::EndDisabled();
         if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Uses the shared Item Bay cache. Equipment compatibility and native use requirements still apply.");
@@ -229,7 +229,7 @@ inline void StudioGear(){
         const auto title=location=="Trinket2"?"Trinket 2":location=="MagicAmmo1"?"Runes":location=="HeldRight"?"Main hand":location=="HeldLeft"?"Off hand":location=="CrossbowBolts"?"Bolts":location=="FishingBait"?"Bait":slot;
         ImGui::PushID(slot);Json item=Json::object();for(const auto& row:StudioSavedLoadout)if(row.value("Location",std::string{})==slot)item=SavedPlacard(row);
         const auto path=StudioEquipment.value(slot,item.value("Path",std::string{}));if(!path.empty()&&item.value("Path",std::string{})!=path)item={{"Path",path},{"Name","Preview fitting"}};
-        const auto a=ImGui::GetCursorScreenPos();const ImVec2 b(a.x+ImGui::GetContentRegionAvail().x,a.y+theme.Y(108));const bool clicked=ImGui::InvisibleButton("##loadout-placard",{b.x-a.x,b.y-a.y}),hovered=ImGui::IsItemHovered();
+        const auto a=ImGui::GetCursorScreenPos();const ImVec2 b(a.x+ImGui::GetContentRegionAvail().x,a.y+theme.Y(108));const bool clicked=ImGui::InvisibleButton("##loadout-placard",{b.x-a.x,b.y-a.y},ImGuiButtonFlags_EnableNav),hovered=ImGui::IsItemHovered()||ImGui::IsItemFocused();
         if(!path.empty()){ItemGridPicker::DrawPlacard(item,a,b,false,hovered);if(clicked){StudioSelected=item;StudioPreviewMode="Item";StudioRequestedView.clear();}}
         else{auto* draw=ImGui::GetWindowDrawList();draw->AddRectFilled(a,b,ImGui::GetColorU32(theme.panelAlt),4);draw->AddRect(a,b,ImGui::GetColorU32(theme.border),4);MapLayerIcons::Draw(glyph,{(a.x+b.x)*.5f,a.y+theme.Y(48)},theme.Y(28));}
         auto* draw=ImGui::GetWindowDrawList();const auto extent=ImGui::CalcTextSize(title);draw->AddRectFilled(a,{b.x,a.y+theme.Y(18)},ImGui::GetColorU32(theme.panelAlt),3);MapLayerIcons::Draw(glyph,{a.x+theme.X(10),a.y+theme.Y(9)},theme.Y(13));draw->AddText({std::max(a.x+theme.X(20),(a.x+b.x-extent.x)*.5f),a.y+theme.Y(2)},ImGui::GetColorU32(theme.accent),title);

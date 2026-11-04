@@ -14,6 +14,7 @@ public:
     void Load(const std::filesystem::path& root);
     void Shutdown() noexcept;
     void OnUiInit();
+    void StartDesktop();
     void OnUnrealInit();
     bool HasCapability(const std::string& capability) const;
     bool HasConnection(const std::string& connection) const;

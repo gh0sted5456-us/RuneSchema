@@ -5,6 +5,10 @@
 #include <string>
 int main(){
     using namespace PS;
+    {DiagnosticToastFeed::Notice card;card.Text=R"([RuneSchema] [RS-SAVE-006] {"Removed":12,"Mod":"Siege"})";
+    const auto known=DiagnosticToastPresentation::Format(card);assert(known.Success&&known.Title=="Removed 12 records from uninstalled mod: Siege."&&known.Detail.empty()&&known.Subtitle.empty());
+    card.Text=R"([RuneSchema] [RS-SAVE-006] {"Removed":12,"Mod":""})";assert(DiagnosticToastPresentation::Format(card).Title=="Removed 12 records.");
+    card.Text=R"([RuneSchema] [RS-SAVE-006] {"Removed":0,"Mod":"Siege"})";assert(!DiagnosticToastPresentation::Format(card).Success);}
     {DiagnosticToastFeed::Notice joined;joined.Text="[RuneSchema] [RS-NET-004] Server supplied 5 enabled RuneSchema mods.";
         const auto notice=DiagnosticToastPresentation::Format(joined);assert(notice.WorldMods&&notice.Level=="Connected"&&notice.Title=="Entering a RuneSchema world"&&notice.Subtitle.find("Click")!=std::string::npos);
         assert(notice.Alignment==ServerModVersions::Tone::Neutral);

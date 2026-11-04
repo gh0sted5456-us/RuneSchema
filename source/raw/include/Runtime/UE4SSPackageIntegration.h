@@ -18,6 +18,7 @@ inline std::vector<std::string> Prepare(const std::filesystem::path& ue4ss){
     std::set<std::string> identities;
     for(const auto& owner:DragonWilds::ModLoadOrder::Resolve(mods,discovered))try {
         for(auto package:UE4SSPackages::Discover(mods/owner,RC::to_string(owner))) {
+            if(!package.Enabled)continue;
             const auto id=ModFolderLayout::FoldAscii(package.Name);
             if(!identities.insert(id).second){diagnostics.push_back("[REJECTED] Duplicate UE4SS package identity: "+package.Name);continue;}
             if(fs::exists(ue4ss/"Mods"/RC::to_generic_string(package.Name))){diagnostics.push_back("[REJECTED] UE4SS sibling already claims '"+package.Name+"'; remove the duplicate installation deliberately");continue;}

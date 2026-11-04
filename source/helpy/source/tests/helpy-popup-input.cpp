@@ -56,6 +56,10 @@ int main(int argc,char** argv){
     Require(late.Next<now+34ms); // Preserve the cadence after a late wake.
     Require(late.Due(now+34ms,true,true,60)&&late.Next<now+51ms);
     Require(late.Due(now+5s,true,true,60)&&!late.Due(now+5s,true,true,60));
+    for(const bool focused:{false,true}){PS::HelpyFramePacing passive;frames=0;
+        for(int tick=0;tick<1000;++tick)frames+=passive.Due(now+std::chrono::milliseconds(tick),true,focused,2);
+        Require(frames==2);
+    }
     PS::HelpyUiMotion::PageFade fade;
     Require(fade.Alpha(0,0,true)==1.f&&fade.Alpha(1,1,true)==.6f);
     const auto half=fade.Alpha(1,1.08,true);Require(half>.9f&&half<1.f);

@@ -12,6 +12,12 @@ int main(){using namespace PS::HelpyOverlayFrames;Page page;page.GamePid=7;page.
     Input input;for(unsigned i=0;i<InputCapacity;++i){Check(Pop(page,input));Check(input.Code==i);}Check(!Pop(page,input));
     Page pending,target;
     Check(WindowInput(WM_LBUTTONUP,0,MAKELPARAM(12,34),input)&&input.Kind==InputKind::Button&&input.Code==WM_LBUTTONUP&&input.X==12&&input.Y==34);
+    for(const UINT message:{WM_LBUTTONDOWN,WM_LBUTTONUP,WM_MBUTTONDOWN,WM_MBUTTONUP,WM_RBUTTONDOWN,WM_RBUTTONUP})
+        Check(WindowInput(message,0,MAKELPARAM(12,34),input)&&input.Kind==InputKind::Button&&input.Code==message);
+    for(const UINT key:{UINT('W'),UINT('A'),UINT('S'),UINT('D'),UINT(VK_SPACE),UINT(VK_SHIFT)}){
+        Check(WindowInput(WM_KEYDOWN,key,0,input)&&input.Kind==InputKind::Key&&input.Code==key);
+        Check(WindowInput(WM_KEYUP,key,LPARAM(1u<<31),input)&&input.Kind==InputKind::Key&&input.Code==key&&(input.Flags&(1u<<31)));
+    }
     Check(WindowInput(WM_KEYUP,VK_BACK,LPARAM(1u<<31),input)&&input.Kind==InputKind::Key&&input.Flags==(1u<<31));
     Check(WindowInput(WM_CHAR,'f',0,input)&&input.Kind==InputKind::Character&&input.Code=='f');
     Check(!WindowInput(WM_PAINT,0,0,input));

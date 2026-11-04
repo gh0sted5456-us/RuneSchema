@@ -16,6 +16,7 @@ int main(int argc,char** argv){
         const auto position=[&](int id){return std::find(layout.begin(),layout.end(),id);};
         assert(position(int(Page::Settings))<position(N::SidebarDivider));
         assert(position(int(Page::BugReport))>position(N::SidebarDivider));
+        assert(position(int(Page::Notifications))==position(int(Page::BugReport))+1);
         assert(position(int(Page::Home))<position(int(Page::Profile))&&position(int(Page::Profile))<position(int(Page::BugReport)));
         assert(N::Move(N::SidebarSurface,int(Page::BugReport),int(Page::Items),N::SidebarDefaults()));
         assert(N::Load(file));layout=N::Sidebar();assert(position(int(Page::BugReport))<position(N::SidebarDivider));

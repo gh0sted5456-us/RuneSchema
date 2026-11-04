@@ -18,17 +18,19 @@ inline void Details(const std::string& stage,const std::string& detail,ImVec2 mi
 #endif
 }
 inline void HoverDetails(const std::string& stage,const std::string& detail){if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))Details(stage,detail,ImGui::GetItemRectMin(),ImGui::GetItemRectMax());}
-inline void Draw(ImVec2 center,float radius,const HelpyImGuiTheme::Theme& theme,const std::string& stage="Loading",const std::string& detail={},bool spinning=true){
-#if defined(HELPY_PREVIEW)
-    if(spinning)++HelpyPreviewHooks::LoadingRings;HelpyPreviewHooks::LoadingRect={center.x-radius,center.y-radius,center.x+radius,center.y+radius};
-#endif
-    auto* draw=ImGui::GetWindowDrawList();const float angle=spinning?static_cast<float>(std::fmod(ImGui::GetTime(),10.0)*3.141592653589793):0;
+inline void Paint(ImDrawList* draw,ImVec2 center,float radius,const HelpyImGuiTheme::Theme& theme,float angle){
     if(Texture.GetTexID()!=ImTextureID{}){
         const auto q=LoadingIndicator::Quad({center.x,center.y},radius,angle);
         draw->AddImageQuad(Texture,{q[0].X,q[0].Y},{q[1].X,q[1].Y},{q[2].X,q[2].Y},{q[3].X,q[3].Y},{0,0},{1,0},{1,1},{0,1},ImGui::GetColorU32(theme.accent));
     }else{
         draw->PathClear();draw->PathArcTo(center,radius,angle,angle+4.65f,28);draw->PathStroke(ImGui::GetColorU32(theme.accent),0,theme.X(theme.loadingSpinnerThickness));
     }
+}
+inline void Draw(ImVec2 center,float radius,const HelpyImGuiTheme::Theme& theme,const std::string& stage="Loading",const std::string& detail={},bool spinning=true){
+#if defined(HELPY_PREVIEW)
+    if(spinning)++HelpyPreviewHooks::LoadingRings;HelpyPreviewHooks::LoadingRect={center.x-radius,center.y-radius,center.x+radius,center.y+radius};
+#endif
+    Paint(ImGui::GetWindowDrawList(),center,radius,theme,spinning?static_cast<float>(std::fmod(ImGui::GetTime(),10.0)*3.141592653589793):0);
     const ImVec2 minimum{center.x-radius,center.y-radius},maximum{center.x+radius,center.y+radius};
     if(ImGui::IsWindowHovered()&&ImGui::IsMouseHoveringRect(minimum,maximum))Details(stage,detail,minimum,maximum);
 }

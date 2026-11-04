@@ -835,15 +835,28 @@ inline nlohmann::json LoaderSchemas() {
             {"Function",{{"type","string"},{"pattern","^[A-Za-z0-9_.-]+$"},{"default","Trigger"}}},
             {"DataAsset",{{"type","string"},{"maxLength",1024},{"pattern","^/[A-Za-z0-9_.-]+/[^\\r\\n\\t]+$"}}},
             {"Bindings",{{"type","object"},{"maxProperties",32},{"additionalProperties",{{"type","string"},{"pattern","^/(?:Game|DowdunReach|FutureMajorVersion)/"}}}}}}}};
-    registryEntry["anyOf"]={json{{"required",{"Presentation"}}},json{{"required",{"Authority"}}},json{{"required",{"Relay"}}}};
+    registryAuthority["properties"]["OwnerPresentation"]={{"type","object"},{"additionalProperties",false},{"required",{"Connection","Key"}},
+        {"properties",{{"Connection",{{"type","string"},{"minLength",1},{"maxLength",96},{"pattern","^[A-Za-z0-9_.-]+$"}}},
+            {"Key",{{"type","string"},{"minLength",1},{"maxLength",96},{"pattern","^[A-Za-z0-9_.-]+$"}}}}}};
+    registryAuthority["allOf"]={{{"if",{{"required",{"OwnerPresentation"}}}},
+        {"then",{{"required",{"DataAsset","Function"}},{"properties",{{"Action",{{"const","ConsumedItemAuthority"}}},{"Function",{{"const","OnConsumeSuccess"}}}}}}}}};
+    registryEntry["anyOf"]={json{{"required",{"Presentation"}}},json{{"required",{"Authority"}}},json{{"required",{"Relay"}}},json{{"required",{"Consumer"}}},json{{"required",{"Profile"}}},json{{"required",{"Appearance"}}}};
     registryEntry["properties"]={
         {"Id",{{"type","string"},{"pattern","^[A-Za-z0-9_.-]+$"},{"maxLength",96}}},
-        {"Kind",{{"enum",{"SpellPresentation","PersistentEffect","WeatherPresentation","AudioPresentation","CosmeticWrapper","DataRelay","GameplayAuthority"}}}},
+        {"Kind",{{"enum",{"SpellPresentation","PersistentEffect","WeatherPresentation","AudioPresentation","CosmeticWrapper","DataRelay","GameplayAuthority","LocalProfile","CharacterAppearance"}}}},
         {"Spell",{{"type","string"},{"pattern","^/(?:Game|DowdunReach|FutureMajorVersion)/"}}},
         {"Presentation",{{"type","array"},{"minItems",1},{"maxItems",64},{"items",registryPresentation}}},
         {"Authority",registryAuthority},
+        {"Consumer",{{"type","object"},{"additionalProperties",false},{"required",{"Connection","Class","AllowedKeys"}},
+            {"properties",{{"Connection",{{"type","string"},{"minLength",1},{"maxLength",96},{"pattern","^[A-Za-z0-9_.-]+$"}}},
+                {"Class",{{"type","string"},{"pattern","^/[A-Za-z0-9_.-]+/.+_C$"}}},
+                {"Function",{{"type","string"},{"pattern","^[A-Za-z0-9_.-]+$"},{"default","OnRuneSchemaPresentation"}}},
+                {"AllowedKeys",{{"type","array"},{"minItems",1},{"maxItems",256},{"uniqueItems",true},{"items",{{"type","string"},{"minLength",1},{"maxLength",96},{"pattern","^[A-Za-z0-9_.-]+$"}}}}},
+                {"Audience",{{"enum",{"World","Owner"}},{"default","World"}}}}}}},
         {"Metadata",{{"type","object"},{"maxProperties",32}}}
     };
+    registryEntry["properties"]["Consumer"]["allOf"]={{{"if",{{"required",{"Audience"}},{"properties",{{"Audience",{{"const","Owner"}}}}}}},
+        {"then",{{"required",{"Function"}}}}}};
     registryEntry["properties"]["Relay"]={{"type","object"},{"additionalProperties",false},{"required",{"Channel"}},
         {"properties",{{"Channel",{{"type","string"},{"minLength",1},{"maxLength",96},{"pattern","^[A-Za-z0-9_.-]+$"}}},
             {"Version",{{"type","integer"},{"minimum",1},{"maximum",65535},{"default",1}}},
@@ -851,6 +864,17 @@ inline nlohmann::json LoaderSchemas() {
             {"ClientPublish",{{"type","boolean"},{"default",false}}},{"Broadcast",{{"type","boolean"},{"default",false}}},{"Snapshot",{{"type","boolean"},{"default",false}}}}}};
     registryEntry["allOf"]={{{"if",{{"properties",{{"Kind",{{"const","DataRelay"}}}}}}},
         {"then",{{"required",{"Relay"}},{"maxProperties",3}}},{"else",{{"not",{{"required",{"Relay"}}}}}}}};
+    registryEntry["properties"]["Profile"]={{"type","object"},{"additionalProperties",false},{"required",{"Class"}},
+        {"properties",{{"Class",{{"type","string"},{"maxLength",1024},{"pattern","^/(?!Script/|Engine/)[A-Za-z0-9_.-]+/[^\\r\\n\\t\\\\]+_C$"},{"not",{{"pattern","\\.\\."}}}}}}}};
+    registryEntry["allOf"].push_back({{"if",{{"properties",{{"Kind",{{"const","LocalProfile"}}}}}}},
+        {"then",{{"required",{"Profile"}},{"maxProperties",3}}},{"else",{{"not",{{"required",{"Profile"}}}}}}});
+    registryEntry["properties"]["Appearance"]={{"type","object"},{"additionalProperties",false},
+        {"properties",{{"MaxBytes",{{"type","integer"},{"minimum",2},{"maximum",4096},{"default",4096}}},
+            {"Class",registryEntry["properties"]["Profile"]["properties"]["Class"]},
+            {"Function",{{"type","string"},{"pattern","^[A-Za-z0-9_.-]+$"},{"maxLength",96},{"default","OnRuneSchemaCharacterAppearance"}}}}},
+        {"dependentRequired",{{"Function",{"Class"}}}}};
+    registryEntry["allOf"].push_back({{"if",{{"properties",{{"Kind",{{"const","CharacterAppearance"}}}}}}},
+        {"then",{{"required",{"Appearance"}},{"maxProperties",3}}},{"else",{{"not",{{"required",{"Appearance"}}}}}}});
     result["registry"]={{"type","object"},{"additionalProperties",false},{"required",{"Entries"}},
         {"properties",{{"SchemaVersion",{{"description","Informational authoring version; supported fields are validated independently."}}},
             {"Entries",{{"type","array"},{"maxItems",256},{"items",registryEntry}}}}},

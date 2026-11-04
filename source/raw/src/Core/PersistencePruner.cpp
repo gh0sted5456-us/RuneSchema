@@ -216,6 +216,7 @@ std::size_t PersistencePruner::PruneCharacterJson(FString& characterJson,bool* p
             : std::string{};
         if (characterId.empty()) return 0;
         CharacterLoadAudit::BindCharacter(characterId);
+        LoadProtectionNotice::Record(characterId,0,0,false,{},true);
 
         ReportValidatedSavedItems(source, *registry);
         // Every incoming gameplay payload is checked. One failed attempt or
@@ -300,7 +301,7 @@ std::size_t PersistencePruner::PruneCharacterJson(FString& characterJson,bool* p
         const auto backup=SavePruneBackup::Write(SavePruneBackup::Directory(runtime),utf8,characterId,true);
         Log<LogLevel::Normal>(STR("[PERSISTENCE-BACKUP][VERIFIED] Whole original character load payload saved before pruning: '{}'.\n"),backup.wstring());
         characterJson=std::move(replacement);applied=true;committedRemovals=removed;
-        LoadProtectionNotice::Record(characterId,removed,0,false);
+        LoadProtectionNotice::Record(characterId,removed,0,false,LoadProtectionNotice::UninstalledOwners(cleaned.Removed,cleaned.Owners,SaveBackups::ActiveMods(),HostServices::ModDirectory()/"mods"),true);
         if(prepared)*prepared=true;
 
         std::map<std::string, std::size_t> counts;

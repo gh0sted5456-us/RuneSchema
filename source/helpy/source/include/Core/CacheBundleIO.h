@@ -43,6 +43,12 @@ inline std::string Read(const fs::path& logical,size_t maximum){
     Safe(path);const auto size=fs::file_size(path);if(size>maximum)throw std::runtime_error("[RS-CACHE-005] Bundle metadata exceeds its limit.");
     std::string bytes(size,'\0');std::ifstream input(path,std::ios::binary);input.read(bytes.data(),bytes.size());if(!input||input.peek()!=std::char_traits<char>::eof())throw std::runtime_error("[RS-CACHE-002] Bundle metadata changed while reading.");return bytes;
 }
+struct MetadataLock {
+    HANDLE Value{};
+    explicit MetadataLock(const fs::path& path){const auto key=Hash(fs::absolute(path).lexically_normal().generic_string());const auto name=L"Local\\RuneSchema-CacheMetadata-"+std::wstring(key.begin(),key.end());Value=CreateMutexW(nullptr,FALSE,name.c_str());if(!Value)throw std::runtime_error("Cannot lock cache metadata.");const auto wait=WaitForSingleObject(Value,1000);if(wait!=WAIT_OBJECT_0&&wait!=WAIT_ABANDONED){CloseHandle(Value);Value=nullptr;throw std::runtime_error("Cache metadata is busy; retry later.");}}
+    MetadataLock(const MetadataLock&)=delete;
+    ~MetadataLock(){if(Value){ReleaseMutex(Value);CloseHandle(Value);}}
+};
 inline void Publish(const fs::path& logical,std::string_view bytes){
     const auto target=NativePath(logical);
     Safe(target);fs::create_directories(target.parent_path());Safe(target);

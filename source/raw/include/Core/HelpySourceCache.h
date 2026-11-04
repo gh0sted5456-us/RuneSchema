@@ -314,8 +314,8 @@ inline void Persist(const Snapshot& value) noexcept {
 }
 // Called only by the owning UI/game thread. The worker only reads files and
 // returns a value; it never accesses Unreal, ImGui, or mutable cache state.
-inline bool Poll(const std::filesystem::path& root){
-    bool changed=false;const auto now=std::chrono::steady_clock::now();
+inline bool PollSaved(){
+    bool changed=false;
     // Both the native host and desktop can display saved references before the
     // live census completes. Provisional sources never publish a live contract.
     if(!CachedSourcesAttempted){CachedSourcesAttempted=true;if(Current.Key.empty()){const auto file=Directory(false)/"sources.json";
@@ -327,6 +327,10 @@ inline bool Poll(const std::filesystem::path& root){
             if(!RemoteSnapshot){std::lock_guard lock(PublishedMutex);Published=Document(Current);}
         }}catch(...){}
     }
+    return changed;
+}
+inline bool Poll(const std::filesystem::path& root){
+    bool changed=PollSaved();const auto now=std::chrono::steady_clock::now();
     if(RemoteSnapshot){
         if(now<Next)return changed;Next=now+std::chrono::seconds(2);try{nlohmann::json value;
         if(!RemoteSnapshot(value)||!value.value("Ready",false))return changed;

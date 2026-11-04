@@ -1,24 +1,16 @@
 # RuneSchema project rules
 
 - Read [Contributing](CONTRIBUTING.md) and [If Using AI](IF-USING-AI.md).
-  If `AGENTS.local.md` exists, read it for local machine/user instructions;
-  never copy that file or its private settings into public contributions.
-
-- Keep unreleased runtime code on `experimental` unless the user asks to promote it.
-- Use `pre-release` for an explicitly requested candidate-testing branch. Keep
-  existing releases/tags intact until the complete maintainer-assembled package
-  and its matching source/documentation have passed the release checks.
-- Document experimental features under `docs/experimental/`, with a visible
-  experimental notice and a `promote_to` frontmatter path for each feature guide.
-  Add its navigation entry to `build/docs-experimental-nav.json`.
-- The public site combines `main`'s normal guides with `experimental`'s dedicated
-  area. Do not replace stable instructions with experimental instructions.
-  Shared diagnostic anchors cover both channels and must remain backward compatible.
-- Promotion includes documentation: merge the feature guide into its `promote_to`
-  destination, remove its experimental notice, reconcile existing instructions and
-  links, and remove the duplicate experimental guide/navigation entry. Preserve
-  historical changelogs and useful existing anchors. Update release information
-  only when the package is actually published.
-- Follow [the documentation channel and promotion procedure](docs/DOCUMENTATION-CHANNELS.md).
-- Keep repository landing pages concise and link to the website for walkthroughs.
-  Exclude local attachments, ImGui state, builds and private runtime data from commits.
+  Read ignored `AGENTS.local.md` when present; never publish its private contents.
+- Use `experimental` for unreleased integration work and `pre-release` when
+  the maintainer requests a candidate. Promotion to `main` is separate.
+- Put feature guides in `docs/experimental/`, with a status notice and
+  `promote_to` path. Register them in `build/docs-experimental-nav.json`.
+- The website combines normal guides from `main` and the dedicated area from
+  `experimental`. Keep shared diagnostic anchors backward compatible.
+- Promotion includes merging the guide into its destination, reconciling links
+  and removing the duplicate experimental entry. Preserve useful history.
+- Follow [documentation channels](docs/DOCUMENTATION-CHANNELS.md). Keep landing
+  pages concise, retain licenses and publish only verified matching packages.
+- Exclude personal instructions, credentials, settings, saves, logs, caches,
+  attachments, ImGui state and build output from contributions.

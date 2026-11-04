@@ -1,6 +1,7 @@
 #pragma once
 #include "Core/DiagnosticToastFeed.h"
 #include "Core/ServerModVersions.h"
+#include "../../../../shared/CleanupNotice.h"
 #include <algorithm>
 #include <cctype>
 #include <string>
@@ -87,6 +88,11 @@ inline Display Format(const DiagnosticToastFeed::Notice& card,const ServerModVer
         result.Detail=card.Text; // The feed builds this bounded summary.
         result.Subtitle="Full details in HELPY > Diagnostics > Live Log";
         return result;
+    }
+    if(Body(card.Text).starts_with("[RS-SAVE-006] ")){
+        const auto packet=nlohmann::json::parse(Body(card.Text).substr(sizeof("[RS-SAVE-006] ")-1),nullptr,false);
+        const auto message=CleanupNotice::Message(packet);
+        if(!message.empty()){result.Success=true;result.Level="Cleanup";result.Title=message;return result;}
     }
     if(Body(card.Text).starts_with("[RS-NET-004] Server supplied ")){
         result.WorldMods=true;result.Level="Connected";result.Title="Entering a RuneSchema world";

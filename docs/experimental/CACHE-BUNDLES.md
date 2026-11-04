@@ -23,7 +23,56 @@ mod definitions.
     Updated Helpy reads the current data-only catalogue independently of the
     DLL's release tag.
 
+## Notification history
+
+The Notifications page has aligned, wrapping actions at the top: **Mark all
+read**, **Refresh mod versions** and **Delete all**. Delete all clears Updates,
+Cache jobs and History together and saves the cleared inbox in AppData. It keeps
+the tracked game/mod versions and fingerprints, so unchanged sources do not
+recreate old alerts. Future changes and newly completed cache jobs can still
+generate notifications. Clearing the inbox does not cancel a running cache job.
+
 ## Use an existing cache immediately
+
+Helpy prepares the saved item index on a lower-priority file worker during its
+own startup, whether its window is open or hidden and whether the game is running.
+This reads AppData references;
+it does not trigger a full PAK capture or walk game objects. The prepared index
+is reused for searches and category/family filters. A changed source or cache
+revision prepares a replacement in the background. Missing cache content still
+uses the bounded live fallback after the game connects.
+
+The initial preparation can take time for a large catalogue; it runs outside
+the interface thread. It is local file work, so the live-game request timeout
+does not cancel it. Once prepared, searches and category/family filters reuse
+the in-memory index.
+
+In cache-first mode, background discoveries do not insert rows into the page
+while you are browsing or selecting items. After updated metadata is saved and
+its replacement index is prepared, **Refresh search** turns green. Click it to
+load the updated cached results. Applying a ready update also works disconnected
+and returns to the first results page. An ordinary refresh can still request a
+bounded live check; game-first mode retains its separate behavior.
+
+Helpy can browse saved items and pictures and build or export carts with the
+assigned game fully closed. It reads that platform's AppData cache and retains
+enabled-source filtering. Uncached searches finish locally with no game request;
+discovery, delivery and teleporting need a live connection.
+
+The **Item Bay cog → Prefer saved cache** switch uses the same saved preference
+as Quick Settings. Leave it enabled to prioritize saved references across
+launches. **Passive cache updates** controls automatic rechecks of cached
+searches; turning it off leaves explicit refresh available and does not stop
+cache misses from checking a connected game.
+
+**Refresh search**, beside **Search**, immediately checks the entered text with
+the selected category, source and family filters. It keeps cached matches
+visible, prioritizes the bounded live request and saves new discoveries in
+AppData. For example, search for `Anti-Hunger Grenade`, then refresh to look for
+a newly mounted mod item even if an older cached result already exists. The mod
+must be enabled and mounted; installing a new PAK normally requires restarting
+the game. **Refresh source** still checks the whole selected mod. Both live
+refresh controls need a connection; cached browsing and cart editing do not.
 
 Item Bay runs cache lookup, live catalogue submission, native item inspection,
 snapshot recovery and native-icon submission outside the UI thread. You can keep typing, selecting
@@ -62,11 +111,22 @@ launches reuse them without waiting for a complete catalogue rebuild. These
 partial observations do not mark the catalogue complete or grant permission to
 spawn an item. Disabled or removed providers remain excluded.
 
-The current local development candidate also checks typed searches and family
-queries that already have cached hits, so an old partial cache does not hide
-newly mounted items. Results merge into the visible page and are saved. These
-checks use up to 32 slices over ten seconds, with a one-minute repeat cooldown;
-ordinary automatic work pauses while Helpy is hidden.
+In the current local development candidate, cache-first searches return saved
+matches without immediately querying the game. Search text settles for 100 ms;
+prepared local search text is reused across queries. Native observations and
+imported references share that index, so a different search does not reparse
+the saved native pages. Preparing or refreshing it stays on a file worker;
+source changes invalidate it and disabled mods remain excluded. Preparing the
+index once can take longer than reading one page; later queries reuse it while
+the rest of Helpy remains responsive. A cache miss goes directly
+to bounded live discovery, and matching discoveries are saved asynchronously in
+AppData. The same query is retained in memory for immediate reuse.
+
+With passive updates enabled, Helpy schedules background work once per minute
+while open. Typed searches and family queries are rechecked without hiding their
+cached matches. These checks use up to 32 slices over ten seconds; ordinary
+automatic work pauses while Helpy is hidden. **Refresh source** starts an
+explicit bounded check immediately.
 
 To request a particular mod's index, choose its name in the Item Bay source
 filter and click **Refresh source** beside it. The game must be connected.
@@ -452,3 +512,41 @@ partial coverage, so a reader cannot mistake them for a verified current native
 registry. Helpy imports them as display references and filters unavailable mod
 sources during browsing. Gameplay actions still validate live. Author builds
 that verify inactive PAK files retain their separate verification path.
+
+## Portable categories and families
+
+An optional `<mod>/cache/taglines.json` assigns exact item paths to categories
+and families. The owner is filled from the mod folder if omitted:
+
+```json
+{
+  "Format": 1,
+  "Rules": [
+    {
+      "Path": "/Example/Items/DA_Helm.DA_Helm",
+      "Owner": "mods/example",
+      "Category": "Armor",
+      "Family": "example_armor"
+    }
+  ]
+}
+```
+
+Categories are Weapons, Armor, Consumables, Ammo, Runes, Resources, Tools,
+Building, Quest and Misc. Family keys use lowercase letters, digits and
+underscores. Empty values retain automatic classification. Format labels are
+informational; the fields are validated.
+
+In Item Bay's view settings, use **Export combined taglines...** to generate one
+JSON file from cached items and retained rules. **Import taglines...** merges a
+shared file into this platform's AppData cache. Missing-mod rules are retained
+for later use, but cannot add search results: only matching paths from enabled,
+present sources receive the classifications. Owner-specific rules take priority
+over unscoped local rules. For a private override, the plugin's
+`settings/item-groupings.json` also accepts the older `Items` object format.
+
+Cache bundles include these grouping rules and optional
+[`cache/tips.json`](MOD-METADATA-AND-CONTROLS.md#mod-tips). Rebuilding an installed
+mod's cache preserves authored sidecars; an edit during capture prevents the
+replacement so the previous cache remains available. **Reload items / groupings**
+refreshes the prepared index after manual edits.

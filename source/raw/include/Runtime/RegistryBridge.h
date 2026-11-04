@@ -12,6 +12,8 @@
 #include "SDK/WeakObjectHandle.h"
 #include "Runtime/BridgeDiagnostics.h"
 #include "Core/ModDataRelay.h"
+#include "Core/ConsumedOwnerPresentation.h"
+#include "Core/CharacterAppearance.h"
 #include "Core/ServerModList.h"
 #include "Runtime/ServerModNotice.h"
 #include "Core/BuildingNetworkGuard.h"
@@ -26,6 +28,7 @@ namespace RC::Unreal {
     class UEngine;
     class FIntProperty;
     class FStrProperty;
+    struct FFrame;
 }
 
 namespace PS::Network {
@@ -61,6 +64,7 @@ public:
     // player. The server remains the only executor and applies its own policy.
     bool RequestAuthority(const std::string& action,const std::string& payload);
     void PublishHelpyResult(RC::Unreal::UObject* player,int64_t revision,const nlohmann::json& result);
+    bool PublishCleanupNotice(RC::Unreal::UObject* controller,std::size_t removed,const std::string& mod);
     // Publishes an allow-listed presentation event through the replicated
     // GameState bridge. The payload contains semantic cue data only; asset
     // paths are rejected and client consumers remain mod-owned.
@@ -83,6 +87,8 @@ private:
     int64_t m_helpyAccessRevision=0;
     uint64_t m_helpyAccessGeneration=0;
     bool m_helpyAccessStatusRequested=false;
+    bool m_helpyPinNoticeSent=false;
+    std::chrono::steady_clock::time_point m_helpyAccessRefreshAt{};
     PS::WeakObjectHandle m_helpyAccessComponent;
     int64_t m_helpyMutationRevision=0;
     uint64_t m_helpyMutationGeneration=0;
@@ -118,6 +124,7 @@ private:
     RC::Unreal::Hook::GlobalCallbackId m_authorityPre = RC::Unreal::Hook::ERROR_ID;
     RC::Unreal::Hook::GlobalCallbackId m_processEvent = RC::Unreal::Hook::ERROR_ID;
     RC::Unreal::Hook::GlobalCallbackId m_retryTick = RC::Unreal::Hook::ERROR_ID;
+    RC::Unreal::Hook::GlobalCallbackId m_localProfileHook = RC::Unreal::Hook::ERROR_ID;
     RC::Unreal::UObject* m_authorityComponent = nullptr;
     RC::Unreal::UObject* m_worldAuthorityComponent = nullptr;
     RC::Unreal::UObject* m_presentationAuthorityComponent = nullptr;
@@ -145,6 +152,25 @@ private:
     std::unordered_map<std::string,PS::WeakObjectHandle> m_relayPeers;
     float m_relayElapsed=0;
     void TickModDataRelay(float deltaSeconds);
+    std::map<std::string,PS::CharacterAppearance::Route> m_characterAppearanceRoutes;
+    PS::CharacterAppearance::Ledger m_characterAppearances;
+    std::map<std::string,PS::WeakObjectHandle> m_appearanceSubjects;
+    struct AppearancePeer {PS::WeakObjectHandle Component;PS::CharacterAppearance::Recipient Delivery;};
+    std::map<std::string,AppearancePeer> m_appearancePeers;
+    std::map<std::pair<std::string,std::string>,int64_t> m_appearanceClientSeen;
+    PS::WeakObjectHandle m_appearanceLocalBridge,m_appearanceClientWorld;
+    std::map<std::string,PS::WeakObjectHandle> m_appearanceClientSubjects;
+    std::unordered_set<std::string> m_appearanceAdvertisedSubjects;
+    bool m_appearancePending=false,m_appearanceResyncPending=false;
+    uint32_t m_appearanceResyncAttempts=0;
+    std::chrono::steady_clock::time_point m_appearanceMaintenance{},m_appearanceResyncAt{};
+    void LoadCharacterAppearances();
+    void HandleCharacterAppearance(RC::Unreal::UObject*,RC::Unreal::UObject*,RC::Unreal::UFunction*,const std::string&,const std::string&,const std::string&,int64_t);
+    void TickCharacterAppearances();
+    void ReceiveCharacterAppearance(RC::Unreal::UObject*,RC::Unreal::UFunction*,void*);
+    void RequestCharacterAppearances(RC::Unreal::UObject*);
+    void SetCharacterAppearanceSubject(RC::Unreal::UObject*,RC::Unreal::UFunction*,void*);
+    void AdvertiseCharacterAppearanceSubject(RC::Unreal::UObject*,bool);
     struct AuthorityAction {
         std::string Action;
         std::string DataAsset;
@@ -152,6 +178,7 @@ private:
         std::string GraphClass;
         std::string EntryFunction = "Trigger";
         std::unordered_map<std::string,std::string> Bindings;
+        std::string OwnerConnection,OwnerKey;
         RC::Unreal::FName EntryName;
         PS::WeakObjectHandle GraphType;
     };
@@ -190,6 +217,13 @@ private:
         std::chrono::steady_clock::time_point Started{};
     };
     std::unordered_map<std::string,ConsumptionPermit> m_consumptionPermits;
+    PS::ConsumedOwnerPresentation::Ledger m_consumedOwnerLedger;
+    PS::ConsumedOwnerPresentation::ReplayWindow m_consumedOwnerReplay;
+    std::unordered_map<std::string,PS::WeakObjectHandle> m_consumedOwnerActors;
+    RC::Unreal::UObject* m_invokingConsumedItem=nullptr;
+    uint64_t m_consumedOwnerClaim=0;
+    bool m_consumedOwnerAlreadyNative=false;
+    bool m_consumedOwnerPending=false;
     std::vector<PendingAuthorityAction> m_pendingAuthorityActions;
     std::vector<PendingClientAction> m_pendingClientActions;
     bool m_lastAuthorityDeferred = false;
@@ -210,6 +244,7 @@ private:
     uint32_t m_activationRevision = 0;
     uint32_t m_persistentRevision = 0;
     int64_t m_outboundRevision = 0;
+    int64_t m_receivedCleanupRevision = 0;
     int64_t m_activeRequestRevision = 0;
     std::string m_activeRequestCorrelation;
     struct RequestWindow {std::chrono::steady_clock::time_point Started{};uint32_t Count=0;int64_t Revision=0;bool RegistryRejected=false,ItemIdsVerified=false;std::string ItemFingerprint;};
@@ -229,10 +264,11 @@ private:
         std::string ClassPath;
         std::string Function = "OnRuneSchemaPresentation";
         std::unordered_set<std::string> AllowedKeys;
+        bool OwnerOnly=false;
     };
     std::unordered_map<std::string,PresentationRoute> m_presentationRoutes;
     std::unordered_set<std::string> m_reportedMissingPresentationRoutes;
-    std::unordered_map<std::string,RC::Unreal::UObject*> m_presentationConsumers;
+    std::unordered_map<std::string,PS::WeakObjectHandle> m_presentationConsumers;
     std::unordered_map<std::string,int64_t> m_presentationAuthorityRevisions;
     std::unordered_map<std::string,int64_t> m_presentationClientRevisions;
     std::unordered_map<std::string,std::string> m_worldInstances;
@@ -248,6 +284,9 @@ private:
     RC::Unreal::UObject* EnsurePresentationComponent(RC::Unreal::AActor* actor,bool replicated);
     void LoadAuthorityActions();
     void LoadPresentationRoutes();
+    void LoadLocalProfiles();
+    bool HandleLocalProfile(RC::Unreal::UObject*,RC::Unreal::FFrame&);
+    std::unordered_map<std::string,std::string> m_localProfiles;
     void EnsurePlayerBridges();
     RC::Unreal::UObject* EnsureBridgeComponent(RC::Unreal::AActor* actor,bool publishRegistry);
     bool Attach(RC::Unreal::AGameModeBase* mode);
@@ -265,11 +304,14 @@ private:
     void TickAuthorityActions(float deltaSeconds);
     bool ConsumeAuthorityPermit(RC::Unreal::UObject* caster,const AuthorityAction& action);
     void InvokeConsumedItemAuthority(RC::Unreal::UObject* caster,const AuthorityAction& action);
+    void ObserveConsumedOwnerPresentation(RC::Unreal::UObject*,RC::Unreal::UFunction*,void*);
+    void TickConsumedOwnerPresentations();
+    void ReceiveConsumedOwnerPresentation(RC::Unreal::UObject*,RC::Unreal::UFunction*,const std::string&,int64_t,const nlohmann::json&);
     void HandleGenericRequest(RC::Unreal::UObject* source,RC::Unreal::UFunction* function,void* parameters);
     void ObserveClientTransport(RC::Unreal::UObject* source,RC::Unreal::UFunction* function,void* parameters);
     void ObservePresentationTransport(RC::Unreal::UObject* source,RC::Unreal::UFunction* function,void* parameters);
     void DeliverPresentation(RC::Unreal::UObject* context,const std::string& pluginId,const std::string& connection,
-        const std::string& entityId,const std::string& payload,int64_t revision);
+        const std::string& entityId,const std::string& payload,int64_t revision,RC::Unreal::UObject* ownerPawn=nullptr);
     void AcknowledgePresentation(const PresentationRoute& route,const std::string& entityId,
         int64_t revision,bool success,const std::string& detail);
     void ReplayPresentationSnapshot(RC::Unreal::UObject* context,const std::string& payload);

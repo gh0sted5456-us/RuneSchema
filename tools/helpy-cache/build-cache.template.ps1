@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([Parameter(Position=0)][string]$ZipPath,[string]$ModDirectory,[string]$Game,[string]$Mapping,[string]$Oodle,[string]$ModId,[string]$OutputDirectory,[string]$ProgressFile,[string]$ControlFile,[switch]$InstallDotNet,[string]$CreationRequest,[string]$PackagePath,[string]$Platform='Win64',[string]$BackupRoot)
+param([Parameter(Position=0)][string]$ZipPath,[string]$ModDirectory,[string]$Game,[string]$Mapping,[string]$Oodle,[string]$ModId,[string]$OutputDirectory,[string]$ProgressFile,[string]$ControlFile,[switch]$InstallDotNet,[string]$CreationRequest,[string]$PackagePath,[string]$Platform='Win64',[string]$BackupRoot,[switch]$AllowRunningGame,[switch]$BaseGame)
 $ErrorActionPreference='Stop'
 Add-Type -AssemblyName System.IO.Compression,System.IO.Compression.FileSystem
 
@@ -98,6 +98,8 @@ function Invoke-CacheZip {
     $env:DOTNET_CLI_TELEMETRY_OPTOUT='1'
     $env:DOTNET_GENERATE_ASPNET_CERTIFICATE='false';$env:MSBUILDDISABLENODEREUSE='1';$env:DOTNET_CLI_DO_NOT_USE_MSBUILD_SERVER='1'
     if($ModDirectory -and $ZipPath){throw 'Choose a mod directory or a ZIP, not both.'}
+    if($AllowRunningGame -and (!$ModDirectory -or $CreationRequest)){throw 'Running-game capture requires an installed mod directory.'}
+    if($BaseGame -and (!$ModDirectory -or !$OutputDirectory -or $CreationRequest)){throw 'Base-game capture requires an installed directory and an AppData output folder.'}
     if($CreationRequest){
         if($ModDirectory -or $ZipPath -or !$PackagePath){throw 'Creation needs its request and a new output ZIP.'}
         if((Get-Item -LiteralPath $CreationRequest).Length -gt 65536){throw 'Creation request exceeds 64 KiB.'}
@@ -120,6 +122,7 @@ function Invoke-CacheZip {
     $output=if($OutputDirectory){[IO.Path]::GetFullPath($OutputDirectory)}else{Join-Path $inputRoot 'cache'}
     $parent=[IO.Path]::GetDirectoryName($output);if(!$parent -or [IO.Path]::GetPathRoot($output) -eq $output){throw 'Choose a cache output folder, not a drive root.'}
     $null=Assert-CachePath $output $parent
+    if($AllowRunningGame -and !$BaseGame -and $output -ine [IO.Path]::GetFullPath((Join-Path $mod 'cache'))){throw 'Running-game capture can only publish the selected mod cache folder.'}
     $token=[Guid]::NewGuid().ToString('N');$tempParent=[IO.Path]::GetTempPath();$stage=Join-Path $tempParent ('RuneSchema.Cache.'+$token)
     $publish=Join-Path $parent ('.RuneSchema.Cache.'+$token);$backup=$null;$swap=$null
     $null=Assert-CachePath $stage $tempParent;$null=Assert-CachePath $publish $parent
@@ -166,8 +169,16 @@ function Invoke-CacheZip {
         }
         $built=Join-Path $stage 'result';$arguments=@('--folder',$mod,'--mod-root',$mod,'--mod-id',$ModId,'--output',$built,'--input-root',$inputRoot,'--progress')
         if($ControlFile){$arguments+=@('--control-file',$ControlFile)}
+        if($AllowRunningGame){if($CreationRequest){throw 'Running-game mode is only for installed-mod cache capture.'};$arguments+='--allow-running-game'}
+        if($BaseGame){$arguments+='--base-game'}
         $previousBundle=Join-Path $output 'offline-helpy.rsmk-cache'
         if(Test-Path -LiteralPath $previousBundle -PathType Leaf){New-Item -ItemType Directory -Path $built | Out-Null;Copy-Item -LiteralPath $previousBundle -Destination $built}
+        $preservedMetadata=@{};$metadataSource=if($CreationRequest){Join-Path $mod 'cache'}else{$output}
+        foreach($name in @('taglines.json','tips.json')){
+            $file=Join-Path $metadataSource $name;$null=Assert-CachePath $file $metadataSource
+            $preservedMetadata[$name]=if(Test-Path -LiteralPath $file -PathType Leaf){(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash}else{''}
+            if($preservedMetadata[$name]){New-Item -ItemType Directory -Path $built -Force | Out-Null;Copy-Item -LiteralPath $file -Destination $built}
+        }
         $providedMapping=$Mapping;if(!$providedMapping -and $plan.Mapping){$providedMapping=Join-Path $stage 'provided.usmap'}
         foreach($entry in @(@('--game',$Game),@('--mapping',$providedMapping),@('--oodle',$Oodle))){if($entry[1]){$arguments+=@($entry[0],$entry[1].Trim('"'))}}
         Show-CacheProgress 'Finding game files and preparing offline mappings automatically' 35
@@ -181,10 +192,12 @@ function Invoke-CacheZip {
         Check-CacheControl
         if($LASTEXITCODE){throw 'Cooked cache build failed; current cache retained. See build.log for details.'}
         if(!(Test-Path -LiteralPath (Join-Path $built 'offline-helpy.rsmk-cache'))){throw 'Builder did not produce a cache bundle.'}
+        foreach($name in $preservedMetadata.Keys){$file=Join-Path $metadataSource $name;$now=if(Test-Path -LiteralPath $file -PathType Leaf){(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash}else{''};if($now -cne $preservedMetadata[$name]){throw 'Cache metadata changed during the build; previous cache retained. Retry after editing.'}}
         Show-CacheProgress 'Publishing the completed cache folder' 95
         if($ModDirectory -and !(Test-Path -LiteralPath $mod -PathType Container)){throw 'Mod folder was removed; cache was not published.'}
         New-Item -ItemType Directory -Path $parent -Force | Out-Null;New-Item -ItemType Directory -Path $publish | Out-Null
         Copy-Item -LiteralPath (Join-Path $built 'offline-helpy.rsmk-cache'),(Join-Path $built 'offline-helpy-report.json') -Destination $publish
+        foreach($name in @('taglines.json','tips.json')){if(Test-Path -LiteralPath (Join-Path $built $name) -PathType Leaf){Copy-Item -LiteralPath (Join-Path $built $name) -Destination $publish}}
         if(Test-Path -LiteralPath (Join-Path $built 'mod.png')){Copy-Item -LiteralPath (Join-Path $built 'mod.png') -Destination $publish}
         if(Test-Path -LiteralPath $output){
             if(!(Test-Path -LiteralPath $output -PathType Container)){throw 'Cache output is an existing file.'}

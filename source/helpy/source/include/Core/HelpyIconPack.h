@@ -6,6 +6,8 @@
 #include "Core/CacheBundleStore.h"
 #include "Core/MapPresentationCache.h"
 #include "Core/HelpyPresentationCache.h"
+#include "Core/ItemGroupings.h"
+#include "Core/CacheTips.h"
 #include <bcrypt.h>
 #include <array>
 #include <cstring>
@@ -130,7 +132,7 @@ inline std::map<std::string,std::string> Portable(const fs::path& root,const Hel
     if(HelpySourceCache::Inspect(root,plan).Key!=sources.Key)throw std::runtime_error("Source changed during verification; retry later");return result;
 }
 struct Entry {std::string Icon,Source,SHA256;uint32_t Bytes=0;uint64_t Offset=0;std::set<std::string> Origins;};
-struct Manifest {nlohmann::json Sources;std::vector<Entry> Icons;nlohmann::json Coverage,WorldMap;uint64_t MapOffset=0;std::vector<CacheBundle::Record> Records;std::string Locale,ContentOwner;bool PresentationOnly=false;int Version=1;uint64_t CacheVersion=0;int FingerprintVersion=1;};
+struct Manifest {nlohmann::json Sources;std::vector<Entry> Icons;nlohmann::json Coverage,WorldMap;uint64_t MapOffset=0;std::vector<CacheBundle::Record> Records;ItemGroupings::Plan Taglines;CacheTips::Plan Tips;std::string Locale,ContentOwner;bool PresentationOnly=false;int Version=1;uint64_t CacheVersion=0;int FingerprintVersion=1;};
 inline Manifest Parse(const nlohmann::json& value,uint64_t payload){
     const auto version=value.value("Version",0);
     if(!value.is_object()||(version!=1&&version!=2)||!value.contains("Sources")||!value["Sources"].is_object()||value["Sources"].size()>512
@@ -145,6 +147,8 @@ inline Manifest Parse(const nlohmann::json& value,uint64_t payload){
     if(result.FingerprintVersion!=1&&result.FingerprintVersion!=2)throw std::runtime_error("[RS-CACHE-002] Unsupported fingerprint version.");
     result.ContentOwner=value.value("ContentOwner",std::string{});
     if(!result.ContentOwner.empty()&&(version!=2||!result.ContentOwner.starts_with("mods/")||ContentSource::Mod(result.ContentOwner.substr(5))!=result.ContentOwner))throw std::runtime_error("Invalid bundle content owner");
+    if(value.contains("Taglines"))result.Taglines=ItemGroupings::Bound(ItemGroupings::Parse(value["Taglines"]),result.ContentOwner);
+    if(value.contains("Tips"))result.Tips=CacheTips::Parse(value["Tips"],result.ContentOwner);
     if(version==2){
         if(value.value("Kind",std::string{})!="RuneSchemaCacheBundle"||!value.contains("Locale")||!CacheBundle::Text(value["Locale"],64)||value["Locale"].get_ref<const std::string&>().empty())throw std::runtime_error("[RS-CACHE-002] Invalid bundle kind or locale");
         result.Locale=value["Locale"].get<std::string>();result.Records=CacheBundle::Records(value.at("Records"));
@@ -188,7 +192,8 @@ inline std::string MapBlob(std::ifstream& input,const Manifest& manifest,uint64_
     input.clear();input.seekg(std::streamoff(start+manifest.MapOffset));std::string bytes(manifest.WorldMap.at("Bytes").get<size_t>(),'\0');
     input.read(bytes.data(),bytes.size());if(!input)throw std::runtime_error("[RS-CACHE-002] Truncated world-map image.");MapPresentationCache::Validate(manifest.WorldMap,bytes);return bytes;
 }
-struct Result {size_t Imported=0,Skipped=0,Exported=0;std::string Message;size_t Unchanged=0;std::vector<std::string> ChangedIcons;size_t Packs=0,Warnings=0,RecordsImported=0,RecordsExported=0;bool MapImported=false;};
+struct Result {size_t Imported=0,Skipped=0,Exported=0;std::string Message;size_t Unchanged=0;std::vector<std::string> ChangedIcons;size_t Packs=0,Warnings=0,RecordsImported=0,RecordsExported=0;bool MapImported=false,MetadataImported=false;};
+inline void ImportMetadata(const Manifest& manifest,const fs::path& cache,Result& result){if(!manifest.Taglines.empty()){ItemGroupings::Import(cache,manifest.Taglines);result.MetadataImported=true;}if(!manifest.Tips.empty()){CacheTips::Import(cache,manifest.Tips);result.MetadataImported=true;}}
 enum class ImportPolicy { VerifiedContent,ServerDisplayOnly,NativeArtworkFallback,Presentation };
 // This path publishes only validated display data. It never invokes live ownership RPCs.
 inline Result ImportPresentation(std::ifstream& input,const Manifest& manifest,uint64_t start,const fs::path& cache,uint64_t budget,Progress& progress,const std::string& installedOwner={}){
@@ -217,6 +222,7 @@ inline Result ImportPresentation(std::ifstream& input,const Manifest& manifest,u
     Result result;result.Imported=committed.Images;result.RecordsImported=committed.Records;result.Unchanged=committed.Unchanged;
     result.ChangedIcons.assign(committed.ChangedIcons.begin(),committed.ChangedIcons.end());
     if(!mapBytes.empty()){Check(progress);MapPresentationCache::Install(cache,manifest.WorldMap,mapBytes);result.MapImported=true;}
+    ImportMetadata(manifest,cache,result);
 
     result.Message="Cache ready: "+std::to_string(manifest.Records.size())+" item/content references, "+std::to_string(manifest.Icons.size())+" pictures. Saved in this platform's AppData cache; gameplay availability is checked separately.";
     if(result.MapImported)result.Message+=" World map and alignment installed.";
@@ -293,6 +299,7 @@ inline Result Import(const fs::path& file,const fs::path& root,const fs::path& c
     // Commit metadata only after every blob passed validation and publication.
     // Cancellation before this commit never replaces the last-good index.
     if(!records.empty()){Check(progress);progress.Stage=Phase::Commit;result.RecordsImported=CacheBundleStore::Commit(cache,root,snapshot,manifest.Locale,records,[&]{Check(progress);});}
+    ImportMetadata(manifest,cache,result);
     progress.Stage=Phase::Complete;result.Message="Imported "+std::to_string(result.Imported)+" new/changed icons; kept "+std::to_string(result.Unchanged)+" unchanged; skipped "+std::to_string(result.Skipped)+" from missing or changed sources.";
     if(policy==ImportPolicy::ServerDisplayOnly)result.Message+=" Display-only thumbnails; live item definitions and permissions are unchanged.";
     if(baselineArtwork)result.Message+=" Base-game artwork references; installed mods may override presentation. Not relabelled as mod-verified artwork.";
@@ -373,6 +380,12 @@ inline Result Export(const fs::path& file,const fs::path& root,const fs::path& c
         for(const auto& row:records)content[row.at("Source").get<std::string>()]["Records"].push_back(row);
         for(const auto& icon:document["Icons"])content[icon.at("Source").get<std::string>()]["Icons"].push_back(icon);
         document["Sources"]=nlohmann::json::object();for(const auto& [group,value]:content)document["Sources"][group]=CacheBundleIO::Hash(value.dump());
+    }
+    if(bundle){
+        auto groups=ItemGroupings::Load(cache,root);if(!source.empty())std::erase_if(groups,[&](const auto& entry){return !entry.second.Owner.empty()&&entry.second.Owner!=source;});document["Taglines"]=ItemGroupings::Document(ItemGroupings::Generate(records,groups));
+        CacheTips::Plan tips;const auto file=cache/"tips.json";if(fs::is_regular_file(file))tips=CacheTips::Read(file);
+        const auto mods=root/"mods";Safe(mods);if(fs::is_directory(mods))for(const auto& mod:fs::directory_iterator(mods)){Safe(mod.path());if(!mod.is_directory())continue;const auto owner="mods/"+HelpyCacheSources::Lower(mod.path().filename().string());const auto sidecar=mod.path()/"cache/tips.json";if(fs::is_regular_file(sidecar))CacheTips::Merge(tips,CacheTips::Read(sidecar,owner));}
+        if(!source.empty())std::erase_if(tips,[&](const auto& entry){return entry.second.at("Owner")!=source;});if(!tips.empty())document["Tips"]=CacheTips::Document(tips);
     }
     std::string mapBytes;
     if(bundle&&!targeted&&(source.empty()||source=="core")){

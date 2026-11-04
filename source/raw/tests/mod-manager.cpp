@@ -47,6 +47,7 @@ int main(int argc,char**argv){
         for(const auto* invalid:{"NexusFileID=-1","NexusModID=abc","Banner=../escape.png","Banner=C:/outside.png","Banner=cache/payload.dll"}){bool rejected=false;try{(void)PS::ModIdentity::Parse(invalid,"Folder");}catch(...){rejected=true;}assert(rejected);}
         PS::ConfigFiles::Write(root/"mods/Alpha/ID.txt","ModID=stable-alpha\nName=Alpha display\nBuild=test\nNexusModID=123\nNexusFileID=456\nDescription=From ID.txt\n");const auto info=Metadata(root/"mods/Alpha");assert(info["modId"]=="stable-alpha"&&info["name"]=="Alpha display"&&info["build"]=="test"&&info["nexusModId"]=="123"&&info["nexusFileId"]=="456"&&info["description"]=="example");
     }
+    PS::ConfigFiles::Write(root/"mods/Alpha/ID.txt","ModID=stable-alpha\nVersion=3.4\n");assert(Metadata(root/"mods/Alpha")["version"]=="3.4");
     auto state=Read(root,true);assert(state["Rows"].size()==2&&state["Rows"][0]["Name"]=="Alpha"&&state["Rows"][0]["Enabled"]==false);
     fs::create_directories(root/"mods/Beta/cache");PS::ConfigFiles::Write(root/"mods/Beta/cache/mod.png","fixture-pixels");
     const auto banner=Read(root,true);assert(banner["Rows"][1]["BannerRelative"]=="cache/mod.png");

@@ -3,8 +3,8 @@ channel: experimental
 promote_to: SERVER-ACCESS.md
 ---
 
-!!! info "Experimental · local candidate"
-    These changes are being tested locally and have not been published.
+!!! info "Pre-release · 0.8.1.0"
+    Included in 0.8.1.0. See the [candidate and validation limits](PRE-RELEASE.md).
 
 # Connect Helpy to server authority
 
@@ -12,6 +12,34 @@ The host executes item delivery and teleport requests. A client uses Helpy as
 a remote for its own active character; a character GUID alone grants no access.
 
 ## Set up the host once
+
+### Saved player authorization
+
+Open **Server / Co-op → Players** in the server's own Helpy or the native
+owner's connected client. Use **Authorize player** or **Authorize all connected**.
+The saved grant takes effect immediately; clients refresh their access within
+five seconds, or can select **Refresh access** in Settings → Server access.
+
+**Automatically authorize connecting players** is optional and off by default.
+Enabling it authorizes current connections too. Turn it off before removing a
+player's saved access; disabling the toggle keeps grants already saved.
+
+RuneSchema records the server-observed character GUID, character name, account
+name, platform and current player-ID alias in the host's private
+`settings/settings.ini`, under `helpyAuthority.authorizedPlayers`. Grants reload
+on restart and follow the same character on reconnect. A display/account name or
+reused session player ID cannot grant access. A different character needs its
+own grant. Missing platform metadata is shown as unavailable rather than guessed.
+
+Saved authorization enables item delivery, map travel and temporary spawns
+without requiring the separate PIN action switches. The server retains quantity,
+duration, item-network-ID and ground checks, and executes requests for the
+requesting character. It does not grant native Admin, permanent authoring,
+arbitrary commands or local files. The native owner also has this RuneSchema
+access without entering a PIN. Local server Helpy does not need an in-game owner
+character to authorize connected players.
+
+### PIN alternative
 
 1. Open **Settings → Server access → Host configuration** in Helpy assigned to
    the host/server installation.
@@ -28,6 +56,9 @@ GUID/name allowlists are an alternative, broader explicit host permission.
 PIN access is limited to self-service delivery and map teleportation. PIN users
 are not automatically added to an allowlist. The connected player's own GUID
 can be copied from the access panel when the server reports it.
+
+Native owner/admin roles are separate. See [Server control](SERVER-CONTROL.md)
+for owner-controlled admin grants and revocations.
 
 ## Connect as a client
 
@@ -58,7 +89,9 @@ Access sessions are in memory, scoped to the owning connection and character,
 and expire after an idle hour. Changing world/character, restarting the server,
 changing the PIN or disabling access requires authentication again. **Disconnect**
 revokes the current session. Persistent host settings are separate from these
-temporary sessions; restarting does not preserve client authentication.
+temporary PIN sessions; restarting does not preserve PIN authentication. Saved
+player authorizations above persist independently of PIN sessions. Background
+access-status refreshes do not extend a PIN session's idle deadline.
 
 - [RS-NET-006: PIN access available](../ERROR-CODES.md#rs-net-006)
 - [RS-NET-007: client-server authority bridged](../ERROR-CODES.md#rs-net-007)

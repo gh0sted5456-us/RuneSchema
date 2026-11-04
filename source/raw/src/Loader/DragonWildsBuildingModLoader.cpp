@@ -326,6 +326,13 @@ namespace DragonWilds {
             if(present&&definition.Declared&&!present->contains(definition.DeclaredPersistenceID))continue;
             const auto identity = Identity(definition.Owner, definition.Key);
             auto* object = GetValidBuilding(identity);
+            // Frontend package changes can retire a direct export before the world refresh callback.
+            if(!object&&!definition.Clone){
+                auto* resolved=LoadObject(definition.AssetPath);
+                if(resolved&&m_buildingPieceClass&&resolved->IsA(m_buildingPieceClass)){
+                    resolved->SetRootSet();RememberBuilding(identity,resolved);object=resolved;
+                }
+            }
             const auto label = "owner='" + RC::to_string(definition.Owner)
                 + "' key='" + RC::to_string(definition.Key) + "'";
             // World preflight precedes menu application; a verified enabled object must be protected meanwhile.

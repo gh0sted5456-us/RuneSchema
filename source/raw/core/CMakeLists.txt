@@ -25,6 +25,13 @@ if(MSVC)
         "$<$<CONFIG:Release,MinSizeRel,Game__Shipping__Win64,CasePreserving__Shipping__Win64,LessEqual421__Shipping__Win64>:/O1;/Os;/Oi;/Gy;/Gw>")
 endif()
 if(PROJECT_IS_TOP_LEVEL)
+    find_program(RUNESCHEMA_LUA_EXECUTABLE NAMES lua lua54 lua5.4 lua-runner)
+    if(RUNESCHEMA_LUA_EXECUTABLE)
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/lua-scheduling-temp")
+        add_test(NAME lua-mod-data-relay COMMAND "${RUNESCHEMA_LUA_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../tests/mod-data-relay.lua" "${CMAKE_CURRENT_SOURCE_DIR}/../../ue4ss/scripts/mod-data-relay.lua")
+        add_test(NAME lua-mapping-loader COMMAND "${RUNESCHEMA_LUA_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../tests/mapping-loader.lua" "${CMAKE_CURRENT_SOURCE_DIR}/../../ue4ss/scripts/mapping-loader.lua" "${CMAKE_CURRENT_BINARY_DIR}/lua-scheduling-temp")
+        add_test(NAME lua-mod-menu COMMAND "${RUNESCHEMA_LUA_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../tests/helpy-mod-menu.lua" "${CMAKE_CURRENT_SOURCE_DIR}/../../ue4ss/scripts/helpy-mod-menu.lua")
+    endif()
     add_executable(helpy-remote-access ../tests/helpy-remote-access.cpp)
     target_sources(helpy-remote-access PRIVATE ../src/Generator/ToolRequestState.cpp)
     target_link_libraries(helpy-remote-access PRIVATE RuneSchemaJsonCore)
@@ -73,7 +80,7 @@ if(PROJECT_IS_TOP_LEVEL)
     add_executable(quest-ownership-contract ../tests/quest-ownership-contract.cpp)
     target_link_libraries(quest-ownership-contract PRIVATE RuneSchemaJsonCore)
     add_test(NAME quest-ownership-contract COMMAND quest-ownership-contract "${CMAKE_CURRENT_SOURCE_DIR}/..")
-    foreach(test helpy-activity building-network-guard building-policy-adapter building-policy-bindings scoped-cost-swap world-effect-rules mod-data-relay server-mod-list save-recovery building-prop-ownership raw-table-target console-command buffered-trace item-catalog-filter diagnostic-log-file work-slice metadata-window native-persistence-policy character-load-audit quick-load-settings mapping-retention mapping-compatibility runeschema-data-root mod-health-ledger native-inventory-mark-input)
+    foreach(test native-server-admin helpy-activity building-network-guard building-policy-adapter building-policy-bindings scoped-cost-swap world-effect-rules mod-data-relay consumed-owner-presentation local-mod-profiles character-appearance server-mod-list save-recovery building-prop-ownership raw-table-target console-command buffered-trace item-catalog-filter diagnostic-log-file work-slice metadata-window native-persistence-policy character-load-audit quick-load-settings mapping-retention mapping-compatibility runeschema-data-root mod-health-ledger native-inventory-mark-input)
         add_executable(${test} ../tests/${test}.cpp)
         target_link_libraries(${test} PRIVATE RuneSchemaJsonCore)
         add_test(NAME ${test} COMMAND ${test})
@@ -455,7 +462,8 @@ if(PROJECT_IS_TOP_LEVEL)
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsRegistryLoader.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../../plugins/RSNetworking/paks/Networking/Networking_P.pak"
         "${CMAKE_CURRENT_SOURCE_DIR}/../include/SDK/Helper/ActorHelper.h"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../src/SDK/Helper/ActorHelper.cpp")
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src/SDK/Helper/ActorHelper.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../plugins/RSNetworking/paks/Networking/Networking_P.utoc")
     add_executable(summoning-authority-contract ../tests/summoning-authority-contract.cpp)
     add_test(NAME summoning-authority-contract COMMAND summoning-authority-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Runtime/RegistryBridge.cpp"

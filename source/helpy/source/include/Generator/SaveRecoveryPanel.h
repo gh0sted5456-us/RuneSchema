@@ -117,7 +117,7 @@ inline void Render(){
     if(!wide){constexpr std::array tabs{"Backups","Details"};HelpyMenu::Tabs("recovery-layout",tabs,NarrowSection);}
     const bool table=wide&&ImGui::BeginTable("##recovery-panes",2,ImGuiTableFlags_Resizable|ImGuiTableFlags_SizingStretchProp);
     if(table){ImGui::TableSetupColumn("Backups",ImGuiTableColumnFlags_WidthStretch,.48f);ImGui::TableSetupColumn("Details",ImGuiTableColumnFlags_WidthStretch,.52f);ImGui::TableNextColumn();}
-    if(wide||NarrowSection==0){if(ImGui::BeginChild("##recovery-list",{0,0},true)){
+    if(wide||NarrowSection==0){if(HelpyImGuiTheme::BeginPanel("##recovery-list",{0,0},true)){
         for(const auto& row:Current.Rows){if((Filter==1&&row.World)||(Filter==2&&!row.World))continue;const auto haystack=row.Backup.Name+" "+row.Backup.Guid+" "+row.Slot;if(*Query&&LiveLog::Lower(haystack).find(LiveLog::Lower(Query))==std::string::npos)continue;
             const auto key=Key(row),label=row.Backup.Name+"\n"+(row.Backup.CreatedUtc.empty()?"Older backup":row.Backup.CreatedUtc)+" · "+Reasons(row.Backup);ImGui::PushID(key.c_str());
             if(ImGui::Selectable(label.c_str(),Selected==key,0,{0,ImGui::GetTextLineHeightWithSpacing()*3})){Selected=key;Confirm=false;if(!wide)NarrowSection=1;}
@@ -126,16 +126,16 @@ inline void Render(){
 #endif
             if(ImGui::IsItemHovered()){HelpyImGuiTheme::BeginDetailsTooltip(440);Information(row);HelpyImGuiTheme::EndDetailsTooltip();}ImGui::PopID();
         }if(Current.Rows.empty())ImGui::TextWrapped("No snapshots found for this runtime. New backups will appear here after cleanup or an entry with automatic snapshots enabled.");
-    }ImGui::EndChild();}
+    }PS::HelpyImGuiTheme::EndPanel();}
     if(table)ImGui::TableNextColumn();
-    if(wide||NarrowSection==1){if(ImGui::BeginChild("##recovery-details",{0,0},true)){
+    if(wide||NarrowSection==1){if(HelpyImGuiTheme::BeginPanel("##recovery-details",{0,0},true)){
         if(const auto* row=Chosen()){
             const bool review=row->RequestState.starts_with("Queued")||row->RequestState.starts_with("Needs review");
             const float footer=(review?2.f:1.f)*ImGui::GetFrameHeightWithSpacing()+ImGui::GetStyle().ItemSpacing.y;
-            if(ImGui::BeginChild("##snapshot-information",{0,std::max(1.f,ImGui::GetContentRegionAvail().y-footer)},false)){
+            if(HelpyImGuiTheme::BeginPanel("##snapshot-information",{0,std::max(1.f,ImGui::GetContentRegionAvail().y-footer)},false)){
             Information(*row);ImGui::Separator();ImGui::TextWrapped("Close Dragonwilds before restoring. Existing saves are preserved first. Normal cleanup still applies when missing mods are not reinstalled.");
             if(!Current.Stopped)ImGui::TextWrapped("Dragonwilds was running during the last check. Close it, then refresh this list.");
-            }ImGui::EndChild();
+            }PS::HelpyImGuiTheme::EndPanel();
             if(review){
                 ImGui::BeginDisabled(!Current.Stopped||Busy());
                 if(HelpyImGuiTheme::SoftButton("Cancel restore request")){
@@ -155,6 +155,6 @@ inline void Render(){
                 if(ImGui::Button("Restore")){Restore(*row);ImGui::CloseCurrentPopup();}ImGui::EndDisabled();ImGui::SameLine();if(ImGui::Button("Cancel"))ImGui::CloseCurrentPopup();ImGui::EndPopup();
             }
         }else ImGui::TextWrapped("Select a snapshot to review its save identity, backup reason and mod record.");
-    }ImGui::EndChild();}if(table)ImGui::EndTable();
+    }PS::HelpyImGuiTheme::EndPanel();}if(table)ImGui::EndTable();
 }
 }

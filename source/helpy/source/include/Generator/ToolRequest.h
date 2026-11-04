@@ -90,7 +90,7 @@ template<> struct ToolRequest<SpawnToolTag> {
         Result.erase("GrantResults");Result.erase("SpawnResult");
         Result.erase("CloneResult");Result.erase("CloneSource");Result.erase("CloneAppearance");Result.erase("ItemDetails");
         Result.erase("RecipeExportResult");Result.erase("ItemOverrideExportResult");Result.erase("KitMetadata");Result.erase("NativeContracts");
-        Result.erase("CartValidation");
+        Result.erase("CartValidation");Result.erase("ServerControl");
         Result.erase("RecipeWorkspaceCatalog");Result.erase("RecipeWorkspaceSource");
         Result.erase("JournalCatalog");
         Result.erase("InventorySnapshot");
@@ -138,6 +138,7 @@ template<> struct ToolRequest<SpawnToolTag> {
             if(result.contains("GrantResults"))receipt["GrantResults"]=result["GrantResults"];
             if(result.contains("KitMetadata"))receipt["KitMetadata"]=result["KitMetadata"];
             if(result.contains("NativeContracts"))receipt["NativeContracts"]=result["NativeContracts"];
+            if(result.contains("ServerControl"))receipt["ServerControl"]=result["ServerControl"];
             if(result.contains("SpawnResult"))receipt["SpawnResult"]=result["SpawnResult"];
             if(result.contains("CloneResult"))receipt["CloneResult"]=result["CloneResult"];
             if(result.contains("CloneSource"))receipt["CloneSource"]=result["CloneSource"];

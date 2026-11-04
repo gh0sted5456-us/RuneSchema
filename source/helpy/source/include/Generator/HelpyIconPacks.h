@@ -89,7 +89,7 @@ inline void Poll(){PollBuild();
     }
     if(!Worker.valid()||Worker.wait_for(std::chrono::seconds(0))!=std::future_status::ready)return;
     try{const auto result=Worker.get();Status=result.Message;CompletionNotify=!Packaged||HelpyModIconPacks::NotifyAutomatic(result);if(!Packaged){LastFile=ActiveFile;LastOperationOK=true;}if(Importing&&result.Imported){ItemIconCache::InvalidateIcons(result.ChangedIcons);if(ItemIconCache::RemoteResetAccounting)ItemIconCache::RemoteResetAccounting();}
-        if(Importing&&(result.RecordsImported||result.MapImported)){if(RemoteBuild){nlohmann::json ignored;RemoteBuild({{"Action","CacheBundleImported"}},ignored);}++ReferencesRevision;}
+        if(Importing&&(result.RecordsImported||result.MapImported||result.MetadataImported)){if(RemoteBuild){nlohmann::json ignored;RemoteBuild({{"Action","CacheBundleImported"}},ignored);}++ReferencesRevision;}
         if(Importing&&!Packaged){if(result.Imported||result.Unchanged||result.RecordsImported||result.MapImported)HelpyDownloads::ReleaseImportedPack(ActiveFile);HelpyDownloads::CacheApplied(Status);}}
     catch(const HelpyCacheOwnership::Unavailable& error){
         Status=error.what();CompletionNotify=!Packaged;
@@ -124,6 +124,18 @@ inline void Choose(bool importing,bool buildFirst=false){
             }else Status="Registered icon capture could not start. No export was written.";
         }else Start(file,importing);
     }
+}
+inline void ChooseTaglines(bool importing){
+    if(Busy()||Building()||SourceBanners::Busy()){Status="Wait for the current cache operation.";return;}
+    wchar_t file[32768]=L"taglines.json";OPENFILENAMEW dialog{};dialog.lStructSize=sizeof(dialog);dialog.hwndOwner=GetActiveWindow();dialog.lpstrFile=file;dialog.nMaxFile=32768;dialog.lpstrFilter=L"Helpy taglines (*.json)\0*.json\0\0";dialog.lpstrDefExt=L"json";dialog.Flags=OFN_EXPLORER|OFN_NOCHANGEDIR|OFN_PATHMUSTEXIST|(importing?OFN_FILEMUSTEXIST:OFN_OVERWRITEPROMPT);
+    if(!(importing?GetOpenFileNameW(&dialog):GetSaveFileNameW(&dialog)))return;
+    const auto cache=HelpySourceCache::Directory(false),root=HostServices::ModDirectory(),journal=HostServices::CacheDirectory()/"journal";const auto snapshot=HelpySourceCache::Current;const std::filesystem::path path=file;
+    Importing=importing;Packaged=false;ActiveFile=path;LastOperationOK=false;CompletionNotify=false;Progress.Cancel=false;Progress.Begin(HelpyIconPack::Phase::Discover);
+    Worker=std::async(std::launch::async,[path,cache,root,journal,snapshot,importing]{HelpyIconPack::Result result;
+        if(importing){ItemGroupings::Import(cache,ItemGroupings::Read(path));result.MetadataImported=true;result.Message="Grouping rules imported. They apply only to matching cached items from enabled sources.";}
+        else {auto rows=CacheBundleStore::Collect(cache,root,journal,snapshot,true);for(const auto& row:HelpyPresentationCache::Records(cache,CacheBundleStore::Locale()))rows.push_back(row);const auto plan=ItemGroupings::Generate(rows,ItemGroupings::Load(cache,root));const auto text=ItemGroupings::Document(plan).dump(2);if(text.size()>64*1024*1024)throw std::runtime_error("Taglines exceed cache metadata bounds.");CacheBundleIO::Publish(path,text);result.Message="Exported "+std::to_string(plan.size())+" category / family rules. No mods or gameplay data included.";}
+        Progress.Stage=HelpyIconPack::Phase::Complete;return result;
+    });Status=importing?"Importing grouping rules...":"Exporting combined grouping rules...";
 }
 inline void Render(bool catalogueBusy=false){
     PollBuild();HelpyCacheSources::Plan plan;plan.Registered.clear();plan.Owners=HelpySourceCache::Current.Owners;
@@ -187,7 +199,7 @@ inline void Render(bool catalogueBusy=false){
 #endif
     if(Advanced&&ImGui::CollapsingHeader("PAK / container discovery")){
         ImGui::TextWrapped("Directory indexes associate packages with their supplying containers. Indexed does not certify a successful mount or live item availability.");
-        if(ImGui::BeginChild("##pak-discovery",ImVec2(0,180),ImGuiChildFlags_Borders)){
+        if(HelpyImGuiTheme::BeginPanel("##pak-discovery",ImVec2(0,180),ImGuiChildFlags_Borders)){
             for(const auto& [file,entry]:HelpySourceCache::Current.Containers.items()){
                 const auto owner=entry.value("Owner",std::string{});
                 if(!SelectedSource.empty()&&SelectedSource!=owner)continue;
@@ -196,7 +208,7 @@ inline void Render(bool catalogueBusy=false){
                 const auto reason=entry.value("Reason",std::string{});if(!reason.empty())ImGui::TextWrapped("%s",reason.c_str());
                 ImGui::Separator();
             }
-        }ImGui::EndChild();
+        }PS::HelpyImGuiTheme::EndPanel();
     }
     if(Building()){
         const auto stage=BuildState.value("Stage",std::string("Queued"));const bool verifying=stage=="Verifying complete cache";const bool capture=verifying||stage=="Caching registered icons"||stage=="Checking cached icons";
@@ -260,8 +272,8 @@ inline void RenderWindowContents(bool catalogueBusy=false){
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::CacheDetach=HelpyPreviewHooks::LastRect();
 #endif
-    ImGui::Separator();ImGui::BeginChild("##cache-body",{0,0});
-    Render(catalogueBusy);ImGui::EndChild();
+    ImGui::Separator();HelpyImGuiTheme::BeginPanel("##cache-body",{0,0});
+    Render(catalogueBusy);PS::HelpyImGuiTheme::EndPanel();
 }
 inline void RenderDockedWindow(bool catalogueBusy=false){
     if(!Open||Detached||HelpyTaskbar::Current.Contains(HelpyTaskbar::Window::IconCache))return;

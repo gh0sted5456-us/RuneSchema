@@ -6,6 +6,7 @@
 #include <string>
 #include <string_view>
 #include <stdexcept>
+#include <nlohmann/json.hpp>
 namespace PS::ItemFamily {
 // Browsing identity only: strip equipment-slot words, retain set, material,
 // quality and dye/trim words. No asset loading, grants or item mutation.
@@ -45,6 +46,11 @@ inline std::string Key(std::string_view name){
     return contract&&family.size()>=3?family+"_contract":std::string{};
 }
 inline bool Matches(const std::string& filter,std::string_view name){return filter.empty()||Key(name)==filter;}
+inline std::string RowKey(const nlohmann::json& row){
+    const auto manual=row.find("HelpyFamily");if(manual!=row.end()&&manual->is_string()){const auto& key=manual->get_ref<const std::string&>();if(!key.empty()&&key.size()<=192&&key.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789_")==key.npos)return key;}
+    const auto name=row.find("Name");return name!=row.end()&&name->is_string()?Key(name->get_ref<const std::string&>()):std::string{};
+}
+inline bool MatchesRow(const std::string& filter,const nlohmann::json& row){return filter.empty()||RowKey(row)==filter;}
 inline std::string TakeFilter(std::string& query){
     constexpr std::string_view prefix="__helpyfamily:";if(!query.starts_with(prefix))return {};
     const auto end=query.find(' ');auto key=query.substr(prefix.size(),end==query.npos?std::string::npos:end-prefix.size());

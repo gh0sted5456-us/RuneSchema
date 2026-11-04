@@ -658,7 +658,7 @@ namespace DragonWilds {
                 if (plan.Removed.empty()) continue;
                 ReplaceCharacterSave(path, original, plan.Save,
                     decoded.Utf16Le,!expectedGuid.empty());
-                if(source.contains("meta_data")&&source["meta_data"].is_object())PS::LoadProtectionNotice::Record(source["meta_data"].value("char_guid",std::string{}),plan.Removed.size(),0,false);
+                if(source.contains("meta_data")&&source["meta_data"].is_object())PS::LoadProtectionNotice::Record(source["meta_data"].value("char_guid",std::string{}),plan.Removed.size(),0,false,PS::LoadProtectionNotice::UninstalledOwners(plan.Removed,plan.Owners,PS::SaveBackups::ActiveMods(),PS::HostServices::ModDirectory()/"mods"));
                 ++changed;
                 removed += plan.Removed.size();
                 for (const auto& row : plan.Removed)

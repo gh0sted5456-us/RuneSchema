@@ -19,13 +19,13 @@ inline void Render(){
         if(!job.Job.empty()&&HelpyImGuiTheme::SoftButton("Open repair report & backups"))ShellExecuteW(nullptr,L"open",job.Job.c_str(),nullptr,nullptr,SW_SHOWNORMAL);
     }else if(job.Running)ImGui::TextWrapped("Finish the active authoring job before starting a repair.");
     ImGui::SeparatorText("Console");
-    if(ImGui::BeginChild("##repair-console",{0,0},true,ImGuiWindowFlags_HorizontalScrollbar)){
+    if(HelpyImGuiTheme::BeginPanel("##repair-console",{0,0},true,ImGuiWindowFlags_HorizontalScrollbar)){
 #if defined(HELPY_PREVIEW)
         HelpyPreviewHooks::RepairConsole=true;
 #endif
         const bool following=ImGui::GetScrollY()>=ImGui::GetScrollMaxY()-4;
         const auto* text=job.Repair&&!job.Console.empty()?job.Console.c_str():"Ready. Press Repair to read recent logs and scan the base files.";
         ImGui::TextUnformatted(text);if(following)ImGui::SetScrollHereY(1.f);
-    }ImGui::EndChild();
+    }PS::HelpyImGuiTheme::EndPanel();
 }
 }

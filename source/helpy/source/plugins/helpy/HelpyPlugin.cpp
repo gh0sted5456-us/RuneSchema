@@ -51,14 +51,16 @@ bool CallCore(State* state,const nlohmann::json& request,nlohmann::json& respons
     if(!state||!state->Host)return false;
     const auto input=request.dump();
     const auto action=request.value("Action",std::string{});
-    const bool readOnly=action=="Read"||action=="AuthoringSnapshot"||action=="SettingsRead"||action=="ModsRead"||action=="IconCacheOwnership"||action=="IconCacheSources"||action=="CrashDumpRead";
+    const bool hudExtension=action=="HudExtensions";
+    const bool hudRead=hudExtension&&request.at("Payload").value("Action",std::string{})=="List";
+    const bool readOnly=action=="Read"||action=="AuthoringSnapshot"||action=="SettingsRead"||action=="ModsRead"||action=="IconCacheOwnership"||action=="IconCacheSources"||action=="CrashDumpRead"||action=="HelpyModMenuRead"||hudRead;
     uint32_t size=0;thread_local std::vector<char> output(8192);
     const bool maximum=action=="Completed"||action=="SettingsSave"||action=="ModsSave"||action=="ModsImport"||action=="QuickLoadSave"||action=="AdditionalLoggingSave"||action=="CrashDumpSave";
-    uint32_t capacity=(readOnly||action=="HelpyNativeOverlay")?8192:maximum?RUNESCHEMA_PLUGIN_MAX_MESSAGE:4096;
+    uint32_t capacity=(readOnly||action=="HelpyNativeOverlay"||hudExtension)?8192:maximum?RUNESCHEMA_PLUGIN_MAX_MESSAGE:4096;
     if(output.size()<capacity)output.resize(capacity);
     auto code=state->Host->CallService(Descriptor.Id,"runeschema.tools",input.c_str(),output.data(),capacity,&size);
     if(readOnly&&code==RS_PLUGIN_BUFFER_TOO_SMALL&&size>capacity&&size<=RUNESCHEMA_PLUGIN_MAX_MESSAGE){capacity=size;if(output.size()<capacity)output.resize(capacity);code=state->Host->CallService(Descriptor.Id,"runeschema.tools",input.c_str(),output.data(),capacity,&size);}
-    if(code!=RS_PLUGIN_OK||!size||size>output.size())return false;
+    if(code!=RS_PLUGIN_OK||!size||size>capacity)return false;
     if(output[size-1]=='\0')--size;
     response=nlohmann::json::parse(output.data(),output.data()+size);return true;
     }catch(...){return false;}
@@ -96,7 +98,7 @@ void StoreReceipt(State* state,const nlohmann::json& result) {
     if(result.value("_InProgress",false))return;
     const auto id=result.value("_RequestId",uint64_t{});if(!id)return;
     nlohmann::json receipt={{"Status",result.value("Status",std::string("Completed."))}};
-    for(const auto* key:{"InventorySnapshot","EquipmentAction","InventoryAction","StorageResult","JournalCatalog","GrantResults","SpawnResult","SpawnDefinition","CloneResult","CloneSource","CloneAppearance","ItemDetails","MapSnapshot","MapBuildings","MapPoint","RecipeExportResult","RecipeWorkspaceCatalog","RecipeWorkspaceSource","ItemOverrideExportResult","KitMetadata","NativeContracts"})
+    for(const auto* key:{"InventorySnapshot","EquipmentAction","InventoryAction","StorageResult","JournalCatalog","GrantResults","SpawnResult","SpawnDefinition","CloneResult","CloneSource","CloneAppearance","ItemDetails","MapSnapshot","MapBuildings","MapPoint","RecipeExportResult","RecipeWorkspaceCatalog","RecipeWorkspaceSource","ItemOverrideExportResult","KitMetadata","NativeContracts","ServerControl"})
         if(result.contains(key))receipt[key]=result[key];
     state->Completed[id]=std::move(receipt);while(state->Completed.size()>16)state->Completed.erase(state->Completed.begin());
 }
@@ -271,7 +273,7 @@ void SyncHost(State* state,bool force=false,bool metadata=false) {
     state->ToolsGeneration=generation;state->ToolsAvailable=reply.value("Available",false);state->ToolsWaiting=reply.value("Waiting",false);
     state->HostRevision=reply.value("Revision",state->HostRevision);
     if(reply.contains("Snapshot")&&reply["Snapshot"].is_object()){
-        const auto& snapshot=reply["Snapshot"];state->ToolsResult=snapshot;
+        const auto& snapshot=reply["Snapshot"];state->ToolsResult=snapshot;StoreReceipt(state,snapshot);
         if(snapshot.contains("Players")&&snapshot["Players"].is_array())state->Players=snapshot["Players"];
         for(auto it=snapshot.begin();it!=snapshot.end();++it)if(it.key()!="Players")state->ToolsCatalog[it.key()]=it.value();
     }

@@ -1,4 +1,5 @@
 #include "Runtime/QuickLoad.h"
+#include "Runtime/GameFrameRate.h"
 #include "Core/QuickLoadSettings.h"
 #include "Core/QuickLaunchConfiguration.h"
 #include "Core/QuickLaunchStartup.h"
@@ -85,6 +86,7 @@ void Fade(UObject* controller,float amount){auto* camera=AH::GetObjectRef(contro
 void Finish(bool restore,const std::string& message,UObject* controller=nullptr){
     requested=false;finished=true;if(restore)loadingHook.reset();
     if(!controller)controller=currentController.Get();
+    if(controller&&controller->GetWorld())GameFrameRate::StartupReady=true;
     if(controller)try{Fade(controller,0.f);}catch(...){}
     SetStatus(message);
 }
@@ -158,6 +160,7 @@ void Initialize(){
     mapHook=Hook::RegisterLoadMapPostCallback([](auto&,auto*,FWorldContext& context,auto&&...){
         UObject* controller=nullptr;
         try{auto* world=context.GetThisCurrentWorld().Get();NativePersistenceRecovery::EnsureSessionPolicy(world);if(Storefront::IsDedicatedServer())return;controller=world?Controller(world):nullptr;if(!controller)return;currentController.Assign(controller);
+        if(!config.Enabled||finished)GameFrameRate::StartupReady=true;
         auto* type=Find(TEXT("/Script/Dominion.DominionPlayerControllerMenu"));if(type&&type->IsA<UClass>()&&controller->IsA(static_cast<UClass*>(type))){
             if(requested){Finish(true,"World load returned to the menu; normal loading restored.",controller);return;}
             if(frontend.Due(GetTickCount64(),bool(loadingHook)&&config.Enabled,requested,finished))Load(controller);
@@ -178,16 +181,17 @@ void Initialize(){
     },options);
     options.HookName=TEXT("QuickLoadStatus");tickHook=Hook::RegisterEngineTickPostCallback([](auto&,auto*,float,bool){
         const bool read=refresh.exchange(false);const bool armed=loadingHook&&!finished&&config.Enabled;
-        if(!armed&&!read)return;
+        const bool startup=GameFrameRate::StartupProbe.exchange(false);
+        if(!armed&&!read&&!startup)return;
         if(armed)shift=shift||ShiftInGame();
         if(shift&&loadingHook&&!finished){Finish(true,requested?"Shift restored the normal loading screen; the game's already requested load is not cancelled.":"Cancelled with Shift; normal startup restored.");return;}
         if(requested&&GetTickCount64()-started>120000){Finish(true,"Native load timed out; loading screen restored. No retry attempted.");return;}
         const auto now=GetTickCount64();
         if(armed&&!requested&&frontend.Expired(now)){Finish(true,"Quick Start could not resolve the saved character/world before its startup deadline; normal menu restored. Check launch status and selected native save names in Quick settings.");return;}
-        const bool start=frontend.Due(now,armed,requested,finished);if(!read&&!start)return;
+        const bool start=frontend.Due(now,armed,requested,finished);if(!read&&!start&&!startup)return;
         try{auto* type=static_cast<UClass*>(Find(TEXT("/Script/Dominion.DominionPlayerControllerMenu")));if(!type)return;TArray<UObject*> objects;UECustom::UObjectGlobals::GetObjectsOfClass(type,objects,true);if(objects.Num()>16)return;
             for(auto* object:objects)if(object&&!object->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed))&&object->GetWorld()&&Controller(object->GetWorld())==object){
-                currentController.Assign(object);if(start)Load(object);else {Character(object,"",false);Worlds(object);}break;
+                if(!config.Enabled||finished)GameFrameRate::StartupReady=true;currentController.Assign(object);if(start)Load(object);else if(read){Character(object,"",false);Worlds(object);}break;
             }
         }catch(const std::exception& e){if(start)Finish(true,std::string("Quick Start stopped: ")+e.what());else SetStatus(std::string("Native save choices unavailable: ")+e.what());}
     },options);

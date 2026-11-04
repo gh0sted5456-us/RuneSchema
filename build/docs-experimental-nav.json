@@ -27,6 +27,12 @@
         "Native overlay and controllers": "experimental/NATIVE-OVERLAY.md"
       },
       {
+        "Shared HUD plugin API": "experimental/SHARED-HUD.md"
+      },
+      {
+        "Lua scheduling": "experimental/LUA-SCHEDULING.md"
+      },
+      {
         "Controller navigation": "experimental/CONTROLLER-NAVIGATION.md"
       },
       {
@@ -39,10 +45,19 @@
         "Cache bundles": "experimental/CACHE-BUNDLES.md"
       },
       {
+        "Mod metadata and UE4SS controls": "experimental/MOD-METADATA-AND-CONTROLS.md"
+      },
+      {
+        "Mod Menu 2 and HUD layout": "experimental/MOD-MENU-2-AND-HUD.md"
+      },
+      {
         "Save recovery": "experimental/SAVE-RECOVERY.md"
       },
       {
         "Resource and UE4SS diagnostics": "experimental/PERFORMANCE-DIAGNOSTICS.md"
+      },
+      {
+        "Cleanup notifications and hotfixes": "experimental/NOTIFICATIONS-AND-HOTFIXES.md"
       }
     ]
   },
@@ -53,6 +68,15 @@
       },
       {
         "Server PIN access": "experimental/SERVER-ACCESS.md"
+      },
+      {
+        "Server control & native admin": "experimental/SERVER-CONTROL.md"
+      },
+      {
+        "Consumed-item owner interface": "experimental/CONSUMED-OWNER-PRESENTATION.md"
+      },
+      {
+        "Local mod profiles": "experimental/LOCAL-MOD-PROFILES.md"
       },
       {
         "Cooked declarations": "experimental/COOKED-PAK-REGISTRY-MANIFEST.md"
@@ -71,6 +95,12 @@
       },
       {
         "Skills investigation": "experimental/SKILL-REGISTRY.md"
+      },
+      {
+        "Multiplayer character appearance": "experimental/CHARACTER-APPEARANCE.md"
+      },
+      {
+        "Character companion saves (investigation)": "experimental/COMPANION-SAVES.md"
       }
     ]
   },

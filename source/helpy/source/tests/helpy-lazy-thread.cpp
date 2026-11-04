@@ -61,6 +61,13 @@ int main(){
         assert(state.Pending&&state.LastError.empty()&&state.StalledWindows==0);
     }
     respond(0,28,false,false);assert(For(0).Rows.size()==28&&!For(0).Pending);
+    {
+        assert(Retry(0));const auto local=For(0).ActiveRequestId;
+        LocalWaiting=[local](uint64_t id){return id==local;};
+        CheckTimeouts(For(0).RequestedAt+std::chrono::seconds(16));
+        assert(For(0).Pending&&For(0).ActiveRequestId==local&&For(0).LastError.empty());
+        LocalWaiting={};respond(0,28,true,false);
+    }
     assert(Retry(0));const auto oldCancel=For(0).CancelGeneration;
     CheckTimeouts(For(0).RequestedAt+std::chrono::seconds(16));
     assert(!For(0).Pending&&!For(0).LastError.empty()&&For(0).CancelGeneration>oldCancel);

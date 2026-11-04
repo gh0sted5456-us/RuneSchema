@@ -3,51 +3,50 @@ channel: experimental
 promote_to: RELEASE-0.8.1.0.md
 ---
 
-!!! info "Pre-release · 0.8.1.0 · testing"
-    This is the candidate-testing branch. It is not a stable release, and the
-    maintainer is assembling its complete runtime ZIP separately. Existing
-    release downloads and tags remain unchanged.
+!!! info "Pre-release · 0.8.1.0"
+    Candidate for testing. Stable 0.8.0.3 remains available separately.
 
 # RuneSchema 0.8.1.0 candidate
 
-The `pre-release` branch collects the current RuneSchema and Helpy changes for
-testing. Start with the [itemized changelog](CHANGELOG-0.8.1.0.md). Setup,
-defaults and remaining limits are documented in this branch's feature guides.
+[Download the complete ZIP](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0/RuneSchema-0.8.1.0.zip)
+· [Release and verification files](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0)
+· [Installation](INSTALLATION.md).
 
-- [Helpy desktop and settings](HELPY-STANDALONE.md)
-- [Controller navigation and alternate shortcut](CONTROLLER-NAVIGATION.md)
-- [Native overlay](NATIVE-OVERLAY.md)
-- [Resource diagnostics and startup alerts](PERFORMANCE-DIAGNOSTICS.md)
-- [Item caches and authoring tools](AUTHORING-AND-REPAIR.md)
-- [Save recovery](SAVE-RECOVERY.md)
-- [Server mod comparison](SERVER-MOD-LIST.md) and [PIN access](SERVER-ACCESS.md)
+The download is the maintainer-supplied `RuneSchema.zip`, published with a
+versioned filename and unchanged contents. It includes Helpy, all bundled plugins,
+Lua companions and release settings. UE4SS is installed separately.
 
-## Package status
+## Highlights
 
-The complete runtime ZIP will be supplied by the maintainer so required
-components are not missed. Do not treat a small binary follow-up bundle or
-GitHub's automatic **Source code** archive as a complete installation.
+- Helpy desktop/overlay, consistent two-pane menus and controller navigation.
+- Offline Item Bay browsing, cached searches, multi-selection and carts.
+- Sequential mod-cache builds, metadata editing and optional UE4SS loader controls.
+- Save recovery, cleanup notices, diagnostics and update notifications.
+- Host/client mod comparison, saved player authorization and optional automatic
+  authorization for connections. Native Admin remains separate.
+- Shared HUD, local mod-profile and presentation interfaces for mod authors.
 
-Before publishing the ZIP, check its actual file inventory and hashes against
-the matching candidate. Include the core DLL, all required plugin manifests and
-payloads, matching Helpy application/bridge/helpers, complete PAK triplets,
-required Lua companions, packaged assets, default settings and license notices.
-Preserve the chosen installer layout. Review local settings, logs and runtime
-data so private server PINs, account identifiers and personal saves are not
-accidentally distributed.
+Use the [feature index](index.md) for setup and the
+[changelog](CHANGELOG-0.8.1.0.md) for development history.
 
-The core and project-owned plugin DLLs should retain the verified compression
-checks. SDL3.dll stays beside Helpy.exe, with its complete bundled license.
-Helpy runs from the installed runtime folder; AppData contains user data.
+## Replaced instructions
 
-## Testing and promotion
+- ~~A complete 0.8.1.0 runtime ZIP is still being assembled.~~ Use the release ZIP above.
+- ~~Install the old `pre-release-binaries` follow-up.~~ It is superseded by the complete ZIP.
+- ~~Helpy is copied into AppData to run.~~ It runs from its installed runtime folder.
+- ~~UE4SS inventory is always read-only.~~ External management is opt-in.
+- ~~Submit a bug-report form inside Helpy.~~ **Report a bug** opens Nexus Bugs.
 
-Automated checks cover the supported code paths and rendered menu layouts.
-Virtual controller tests do not certify every USB/Bluetooth driver. In
-particular, verify the Guide shortcut and Steam/Game Bar interaction on real
-controllers: Windows Guide reservation only covers GameInput clients.
+## Known limits
 
-Keep this branch separate until candidate testing and the complete ZIP checks
-pass. A source push does not replace the stable download or publish a release.
-When the candidate is promoted, move its feature documentation to the normal
-guides using the [documentation promotion procedure](../DOCUMENTATION-CHANNELS.md).
+This is a Windows prerelease. Proton/Wine, every physical controller/driver,
+authenticated multiplayer actions and server restart behavior need further live
+coverage. World recovery is experimental and off by default. Mod Menu 2 remains
+optional/key-gated and avoids the separate Mod Menu's hooks.
+
+The loading indicator uses the previous startup behavior; the unsuccessful
+post-intro timing experiment is excluded. Leftover Helpy-process reports remain
+under investigation. Use **Exit Helpy** before replacing its files.
+
+Normal guides stay tied to the stable release. Promotion follows
+[documentation channels](../DOCUMENTATION-CHANNELS.md).

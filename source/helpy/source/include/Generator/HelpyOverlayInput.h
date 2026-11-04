@@ -6,6 +6,10 @@
 
 extern ImGuiKey ImGui_ImplWin32_KeyEventToImGuiKey(WPARAM,LPARAM);
 namespace PS::HelpyOverlayInput {
+inline ImVec2 ClientPosition(HelpyOverlayFrames::Page& page,ImVec2 panel,ImVec2 client){
+    const auto width=HelpyOverlayFrames::Read(page.ViewportWidth),height=HelpyOverlayFrames::Read(page.ViewportHeight);
+    return {(panel.x+page.Left)*(width>0&&client.x>0?client.x/width:1.f),(panel.y+page.Top)*(height>0&&client.y>0?client.y/height:1.f)};
+}
 inline void Feed(HelpyOverlayFrames::Page& page,HWND game){
     auto& io=ImGui::GetIO();io.AddFocusEvent(true);HelpyOverlayFrames::Input input;
     RECT client{};GetClientRect(game,&client);const auto width=HelpyOverlayFrames::Read(page.ViewportWidth),height=HelpyOverlayFrames::Read(page.ViewportHeight);

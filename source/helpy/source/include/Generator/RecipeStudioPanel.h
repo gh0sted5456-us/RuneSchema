@@ -79,7 +79,7 @@ inline void CenterText(const std::string& text,bool disabled=false){
 inline ImRect ItemNode(const char* id,const char* title,Json& side,bool& grid,float height) {
     const auto& t=HelpyImGuiTheme::Current;ImRect bounds;
     ImGui::PushStyleColor(ImGuiCol_ChildBg,t.panelAlt);
-    if(ImGui::BeginChild(id,ImVec2(0,height),true)) {
+    if(HelpyImGuiTheme::BeginPanel(id,ImVec2(0,height),true)) {
         const auto pos=ImGui::GetWindowPos(),size=ImGui::GetWindowSize();bounds=ImRect(pos,ImVec2(pos.x+size.x,pos.y+size.y));
 #if defined(HELPY_PREVIEW)
         if(std::string_view(title)=="Inputs")HelpyPreviewHooks::Inputs=HelpyPreviewHooks::WindowRect();
@@ -128,12 +128,12 @@ inline ImRect ItemNode(const char* id,const char* title,Json& side,bool& grid,fl
             ImGui::EndDragDropTarget();
         }
         ImGui::PopID();
-    }ImGui::EndChild();ImGui::PopStyleColor();return bounds;
+    }PS::HelpyImGuiTheme::EndPanel();ImGui::PopStyleColor();return bounds;
 }
 inline ImRect StationNode(float height) {
     auto& s=State();const auto& t=HelpyImGuiTheme::Current;ImRect bounds;
     ImGui::PushStyleColor(ImGuiCol_ChildBg,t.panelAlt);
-    if(ImGui::BeginChild("recipe-station",ImVec2(0,height),true)) {
+    if(HelpyImGuiTheme::BeginPanel("recipe-station",ImVec2(0,height),true)) {
         const auto p=ImGui::GetWindowPos(),size=ImGui::GetWindowSize();bounds=ImRect(p,ImVec2(p.x+size.x,p.y+size.y));
         CenterText("Station & timing");ImGui::Separator();
         if(s.Override){HelpyImGuiTheme::Toggle("Also add this station",&s.AddStation);ImGui::TextDisabled("%zu original placement(s) retained",s.Placements.size());}
@@ -181,7 +181,7 @@ inline ImRect StationNode(float height) {
         HelpyImGuiTheme::Toggle("Set processing duration",&s.Duration);
         if(s.Duration){ImGui::TextUnformatted("Minimum seconds");ImGui::SetNextItemWidth(-1);ImGui::InputFloat("##min-seconds",&s.MinSeconds,0.5f,5.0f,"%.2f");ImGui::TextUnformatted("Maximum seconds");ImGui::SetNextItemWidth(-1);ImGui::InputFloat("##max-seconds",&s.MaxSeconds,0.5f,5.0f,"%.2f");}
         if(HelpyImGuiTheme::Current.advancedMode){ImGui::SetNextItemWidth(-1);HelpyTextInput::InputTextWithHint("##station-icon","Custom cooked station icon path",s.StationIcon,sizeof(s.StationIcon));}
-    }ImGui::EndChild();ImGui::PopStyleColor();return bounds;
+    }PS::HelpyImGuiTheme::EndPanel();ImGui::PopStyleColor();return bounds;
 }
 inline void Connector(const ImRect& left,const ImRect& right) {
     if(left.GetWidth()<=0||right.GetWidth()<=0)return;

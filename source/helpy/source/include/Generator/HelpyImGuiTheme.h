@@ -72,10 +72,12 @@ struct Theme {
     int helpyFpsLimit{60},fpsRefreshMs{1000};
     bool showFps{false};
     bool showGameFps{false};
+    bool showCoordinates{false};
+    bool showStartupProgress{true};
     bool gameOverlay{true};
     bool nativeOverlay{true};
     int inputMode=0,controllerGlyphs=0,controllerShortcut=1;
-    bool reserveControllerGuide=true;
+    bool reserveControllerGuide=true,controllerTouchpad=true;
     bool navigationCollapsed=false,navigationPinned=false;
     bool autoInstallAuthoringDotNet{true};
     float overlayOpacity{.88f},overlaySize{.9f},overlayUiScale{1.f};
@@ -84,6 +86,7 @@ struct Theme {
     float backgroundStrength{.12f};
     bool dpiAware{true},autoReload{true},textBold{false},verboseTooltips{false},itemGridView{true},itemInternalNames{false},aiGridView{false},advancedMode{false};
     bool automaticUpdateChecks{true};
+    bool ue4ssManageExternal{false},ue4ssCompact{false};
     bool resourceDiagnostics{true},gpuResourceDiagnostics{true},ue4ssDiagnostics{true},playTimeReminders{true},startupResourceAlerts{false};
     int resourceCpuThreshold{90},resourceMemoryThreshold{90},resourceGpuThreshold{98},ue4ssLogBudget{100},ue4ssOverlapSeconds{5};
     bool updateArtwork{true},updateWorldMap{true},updateMapFilters{true};
@@ -289,12 +292,13 @@ inline nlohmann::json DocumentFrom(const Theme& t,int iconCacheMB) {
         {"views",{{"advancedMode",t.advancedMode},{"itemGrid",t.itemGridView},{"itemInternalNames",t.itemInternalNames},{"itemPageSize",t.itemPageSize},{"itemGridColumns",t.itemGridColumns},{"itemGridRows",t.itemGridRows},{"itemGridFitRows",t.itemGridFitRows},{"itemShowPlaceholders",t.itemShowPlaceholders},{"aiGrid",t.aiGridView},{"itemResultHeight",t.itemResultHeight},{"aiResultHeight",t.aiResultHeight},{"itemCategory",t.itemCategory},{"itemSource",t.itemSource},{"itemBayBrowseRatio",t.itemBayBrowseRatio},{"dockedBayHeight",t.dockedBayHeight},{"itemCartWidth",t.itemCartWidth}}},
         {"cache",{{"iconCacheMB",std::clamp(iconCacheMB,0,16384)},{"loadOrder",HelpyRuntimePreferences::CacheFirst.load()?"cacheFirst":"gameFirst"},{"passiveRefresh",HelpyRuntimePreferences::PassiveRefresh.load()}}},
         {"monitoring",{{"resources",t.resourceDiagnostics},{"gpu",t.gpuResourceDiagnostics},{"ue4ss",t.ue4ssDiagnostics},{"playTimeReminders",t.playTimeReminders},{"startupResourceAlerts",t.startupResourceAlerts},{"cpuThreshold",t.resourceCpuThreshold},{"memoryThreshold",t.resourceMemoryThreshold},{"gpuThreshold",t.resourceGpuThreshold},{"luaMessages",t.ue4ssLogBudget},{"overlapSeconds",t.ue4ssOverlapSeconds}}},
-        {"input",{{"mode",t.inputMode},{"glyphs",t.controllerGlyphs},{"shortcut",t.controllerShortcut},{"reserveGuide",t.reserveControllerGuide}}},
+        {"input",{{"mode",t.inputMode},{"glyphs",t.controllerGlyphs},{"shortcut",t.controllerShortcut},{"reserveGuide",t.reserveControllerGuide},{"touchpad",t.controllerTouchpad}}},
         {"navigation",{{"collapsed",t.navigationCollapsed},{"pinned",t.navigationPinned}}},
         {"authoring",{{"autoInstallDotNet",t.autoInstallAuthoringDotNet}}},
+        {"mods",{{"manageExternalUE4SS",t.ue4ssManageExternal},{"compactUE4SS",t.ue4ssCompact}}},
         {"updates",{{"automaticChecks",t.automaticUpdateChecks},{"artwork",t.updateArtwork},{"worldMap",t.updateWorldMap},{"mapFilters",t.updateMapFilters}}},
         {"preview",{{"quality",t.previewQuality},{"animation",t.previewAnimate},{"details",t.previewDetails},{"scaleUsePortrait",t.scaleUsePortrait},{"scaleReferenceIcon",t.scaleReferenceIcon}}},
-        {"runtime",{{"timeUnit",t.runtimeTimeUnit},{"helpyFpsLimit",t.helpyFpsLimit},{"showFps",t.showFps},{"fpsRefreshMs",t.fpsRefreshMs},{"showGameFps",t.showGameFps},{"fpsHotkey",t.fpsHotkey},{"gameOverlay",t.gameOverlay},{"nativeOverlay",t.nativeOverlay},{"overlayOpacity",t.overlayOpacity},{"overlaySize",t.overlaySize},{"overlayUiScale",t.overlayUiScale}}},
+        {"runtime",{{"timeUnit",t.runtimeTimeUnit},{"helpyFpsLimit",t.helpyFpsLimit},{"showFps",t.showFps},{"fpsRefreshMs",t.fpsRefreshMs},{"showGameFps",t.showGameFps},{"showCoordinates",t.showCoordinates},{"showStartupProgress",t.showStartupProgress},{"fpsHotkey",t.fpsHotkey},{"gameOverlay",t.gameOverlay},{"nativeOverlay",t.nativeOverlay},{"overlayOpacity",t.overlayOpacity},{"overlaySize",t.overlaySize},{"overlayUiScale",t.overlayUiScale}}},
         {"background",{{"file",t.backgroundFile},{"strength",t.backgroundStrength}}},
         {"liveLog",{{"colorRules",LiveLog::WriteColors(t.logColors)}}},
         {"notifications",{{"enabled",t.diagnosticToastsEnabled},{"visibleLimit",t.diagnosticToastLimit},{"durationSeconds",t.diagnosticToastDuration},{"registryActivity",t.diagnosticRegistryActivity}}},
@@ -358,6 +362,7 @@ inline void Reload(bool createIfMissing=true) {
         next.windowOpacity=ReadFloat(doc,"windowOpacity",next.windowOpacity,0.60f,1.0f);
         const auto display=doc.value("display",nlohmann::json::object());
         const auto navigation=doc.value("navigation",nlohmann::json::object());next.navigationCollapsed=navigation.value("collapsed",false);next.navigationPinned=navigation.value("pinned",false);
+        const auto mods=doc.value("mods",nlohmann::json::object());next.ue4ssManageExternal=mods.value("manageExternalUE4SS",false);next.ue4ssCompact=mods.value("compactUE4SS",false);
         const auto monitoring=doc.value("monitoring",nlohmann::json::object());
         next.resourceDiagnostics=monitoring.value("resources",true);next.gpuResourceDiagnostics=monitoring.value("gpu",true);next.ue4ssDiagnostics=monitoring.value("ue4ss",true);next.playTimeReminders=monitoring.value("playTimeReminders",true);
         next.startupResourceAlerts=monitoring.value("startupResourceAlerts",false);
@@ -401,9 +406,11 @@ inline void Reload(bool createIfMissing=true) {
         next.fpsRefreshMs=ReadInt(runtime,"fpsRefreshMs",1000,500,2000);
         next.showFps=runtime.value("showFps",false);
         next.showGameFps=runtime.value("showGameFps",false);
+        next.showCoordinates=runtime.value("showCoordinates",false);
+        next.showStartupProgress=runtime.value("showStartupProgress",true);
         next.gameOverlay=runtime.value("gameOverlay",true);
         next.nativeOverlay=runtime.value("nativeOverlay",true);
-        const auto input=doc.value("input",nlohmann::json::object());next.inputMode=ReadInt(input,"mode",0,0,2);next.controllerGlyphs=ReadInt(input,"glyphs",0,0,4);next.controllerShortcut=ReadInt(input,"shortcut",1,0,2);next.reserveControllerGuide=input.value("reserveGuide",true);
+        const auto input=doc.value("input",nlohmann::json::object());next.inputMode=ReadInt(input,"mode",0,0,2);next.controllerGlyphs=ReadInt(input,"glyphs",0,0,4);next.controllerShortcut=ReadInt(input,"shortcut",1,0,2);next.reserveControllerGuide=input.value("reserveGuide",true);next.controllerTouchpad=input.value("touchpad",true);
         next.autoInstallAuthoringDotNet=doc.value("authoring",nlohmann::json::object()).value("autoInstallDotNet",true);
         next.overlayOpacity=ReadFloat(runtime,"overlayOpacity",.88f,.60f,1.f);
         next.overlaySize=ReadFloat(runtime,"overlaySize",.9f,.45f,.98f);
@@ -504,9 +511,38 @@ inline bool SearchIconButton(const char* id,float logicalSize=0.0f) {
     ImGui::PopID();return clicked;
 }
 
+struct PaneNavigationScope {ImGuiWindow* Source=nullptr;ImGuiNavItemData Saved;};
+inline std::vector<PaneNavigationScope> PaneNavigationStack;
+inline ImGuiContext* PaneNavigationContext=nullptr;inline int PaneNavigationFrame=-1;
+inline ImGuiWindow* PaneNavigationSource=nullptr;inline ImGuiNavItemData PaneNavigationBest;
+inline bool Nearer(const ImGuiNavItemData& a,const ImGuiNavItemData& b){return a.ID&&(!b.ID||a.DistBox<b.DistBox||(a.DistBox==b.DistBox&&a.DistCenter<b.DistCenter));}
+inline bool BeginPanel(const char* id,const ImVec2& size=ImVec2(0,0),ImGuiChildFlags childFlags=0,ImGuiWindowFlags windowFlags=0) {
+    auto& context=*ImGui::GetCurrentContext();
+    if(PaneNavigationContext!=&context||PaneNavigationFrame!=context.FrameCount){PaneNavigationContext=&context;PaneNavigationFrame=context.FrameCount;PaneNavigationStack.clear();PaneNavigationSource=nullptr;PaneNavigationBest.Clear();}
+    const bool visible=ImGui::BeginChild(id,size,childFlags|ImGuiChildFlags_NavFlattened,windowFlags);
+    PaneNavigationScope scope;auto* window=ImGui::GetCurrentWindow();
+    if(context.NavWindow&&window!=context.NavWindow&&context.NavMoveScoringItems&&!(context.NavMoveFlags&(ImGuiNavMoveFlags_IsTabbing|ImGuiNavMoveFlags_AlsoScoreVisibleSet))&&ImGui::IsWindowChildOf(window,context.NavWindow,false)){
+        scope.Source=context.NavWindow;scope.Saved=context.NavMoveResultOther;context.NavMoveResultOther.Clear();
+    }
+    PaneNavigationStack.push_back(scope);return visible;
+}
+inline void EndPanel(){
+    auto& context=*ImGui::GetCurrentContext();IM_ASSERT(!PaneNavigationStack.empty());
+    const auto scope=PaneNavigationStack.back();PaneNavigationStack.pop_back();
+    if(scope.Source){
+        const auto candidate=context.NavMoveResultOther;
+        if(scope.Source==context.NavWindow&&candidate.ID&&ImGui::IsWindowChildOf(candidate.Window,scope.Source,false)){
+            // Retain the best content target before a nearby sidebar can replace the shared score.
+            if(PaneNavigationSource!=scope.Source){PaneNavigationSource=scope.Source;PaneNavigationBest.Clear();}
+            if(Nearer(candidate,PaneNavigationBest))PaneNavigationBest=candidate;
+        }
+        if(Nearer(scope.Saved,context.NavMoveResultOther))context.NavMoveResultOther=scope.Saved;
+    }
+    ImGui::EndChild();
+}
 inline bool BeginScroll(const char* id,const ImVec2& size=ImVec2(0,0),bool border=false) {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(Current.X(Current.contentPaddingX),Current.Y(Current.contentPaddingY)));
-    return ImGui::BeginChild(id,size,border,ImGuiWindowFlags_AlwaysVerticalScrollbar|ImGuiWindowFlags_AlwaysUseWindowPadding);
+    return BeginPanel(id,size,border?ImGuiChildFlags_Borders:0,ImGuiWindowFlags_AlwaysVerticalScrollbar|ImGuiWindowFlags_AlwaysUseWindowPadding);
 }
 inline void EndScroll(const Theme& t) {
     const float y=ImGui::GetScrollY(),max=ImGui::GetScrollMaxY(),h=t.Y(t.scrollFadeHeight);
@@ -516,13 +552,20 @@ inline void EndScroll(const Theme& t) {
         if(y>1.0f)draw->AddRectFilledMultiColor(p,ImVec2(right,p.y+h),solid,solid,clear,clear);
         if(y<max-1.0f)draw->AddRectFilledMultiColor(ImVec2(p.x,p.y+s.y-h),ImVec2(right,p.y+s.y),clear,clear,solid,solid);
     }
-    ImGui::EndChild();
+    EndPanel();
     ImGui::PopStyleVar();
 }
-enum class Icon : unsigned char { Ai, Resource, Item, Lab, Building, Cleanup, Appearance, Info, Map, Authoring, Tools, Settings, LiveLog, Server, Acknowledge, Copy, Export, Bell, Code };
+enum class Icon : unsigned char { Ai, Resource, Item, Lab, Building, Cleanup, Appearance, Info, Map, Authoring, Tools, Settings, LiveLog, Server, Acknowledge, Copy, Export, Bell, Code, Players, Package };
 inline void DrawIcon(Icon icon,const ImVec2& c,float size,const ImVec4& tint=Current.icon) {
     auto* d=ImGui::GetWindowDrawList();const ImU32 col=ImGui::GetColorU32(tint);const float r=size*0.5f,w=std::max(1.0f,size*0.09f);
     switch(icon) {
+    case Icon::Players:
+        d->AddCircle({c.x,c.y-r*.35f},r*.22f,col,12,w);
+        d->PathArcTo({c.x,c.y+r*.5f},r*.55f,3.14159265f,6.2831853f,12);d->PathStroke(col,0,w);
+        d->AddLine({c.x-r*.55f,c.y+r*.5f},{c.x+r*.55f,c.y+r*.5f},col,w);break;
+    case Icon::Package:
+        d->AddPolyline(std::array<ImVec2,6>{{{c.x,c.y-r*.65f},{c.x+r*.6f,c.y-r*.3f},{c.x+r*.6f,c.y+r*.35f},{c.x,c.y+r*.7f},{c.x-r*.6f,c.y+r*.35f},{c.x-r*.6f,c.y-r*.3f}}}.data(),6,col,ImDrawFlags_Closed,w);
+        d->AddLine({c.x-r*.6f,c.y-r*.3f},{c.x,c.y+r*.05f},col,w);d->AddLine({c.x,c.y+r*.05f},{c.x+r*.6f,c.y-r*.3f},col,w);d->AddLine({c.x,c.y+r*.05f},{c.x,c.y+r*.7f},col,w);break;
     case Icon::Acknowledge:d->AddLine({c.x-r*.45f,c.y},{c.x-r*.1f,c.y+r*.35f},col,w);d->AddLine({c.x-r*.1f,c.y+r*.35f},{c.x+r*.45f,c.y-r*.35f},col,w);break;
     case Icon::Copy:d->AddRect({c.x-r*.4f,c.y-r*.4f},{c.x+r*.2f,c.y+r*.3f},col,0,0,w);d->AddRect({c.x-r*.1f,c.y-r*.2f},{c.x+r*.5f,c.y+r*.5f},col,0,0,w);break;
     case Icon::Export:d->AddRect({c.x-r*.5f,c.y},{c.x+r*.5f,c.y+r*.5f},col,0,0,w);d->AddLine({c.x,c.y+r*.2f},{c.x,c.y-r*.5f},col,w);d->AddLine({c.x-r*.3f,c.y-r*.2f},{c.x,c.y-r*.5f},col,w);d->AddLine({c.x+r*.3f,c.y-r*.2f},{c.x,c.y-r*.5f},col,w);break;

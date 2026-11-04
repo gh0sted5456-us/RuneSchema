@@ -3,6 +3,7 @@
 #include "Core/CacheBundleItems.h"
 #include <cassert>
 #include <iostream>
+#include <thread>
 using namespace PS;using Json=nlohmann::json;namespace fs=std::filesystem;
 int main(){
     const auto root=fs::temp_directory_path()/("rs-learned-items-"+std::to_string(GetCurrentProcessId()));
@@ -11,9 +12,18 @@ int main(){
     active.Owners["example"]={"test-mod"};active.DeclaredOwners=active.Owners;
     Json row={{"Path","/Example/Items/ITEM_Cannon.ITEM_Cannon"},{"Name","Cannon"},{"SourceKind","modded"},{"SourceName","test-mod"}};
     {LearnedItemCatalog::Store writer;writer.Observe(cache,active,"en-US",Json::array({row}));
+     const auto savedIndex=CacheBundleStore::Directory(cache,cache.parent_path())/"index.json";
+     const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+     while(!fs::is_regular_file(savedIndex)){assert(std::chrono::steady_clock::now()<deadline);writer.Flush();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+     assert(CacheBundleStore::Read(cache,root,active,"en-US","items").size()==1); // Discoveries reach AppData before shutdown or a full rebuild.
      auto second=row;second["Path"]="/Example/Items/ITEM_Cannonball.ITEM_Cannonball";second["Name"]="Cannonball";
      writer.Observe(cache,active,"en-US",Json::array({second}));writer.Shutdown();assert(writer.Error.empty());}
     const auto saved=CacheBundleStore::Read(cache,root,active,"en-US","items");assert(saved.size()==2);
+    auto publishedRow=row;publishedRow["Name"]="Old cannon label";
+    HelpyPresentationCache::Group group;group.Owner="mods/test-mod";group.Fingerprint=CacheBundleIO::Hash("downloaded-content");group.Locale="en-US";group.Records=Json::array({CacheBundle::FromRow("items",publishedRow)});
+    HelpyPresentationCache::Commit(cache,{group},1024*1024,[](const auto&){return std::vector<char>{};});
+    const auto relabelled=CacheBundleStore::Read(cache,root,active,"en-US","items");assert(relabelled.size()==2&&relabelled[0]["Data"]["Name"]=="Cannon");
+    auto changedSource=active;changedSource.SourceKeys["example"]="new-content";const auto newer=CacheBundleStore::Read(cache,root,changedSource,"en-US","items");assert(newer[0]["Data"]["Name"]=="Old cannon label");
     assert(CacheBundleStore::Read(cache,root/"renamed-install",active,"en-US","items").size()==2);
     auto updated=active;updated.SourceKeys["example"]="content-v2";assert(CacheBundleStore::Read(cache,root,updated,"en-US","items").size()==2);
     const auto presentation=HelpyPresentationCache::Directory(cache)/"index.json";

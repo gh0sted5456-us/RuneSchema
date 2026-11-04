@@ -150,14 +150,14 @@ inline void Render(){
     if(!Error.empty())ImGui::TextWrapped("%s",Error.c_str());
     if(LastFilter!=Search){LastFilter=Search;auto query=HelpyCacheSources::Lower(LastFilter);Filtered.clear();for(const auto& icon:Icons)if(HelpyCacheSources::Lower((Labels.contains(icon)?Labels.at(icon):HelpyWikiIcons::Label(icon))+" "+icon).find(query)!=std::string::npos)Filtered.push_back(icon);}
     ImGui::TextDisabled("%zu cached pictures",Filtered.size());
-    ImGui::BeginChild("##portrait-icons",{0,0},true);const float side=t.X(64),cell=side+t.X(12);const int columns=std::max(1,int(ImGui::GetContentRegionAvail().x/cell));
+    HelpyImGuiTheme::BeginPanel("##portrait-icons",{0,0},true);const float side=t.X(64),cell=side+t.X(12);const int columns=std::max(1,int(ImGui::GetContentRegionAvail().x/cell));
     ImGuiListClipper clip;clip.Begin(int((Filtered.size()+columns-1)/columns),side+t.Y(12));
     while(clip.Step())for(int line=clip.DisplayStart;line<clip.DisplayEnd;++line){for(int col=0;col<columns;++col){const size_t i=size_t(line)*columns+col;if(i>=Filtered.size())break;if(col)ImGui::SameLine();ImGui::PushID(int(i));
         const auto a=ImGui::GetCursorScreenPos();const auto& icon=Filtered[i];ImGui::BeginDisabled(!Loaded);
         if(ImGui::Selectable("##cached-portrait",Choices.Get(Player)==icon,0,{side,side})){if(Choices.Set(Player,icon)){SaveWanted=true;ImGui::CloseCurrentPopup();}}
         ImGui::EndDisabled();if(!DrawCached(icon,a,{a.x+side,a.y+side})&&!icon.starts_with("/HelpyWiki/"))ItemIconCache::Draw(icon,a,{a.x+side,a.y+side},true);
         if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("%s",Labels.contains(icon)?Labels.at(icon).c_str():HelpyWikiIcons::Label(icon).c_str());ImGui::PopID();
-    }}ImGui::EndChild();ImGui::EndPopup();
+    }}PS::HelpyImGuiTheme::EndPanel();ImGui::EndPopup();
 }
 inline void Shutdown(){
     CancelScan=true;if(Load.valid())try{Choices=Load.get();Loaded=true;}catch(...){}

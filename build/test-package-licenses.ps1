@@ -36,7 +36,7 @@ function Assert-Archive([string]$Path, [string]$Prefix) {
         $reader = [IO.StreamReader]::new($entry.Open())
         try { $consolidated = $reader.ReadToEnd() } finally { $reader.Dispose() }
         foreach ($name in @('LICENSE', 'AUTHORS.md', 'LICENSING.md', 'CONTRIBUTING.md', 'THIRD_PARTY_NOTICES.md',
-            'licenses/PalSchema-MIT.txt', 'licenses/UE4SS-MIT.txt', 'licenses/nlohmann-json-MIT.txt', 'licenses/SDL3-zlib.txt')) {
+            'licenses/PalSchema-MIT.txt', 'licenses/UE4SS-MIT.txt', 'licenses/nlohmann-json-MIT.txt', 'licenses/SDL3-zlib.txt', 'licenses/ModMenu-MIT.txt')) {
             $expected = (Get-Content -LiteralPath (Join-Path $repository $name) -Raw).Trim()
             Assert-True ($consolidated.Contains($expected)) "Consolidated document omits complete source text: $name"
         }
@@ -84,6 +84,7 @@ try {
             New-Item -ItemType Directory -Path $nestedNotices -Force | Out-Null
             Set-Content -LiteralPath (Join-Path $nestedNotices 'Unique-Plugin-Notice.txt') -Value 'Unique plugin-only license must survive consolidation.' -Encoding ascii
         }
+        if($name -like 'RuneSchema.Helpy-*'){$hud=Join-Path (Split-Path -Parent $payload) 'RuneSchema.HUD/dll';New-Item -ItemType Directory -Path $hud -Force|Out-Null;Set-Content -LiteralPath (Join-Path $hud 'RuneSchema.HUD.dll') -Value 'shared HUD fixture' -Encoding ascii}
         Compress-Archive -LiteralPath $payload -DestinationPath (Join-Path $fixture "dist/$name.zip")
     }
     & $helper -RepositoryRoot $fixture -FinalizeBuild
@@ -92,6 +93,7 @@ try {
         $prefix = if ($name -like 'RuneSchema.Helpy-*') { 'RuneSchema.Helpy' } else { 'RuneSchema' }
         $archivePrefix = if ($prefix -eq 'RuneSchema') { $prefix } else { "$name/$prefix" }
         Assert-Archive (Join-Path $fixture "dist/$name.zip") $archivePrefix
+        if($name -like 'RuneSchema.Helpy-*'){$zip=[IO.Compression.ZipFile]::OpenRead((Join-Path $fixture "dist/$name.zip"));try{Assert-True (@($zip.Entries|Where-Object {$_.FullName.Replace('\','/') -eq "$name/RuneSchema.HUD/dll/RuneSchema.HUD.dll"}).Count -eq 1) 'Helpy finalization dropped the shared HUD plugin'}finally{$zip.Dispose()}}
         $payload = Join-Path $fixture "dist/$name/$prefix"
         $licenseFiles = @(Get-ChildItem -LiteralPath (Join-Path $payload 'settings/licenses') -File -Recurse)
         Assert-True ($licenseFiles.Count -eq 1 -and $licenseFiles[0].Name -eq 'RuneSchema-Licenses.txt') 'Payload does not contain exactly one consolidated license document.'

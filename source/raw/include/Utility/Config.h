@@ -6,6 +6,7 @@
 #include <unordered_set>
 #include <vector>
 #include "nlohmann/json.hpp"
+#include "../../../shared/HelpyPlayerAuthorization.h"
 
 namespace PS {
     struct LoadOrderSettings {
@@ -119,8 +120,7 @@ namespace PS {
     };
 
     struct WorldSaveCleanupSettings {
-        // Preserve the original world before removing unresolved building IDs.
-        // Legacy compatibility field; backups are now mandatory before pruning.
+        // Legacy compatibility field; Helpy's optional world-recovery setting owns backups.
         bool backupBeforePrune = true;
     };
 
@@ -164,6 +164,8 @@ namespace PS {
         bool allowPinAccess = false;
         std::string accessPin{}; // Private server setting; never replicate or log.
         bool allowClientTemporarySpawns = false;
+        bool autoAuthorizeConnectingPlayers = false;
+        std::vector<HelpyAuthorizedPlayer> authorizedPlayers{};
         int maximumItemCount = 100;
         int maximumSpawnCount = 100;
         int maximumNpcDurationSeconds = 300;

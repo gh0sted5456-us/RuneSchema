@@ -8,6 +8,7 @@ int main(){
     Visible=true;Need(BackgroundAllowed()&&BackgroundAllowed(true));
     Visible=false;Need(!BackgroundAllowed()&&BackgroundAllowed(true));
     CaptureInput=true;Need(!WantsInputCapture());Visible=true;Need(WantsInputCapture());CaptureInput=false;Need(!WantsInputCapture());
+    HudCaptureInput=true;Visible=false;Need(WantsInputCapture());CaptureInput=false;Need(WantsInputCapture());HudCaptureInput=false;Need(!WantsInputCapture());
     InputCapture capture;int move=3,look=2;
     const auto apply=[&](bool moving,bool enabled){(moving?move:look)+=enabled?1:-1;};
     capture.Update(true,apply);capture.Update(true,apply);Need(move==4&&look==3);

@@ -38,11 +38,11 @@ public:
         entry.Failures=0;return Result::Granted;
     }
     bool Allowed(const std::string& peer,const std::string& world,bool enabled,const std::string& pin,
-        Clock::time_point now=Clock::now()){
+        Clock::time_point now=Clock::now(),bool touch=true){
         Configure(world,enabled,pin);
         const auto found=m_peers.find(peer);
         if(!enabled||!ValidPin(pin)||found==m_peers.end()||!found->second.Granted||found->second.Expires<=now)return false;
-        found->second.Expires=now+std::chrono::hours(1);return true;
+        if(touch)found->second.Expires=now+std::chrono::hours(1);return true;
     }
     void Revoke(const std::string& peer){const auto found=m_peers.find(peer);if(found!=m_peers.end())found->second.Granted=false;}
 private:

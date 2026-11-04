@@ -10,9 +10,10 @@ static std::string Read(const char* path) {
 }
 
 int main(int argc,char** argv) {
-    if(argc!=7)throw std::runtime_error("Expected RegistryBridge source/header, RegistryLoader source, networking PAK and ActorHelper source/header");
+    if(argc!=8)throw std::runtime_error("Expected RegistryBridge source/header, RegistryLoader source, networking PAK, ActorHelper source/header and networking UTOC");
     const auto source=Read(argv[1]),header=Read(argv[2]),loader=Read(argv[3]),pak=Read(argv[4]);
     const auto actorHeader=Read(argv[5]),actorSource=Read(argv[6]);
+    const auto toc=Read(argv[7]);
     const auto require=[](bool value,const char* message) {
         if(!value)throw std::runtime_error(std::string("Presentation transport regression: ")+message);
     };
@@ -47,12 +48,26 @@ int main(int argc,char** argv) {
         && loader.find("\"AllowedKeys\"")!=std::string::npos
         && loader.find("MaxPresentationKeysPerConsumer=256")!=std::string::npos,
         "manifest consumer schema is missing or unbounded");
-    require(pak.find("BPC_RuneSchemaPluginPresentation.uasset")!=std::string::npos
-        &&pak.find("Content/Networking/Extensions/")!=std::string::npos,
+    require((pak.find("BPC_RuneSchemaPluginPresentation.uasset")!=std::string::npos
+        &&pak.find("Content/Networking/Extensions/")!=std::string::npos)
+        ||(toc.find("BPC_RuneSchemaPluginPresentation.uasset")!=std::string::npos&&toc.find("Extensions")!=std::string::npos),
         "the packaged networking bridge does not contain the presentation component");
     require(actorHeader.find("Arg(const RC::CharType* Name, const std::string& Value)")!=std::string::npos
         &&actorHeader.find("return StringArg(Name, Value);")!=std::string::npos,
         "reflected Unreal string arguments can fall through to raw byte copying");
-    require(actorSource.find("return JsonArg(Name, nlohmann::json(Value));")!=std::string::npos,
-        "reflected Unreal strings do not use property initialization and cleanup");
+    const auto stringStart=actorSource.find("FunctionCall& FunctionCall::StringArg(");
+    const auto stringEnd=actorSource.find("FunctionCall& FunctionCall::SoftObjectArg(",stringStart);
+    require(stringStart!=std::string::npos&&stringEnd!=std::string::npos,
+        "the reflected FString argument adapter is missing");
+    const auto stringArg=actorSource.substr(stringStart,stringEnd-stringStart);
+    require(stringArg.find("CastField<FStrProperty>")!=std::string::npos
+        &&stringArg.find("ReflectedContract::Input(property,m_function)")!=std::string::npos
+        &&stringArg.find("GetArrayDim()!=1")!=std::string::npos
+        &&stringArg.find("GetElementSize()!=sizeof(FString)")!=std::string::npos,
+        "reflected FString arguments do not validate their native parameter layout");
+    require(stringArg.find("InitializeValue_InContainer(m_params.data())")!=std::string::npos
+        &&stringArg.find("m_initialized.push_back(property)")!=std::string::npos
+        &&stringArg.find("SetPropertyValue(")!=std::string::npos
+        &&actorSource.find("DestroyValue_InContainer(m_params.data())")!=std::string::npos,
+        "reflected FString arguments do not retain native initialization and cleanup");
 }

@@ -91,6 +91,11 @@ static class CacheTool
     static void Need(bool value, string message) { if (!value) throw new InvalidDataException(message); }
     static string Full(string path) => Path.GetFullPath(path);
     static bool Within(string path, string parent) => Full(path).StartsWith(Full(parent).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    internal static void CaptureOutput(string game,string output,bool allowRunning) {
+        if (!allowRunning) return;
+        var engine=Path.Combine(Directory.GetParent(game)!.FullName,"Engine");
+        Need(!Full(output).Equals(Full(game),StringComparison.OrdinalIgnoreCase) && !Within(output,game) && !Full(output).Equals(Full(engine),StringComparison.OrdinalIgnoreCase) && !Within(output,engine), "Running-game capture must stage its output outside the game installation. Only the launcher publishes the finished mod cache.");
+    }
     static void Safe(string path)
     {
         for (var current = Full(path); !string.IsNullOrEmpty(current); current = Path.GetDirectoryName(current))
@@ -213,23 +218,26 @@ static class CacheTool
         try
         {
             if (args.Contains("--self-test")) { SelfTest(); return 0; }
-            if (args.Contains("--help")) { Console.WriteLine("Helpy offline cache builder (Windows, .NET 10)\n[--game GAME/RSDragonwilds] [--mapping matching.usmap] [--oodle local-decoder.dll]\n[--folder PAK-FOLDER] [--mod-root MOD-ROOT] [--mod-id MOD-ID] [--output DIRECTORY]\n[--base-game [--include-mods]] [--locale en-US] [--input-root ORIGINAL-FOLDER]\nAutomatically finds an inactive installation, reads a supplied/platform .usmap or downloads RSDW Archive's snapshot, and prepares the pinned decoder. Mod mode is the default.\nNo game, runtime mapping, save, PAK or installed Helpy cache is modified. Output is presentation only."); return 0; }
+            if (args.Contains("--help")) { Console.WriteLine("Helpy PAK cache builder (Windows, .NET 10)\n[--game GAME/RSDragonwilds] [--mapping matching.usmap] [--oodle local-decoder.dll]\n[--folder PAK-FOLDER] [--mod-root MOD-ROOT] [--mod-id MOD-ID] [--output DIRECTORY]\n[--base-game [--include-mods]] [--locale en-US] [--input-root ORIGINAL-FOLDER]\n[--allow-running-game --output STAGING-OUTSIDE-GAME]\nNormally selects an inactive installation; --allow-running-game permits read-only capture into external staging. Reads a supplied/platform .usmap or downloads RSDW Archive's snapshot, and prepares the pinned decoder. Mod mode is the default.\nNo game, runtime mapping, save, PAK or installed Helpy cache is modified. Output is presentation only."); return 0; }
             Need(OperatingSystem.IsWindows(), "This release supports Windows/Git Bash only (native texture decoder and game process checks).");
             var options = new Dictionary<string, string>();
             foreach (var (arg, index) in args.Select((s, i) => (s, i)))
                 if (arg.StartsWith("--", StringComparison.Ordinal))
                 {
-                    Need(new[] { "--game", "--mapping", "--oodle", "--folder", "--mod-root", "--mod-id", "--output", "--base-game", "--include-mods", "--locale", "--progress", "--input-root", "--check-inputs", "--control-file", "--prepare-creation", "--package-creation", "--platform" }.Contains(arg), "Unknown option " + arg);
+                    Need(new[] { "--game", "--mapping", "--oodle", "--folder", "--mod-root", "--mod-id", "--output", "--base-game", "--include-mods", "--locale", "--progress", "--input-root", "--check-inputs", "--control-file", "--prepare-creation", "--package-creation", "--platform", "--allow-running-game" }.Contains(arg), "Unknown option " + arg);
                     Need(!options.ContainsKey(arg), "Repeated option " + arg);
-                    if (arg is "--base-game" or "--include-mods" or "--progress" or "--check-inputs") options[arg] = "true";
+                    if (arg is "--base-game" or "--include-mods" or "--progress" or "--check-inputs" or "--allow-running-game") options[arg] = "true";
                     else { Need(index + 1 < args.Length && !args[index + 1].StartsWith("--", StringComparison.Ordinal), "Missing value for " + arg); options[arg] = args[index + 1]; }
                 }
             EmitProgress = options.ContainsKey("--progress");
+            var allowRunning = options.ContainsKey("--allow-running-game");
+            Need(!allowRunning || !options.ContainsKey("--prepare-creation") && !options.ContainsKey("--package-creation"), "Running-game mode is only for read-only cache capture.");
+            if (allowRunning) { using var process = Process.GetCurrentProcess(); process.PriorityClass = ProcessPriorityClass.BelowNormal; }
             ControlFile=options.GetValueOrDefault("--control-file");CheckControl();
             if(options.TryGetValue("--prepare-creation",out var request)){CreationArchive.Prepare(request,options["--output"],Progress,CheckControl);return 0;}
             if(options.TryGetValue("--package-creation",out var prepared)){CreationArchive.Package(prepared,options["--platform"],options["--output"],options["--mod-id"],Progress,CheckControl);return 0;}
             var inputRoot = Full(options.GetValueOrDefault("--input-root", Directory.GetCurrentDirectory())); Safe(inputRoot);
-            var game = AuthoringInputs.Game(options.GetValueOrDefault("--game"), inputRoot, Closed); Safe(game);
+            var game = AuthoringInputs.Game(options.GetValueOrDefault("--game"), inputRoot, Closed, allowRunning); Safe(game);
             var oodle = AuthoringInputs.Decoder(options.GetValueOrDefault("--oodle"), Safe); OodleHelper.Initialize(oodle);
             Need(OodleHelper.Instance is not null, "Oodle decoder could not be initialized.");
             var mapping = AuthoringInputs.Mapping(options.GetValueOrDefault("--mapping"), inputRoot, game, Safe);
@@ -242,6 +250,7 @@ static class CacheTool
             var modId = options.GetValueOrDefault("--mod-id", new DirectoryInfo(modRoot).Name).ToLowerInvariant();
             Need(Regex.IsMatch(modId, "^[a-z0-9][a-z0-9 _.-]{0,127}$") && !modId.Contains(".."), "Use the final RuneSchema mod folder name as --mod-id");
             var output = Full(options.GetValueOrDefault("--output", baseMode ? Path.Combine(folder, "base-game-cache") : Path.Combine(modRoot, "cache"))); Safe(output); Safe(modRoot);
+            CaptureOutput(game,output,allowRunning);
             if (!baseMode) Need(Directory.Exists(Path.Combine(modRoot, "paks"))||Directory.Exists(Path.Combine(modRoot,"ue4ss")), "Mod root must contain paks/ or ue4ss/. --mod-root selects it.");
             var nativeRoots = new[] { Path.Combine(game, "Content", "Paks"), Path.Combine(game, "Plugins"), Path.Combine(game, "GameFeatures"), Path.Combine(Directory.GetParent(game)!.FullName, "Engine", "Plugins") }.Where(Directory.Exists).ToArray();
             var nativeFiles = nativeRoots.SelectMany(r => Files(r, NativeExtensions)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
@@ -259,7 +268,8 @@ static class CacheTool
             foreach (var mod in mods) { Safe(mod.Root); Safe(mod.Output); Need(!Within(mod.Output, mod.Root) || Full(mod.Output).Equals(Path.Combine(mod.Root, "cache"), StringComparison.OrdinalIgnoreCase), "Output inside the mod must be its cache/ folder"); }
             var ownerFiles = mods.ToDictionary(m => m.Id, m => Files(m.Root, OwnerExtensions), StringComparer.Ordinal);
             Need(ownerFiles.Values.Sum(files => files.Length) + nativeFiles.Length <= 100000, "Source file count exceeds 100000");
-            var before = Stamps(nativeFiles.Concat(ownerFiles.Values.SelectMany(x => x)).Append(mapping).Append(oodle));
+            IEnumerable<string> CaptureFiles() => nativeRoots.SelectMany(r => Files(r, NativeExtensions)).Concat(mods.SelectMany(m => Files(m.Root, OwnerExtensions))).Concat(mods.Select(m => Path.Combine(m.Root, "ID.txt")).Where(File.Exists)).Append(mapping).Append(oodle);
+            var before = Stamps(nativeFiles.Concat(ownerFiles.Values.SelectMany(files=>files)).Concat(mods.Select(m=>Path.Combine(m.Root,"ID.txt")).Where(File.Exists)).Append(mapping).Append(oodle));
             Console.WriteLine($"Hashing {nativeFiles.Length} native files; fingerprints match Helpy's portable contract...");
             var digests = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var memoFile = Path.Combine(Path.GetTempPath(), "runeschema-helpy-cache-digests-v1.json"); Safe(memoFile); var memo = new JObject();
@@ -285,7 +295,7 @@ static class CacheTool
             foreach (var mod in mods) try { Build(mod, mod.Output); } catch (Exception e) { ++failures; Console.Error.WriteLine(mod.Id + ": cache unchanged; " + e.Message); }
             return failures == 0 ? 0 : 1;
 
-            void CheckInputs() { CheckControl(); Closed(game); Unchanged(before, nativeRoots.SelectMany(r => Files(r, NativeExtensions)).Concat(mods.SelectMany(m => Files(m.Root, OwnerExtensions))).Append(mapping).Append(oodle)); }
+            void CheckInputs() { CheckControl(); if (!allowRunning) Closed(game); Unchanged(before, CaptureFiles()); }
             void Build((string Root, string Id, string Output)? mod, string destination)
             {
                 CheckInputs();
@@ -412,6 +422,14 @@ static class CacheTool
                 var manifest = new JObject { ["Version"] = 2, ["FingerprintVersion"] = 2, ["Kind"] = "RuneSchemaCacheBundle", ["Locale"] = locale, ["Sources"] = fingerprints, ["Records"] = records, ["Icons"] = icons,
                     ["RecordCoverage"] = "Partial", ["Coverage"] = new JObject { ["Complete"] = false, ["Expected"] = wantedIcons.Count, ["Exported"] = icons.Count } };
                 if (mod is not null) manifest["ContentOwner"] = "mods/" + mod.Value.Id;
+                var sidecars = new[] { "taglines.json", "tips.json" }.Select(name => Path.Combine(destination, name)).ToArray();
+                var sidecarStamps = Stamps(sidecars.Where(File.Exists));
+                foreach(var pair in sidecarStamps) Need(pair.Value.Size <= (Path.GetFileName(pair.Key)=="tips.json"?8:64)*1024*1024,"Cache metadata sidecar is too large");
+                var metadataOwner = mod is null ? "" : "mods/" + mod.Value.Id;
+                var taglines = CacheMetadata.Taglines(records, File.Exists(sidecars[0]) ? JObject.Parse(File.ReadAllText(sidecars[0])) : null, metadataOwner);
+                manifest["Taglines"] = taglines;
+                var tips = File.Exists(sidecars[1]) ? CacheMetadata.Tips(JToken.Parse(File.ReadAllText(sidecars[1])), metadataOwner) : null;
+                if (tips is not null) manifest["Tips"] = tips;
                 // Stable across identical exports, monotonic when cache content changes.
                 var previousBundle = Path.Combine(destination, "offline-helpy.rsmk-cache");
                 long revision = 1;
@@ -426,12 +444,14 @@ static class CacheTool
                 manifest["CacheVersion"] = revision;
                 var metadata = Encoding.UTF8.GetBytes(Json(manifest)); Need(metadata.Length <= 80 * 1024 * 1024 && metadata.Length + payload.Length + 12 <= MaxBundle, "Bundle exceeds download/import limits");
                 using var bundle = new MemoryStream(); using (var writer = new BinaryWriter(bundle, Encoding.UTF8, true)) { writer.Write(Encoding.ASCII.GetBytes("RSCACHE1")); writer.Write(metadata.Length); writer.Write(metadata); payload.Position = 0; payload.CopyTo(bundle); }
-                var bytes = bundle.ToArray(); var digest = Hash(bytes); CheckInputs();
+                var bytes = bundle.ToArray(); var digest = Hash(bytes); CheckInputs(); Unchanged(sidecarStamps, sidecars.Where(File.Exists));
                 Directory.CreateDirectory(destination); Safe(destination);
                 if (banner is not null) Atomic(Path.Combine(destination, "mod.png"), File.ReadAllBytes(banner));
                 var receipt = new JObject { ["Tool"] = "RuneSchema offline Helpy cache", ["Format"] = 1, ["Owner"] = mod is null ? "native" : "mods/" + mod.Value.Id, ["SHA256"] = digest, ["Bytes"] = bytes.Length,
                     ["CacheVersion"] = revision, ["FingerprintVersion"] = 2, ["Records"] = records.Count, ["Icons"] = icons.Count, ["RecordCoverage"] = "Partial", ["Mapping"] = Path.GetFileName(mapping), ["MappingSHA256"] = Hash(File.ReadAllBytes(mapping)), ["Issues"] = report };
                 Atomic(Path.Combine(destination, "offline-helpy-report.json"), Encoding.UTF8.GetBytes(receipt.ToString()));
+                Atomic(sidecars[0], Encoding.UTF8.GetBytes(Json(taglines)));
+                if (tips is not null) Atomic(sidecars[1], Encoding.UTF8.GetBytes(Json(tips)));
                 Atomic(Path.Combine(destination, "offline-helpy.rsmk-cache"), bytes);
                 Console.WriteLine($"Wrote {destination}: {records.Count} records, {icons.Count} icons, {report.Count} reported skips. Partial presentation cache; no gameplay or save changes.");
             }
@@ -447,6 +467,7 @@ static class CacheTool
     static void SelfTest()
     {
         AuthoringInputTests.Run();
+        CacheMetadata.Test();
         CreationArchiveTests.Run();
         Need(Source("/Game/Gameplay/Mods/Dye/ITEM.Item") == "game/gameplay/mods/dye", "Nested mod namespace");
         Need(Asset("RSDragonwilds/Plugins/Test/Content/UI/T_Icon.uasset") == "/Test/UI/T_Icon.T_Icon", "Plugin virtual path");
@@ -468,6 +489,58 @@ static class CacheTool
     }
 }
 RUNESCHEMA_PROGRAM_CS
+cat > "$stage/CacheMetadata.cs" <<'RUNESCHEMA_CACHEMETADATA_CS'
+using Newtonsoft.Json.Linq;
+
+static class CacheMetadata
+{
+    static readonly string[] Categories = ["Weapons", "Armor", "Consumables", "Ammo", "Runes", "Resources", "Tools", "Building", "Quest", "Misc"];
+    static void Need(bool ok, string why) { if (!ok) throw new InvalidDataException(why); }
+    static bool Owner(string value) => value == "core" || System.Text.RegularExpressions.Regex.IsMatch(value, "^(mods|plugins)/[a-z0-9][a-z0-9_ -]{0,95}$");
+    static string Text(JToken value, string field) { var token=value[field];Need(token is null || token.Type==JTokenType.String,"Invalid cache metadata text: "+field);return (string?)token??""; }
+    public static JObject Taglines(JArray records, JObject? edits, string owner)
+    {
+        var rules=new SortedDictionary<string,JObject>(StringComparer.Ordinal);
+        void Add(string path, JToken value)
+        {
+            Need(path.StartsWith('/')&&path.Length<=2048&&!path.Contains("..")&&!path.Any(c=>c<32||c==127||"\\:*?".Contains(c))&&value is JObject,"Invalid tagline path");
+            var source=Text(value,"Owner").ToLowerInvariant();if(source.Length==0)source=owner;
+            var category=Text(value,"Category");var family=Text(value,"Family");
+            Need((source.Length==0||Owner(source))&&(owner.Length==0||owner==source),"Taglines escape their mod owner");
+            Need((category.Length==0||Categories.Contains(category))&&family.Length<=192&&family.All(c=>char.IsAsciiLetterLower(c)||char.IsAsciiDigit(c)||c=='_'),"Invalid tagline classification");
+            rules[path.ToLowerInvariant()+"|"+source]=new JObject{["Path"]=path,["Owner"]=source,["Category"]=category,["Family"]=family};
+        }
+        foreach(var record in records)if((string?)record["Kind"]=="items")
+        {
+            var category=(string?)record["Data"]?["Category"]??"";
+            Add((string)record["Path"]!,new JObject{["Owner"]=record["Owner"],["Category"]=Categories.Contains(category)?category:""});
+        }
+        if(edits is not null)
+        {
+            if(edits["Rules"] is JArray entries){Need(entries.Count<=65536,"Too many taglines");foreach(var rule in entries)Add((string)rule["Path"]!,rule);}
+            else if(edits["Items"] is JObject items){Need(items.Count<=65536,"Too many taglines");foreach(var item in items.Properties())Add(item.Name,item.Value);}
+            else throw new InvalidDataException("Taglines need a Rules array or Items object");
+        }
+        Need(rules.Count<=65536,"Too many taglines");return new JObject{["Format"]=1,["Rules"]=new JArray(rules.Values)};
+    }
+    public static JObject Tips(JToken document,string owner)
+    {
+        var entries=document as JArray??document["Tips"] as JArray;Need(entries is not null&&entries.Count<=8192,"Invalid cache tips array");var tips=new SortedDictionary<string,JObject>(StringComparer.Ordinal);
+        foreach(var tip in entries!)
+        {
+            Need(tip.Type==JTokenType.String||tip is JObject,"Invalid cache tip");var text=tip.Type==JTokenType.String?(string)tip!:Text(tip,"Text");var source=tip.Type==JTokenType.String?owner:Text(tip,"Owner");if(source.Length==0)source=owner;
+            Need(Owner(source)&&(owner.Length==0||source==owner)&&text.Length>0&&System.Text.Encoding.UTF8.GetByteCount(text)<=512&&!text.Any(c=>c<32||c==127),"Invalid tip text or owner");tips[source+"|"+text]=new JObject{["Owner"]=source,["Text"]=text};
+        }return new JObject{["Format"]=1,["Tips"]=new JArray(tips.Values)};
+    }
+    public static void Test()
+    {
+        var edits=JObject.Parse("{\"Format\":99,\"Rules\":[{\"Path\":\"/Example/Item.Item\",\"Family\":\"set\",\"Category\":\"Armor\"}]}");
+        Need(Taglines([],edits,"mods/example")["Rules"]![0]!.Value<string>("Owner")=="mods/example","Scoped taglines");
+        Need(Tips(new JArray("A tip"),"mods/example")["Tips"]!.Count()==1,"Optional cache tips");
+        var refused=false;try{Tips(new JArray(new JObject{["Owner"]="mods/other",["Text"]="Wrong mod"}),"mods/example");}catch(InvalidDataException){refused=true;}Need(refused,"Foreign tips must be refused");
+    }
+}
+RUNESCHEMA_CACHEMETADATA_CS
 cat > "$stage/AuthoringInputs.cs" <<'RUNESCHEMA_AUTHORINGINPUTS_CS'
 using System.Net.Http;
 using System.Security.Cryptography;
@@ -524,16 +597,16 @@ static class AuthoringInputs
             if (install is not null) yield return install;
         }
     }
-    internal static string Game(string? supplied, string input, Action<string> closed)
+    internal static string Game(string? supplied, string input, Action<string> closed, bool allowRunning = false)
     {
         if (supplied is not null)
         {
-            var project = Project(supplied) ?? throw new InvalidDataException("Selected game must contain RSDragonwilds/Content/Paks."); closed(project); return project;
+            var project = Project(supplied) ?? throw new InvalidDataException("Selected game must contain RSDragonwilds/Content/Paks."); if (!allowRunning) closed(project); return project;
         }
         var candidates = InstalledGames(input).Select(Project).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase);
         foreach (var candidate in candidates)
         {
-            try { closed(candidate); Console.WriteLine("Using installed game: " + candidate); return candidate; }
+            try { if (!allowRunning) closed(candidate); Console.WriteLine("Using installed game: " + candidate); return candidate; }
             catch (InvalidDataException) { Console.WriteLine("Skipping active installation: " + candidate); }
         }
         throw new InvalidDataException("No inactive Dragonwilds installation found. Close the target game, or use -Game/--game for a custom installation.");
@@ -717,6 +790,11 @@ static class AuthoringInputTests
             Check(AuthoringInputs.Project(Path.GetDirectoryName(game)!) == game, "Installed root normalization failed");
             Check(AuthoringInputs.Game(game, root, _ => { }) == game, "Explicit game selection failed");
             Refuses(() => AuthoringInputs.Game(game, root, _ => throw new InvalidDataException("active")));
+            Check(AuthoringInputs.Game(game, root, _ => throw new InvalidDataException("active"), true) == game, "Read-only capture should accept the selected running installation");
+            CacheTool.CaptureOutput(game,Path.Combine(root,"stage"),true);
+            Refuses(()=>CacheTool.CaptureOutput(game,Path.Combine(game,"Content","Paks"),true));
+            Refuses(()=>CacheTool.CaptureOutput(game,game,true));
+            Refuses(()=>CacheTool.CaptureOutput(game,Path.Combine(Path.GetDirectoryName(game)!,"Engine","Plugins"),true));
             var steam = Path.Combine(root, "Steam"); Directory.CreateDirectory(Path.Combine(steam, "steamapps"));
             File.WriteAllText(Path.Combine(steam, "steamapps", "libraryfolders.vdf"), "\"path\" \"D:\\\\Library With Spaces\"");
             Check(AuthoringInputs.SteamLibraries(steam).Last() == @"D:\Library With Spaces", "Steam library decoding failed");

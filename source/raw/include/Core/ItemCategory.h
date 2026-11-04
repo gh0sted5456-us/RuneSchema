@@ -55,6 +55,7 @@ inline std::string Classify(const std::string& path,const std::string& name,cons
 }
 inline std::string Text(const nlohmann::json& row,const char* key){const auto it=row.find(key);return it!=row.end()&&it->is_string()?it->get<std::string>():std::string{};}
 inline std::string Resolve(const nlohmann::json& row){
+    const auto manual=Text(row,"HelpyCategory");if(!manual.empty()&&manual!="All")for(const auto* known:Categories)if(manual==known)return manual;
     const auto category=Classify(Text(row,"Path"),Text(row,"Name"),Text(row,"InternalName"),Text(row,"Tags"),Text(row,"Class")+" "+Text(row,"Type"));
     if(!category.empty())return category;
     const auto previous=Text(row,"Category");for(const auto* known:Categories)if(previous==known&&previous!="All")return previous;

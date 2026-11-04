@@ -12,7 +12,7 @@
 
 namespace PS::UE4SSPackages {
 namespace fs=std::filesystem;
-struct Package {std::string Owner,Name;fs::path Root,Main,Native;};
+struct Package {std::string Owner,Name;fs::path Root,Main,Native;bool Enabled=true;};
 inline bool Linked(const fs::path& path){
     std::error_code ec;if(fs::is_symlink(fs::symlink_status(path,ec))||ec)return true;
 #if defined(_WIN32)
@@ -32,6 +32,13 @@ inline fs::path EntryFile(const fs::path& root,const std::string& wanted){
         if(!entry.is_regular_file()||Linked(entry.path()))throw std::runtime_error("UE4SS entry must be an ordinary local file");
         found=entry.path();
     }return found;
+}
+inline bool StatusEnabled(const fs::path& container){
+    const auto file=EntryFile(container,"status.txt");if(file.empty())return true;
+    if(fs::file_size(file)>32)throw std::runtime_error("UE4SS status.txt must contain 0 or 1.");
+    std::ifstream input(file,std::ios::binary);std::string value{std::istreambuf_iterator<char>(input),{}};if(!input.eof()&&input.fail())throw std::runtime_error("Could not read UE4SS status.txt.");
+    if(value.starts_with("\xef\xbb\xbf"))value.erase(0,3);const auto first=value.find_first_not_of(" \t\r\n"),last=value.find_last_not_of(" \t\r\n");value=first==value.npos?std::string{}:value.substr(first,last-first+1);
+    if(value!="0"&&value!="1")throw std::runtime_error("UE4SS status.txt must contain 0 or 1.");return value=="1";
 }
 inline Package Inspect(const fs::path& root,const std::string& owner,const std::string& name){
     if(Linked(root)||!NameSafe(owner)||!NameSafe(name))throw std::runtime_error("Unsafe UE4SS package root/name");
@@ -53,13 +60,13 @@ inline std::vector<Package> Discover(const fs::path& mod,const std::string& owne
     if(!NameSafe(owner)||Linked(mod))throw std::runtime_error("Unsafe RuneSchema owner directory");
     const auto container=ModFolderLayout::FindChildDirectory(mod,"ue4ss");if(container.empty())return {};
     if(Linked(container))throw std::runtime_error("Linked UE4SS container refused");
-    const auto direct=Inspect(container,owner,owner);std::vector<Package> children;std::set<std::string> names;size_t count=0;
+    auto direct=Inspect(container,owner,owner);const bool enabled=StatusEnabled(container);direct.Enabled=enabled;std::vector<Package> children;std::set<std::string> names;size_t count=0;
     for(const auto& entry:fs::directory_iterator(container)){
         if(++count>256)throw std::runtime_error("UE4SS container exceeds 256 entries");
         if(!entry.is_directory())continue;
         const auto name=entry.path().filename().string();
         if(ModFolderLayout::EqualsInsensitive(name,"scripts")||ModFolderLayout::EqualsInsensitive(name,"dlls"))continue;
-        const auto package=Inspect(entry.path(),owner,name);
+        auto package=Inspect(entry.path(),owner,name);package.Enabled=enabled;
         if(package.Main.empty()&&package.Native.empty())continue;
         if(!names.insert(ModFolderLayout::FoldAscii(name)).second)throw std::runtime_error("UE4SS package names differ only by case");
         children.push_back(package);
@@ -74,6 +81,7 @@ inline std::vector<Package> Discover(const fs::path& mod,const std::string& owne
 inline std::string Manifest(const fs::path& mods,const std::vector<Package>& packages){
     std::ostringstream out;out<<"# RuneSchema UE4SS packages v1; generated from enabled parent mods.\n";
     for(const auto& package:packages){
+        if(!package.Enabled)continue;
         const auto relative=package.Root.lexically_relative(mods).generic_string();
         if(relative.empty()||relative.starts_with("../")||relative.find_first_of("\t\r\n")!=std::string::npos)throw std::runtime_error("UE4SS manifest path escaped its mod root");
         out<<package.Owner<<'\t'<<package.Name<<'\t'<<relative<<'\t';

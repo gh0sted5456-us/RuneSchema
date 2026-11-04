@@ -56,6 +56,8 @@ namespace DragonWilds {
         void LoadDialogues(const nlohmann::json& data,const RC::StringType& modName);
         void LoadQuests(const nlohmann::json& data,const RC::StringType& mod,const std::string& source="<internal quest>"){m_quests.Load(RC::to_string(mod),data,source);}
         Events::Runtime& EventService(){return m_events;}
+        std::function<bool(RC::Unreal::UObject*,std::size_t,const std::string&)> PublishCleanupNotice;
+        std::function<void(RC::Unreal::UObject*)> NotifyWorldCleanup;
         void PublishEventIdentity(RC::Unreal::AActor* actor,const std::string& payload);
         std::function<void(const std::string&,const std::string&)> PublishWorldState;
         std::function<bool(RC::Unreal::AActor*,const std::string&)> PresentEventIdentity;

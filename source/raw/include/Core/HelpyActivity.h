@@ -3,7 +3,8 @@
 namespace PS::HelpyActivity {
 inline std::atomic<bool> Visible{false};
 inline std::atomic<bool> CaptureInput{false};
-inline bool WantsInputCapture(){return Visible.load(std::memory_order_relaxed)&&CaptureInput.load(std::memory_order_relaxed);}
+inline std::atomic<bool> HudCaptureInput{false};
+inline bool WantsInputCapture(){return HudCaptureInput.load(std::memory_order_relaxed)||(Visible.load(std::memory_order_relaxed)&&CaptureInput.load(std::memory_order_relaxed));}
 struct InputCapture {
     bool Move=false,Look=false;
     bool Applied()const{return Move||Look;}

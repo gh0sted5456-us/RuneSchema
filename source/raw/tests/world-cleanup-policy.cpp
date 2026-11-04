@@ -75,6 +75,16 @@ static void Transform() {
     Need(clean.pieces.size()==2&&clean.pieces[0].links==std::vector<std::uint32_t>{3}
         &&clean.pieces[1].id==3,"platform connections were not retained");
     Need(P::RemoveUnresolved(repair.bytes,{"vanilla-platform"}).bytes.empty(),"second cleanup was not a no-op");
+    {
+        auto rows=Piece(1,"vanilla-platform",{2,3,4});
+        for(const auto& row:{Piece(2,"retired-siege-piece",{1}),Piece(3,"enabled-other-mod",{1}),Piece(4,"retired-siege-piece",{1})})rows.insert(rows.end(),row.begin(),row.end());
+        auto pieces=Chunk("Pces",rows);P::Bytes mixed;U32(mixed,static_cast<std::uint32_t>(pieces.size()));mixed.insert(mixed.end(),pieces.begin(),pieces.end());
+        for(const auto* tag:{"CUST","NOBJ","LATS","LEVL","LVLS","SAVE"})mixed=Chunk(tag,mixed);
+        const auto retired=P::RemoveUnresolved(mixed,{"vanilla-platform","enabled-other-mod"});
+        Need(retired.removedIds==std::vector<std::uint32_t>({2,4}),"removing Siege affected another mod or vanilla");
+        const auto kept=P::Parse(retired.bytes);
+        Need(kept.pieces.size()==2&&kept.pieces[0].id==1&&kept.pieces[1].id==3&&kept.pieces[0].links==std::vector<std::uint32_t>{3},"unrelated buildings or their retained links changed");
+    }
     Reject([&]{P::RemoveUnresolved(original,{});});
     auto malformed=original;P::PutU32(malformed,4,1);Reject([&]{P::RemoveUnresolved(malformed,{"vanilla-platform"});});
     malformed=original;malformed.pop_back();Reject([&]{P::Parse(malformed);});

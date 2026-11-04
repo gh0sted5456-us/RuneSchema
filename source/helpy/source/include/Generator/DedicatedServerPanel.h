@@ -41,10 +41,9 @@ inline void Render(){
     if(!HelpyEnvironment::Server()){ImGui::TextWrapped("Available only in Helpy running on the dedicated server itself. A connected client cannot edit server configuration.");return;}
     if(!Initialized){Initialized=true;File=HostServices::WorkingDirectory().parent_path().parent_path().parent_path()/"Saved"/"Config"/"WindowsServer"/"DedicatedServer.ini";if(!Preview)Load();}
     const bool dirty=Draft&&Draft->Dirty();
-    constexpr std::array categories{"Server","World","Access","Files & changes"};
-    HelpyMenu::Categories("server-settings",categories,Category);
-    const auto& theme=HelpyImGuiTheme::Current;auto surface=theme.panel;surface.w=std::max(.94f,surface.w);ImGui::PushStyleColor(ImGuiCol_ChildBg,surface);
-    const bool body=ImGui::BeginChild("##server-setting-details",{0,0},true);if(body){
+    constexpr std::array categories{"Server","World","Passwords","Files & changes"};
+    HelpyMenu::Tabs("server-settings",categories,Category);
+    const bool body=HelpyMenu::BeginBody("Server settings body",Category);if(body){
     ImGui::SeparatorText(categories[Category]);
     if(Category==3){
     ImGui::TextWrapped("Local server configuration only. Confirm this is the active profile, especially if you use -UserDir or another save directory. Unknown keys, repeated GUID entries, order and comments are retained.");
@@ -72,7 +71,7 @@ inline void Render(){
     }
     if(!Status.empty())ImGui::TextWrapped("%s",Status.c_str());
     ImGui::SetNextItemWidth(-1);HelpyTextInput::InputTextWithHint("##server-ini-filter","Filter sections or keys...",Search,sizeof(Search));const auto query=LiveLog::Lower(Search);
-    if(Draft){ImGui::BeginChild("Server INI fields",{0,0},true);std::string section;
+    if(Draft){HelpyImGuiTheme::BeginPanel("Server INI fields",{0,0},true);std::string section;
         for(size_t i=0;i<Draft->Lines.size();++i){auto& line=Draft->Lines[i];if(!line.Editable||(!query.empty()&&LiveLog::Lower(line.Section+" "+line.Key).find(query)==std::string::npos))continue;
             const int group=line.Key=="DefaultWorldName"?1:line.Key=="AdminPassword"||line.Key=="WorldPassword"?2:0;
             if(Category!=3&&Category!=group)continue;
@@ -84,7 +83,7 @@ inline void Render(){
                 const auto flags=!ShowSecrets&&DedicatedServerIni::Sensitive(line.Key)?ImGuiInputTextFlags_Password:ImGuiInputTextFlags_None;
                 const bool writable=DedicatedServerIni::Writable(line.Section,line.Key);ImGui::BeginDisabled(!writable);
                 if(HelpyTextInput::InputText("##value",value.data(),value.size(),flags))line.Value=value.data();ImGui::EndDisabled();}ImGui::PopID();}
-        ImGui::EndChild();}
-    }ImGui::EndChild();ImGui::PopStyleColor();
+        PS::HelpyImGuiTheme::EndPanel();}
+    }HelpyMenu::EndBody();
 }
 }

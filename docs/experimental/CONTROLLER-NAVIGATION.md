@@ -3,9 +3,9 @@ channel: experimental
 promote_to: CONTROLLER-NAVIGATION.md
 ---
 
-!!! info "Experimental · local candidate"
-    This controller update is being tested locally. USB/Bluetooth hardware and
-    live-game acceptance remain separate from virtual-device and render fixtures.
+!!! info "Pre-release · 0.8.1.0"
+    Included in 0.8.1.0. USB/Bluetooth hardware and live-game acceptance remain
+    separate from virtual-device and render fixtures. [Candidate](PRE-RELEASE.md).
 
 # Use Helpy with a controller
 
@@ -113,6 +113,10 @@ the selected one; disconnects release its held controls.
 
 ## Items, mods, maps and text
 
+- Press **Down** from a section's tabs/header to focus its content. Use the
+  D-pad or left stick to move between controls and
+  between adjoining panes. Press **Right** from a category list to enter its
+  settings/content pane. Pane borders do not need an extra confirm press.
 - Focus an Item Bay card and confirm to select it. Enable **Select multiple**
   for a batch, then use **Send to cart**. The west button opens the existing
   actions menu, including family/details commands. Drag/drop remains available.
@@ -123,6 +127,14 @@ the selected one; disconnects release its held controls.
 - Focus the map canvas. The right stick pans, stick clicks zoom in/out, confirm
   selects its center crosshair, and the west button opens actions there. Existing
   authority, ground and placement checks still apply.
+- On DualSense/PS5 and DualShock controllers, slide one finger on the touchpad
+  to move the pointer; press the touchpad to click or hold it to drag. Lift and
+  reposition your finger without jumping the cursor. Disable **PlayStation
+  touchpad pointer** under **Settings → Helpy → Display → Controller navigation**
+  if another input mapper handles it. Helpy processes touchpad clicks only while
+  its interface has focus; hiding it, disconnecting or disabling the option
+  releases its click. Steam Input/emulation may hide the original touchpad.
+  This uses SDL's [touchpad state](https://wiki.libsdl.org/SDL3/SDL_GetGamepadTouchpadFinger).
 - Activate a text field with the controller to open the in-app keyboard, or use
   the north button on a focused field. Navigate its keys, then choose **Done**
   to apply the text or **Cancel** to retain the original. Password previews stay

@@ -25,6 +25,16 @@ int main(int argc,char** argv){try{
     if(!status.value("Ready",false))throw std::runtime_error(status.dump());Check(status.at("Api")== (dx11?"D3D11":"D3D12"),"Bridge selected the wrong renderer");
     char nonce[33]{};std::snprintf(nonce,sizeof(nonce),"%032llx",static_cast<unsigned long long>(GetTickCount64())*GetCurrentProcessId());Producer producer;producer.Create(producerDevice.Get(),GetCurrentProcessId(),nonce,256,128);
     status=PS::HelpyNativeOverlayBridge::Call({{"Action","Open"},{"AppPid",GetCurrentProcessId()},{"Nonce",nonce}});Check(status.at("Ready")==true&&producer.Page->Bound==1,"Bridge did not attach the shared UI surface");
+    producer.Page->Visible=1;producer.Page->Heartbeat=GetTickCount64();
+    auto competing=PS::HelpyNativeOverlayBridge::Call({{"Action","Open"},{"Client",2},{"Interactive",true},{"AppPid",GetCurrentProcessId()},{"Nonce",nonce}});
+    Check(competing.value("Busy",false)&&competing.value("PassivePresentation",false),"Another client stole a live interactive HUD surface or lost passive HUD capability");
+    PS::HelpyNativeOverlayBridge::Call({{"Action","Hide"},{"Client",2}});Check(producer.Page->Visible==1,"A foreign client hid the active HUD");
+    PS::HelpyNativeOverlayBridge::Call({{"Action","Hide"}});
+    competing=PS::HelpyNativeOverlayBridge::Call({{"Action","Open"},{"Client",2},{"Interactive",false},{"AppPid",GetCurrentProcessId()},{"Nonce",nonce}});Check(competing.value("OwnsSurface",false),"A hidden owner prevented HUD handoff");
+    producer.Page->Visible=2;producer.Page->Heartbeat=GetTickCount64();
+    competing=PS::HelpyNativeOverlayBridge::Call({{"Action","Open"},{"Client",3},{"Interactive",false},{"AppPid",GetCurrentProcessId()},{"Nonce",nonce}});Check(competing.value("Busy",false),"Passive HUDs repeatedly replaced each other");
+    status=PS::HelpyNativeOverlayBridge::Call({{"Action","Open"},{"Interactive",true},{"AppPid",GetCurrentProcessId()},{"Nonce",nonce}});Check(status.value("OwnsSurface",false),"An interactive panel could not replace a passive HUD");
+    PS::HelpyNativeOverlayBridge::Call({{"Action","Release"},{"Client",2}});Check(producer.Page->Bound==1,"A stale owner released another client's surface");
     producer.Page->Visible=1;producer.Page->Heartbeat=GetTickCount64();PS::HelpyNativeOverlayBridge::Call({{"Action","Show"}});Need(swap->Present(0,0),"Private native present failed");Check(producer.Page->Visible==0,"Background game retained overlay input capture");
     PS::HelpyNativeOverlayBridge::Call({{"Action","Hide"}});Need(swap->ResizeBuffers(2,512,320,DXGI_FORMAT_UNKNOWN,0),"Resize did not release overlay references");Check(producer.Page->Bound==0,"Resize left a stale app surface binding");
     swap.Reset();desc.Width=512;desc.Height=320;Need(factory->CreateSwapChainForHwnd(dx11?static_cast<IUnknown*>(producerDevice.Get()):static_cast<IUnknown*>(queue.Get()),window,&desc,nullptr,nullptr,&swap),"Bridge retained the old flip swap chain during replacement");Need(swap->Present(0,0),"Replacement swap-chain presentation failed");status=PS::HelpyNativeOverlayBridge::Call({{"Action","Status"}});Check(status.value("Ready",false),"Replacement swap chain was not recognized");

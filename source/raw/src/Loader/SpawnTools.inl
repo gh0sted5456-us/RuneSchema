@@ -225,7 +225,7 @@ void DragonWildsSpawnLoader::HandleNetworkHelpyMarks(UObject* player,const std::
 std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,const std::string& action,const std::string& payload) {
     if(!player || !player->GetWorld() || !GetGameMode(player->GetWorld()))
         throw std::runtime_error("Helpy authority request did not arrive in an authoritative world");
-    if(action!="GiveItems" && action!="MapTeleport" && action!="HelpyRemoteAccess" && action!="Spawn" && action!="Players" && action!="InventoryMarks")
+    if(action!="GiveItems" && action!="MapTeleport" && action!="HelpyRemoteAccess" && action!="Spawn" && action!="Players" && action!="InventoryMarks" && action!="NativeServerAdmin")
         throw std::runtime_error("Helpy authority action is not permitted");
     if(payload.empty() || payload.size()>256*1024)
         throw std::runtime_error("Helpy authority payload exceeds the safe bound");
@@ -245,15 +245,25 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
     const PS::WeakObjectHandle controllerIdentity(controller);
     const auto identity=[](const auto& value){return std::to_string(value.ObjectIndex)+":"+std::to_string(value.ObjectSerialNumber);};
     const auto peerKey=identity(controllerIdentity)+"|"+playerGuid,worldKey=identity(worldIdentity);
+    if(action=="NativeServerAdmin"){
+        if(payload.size()>2048||!PublishHelpyResult)throw std::runtime_error("Native server administration transport is unavailable.");
+        const auto revision=request.value("_BridgeRevision",int64_t{});if(revision<=0)throw std::runtime_error("Administration requires a correlated owning-player request.");
+        const auto result=PS::NativeServerAdminRuntime::Handle(controller,player->GetWorld(),request);
+        PublishHelpyResult(player,revision,result);
+        PS::Log<LogLevel::Normal>(STR("[SERVER-CONTROL] Native administration operation '{}' completed; no account credentials were logged.\n"),PS::ToWideSafe(request.at("Operation").get<std::string>()));
+        return "Native administration result sent to the requesting owner connection.";
+    }
     if(action=="HelpyRemoteAccess"){
         if(payload.size()>256)throw std::runtime_error("Remote access request exceeds its size limit");
-        const bool enabled=policy.allowPinAccess&&PS::HelpyRemoteAccess::Sessions::ValidPin(policy.accessPin);
+        PS::HelpyPlayerAccess::Observe(controller);
+        const bool saved=PS::NativeServerAdminRuntime::HelpyAuthorized(controller,playerGuid);
+        const bool enabled=saved||(policy.allowPinAccess&&PS::HelpyRemoteAccess::Sessions::ValidPin(policy.accessPin));
         const auto status=[&](bool allowed,bool authenticated,std::string detail){return PS::HelpyRemoteAccess::AccessStatus(enabled,allowed,authenticated,
-            policy.allowClientItemGrants,policy.allowClientTeleport,playerGuid,std::move(detail)).dump();};
+            saved||policy.allowClientItemGrants,saved||policy.allowClientTeleport,playerGuid,std::move(detail)).dump();};
         if(request.value("Disconnect",false)){PS::HelpyRemoteAccess::Server.Revoke(peerKey);return status(false,false,"Remote access disconnected.");}
         if(request.value("Query",false)){
-            const bool allowed=PS::HelpyRemoteAccess::Server.Allowed(peerKey,worldKey,enabled,policy.accessPin);
-            return status(allowed,false,allowed?"Server authority access is active for your current character.":enabled
+            const bool allowed=saved||PS::HelpyRemoteAccess::Server.Allowed(peerKey,worldKey,policy.allowPinAccess,policy.accessPin,PS::HelpyRemoteAccess::Sessions::Clock::now(),false);
+            return status(allowed,saved,allowed?"Server authority access is active for your current character.":enabled
                 ?"This world requires a PIN for self-service item delivery and teleportation.":"PIN self-service is disabled by this host.");
         }
         if(playerGuid.empty())throw std::runtime_error("Remote access requires an initialized character identity");
@@ -318,17 +328,19 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
         if(!actual.empty()&&std::ranges::any_of(policy.permittedPlayerGuids,[&](const auto& value){return normalize(value)==actual;}))return true;
         return !playerName.empty()&&std::find(policy.permittedPlayerNames.begin(),policy.permittedPlayerNames.end(),playerName)!=policy.permittedPlayerNames.end();
     };
+    PS::HelpyPlayerAccess::Observe(controller);
+    const bool savedAccess=PS::NativeServerAdminRuntime::HelpyAuthorized(controller,playerGuid);
     const bool pinAccess=PS::HelpyRemoteAccess::Server.Allowed(peerKey,worldKey,policy.allowPinAccess,policy.accessPin);
     const bool allowlisted=permitted();
-    if(!allowlisted&&!(pinAccess&&(action=="GiveItems"||action=="MapTeleport")))
+    if(!savedAccess&&!allowlisted&&!(pinAccess&&(action=="GiveItems"||action=="MapTeleport")))
         throw std::runtime_error("Remote access denied. Connect with the server's world PIN in Settings > Server access, or ask for allowlist access.");
-    if(pinAccess&&!allowlisted){
+    if((pinAccess||savedAccess)&&!allowlisted){
         const auto target=request.value("Player",std::string{});
-        if(!PS::HelpyRemoteAccess::SelfRequest(action,target,playerGuid,RC::to_string(controller->GetPathName())))
+        if((action!="Spawn"||!savedAccess)&&!PS::HelpyRemoteAccess::SelfRequest(action,target,playerGuid,RC::to_string(controller->GetPathName())))
             throw std::runtime_error("PIN access allows deliveries and teleportation only for your own character");
     }
     if(action=="GiveItems") {
-        if(!policy.allowClientItemGrants)
+        if(!savedAccess&&!policy.allowClientItemGrants)
             throw std::runtime_error("This server does not allow client Helpy item grants");
         if(!request.contains("Items") || !request["Items"].is_array() || request["Items"].empty()
             || request["Items"].size()>PS::HelpyGrants::MaxSelection)
@@ -346,12 +358,12 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
                 throw std::runtime_error("Helpy item grant exceeds the server quantity limit");
         }
     } else if(action=="MapTeleport"){
-        if(!policy.allowClientTeleport)throw std::runtime_error("This server does not allow client Helpy teleportation");
+        if(!savedAccess&&!policy.allowClientTeleport)throw std::runtime_error("This server does not allow client Helpy teleportation");
         if(request.contains("TargetPlayer")||request.value("PartyPoint",false))
             throw std::runtime_error("Remote teleport requires a map position for your own character");
         (void)ToolMapTarget(player->GetWorld(),request);
     } else {
-        if(!policy.allowClientTemporarySpawns)
+        if(!savedAccess&&!policy.allowClientTemporarySpawns)
             throw std::runtime_error("This server does not allow client Helpy temporary spawns");
         if(request.value("Permanent",false))
             throw std::runtime_error("Clients cannot author permanent Helpy spawns");
@@ -498,6 +510,22 @@ void DragonWildsSpawnLoader::UpdateHelpyInputCapture(bool enabled){
     }
 }
 void DragonWildsSpawnLoader::PumpSpawnTools(PS::WorkSlice& work) {
+    if(PS::PlayerCoordinates::Current.TakeRequest()){
+        static PS::WeakObjectHandle localController;
+        std::optional<std::array<double,3>> point,rotation;
+        try{
+            if(m_readyWorld&&IsWorldStillLoaded(m_readyWorld)){
+                auto* controller=localController.Get();
+                if(controller&&controller->GetWorld()!=m_readyWorld){localController.Reset();controller=nullptr;}
+                if(!controller){controller=FindLocalPlayerController();if(controller&&controller->GetWorld()==m_readyWorld)localController.Assign(controller);else controller=nullptr;}
+                if(controller)if(auto* pawn=ActorHelper::GetObjectRef(controller,TEXT("Pawn"));pawn&&pawn->IsA<AActor>()&&pawn->GetWorld()==m_readyWorld){
+                    const auto at=ActorHelper::GetActorLocation(static_cast<AActor*>(pawn));point=std::array<double,3>{at.X(),at.Y(),at.Z()};
+                    ActorHelper::FunctionCall look(controller,TEXT("/Script/Engine.Controller:GetControlRotation"));look.Invoke();rotation=look.Result<std::array<double,3>>();
+                }
+            }else localController.Reset();
+        }catch(...){} // No local pawn while entering/leaving a world is normal.
+        PS::PlayerCoordinates::Current.Publish(PS::SpawnToolRequests::Generation.load(),point,rotation);
+    }
     // A coalesced read-only hint from Helpy's existing Read service. Never owns
     // or completes the mutation mailbox, even during a grant or travel action.
     if(m_readyWorld&&IsWorldStillLoaded(m_readyWorld)&&PS::SpawnToolRequests::TakePlayerRoles())try {
@@ -662,6 +690,16 @@ void DragonWildsSpawnLoader::PumpSpawnTools(PS::WorkSlice& work) {
     const char* spawnStage="recipient selection";
     try {
         const auto action=request->at("Action").get<std::string>();
+        if(action=="NativeServerAdmin"){
+            if(!m_readyWorld||!IsWorldStillLoaded(m_readyWorld)||request->value("Generation",uint64_t{})!=PS::SpawnToolRequests::CurrentGeneration())throw std::runtime_error("The current world changed; refresh server controls.");
+            (void)PS::NativeServerAdmin::Operation(*request);
+            if(PS::Network::Detect(m_readyWorld).Mode==PS::Network::Role::Client){
+                if(request->dump().size()>2048||!ForwardHelpyAuthority||!ForwardHelpyAuthority(action,request->dump()))throw std::runtime_error("The owning-player RuneSchema server bridge is unavailable.");
+                PS::SpawnToolRequests::Progress("Waiting for the server's verified administration result; no automatic retry.");return;
+            }
+            auto result=PS::NativeServerAdminRuntime::Handle(FindLocalPlayerController(),m_readyWorld,*request);
+            PS::SpawnToolRequests::Publish(std::move(result));return;
+        }
         static PS::SlowWork::Meter requestTiming[3];
         const int timingSlot=action=="MapSnapshot"?0:action=="QuickPlayers"?1:2;
         PS::SlowWork::Scope requestScope(requestTiming[timingSlot],timingSlot==0?"helpy.request.map":timingSlot==1?"helpy.request.players":"helpy.request.other");

@@ -56,6 +56,14 @@ Snorkles, are consolidated in `AUTHORS.md`. That roster is separate from
 this dependency inventory. See `LICENSING.md` for the scope of the project's
 grant and the treatment of existing contributions.
 
+## Maxxfilth Mod Menu
+
+Mod Menu 2 adapts the schema, configuration and shared-variable backend from
+Maxxfilth's Mod Menu 2.0.2. Copyright (c) 2026 Maxxfilth. The complete MIT
+license is retained in `licenses/ModMenu-MIT.txt` and the packaged notices.
+RuneSchema supplies its own Helpy presentation and input handling.
+Upstream: https://www.curseforge.com/runescape-dragonwilds/ue4ss-mods/mod-menu
+
 ## Other build and runtime components
 
 Helpy uses SDL **3.4.16** for mapped Xbox, PlayStation and Nintendo gamepad input.

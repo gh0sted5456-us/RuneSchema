@@ -1,7 +1,7 @@
 #pragma once
 #include "Runtime/HelpyOverlayD3D12.h"
 
-namespace PS::HelpyOverlayGpu {
+namespace PS::HudGpu {
 class Consumer11 {
     ComPtr<ID3D11Device5> Device;ComPtr<ID3D11DeviceContext4> Immediate;
     ComPtr<ID3D11DeviceContext> Deferred;ComPtr<ID3D11VertexShader> Vertex;ComPtr<ID3D11PixelShader> Pixel;

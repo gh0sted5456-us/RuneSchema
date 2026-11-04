@@ -21,7 +21,7 @@ Backups live under `%LOCALAPPDATA%\RSDragonwilds\RuneSchema\core\backups\<runtim
 
 Turn on **Automatic snapshots at character entry** to preserve the selected character before loading. It is off by default and saved separately for each runtime. It adds no periodic save scan during play. Character previews alone do not authorize a snapshot or cleanup.
 
-Backups made **before cleanup** remain mandatory regardless of this toggle. The reasons shown on one snapshot can include both **Automatic** and **Before cleanup** when the bytes match.
+Character backups made **before cleanup** remain mandatory regardless of this toggle. World backups follow the separate opt-in world recovery setting below. The reasons shown on one snapshot can include both **Automatic** and **Before cleanup** when the bytes match.
 
 ## Optional world recovery
 
@@ -29,7 +29,12 @@ Open **Settings → Helpy → Saves → Experimental recovery** and enable **Wor
 
 When disabled, RuneSchema does not create the new indexed world snapshots or apply queued world restores. Existing archives and pending requests are retained. Re-enable the experiment to review or cancel a pending request before loading that world. The setting is stored as `ExperimentalWorldRecovery` in that runtime's `characters/settings.json`; it does not enable blanket cleanup.
 
-The existing verified rollback backup before actual world cleanup remains available independently. It is created only when cleanup will change a world. An optional recovery archive or metadata failure does not invalidate the world or prevent cleanup after that rollback backup has verified.
+World cleanup runs independently of this optional archive. With world recovery off,
+RuneSchema removes verified invalid building records without creating a world
+backup. With it on, the original native payload is copied to this runtime's
+AppData world archive before repair. A backup, metadata or cache-path error is
+reported separately and does not prevent a validated world repair. No world
+backups are written beside the game or into Xbox's provider database.
 
 Normal cleanup is scoped to the selected character and local world at entry.
 The **Blanket save cleanup (fallback)** setting explicitly enables broader
@@ -38,6 +43,30 @@ cleanup examines the native archive being loaded and checks expected modded
 building IDs against that world's saved pieces. A verified enabled definition
 is protected while its world/menu registration is pending. A readiness message
 about a definition is not evidence that the world contained or lost that piece.
+
+At world-load preflight, a stale direct building asset is reloaded through its
+declared path before its enabled identity is checked. This bounded refresh uses
+the same class, PersistenceID and registration validation as the existing check;
+it does not certify a missing clone or mismatched registry. It runs at entry,
+not through a new periodic scan.
+
+The early native tolerant-mode check initializes its verified FString argument
+directly, so it does not depend on the later generic property-class cache.
+RuneSchema still reports tolerant mode as verified only after reading the
+native setting back. An unavailable optional policy does not stop pruning.
+
+The local corrective build treats native equipped items as independent records.
+Cleaning a bag slot does not remove gear just because its saved inventory hint
+uses the same number. Equipment's own `ItemData` still controls invalid-definition
+cleanup. Only the known legacy record containing a single
+`PlayerInventoryItemIndex` field is followed as a bag reference; unfamiliar
+records are retained. Baseline restoration cannot borrow a bag item's identity
+to approve an unresolved equipped definition.
+
+The offline editor displays complete equipped records under **Equipped** for
+inspection. They are read-only until a native equipment-editing adapter is
+verified. Removing a bag item preserves those independent records. NPC outfit
+export also reads the equipped record's own definition.
 
 ## Restore a snapshot
 

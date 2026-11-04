@@ -1,12 +1,25 @@
 # Shared networking content
 
 This is RuneSchema-owned transport content, not an NPC mod dependency or a
-replacement UE4SS host. The October 16 correction recooks the six existing
-networking components without changing their mounted object paths.
+replacement UE4SS host. The 0.8.1.0 candidate retains the six existing component
+paths and adds `ClientRuneSchemaCharacterAppearance` to the player registry
+bridge: RegistryKey/String, Subject/Actor, CharacterGuid/String, Payload/String,
+Revision/Int64 and Removed/Boolean. Its flags are reliable NetClient. The matching
+reliable server RPC `ServerSetRuneSchemaAppearanceSubject(Subject: Actor,
+Present: Boolean)` tracks client-known actors for relevance-safe snapshot delivery.
+
+The editor's compiled contract check and an isolated Steam CL254097 shipping
+probe verified all six classes, their existing transport contracts and the new
+typed appearance callback. The probe loaded no character or world. This is
+cooked-contract verification, not a rendered multiplayer or JBM acceptance test.
+See the [experimental appearance API](../../../docs/experimental/CHARACTER-APPEARANCE.md).
+
+The October 16 correction had previously recooked these same components to fix
+identity replication without changing their mounted object paths.
 
 The old shipped identity component lacked `IdentityPayload` and its notify
 callback even though the editable asset and current authoring source had them.
-A private Steam CL248854 menu-only comparison reproduces those two failures in
+A private Steam CL248854 menu-only comparison reproduced those two failures in
 the old containers and passes the identity, primary registry RPC and world-state
 checks with the replacement. No test constructs a gameplay actor or edits saves.
 Dedicated/co-op and actual NPC presentation remain live acceptance work.

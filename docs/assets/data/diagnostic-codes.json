@@ -1112,8 +1112,8 @@
       "title": "Server mod list received",
       "severity": "info",
       "subsystem": "Multiplayer",
-      "summary": "The client received and validated the host\u2019s enabled RuneSchema mod list.",
-      "impact": "The complete list is available in Helpy \u2192 Mods \u2192 Server comparison. This is informational and grants no gameplay permission.",
+      "summary": "The client received and validated the host\u00e2\u20ac\u2122s enabled RuneSchema mod list.",
+      "impact": "The complete list is available in Helpy \u00e2\u2020\u2019 Mods \u00e2\u2020\u2019 Server comparison. This is informational and grants no gameplay permission.",
       "action": "Browse or search the server list when checking required content.",
       "causes": "The owning-player bridge finished assembling an authority snapshot after connection.",
       "troubleshooting": "No repair is required. The list describes enabled mods for this host process; it is not proof that every loader succeeded or that client registries match.",
@@ -1261,6 +1261,19 @@
       "causes": "Delivery and teleport requests execute on the server with existing identity, item registry, quantity and ground checks. This does not grant arbitrary administrator rights.",
       "troubleshooting": "Use the allowed self-service actions. Reconnect after changing character/world or if the server revokes access.",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-net-007"
+    },
+    {
+      "id": "SaveCleanupCompleted",
+      "code": "RS-SAVE-006",
+      "title": "Save records removed",
+      "severity": "info",
+      "subsystem": "Save cleanup",
+      "summary": "RuneSchema removed records during a verified character or world cleanup.",
+      "impact": "The player receives a short notification after becoming ready in the loaded world. The original technical cleanup receipt remains in RuneSchema.log.",
+      "action": "No action is needed. A mod name is shown only when the removed records have an attributed owner that is absent from the active mod set.",
+      "causes": "A verified cleanup removed character records or world building instances. Notifications wait for the native player-ready check and use only removal counts plus a reliably attributed absent mod owner.",
+      "troubleshooting": "No action is required. Technical details remain in RuneSchema.log. This message does not assert that a transformed load payload has already been saved to disk.",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-save-006"
     }
   ],
   "structuredCodes": [

@@ -1,4 +1,5 @@
 #include "Runtime/HelpyNativeOverlayBridge.h"
+#include "HudSurfaceOwner.h"
 #include "Runtime/HelpyCursorRestore.h"
 #include "Runtime/HelpyGuideReservation.h"
 #include "Runtime/HelpyOverlayD3D11.h"
@@ -28,6 +29,7 @@ struct State {
     HWND Window=nullptr,PreviousFocus=nullptr,PreviousCapture=nullptr;WNDPROC Previous=nullptr;HCURSOR PreviousCursor=nullptr;int CursorAdds=0;std::atomic<bool> InputActive=false,HardwareCursor=false;std::atomic<int> CursorIndex=0;std::array<HCURSOR,11> Cursors{};
     HelpyCursorRestore CursorRestore;
     HelpyGuideReservation Guide;
+    HudSurfaceOwner Owner;void(*InputObserver)(bool)=nullptr;
     uint32_t Width=0,Height=0;bool Exclusive=false;
     HelpyOverlayFrames::Page* Page(){return Api=="Vulkan"?RendererVk.Page():Api=="OpenGL"?RendererGL.Page():Device11?Renderer11.Page():Renderer.Page();}
     void Hide(){Renderer.Hide();Renderer11.Hide();RendererGL.Hide();RendererVk.Hide();}
@@ -41,7 +43,9 @@ bool GameWindow(HWND window){wchar_t name[64]{};DWORD pid=0;GetWindowThreadProce
 bool Captured(State& state){return !state.Stopping&&state.Capturing&&GetForegroundWindow()==state.Window;}
 HCURSOR CurrentCursor(State& state){const auto index=state.CursorIndex.load();return index<0?nullptr:state.Cursors[size_t(index)<state.Cursors.size()?size_t(index):0];}
 void CursorInput(State& state,bool active){
+    active=active&&state.Owner.Interactive;
     if(state.InputActive==active)return;state.InputActive=active;
+    if(state.InputObserver)state.InputObserver(active);
     if(active){
         state.PreviousFocus=GetFocus();state.PreviousCapture=GetCapture();
         if(state.Previous)CallWindowProcW(state.Previous,state.Window,WM_MOUSELEAVE,0,0);
@@ -82,7 +86,7 @@ LRESULT CALLBACK Input(HWND window,UINT message,WPARAM wParam,LPARAM lParam){
     }
     std::unique_lock lock(state.Gate,std::try_to_lock);
     if(!lock){if(Captured(state)){if(message==WM_INPUT)return DefWindowProcW(window,message,wParam,lParam);if(isInput)return 0;}return state.Previous?CallWindowProcW(state.Previous,window,message,wParam,lParam):DefWindowProcW(window,message,wParam,lParam);}
-    auto* page=state.Page();const bool active=!state.Stopping&&page&&HelpyOverlayFrames::CapturesInput(*page,GetTickCount64())&&GetForegroundWindow()==window;state.Capturing=active;
+    auto* page=state.Page();const bool active=!state.Stopping&&state.Owner.Interactive&&page&&HelpyOverlayFrames::CapturesInput(*page,GetTickCount64())&&GetForegroundWindow()==window;state.Capturing=active;
     CursorInput(state,active);
     if(active&&page){state.CursorIndex=HelpyOverlayFrames::Read(page->CursorShape);if(message==WM_APP+0x5a1&&state.Shape)state.Shape.call<HCURSOR>(state.HardwareCursor?CurrentCursor(state):nullptr);}
     if(active&&page){
@@ -149,7 +153,7 @@ void BeforePresent(IDXGISwapChain* swap){
             HelpyOverlayFrames::ForwardInput(state.PendingInput,*page);
             if(state.Device11)state.Renderer11.Draw(state.Swap.Get());else state.Renderer.Draw(state.Swap.Get());
             const bool active=HelpyOverlayFrames::Alive(*page,GetTickCount64())&&GetForegroundWindow()==state.Window;
-            const bool capture=active&&HelpyOverlayFrames::CapturesInput(*page,GetTickCount64());
+            const bool capture=active&&state.Owner.Interactive&&HelpyOverlayFrames::CapturesInput(*page,GetTickCount64());
             if(state.Capturing.exchange(capture)!=capture)PostMessageW(state.Window,WM_APP+0x5a1,0,0);
             if(!active)state.Drawing=false;
         }
@@ -170,7 +174,7 @@ void BeforeGlSwap(HDC dc){
             HelpyOverlayFrames::ForwardInput(state.PendingInput,*page);
             if(state.Drawing)state.RendererGL.Draw(state.Width,state.Height);
             const bool active=HelpyOverlayFrames::Alive(*page,GetTickCount64())&&GetForegroundWindow()==window;
-            const bool capture=active&&HelpyOverlayFrames::CapturesInput(*page,GetTickCount64());
+            const bool capture=active&&state.Owner.Interactive&&HelpyOverlayFrames::CapturesInput(*page,GetTickCount64());
             if(state.Capturing.exchange(capture)!=capture)PostMessageW(window,WM_APP+0x5a1,0,0);if(!active)state.Drawing=false;
         }
     }catch(const std::exception& error){state.Error=error.what();state.Stopping=true;state.Hide();state.Capturing=false;state.Drawing=false;if(state.Window)PostMessageW(state.Window,WM_APP+0x5a1,0,0);}
@@ -267,6 +271,7 @@ void Prepare(State& state){
 }
 Json Call(const Json& request){
     auto& state=Shared();const auto action=request.value("Action",std::string{});
+    const auto client=request.value("Client",uint64_t(1));
     if(action=="GuideReservation"){
         std::lock_guard lock(state.Gate);const bool enabled=request.at("Enabled").get<bool>();
         if(enabled&&!state.Stopping)state.Guide.Start(request.at("AppPid").get<DWORD>(),request.at("Thread").get<DWORD>(),reinterpret_cast<HWND>(uintptr_t(request.at("Window").get<uint64_t>())));
@@ -274,11 +279,20 @@ Json Call(const Json& request){
         return {{"Ready",state.Guide.Active()},{"Status",state.Guide.Status}};
     }
     if(action=="Prepare")state.Suspended=false;
-    if(action=="Suspend")state.Suspended=true;
     if(action=="Prepare"&&!state.Started.exchange(true)){state.Stopping=false;state.Worker=std::jthread([&state]{Prepare(state);});}
     std::lock_guard lock(state.Gate);
+    if(action=="Suspend"&&(!state.Owner.Client||state.Owner.Owns(client)))state.Suspended=true;
     if(action=="Open"){
         if(!state.Ready||!state.Prepared||state.Stopping)return {{"Ready",false},{"Error",state.Error}};
+        const bool interactive=request.value("Interactive",true);
+        auto* current=state.Page();
+        if(!state.Owner.CanOpen(client,interactive,current&&HelpyOverlayFrames::Alive(*current,GetTickCount64())))
+            return {{"Ready",true},{"Pending",true},{"Busy",true},{"PassivePresentation",true},{"Error",""},{"Status","Another HUD panel is using the shared surface"}};
+        // Keep the old resources alive until their GPU work completes; retry from the app thread.
+        if(!state.Idle()){
+            state.Hide();state.Capturing=false;state.Drawing=false;if(state.Window)PostMessageW(state.Window,WM_APP+0x5a1,0,0);
+            return {{"Ready",true},{"Failed",false},{"Pending",true},{"PassivePresentation",true},{"Api",state.Api},{"Error",""},{"Status","Waiting for previous overlay frames to finish"}};
+        }
         state.Capturing=false;
         InterlockedExchange(&state.PendingInput.InputRead,HelpyOverlayFrames::Read(state.PendingInput.InputWrite));InterlockedExchange(&state.PendingInput.InputOverflow,0);
         if(state.Api=="Vulkan"){
@@ -291,17 +305,21 @@ Json Call(const Json& request){
         else if(state.Api=="OpenGL"){state.PendingApp=request.at("AppPid").get<uint32_t>();state.PendingNonce=request.at("Nonce").get<std::string>();Name(GetCurrentProcessId(),state.PendingApp,state.PendingNonce);}
         else if(state.Device11)state.Renderer11.Create(state.Device11.Get(),request.at("AppPid").get<uint32_t>(),request.at("Nonce").get<std::string>(),state.Vertex.Get(),state.Pixel.Get());
         else state.Renderer.Create(state.Device.Get(),state.Queue.Get(),state.Swap.Get(),request.at("AppPid").get<uint32_t>(),request.at("Nonce").get<std::string>(),state.Vertex.Get(),state.Pixel.Get());
+        state.Owner.Open(client,interactive);
+        state.Suspended=false;
         if(!state.Previous){SetLastError(0);state.Previous=reinterpret_cast<WNDPROC>(SetWindowLongPtrW(state.Window,GWLP_WNDPROC,reinterpret_cast<LONG_PTR>(Input)));if(!state.Previous)throw std::runtime_error("Cannot acquire the game window's overlay input route");}
     }
-    if(action=="Show")state.Drawing=true;
-    if(action=="Hide"){state.Hide();state.Capturing=false;state.Drawing=false;if(state.Window)PostMessageW(state.Window,WM_APP+0x5a1,0,0);}
+    if(action=="Show"&&state.Owner.Owns(client))state.Drawing=true;
+    if((action=="Hide"||action=="Release")&&state.Owner.Owns(client)){state.Hide();state.Capturing=false;state.Drawing=false;if(action=="Release")state.Owner.Release(client);if(state.Window)PostMessageW(state.Window,WM_APP+0x5a1,0,0);}
     auto adapter=state.Api=="Vulkan"&&state.Vulkan?state.Vulkan->Adapter:state.Api=="OpenGL"?state.GlAdapter:state.Device?state.Device->GetAdapterLuid():LUID{};if(state.Device11){ComPtr<IDXGIDevice> dxgi;ComPtr<IDXGIAdapter> gpu;DXGI_ADAPTER_DESC desc{};if(SUCCEEDED(state.Device11.As(&dxgi))&&SUCCEEDED(dxgi->GetAdapter(&gpu))&&SUCCEEDED(gpu->GetDesc(&desc)))adapter=desc.AdapterLuid;}
     DXGI_SWAP_CHAIN_DESC desc{};
     if(state.Swap){state.Swap->GetDesc(&desc);BOOL exclusive=FALSE;if(SUCCEEDED(state.Swap->GetFullscreenState(&exclusive,nullptr)))state.Exclusive=exclusive!=FALSE;}
     auto* page=state.Page();
     if(page)HelpyOverlayFrames::ForwardInput(state.PendingInput,*page);
-    return {{"PassivePresentation",true},{"Ready",state.Ready.load()&&state.Prepared.load()&&!state.Stopping.load()},{"Failed",state.Stopping.load()},{"Error",state.Error},{"Api",state.Api},{"Attached",page&&HelpyOverlayFrames::Read(page->Bound)==1},{"Visible",page&&HelpyOverlayFrames::Read(page->Visible)==1},{"Presented",page&&HelpyOverlayFrames::Read(page->Reading)>=0},{"BackBufferFormat",unsigned(desc.BufferDesc.Format)},{"Width",state.Width},{"Height",state.Height},{"Window",uint64_t(reinterpret_cast<uintptr_t>(state.Window))},{"Exclusive",state.Exclusive},{"AdapterLow",adapter.LowPart},{"AdapterHigh",adapter.HighPart}};
+    const bool owns=state.Owner.Owns(client);
+    return {{"OwnsSurface",owns},{"PassivePresentation",true},{"Ready",state.Ready.load()&&state.Prepared.load()&&!state.Stopping.load()},{"Failed",state.Stopping.load()},{"Error",state.Error},{"Api",state.Api},{"Attached",owns&&page&&HelpyOverlayFrames::Read(page->Bound)==1},{"Visible",owns&&page&&HelpyOverlayFrames::Read(page->Visible)==1},{"Presented",owns&&page&&HelpyOverlayFrames::Read(page->Reading)>=0},{"BackBufferFormat",unsigned(desc.BufferDesc.Format)},{"Width",state.Width},{"Height",state.Height},{"Window",uint64_t(reinterpret_cast<uintptr_t>(state.Window))},{"Exclusive",state.Exclusive},{"AdapterLow",adapter.LowPart},{"AdapterHigh",adapter.HighPart}};
 }
+void SetInputObserver(void(*observer)(bool)) noexcept {auto& state=Shared();std::lock_guard lock(state.Gate);state.InputObserver=observer;}
 VkResult Negotiate(VkNegotiateLayerInterface* version){
     if(!version||version->loaderLayerInterfaceVersion<2)return VK_ERROR_INITIALIZATION_FAILED;version->loaderLayerInterfaceVersion=2;version->pfnGetInstanceProcAddr=VulkanLayer::GetInstance;version->pfnGetDeviceProcAddr=VulkanLayer::GetDevice;version->pfnGetPhysicalDeviceProcAddr=nullptr;return VK_SUCCESS;
 }

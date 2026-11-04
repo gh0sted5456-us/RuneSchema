@@ -67,9 +67,13 @@ int main(int argc,char** argv)try{
         const auto archive=[](const std::string& payload){std::string bytes="SAVE";for(unsigned i=0;i<4;++i)bytes.push_back(char(payload.size()>>(i*8)));return bytes+payload;};
         const auto older=archive("older whole-world fixture"),newer=archive("current fixture");
         assert(!world::Enabled(worlds));assert(rejects([&]{world::Store(worlds,"WorldFixture",older,"Manual");}));
+        std::string backupIssue;
+        assert(world::BeforeCleanup(worlds,"WorldFixture",older,Json::object(),backupIssue).empty()&&backupIssue.empty());
+        assert(!fs::exists(worlds));
         assert(!world::ApplyQueued(worlds,"WorldFixture",newer,[](const auto&){throw std::runtime_error("disabled recovery must not run");}));
         SetWorldRecovery(directory,true);assert(world::Enabled(worlds));
         const auto file=world::Store(worlds,"WorldFixture",older,"Before cleanup",{{"Mods",ActiveMods()}});auto entries=world::List(worlds);assert(entries.size()==1&&entries[0].Slot=="WorldFixture"&&entries[0].Mods.is_array());
+        assert(world::BeforeCleanup(worlds,"WorldFixture",older,Json::object(),backupIssue)==file&&backupIssue.empty());
         const auto entry=entries[0];const auto native=root/"native/SaveGames";const auto target=native/"WorldFixture.sav";PS::CacheBundleIO::Publish(target,newer);
         assert(rejects([&]{world::RestoreFile(worlds,entry,native,PS::CacheBundleIO::Hash(newer),[]{return false;});}));
         world::RestoreFile(worlds,entry,native,PS::CacheBundleIO::Hash(newer),[]{return true;});assert(PS::CacheBundleIO::Read(target,world::MaximumWorldBytes)==older);
@@ -82,6 +86,8 @@ int main(int argc,char** argv)try{
         assert(!world::ApplyQueued(worlds,"WorldFixture",newer,[](const auto&){throw std::runtime_error("world replay");}));
         assert(rejects([&]{world::Store(worlds,"../escape",older,"Manual");}));assert(rejects([&]{world::Validate("SAVEbad");}));
         PS::CacheBundleIO::Publish(file,archive("changed"));assert(rejects([&]{world::Read(worlds,entry);}));
+        assert(world::BeforeCleanup(worlds,"WorldFixture",older,Json::object(),backupIssue).empty()&&!backupIssue.empty());
+        assert(PS::CacheBundleIO::Read(file,world::MaximumWorldBytes)==archive("changed"));
         assert(PS::CacheBundleIO::Read(target,world::MaximumWorldBytes)==older);
     }
     std::cout<<"Verified whole-save backups, metadata, identity checks, offline restoration and one-shot native restore claims.\n";

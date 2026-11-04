@@ -29,7 +29,7 @@ dotnet "$(cygpath -w "$stage/bin/Release/net10.0/HelpyCache.dll")" --folder "$(c
 
 def render():
     result = HEADER
-    for name in ("HelpyCache.csproj", "Program.cs", "AuthoringInputs.cs", "AuthoringInputs.Tests.cs", "CreationArchive.cs", "CreationArchive.Tests.cs", "packages.lock.json"):
+    for name in ("HelpyCache.csproj", "Program.cs", "CacheMetadata.cs", "AuthoringInputs.cs", "AuthoringInputs.Tests.cs", "CreationArchive.cs", "CreationArchive.Tests.cs", "packages.lock.json"):
         delimiter = "RUNESCHEMA_" + name.replace(".", "_").upper()
         source = (ROOT / name).read_text(encoding="utf-8")
         assert delimiter not in source.splitlines()
@@ -39,7 +39,7 @@ def render():
 
 def render_powershell():
     source = []
-    for name in ("HelpyCache.csproj", "Program.cs", "AuthoringInputs.cs", "AuthoringInputs.Tests.cs", "CreationArchive.cs", "CreationArchive.Tests.cs", "packages.lock.json"):
+    for name in ("HelpyCache.csproj", "Program.cs", "CacheMetadata.cs", "AuthoringInputs.cs", "AuthoringInputs.Tests.cs", "CreationArchive.cs", "CreationArchive.Tests.cs", "packages.lock.json"):
         text = (ROOT / name).read_text(encoding="utf-8")
         assert "'@" not in text.splitlines()
         source.append(f"$builderSource=@'\n{text.rstrip()}\n'@\n"

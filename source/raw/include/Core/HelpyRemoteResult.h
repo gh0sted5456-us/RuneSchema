@@ -1,4 +1,5 @@
 #pragma once
+#include "../../../shared/NativeServerAdmin.h"
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
@@ -34,6 +35,7 @@ public:
             throw std::runtime_error("Invalid remote receipt object");
         if(result.contains("GrantResults")&&(!result["GrantResults"].is_array()||result["GrantResults"].size()>64))
             throw std::runtime_error("Invalid remote grant receipt rows");
+        if(result.contains("ServerControl")&&!NativeServerAdmin::Snapshot(result["ServerControl"]))throw std::runtime_error("Invalid server administration snapshot");
         Reset();return result;
     }
 };

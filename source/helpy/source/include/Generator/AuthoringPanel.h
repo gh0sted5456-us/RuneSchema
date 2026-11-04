@@ -60,7 +60,7 @@ inline const std::string& CachedJson(const Json& value,const char* id){
     return cached.Text;
 }
 inline void TextJson(const Json& value,const char* id,float height=190){
-    const auto& text=CachedJson(value,id);ImGui::BeginChild(id,ImVec2(0,height),true,ImGuiWindowFlags_HorizontalScrollbar);ImGui::TextUnformatted(text.c_str());ImGui::EndChild();
+    const auto& text=CachedJson(value,id);HelpyImGuiTheme::BeginPanel(id,ImVec2(0,height),true,ImGuiWindowFlags_HorizontalScrollbar);ImGui::TextUnformatted(text.c_str());PS::HelpyImGuiTheme::EndPanel();
 }
 inline void ApplyResult(){
     const auto& snap=AuthoringClient::Snapshot;const auto receipt=snap.value("RequestId",uint64_t{});if(!receipt||Applied==receipt)return;Applied=receipt;
@@ -111,12 +111,12 @@ inline void Content(){
         HelpyImGuiTheme::Toggle("Read captured values",&ReadValues);ImGui::SameLine();Button("Export search results","ExportCaptured",{{"Kind","AssetSearch"}});
         const auto& found=AuthoringClient::Result("AssetSearch");
         if(found.contains("AssetMatches")&&found["AssetMatches"].is_array()){
-            ImGui::BeginChild("##authoring-matches",ImVec2(0,145),true);int i=0;
+            HelpyImGuiTheme::BeginPanel("##authoring-matches",ImVec2(0,145),true);int i=0;
             for(const auto& row:found["AssetMatches"]){const auto key=row.value("Key",row.value("Path",std::string{}));ImGui::PushID(i++);if(ImGui::Selectable(row.value("Name",row.value("Label",key)).c_str(),Entry.value("Key",std::string{})==key)){Entry=row;AuthoringClient::Submit("AssetCapture",{{"Loader",Loader},{"Entry",row},{"ReadValues",ReadValues}});}
 #if defined(HELPY_PREVIEW)
                 HelpyPreviewHooks::AuthoringButtons["Asset:"+key]=HelpyPreviewHooks::LastRect();
 #endif
-                ImGui::PopID();}ImGui::EndChild();
+                ImGui::PopID();}PS::HelpyImGuiTheme::EndPanel();
         }
         constexpr const char* formats[]{"Basic starter","Patch","Clone","Field reference"};ImGui::SetNextItemWidth(200);
         if(ImGui::BeginCombo("Format",formats[std::clamp(Mode,0,3)])){for(int i=0;i<4;++i){const bool allowed=capability&&(i!=1||capability->value("Patch",false))&&(i!=2||capability->value("Clone",false));ImGui::BeginDisabled(!allowed);if(ImGui::Selectable(formats[i],Mode==i))Mode=i;ImGui::EndDisabled();}ImGui::EndCombo();}
@@ -184,11 +184,11 @@ inline void Traces(){
     if(ImGui::CollapsingHeader("Event rules from captured parameters")){
         const auto& result=AuthoringClient::Result("PlayerTraceStop");
         if(result.contains("Events")&&result["Events"].is_object()&&result["Events"].contains("events")){
-            ImGui::BeginChild("##captured-events",ImVec2(0,140),true);int i=0;
+            HelpyImGuiTheme::BeginPanel("##captured-events",ImVec2(0,140),true);int i=0;
             for(const auto& event:result["Events"]["events"]){ImGui::PushID(i++);
                 ImGui::BeginDisabled(!event.contains("parameters"));
                 if(ImGui::Selectable(event.value("function",std::string("Captured event")).c_str()))AuthoringClient::Submit("EventSuggestions",{{"Event",event}});
-                ImGui::EndDisabled();ImGui::PopID();}ImGui::EndChild();
+                ImGui::EndDisabled();ImGui::PopID();}PS::HelpyImGuiTheme::EndPanel();
         }
         const auto& suggestions=AuthoringClient::Result("EventSuggestions");
         if(suggestions.contains("Suggestions")){
@@ -211,7 +211,7 @@ inline void Inspector(){
     ImGui::SliderInt("Player capture delay",&Delay,0,30);Button("Save player capture preset","PlayerPresetSave",{{"DelaySeconds",Delay}});ImGui::SliderFloat("Crosshair range (cm)",&Range,100,100000,"%.0f");
     HelpyTextInput::InputText("Search loaded objects",Query,sizeof(Query));ImGui::SliderInt("Maximum results",&Limit,1,500);Button("Search objects","Browse",{{"Query",Query},{"Limit",Limit}});
     ObjectFilter.Draw("Filter loaded object results");Button("Export object search results","ExportCaptured",{{"Kind","ObjectSearch"}});
-    const auto& result=AuthoringClient::Result("Browse");if(result.contains("Matches")){ImGui::BeginChild("##object-matches",ImVec2(0,180),true);for(const auto& path:result["Matches"]){const auto text=path.get<std::string>();if(ObjectFilter.PassFilter(text.c_str())&&ImGui::Selectable(text.c_str(),text==ObjectPath)){Copy(ObjectPath,sizeof(ObjectPath),text);AuthoringClient::Submit("Object",{{"Path",text}});}}ImGui::EndChild();}
+    const auto& result=AuthoringClient::Result("Browse");if(result.contains("Matches")){HelpyImGuiTheme::BeginPanel("##object-matches",ImVec2(0,180),true);for(const auto& path:result["Matches"]){const auto text=path.get<std::string>();if(ObjectFilter.PassFilter(text.c_str())&&ImGui::Selectable(text.c_str(),text==ObjectPath)){Copy(ObjectPath,sizeof(ObjectPath),text);AuthoringClient::Submit("Object",{{"Path",text}});}}PS::HelpyImGuiTheme::EndPanel();}
     HelpyTextInput::InputText("Object path",ObjectPath,sizeof(ObjectPath));Button("Inspect selected object","Object",{{"Path",ObjectPath}});
     if(ImGui::CollapsingHeader("Saved-state reports")){ImGui::BeginDisabled(HelpyEnvironment::Server());Button("Read saved items","SavedItems");ImGui::EndDisabled();ImGui::SameLine();Button("Read live building registry","SavedWorld");}
 }

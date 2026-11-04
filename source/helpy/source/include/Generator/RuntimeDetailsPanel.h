@@ -113,7 +113,7 @@ inline void RenderContents(){
             const char* name=tab==Tab::Runtime?"Runtime":tab==Tab::Attributions?"Attributions":"Legal";
             if(ImGui::BeginTabItem(name,nullptr,select&&requested==tab?ImGuiTabItemFlags_SetSelected:0)){
                 Selected=tab;
-                if(ImGui::BeginChild("runtime-tab-body",{0,0},false)){
+                if(HelpyImGuiTheme::BeginPanel("runtime-tab-body",{0,0},false)){
                     if(tab==Tab::Runtime)RenderRuntime();else{
                         ImGui::TextWrapped("%s",tab==Tab::Attributions?HelpyBranding::Credits:HelpyBranding::Legal);
                         if(tab==Tab::Legal&&HelpyImGuiTheme::SoftButton("Open complete legal notice")){
@@ -121,7 +121,7 @@ inline void RenderContents(){
                             ShellExecuteW(nullptr,L"open",file.c_str(),nullptr,nullptr,SW_SHOWNORMAL);
                         }
                     }
-                }ImGui::EndChild();ImGui::EndTabItem();
+                }PS::HelpyImGuiTheme::EndPanel();ImGui::EndTabItem();
             }
         }ImGui::EndTabBar();SelectTab=false;
     }

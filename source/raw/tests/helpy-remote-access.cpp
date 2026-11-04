@@ -36,6 +36,9 @@ int Run(){
     Check(state.Authenticate("p1","w2",true,pin,pin,now+minutes(1))==S::Result::Granted);
     Check(!state.Allowed("p1","w2",true,pin,now+hours(2)));
     Check(state.Authenticate("p1","w2",true,pin,pin,now+hours(2))==S::Result::Granted);
+    Check(state.Allowed("p1","w2",true,pin,now+hours(2)+minutes(59),false));
+    Check(!state.Allowed("p1","w2",true,pin,now+hours(3),false));
+    Check(state.Authenticate("p1","w2",true,pin,pin,now+hours(2))==S::Result::Granted);
     state.Revoke("p1");Check(!state.Allowed("p1","w2",true,pin,now+hours(2)));
     state.Reset();
     for(unsigned i=0;i<256;++i)Check(state.Authenticate(std::to_string(i),"w2",true,pin,pin,now)==S::Result::Granted);

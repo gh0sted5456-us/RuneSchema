@@ -1,7 +1,7 @@
 {
   "FileVersion": 3,
   "Version": 1,
-  "VersionName": "0.7.7.2",
+  "VersionName": "0.8.1.0",
   "FriendlyName": "RuneSchema",
   "Description": "Cooked RuneSchema transport bridge content.",
   "Category": "RuneSchema",

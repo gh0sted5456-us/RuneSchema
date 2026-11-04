@@ -44,6 +44,24 @@ int RunConfigSettings() {
     const auto restarted=DecodeSettings(DecodeIniDocument(ConfigFiles::Read(root/"server-settings.ini")).dump()).helpyAuthority;
     assert(restarted.allowPinAccess&&restarted.accessPin=="world-2398482"&&restarted.allowClientItemGrants&&restarted.allowClientTeleport
         &&restarted.maximumItemCount==250&&restarted.permittedPlayerGuids==persisted.helpyAuthority.permittedPlayerGuids);
+    auto accessSettings=DecodeSettings("{}");auto& authorization=accessSettings.helpyAuthority;
+    assert(!authorization.autoAuthorizeConnectingPlayers&&authorization.authorizedPlayers.empty());
+    authorization.autoAuthorizeConnectingPlayers=true;
+    HelpyAuthorizedPlayer identity{"01234567-89ab-cdef-0123-456789abcdef","Character","Account","Game Pass",41};
+    assert(HelpyPlayerAuthorization::Remember(authorization.authorizedPlayers,identity));
+    assert(!HelpyPlayerAuthorization::Remember(authorization.authorizedPlayers,identity));
+    assert(!HelpyPlayerAuthorization::Contains(authorization.authorizedPlayers,std::string(32,'b')));
+    auto reconnected=identity;reconnected.playerId=87;reconnected.accountName="Renamed account";
+    assert(HelpyPlayerAuthorization::Remember(authorization.authorizedPlayers,reconnected)&&authorization.authorizedPlayers.size()==1);
+    ConfigFiles::Write(root/"authorized-server.ini",EncodeIniDocument(SettingsDocument(accessSettings)));
+    const auto accessRestart=DecodeSettings(DecodeIniDocument(ConfigFiles::Read(root/"authorized-server.ini")).dump()).helpyAuthority;
+    assert(accessRestart.autoAuthorizeConnectingPlayers&&HelpyPlayerAuthorization::Contains(accessRestart.authorizedPlayers,identity.characterGuid));
+    assert(accessRestart.authorizedPlayers[0].accountName=="Renamed account"&&accessRestart.authorizedPlayers[0].platform=="Game Pass"&&accessRestart.authorizedPlayers[0].playerId==87);
+    assert(!HelpyPlayerAuthorization::Contains(accessRestart.authorizedPlayers,"Renamed account"));
+    assert(!HelpyPlayerAuthorization::Contains(accessRestart.authorizedPlayers,"87"));
+    Rejects([&]{DecodeSettings(R"({"helpyAuthority":{"authorizedPlayers":[{"characterGuid":"bad","accountName":"Account"}]}})");});
+    auto invalid=identity;invalid.accountName="bad\nname";
+    Rejects([&]{HelpyPlayerAuthorization::Remember(authorization.authorizedPlayers,invalid);});
     assert(DecodeSettings("{}").helpyHotkey=="F2");
     assert(DecodeSettings(R"({"helpyHotkey":"f5"})").helpyHotkey=="F5");
     assert(DecodeSettings(R"({"helpyHotkey":"X"})").helpyHotkey=="X");

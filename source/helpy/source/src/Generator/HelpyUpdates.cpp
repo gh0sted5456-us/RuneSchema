@@ -1,6 +1,7 @@
 #include "Core/ProcessExitFuture.h"
 #include "Runtime/HelpyUpdates.h"
 #include "Core/RuneSchemaUpdateInfo.h"
+#include "Core/HelpyHotfixInfo.h"
 #include "Core/SteamNewsInfo.h"
 #include "Core/ConfigFiles.h"
 #include "Core/RuneSchemaDataRoot.h"
@@ -34,6 +35,7 @@ void Load(){
         const auto bounded=[&](const char* key){const auto value=data.value(key,std::string{});return value.size()<=256?value:std::string{};};
         Result.MainVersion=bounded("MainVersion");Result.ReleaseVersion=bounded("ReleaseVersion");
         Result.MainError=bounded("MainError");Result.ReleaseError=bounded("ReleaseError");
+        Result.Hotfix=data.value("Hotfix",nlohmann::json{});
         const auto news=SteamNewsInfo::LatestUpdate(data.value("GameNews",nlohmann::json::object()),Now());
         if(news){Result.GameUpdateTitle=news->Title;Result.GameUpdateUrl=news->Url;Result.GameUpdateDate=news->Date;}
         if(!Result.MainVersion.empty()&&!RuneSchemaUpdateInfo::Parse(Result.MainVersion))Result.MainVersion.clear();
@@ -43,11 +45,11 @@ void Load(){
 void Save(){try{
     const auto path=CachePath();if(path.empty())return;
     ConfigFiles::Write(path,nlohmann::json{{"Format",1},{"CheckedAt",Result.CheckedAt},{"MainVersion",Result.MainVersion},
-        {"ReleaseVersion",Result.ReleaseVersion},{"MainError",Result.MainError},{"ReleaseError",Result.ReleaseError},
+        {"ReleaseVersion",Result.ReleaseVersion},{"MainError",Result.MainError},{"ReleaseError",Result.ReleaseError},{"Hotfix",Result.Hotfix},
         {"GameNews",{{"appnews",{{"appid",1374490},{"newsitems",nlohmann::json::array({{{"feedname","steam_community_announcements"},{"title",Result.GameUpdateTitle},{"url",Result.GameUpdateUrl},{"date",Result.GameUpdateDate}}})}}}}}}.dump(2));
 }catch(...){Result.CacheError="Update results could not be cached; checking still works for this session.";}}
 struct InternetHandle {HINTERNET Value{};~InternetHandle(){if(Value)WinHttpCloseHandle(Value);}operator HINTERNET() const{return Value;}};
-std::string Fetch(const wchar_t* host,const wchar_t* path){
+std::string Fetch(const wchar_t* host,const wchar_t* path,std::size_t maximum=256*1024){
     if(Cancelled)throw std::runtime_error("Check cancelled");
     InternetHandle session{WinHttpOpen(L"RuneSchema-Helpy-UpdateCheck/1",WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,WINHTTP_NO_PROXY_NAME,WINHTTP_NO_PROXY_BYPASS,0)};
     if(!session)throw std::runtime_error("Network session unavailable");
@@ -71,12 +73,12 @@ std::string Fetch(const wchar_t* host,const wchar_t* path){
         if(Cancelled)throw std::runtime_error("Check cancelled");
         if(std::chrono::steady_clock::now()>deadline)throw std::runtime_error("Metadata read timed out");
         DWORD count=0;if(!WinHttpReadData(request,buffer.data(),static_cast<DWORD>(buffer.size()),&count))throw std::runtime_error("Metadata read failed");
-        if(!count)break;if(body.size()+count>256*1024)throw std::runtime_error("Metadata response exceeds the size limit");
+        if(!count)break;if(body.size()+count>maximum)throw std::runtime_error("Metadata response exceeds the size limit");
         body.append(buffer.data(),count);
     }
     return body;
 }
-View Check(){
+View Check(const std::string& installed){
     View result;result.CheckedAt=Now();Progress=1;
     try{
         const auto source=Fetch(L"raw.githubusercontent.com",L"/gh0sted5456-us/RuneSchema/main/source/raw/include/Utility/BuildInfo.h");
@@ -96,6 +98,9 @@ View Check(){
         if(!news)throw std::runtime_error("No dated update announcement was returned");
         result.GameUpdateTitle=news->Title;result.GameUpdateUrl=news->Url;result.GameUpdateDate=news->Date;
     }catch(const std::exception& error){result.GameUpdateError=error.what();}
+    if(!Cancelled)try{
+        result.Hotfix=HelpyHotfixInfo::Select(nlohmann::json::parse(Fetch(L"api.github.com",L"/repos/gh0sted5456-us/RuneSchema/releases?per_page=20",1024*1024)),installed);
+    }catch(const std::exception& error){result.HotfixError=error.what();}
     Progress=4;return result;
 }
 }
@@ -106,7 +111,7 @@ int CooldownSeconds(){const auto remaining=NextManual-std::chrono::steady_clock:
 bool Start(const std::string& installed){
     Load();if(Busy()||!RuneSchemaUpdateInfo::Parse(installed)||std::chrono::steady_clock::now()<NextManual)return false;
     NextManual=std::chrono::steady_clock::now()+std::chrono::seconds(60);Cancelled=false;Progress=0;
-    try{Worker=std::async(std::launch::async,Check);return true;}catch(...){Result.MainError="Could not start update worker";return false;}
+    try{Worker=std::async(std::launch::async,Check,installed);return true;}catch(...){Result.MainError="Could not start update worker";return false;}
 }
 bool Tick(bool automatic,bool networkAllowed,const std::string& installed){
     Load();bool notify=false;

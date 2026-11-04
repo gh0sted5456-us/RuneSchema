@@ -11,7 +11,7 @@ inline std::string Utf8(const std::filesystem::path& value){const auto text=valu
 inline nlohmann::json Bind(nlohmann::json entries,const std::filesystem::path& game,const std::filesystem::path& bridge,bool enabled){
     if(!entries.is_array()||entries.size()>64)throw std::runtime_error("Vulkan startup bindings are invalid");
     entries.erase(std::remove_if(entries.begin(),entries.end(),[&](const auto& item){if(!item.is_object()||!item.contains("Executable")||!item.at("Executable").is_string()||!item.contains("Bridge")||!item.at("Bridge").is_string())throw std::runtime_error("Vulkan startup binding is malformed");return _wcsicmp(std::filesystem::u8path(item.at("Executable").template get<std::string>()).c_str(),game.c_str())==0;}),entries.end());
-    if(enabled){if(!game.is_absolute()||!bridge.is_absolute()||game.extension()!=L".exe"||bridge.filename()!=L"RuneSchema.Helpy.dll")throw std::runtime_error("Vulkan startup requires an absolute game and bridge path");entries.push_back({{"Executable",Utf8(game)},{"Bridge",Utf8(bridge)}});}return entries;
+    if(enabled){if(!game.is_absolute()||!bridge.is_absolute()||game.extension()!=L".exe"||bridge.filename()!=L"RuneSchema.HUD.dll")throw std::runtime_error("Vulkan startup requires an absolute game and HUD plugin path");entries.push_back({{"Executable",Utf8(game)},{"Bridge",Utf8(bridge)}});}return entries;
 }
 inline std::filesystem::path GameExecutable(const std::filesystem::path& modRoot){
     const auto binaries=modRoot.parent_path().parent_path().parent_path();std::filesystem::path executable;

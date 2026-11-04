@@ -4,7 +4,7 @@ Find a code from your log to see what happened and what to try next. Use the mes
 
 Open Helpy's **Diagnostics** for an overview, grouped issues and Live Log. You can copy an entry or follow its reference link here. The viewer leaves the original logs unchanged; recent activity includes normal messages, while notifications focus on warnings and errors.
 
-This page contains **97 legacy reference entries**, **222 structured diagnostic entries** and **19 bridge reason codes**. RS-JRN-001, RS-JRN-002 and RS-SPAWN-001 each have an older and a structured meaning. Follow the link from your message, or check its source and namespace to choose the matching entry. Links between the two meanings are included.
+This page contains **98 legacy reference entries**, **222 structured diagnostic entries** and **19 bridge reason codes**. RS-JRN-001, RS-JRN-002 and RS-SPAWN-001 each have an older and a structured meaning. Follow the link from your message, or check its source and namespace to choose the matching entry. Links between the two meanings are included.
 
 Structured reports in `RSDiagLog.jsonl` include their source, context and outcome. Not every operation emits every code. `Unknown` means the cause has not been identified; use the severity in the actual message. `Partial` means some changes may have occurred, and `Deferred` points to later or restart handling. `Skipped` or `Blocked` can describe one step while the rest of the mod continues.
 
@@ -1457,7 +1457,7 @@ Confirm required building definitions match, including versioned Totems or other
 
 **Multiplayer · Typical level: info**
 
-The client received and validated the host’s enabled RuneSchema mod list.
+The client received and validated the hostâ€™s enabled RuneSchema mod list.
 
 **Common reasons**
 
@@ -1465,7 +1465,7 @@ The owning-player bridge finished assembling an authority snapshot after connect
 
 **What RuneSchema does**
 
-The complete list is available in Helpy → Mods → Server comparison. This is informational and grants no gameplay permission.
+The complete list is available in Helpy â†’ Mods â†’ Server comparison. This is informational and grants no gameplay permission.
 
 **What to do next**
 
@@ -2448,6 +2448,34 @@ Read the original error, check free space and the selected runtime, then review 
 Read the original error, check free space and the selected runtime, then review or cancel the request in Save Recovery. Do not delete the prior-save backup.
 
 [Direct link to RS-SAVE-005](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-save-005)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-SAVE-006" data-rs-severity="info" markdown="1">
+
+### RS-SAVE-006: Save records removed {#rs-save-006}
+
+**Save cleanup · Typical level: info**
+
+RuneSchema removed records during a verified character or world cleanup.
+
+**Common reasons**
+
+A verified cleanup removed character records or world building instances. Notifications wait for the native player-ready check and use only removal counts plus a reliably attributed absent mod owner.
+
+**What RuneSchema does**
+
+The player receives a short notification after becoming ready in the loaded world. The original technical cleanup receipt remains in RuneSchema.log.
+
+**What to do next**
+
+No action is needed. A mod name is shown only when the removed records have an attributed owner that is absent from the active mod set.
+
+**Troubleshooting checks**
+
+No action is required. Technical details remain in RuneSchema.log. This message does not assert that a transformed load payload has already been saved to disk.
+
+[Direct link to RS-SAVE-006](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-save-006)
 
 </section>
 

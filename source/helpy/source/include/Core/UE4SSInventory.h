@@ -2,7 +2,7 @@
 #include "Core/ModManager.h"
 #include "Core/UE4SSPackages.h"
 
-// Read-only inventory. File configuration is not evidence that a mod loaded.
+// File configuration is not evidence that a mod loaded.
 namespace PS::UE4SSInventory {
 using Json=nlohmann::json;namespace fs=std::filesystem;
 inline Json Metadata(const fs::path& root){
@@ -37,8 +37,8 @@ inline Json Read(const fs::path& root){
         auto metadata=Metadata(package.Root);
         if(managed&&metadata.value("version",std::string{}).empty()&&!parent.value("version",std::string{}).empty()){metadata["version"]=parent.at("version");metadata["source"]="RuneSchema parent metadata";}
         const auto version=metadata.value("version",std::string{});
-        rows.push_back({{"Name",package.Name},{"Owner",managed?package.Owner:std::string{}},{"Folder",package.Root.string()},{"Managed",managed},{"ConfiguredEnabled",enabled},
-            {"NativeUnsupported",managed&&!package.Native.empty()},{"Kind",package.Native.empty()?"Lua":package.Main.empty()?"Native":"Lua + native"},{"Version",version},{"Metadata",std::move(metadata)}});
+        rows.push_back({{"Name",package.Name},{"Owner",managed?package.Owner:std::string{}},{"Folder",package.Root.string()},{"Managed",managed},{"ConfiguredEnabled",enabled&&package.Enabled},{"ParentEnabled",managed?enabled:true},
+            {"LoaderEnabled",package.Enabled},{"NativeUnsupported",managed&&!package.Native.empty()},{"Kind",package.Native.empty()?"Lua":package.Main.empty()?"Native":"Lua + native"},{"Version",version},{"Metadata",std::move(metadata)}});
     };
     size_t entries=0;
     for(const auto& entry:fs::directory_iterator(mods)){
@@ -51,7 +51,7 @@ inline Json Read(const fs::path& root){
     Json owners;{std::lock_guard lock(ModManager::Gate);owners=ModManager::Read(root,true);}
     for(const auto& owner:owners.at("Rows"))if(owner.value("Present",false)){
         try{for(const auto& package:UE4SSPackages::Discover(fs::path(owner.at("Folder").get<std::string>()),owner.at("Name").get<std::string>()))append(package,true,owner.value("Enabled",false),owner.at("Metadata"));}
-        catch(const std::exception& error){if(rows.size()>=2048)throw;rows.push_back({{"Name",owner.at("Name")},{"Owner",owner.at("Name")},{"Folder",owner.at("Folder")},{"Managed",true},{"ConfiguredEnabled",owner.at("Enabled")},{"NativeUnsupported",false},{"Kind","Layout unavailable"},{"Version",""},{"Metadata",{{"issue",std::string(error.what()).substr(0,512)}}}});}
+        catch(const std::exception& error){if(rows.size()>=2048)throw;rows.push_back({{"Name",owner.at("Name")},{"Owner",owner.at("Name")},{"Folder",owner.at("Folder")},{"Managed",true},{"ConfiguredEnabled",owner.at("Enabled")},{"ConfiguredKnown",false},{"NativeUnsupported",false},{"Kind","Layout unavailable"},{"Version",""},{"Metadata",{{"issue",std::string(error.what()).substr(0,512)}}}});}
     }
     std::sort(rows.begin(),rows.end(),[](const auto& a,const auto& b){return std::pair{a.at("Managed").template get<bool>(),ModFolderLayout::FoldAscii(a.at("Name").template get<std::string>())}<std::pair{b.at("Managed").template get<bool>(),ModFolderLayout::FoldAscii(b.at("Name").template get<std::string>())};});
     return {{"Rows",std::move(rows)},{"Root",root.string()}};

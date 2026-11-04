@@ -2,6 +2,8 @@
 #include "Core/HelpyCacheSources.h"
 #include "../../../shared/SaveBackupStore.h"
 #include "../../../shared/SaveWorldBackups.h"
+#include "Core/LoadProtectionNotice.h"
+#include "SDK/WeakObjectHandle.h"
 #include "Core/RuneSchemaDataRoot.h"
 #include "Core/PakDiscovery.h"
 #include "Core/NativePersistencePolicy.h"
@@ -98,6 +100,8 @@ using namespace RC::Unreal;
 namespace fs = std::filesystem;
 
 namespace {
+    PS::CleanupNotice::WorldReceipt WorldCleanupReceipt;
+    PS::WeakObjectHandle WorldCleanupReceiptWorld;
     // Each world is handled independently. The complete live building registry
     // is required before an unresolved type can be removed from any save.
     std::unordered_set<std::string> ReadValidatedLiveBuildingIds(
@@ -277,6 +281,8 @@ namespace {
         return live;
     }
 
+    fs::path BackupWorldBuildingPayload(const std::wstring& slot,std::span<const std::uint8_t> original,bool enteringWorld=true);
+
     void RunLocalWorldBuildingPreflight(const fs::path& target,
         const std::unordered_set<std::string>& live,
         const std::shared_ptr<PS::WorldCleanupPolicy::MenuWindow>& window = {},bool enteringWorld=false)
@@ -308,13 +314,10 @@ namespace {
         recheck.close();
         if (current != original) throw std::runtime_error("save changed during preflight");
         const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
-        const bool backupEnabled = true;
-        const fs::path backup = backupEnabled
-            ? fs::path(target.wstring() + L".runeschema-" + std::to_wstring(nonce) + L".bak")
-            : fs::path{};
+        const auto backup=BackupWorldBuildingPayload(target.stem().wstring(),original,enteringWorld);
         const fs::path temporary = target.wstring() + L".runeschema-"
             + std::to_wstring(nonce) + L".tmp";
-        if ((backupEnabled && fs::exists(backup)) || fs::exists(temporary))
+        if (fs::exists(temporary))
             throw std::runtime_error("preflight output path already exists");
         {
             std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
@@ -331,24 +334,6 @@ namespace {
                 throw std::runtime_error("temporary repaired save did not verify");
             (void)Preflight::Parse(written);
         }
-        if (backupEnabled) {
-            if (!fs::copy_file(target, backup, fs::copy_options::none))
-                throw std::runtime_error("pre-cleanup backup could not be created; original retained");
-            std::ifstream verification(backup, std::ios::binary);
-            const Preflight::Bytes saved(std::istreambuf_iterator<char>{verification},
-                std::istreambuf_iterator<char>{});
-            if (!verification || saved != original)
-                throw std::runtime_error("pre-cleanup backup did not verify; original retained");
-        }
-        try{
-            const auto backupRuntime=std::string(PS::Storefront::MappingCachePlatform(PS::Storefront::CurrentDetection()));
-            const auto directory=PS::WorldBackups::Directory(PS::RuneSchemaData::Directory(),backupRuntime);
-            if(PS::WorldBackups::Enabled(directory)){
-                PS::SaveBackups::Json context={{"Mods",PS::SaveBackups::ActiveMods()}};if(enteringWorld)context["LastPlayedUtc"]=PS::SaveBackups::Now();
-                PS::WorldBackups::Store(directory,PS::WorldBackups::Slot(target.stem()),
-                    std::string_view(reinterpret_cast<const char*>(original.data()),original.size()),"Before cleanup",std::move(context));
-            }
-        }catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[RS-SAVE-005] Experimental world snapshot unavailable: {}. The verified pre-cleanup backup remains available.\n"),PS::ToWideSafe(error.what()));}
         const auto repairedBytes = std::make_shared<const Preflight::Bytes>(std::move(repair.bytes));
         const auto logSuccess = [target, backup, removedIds = repair.removedIds,
             persistenceIds = repair.removedPersistenceIds, repairedBytes]() {
@@ -356,9 +341,10 @@ namespace {
             const Preflight::Bytes saved(std::istreambuf_iterator<char>{verification},
                 std::istreambuf_iterator<char>{});
             if (!verification || saved != *repairedBytes)
-                throw std::runtime_error("committed repaired save did not verify; pre-cleanup backup retained");
+                throw std::runtime_error("committed repaired save did not verify; preserve the source and available recovery copies");
             (void)Preflight::Parse(saved);
-            const auto backupLabel = backup.empty() ? L"disabled" : backup.filename().wstring();
+            WorldCleanupReceipt.Record(target.stem().wstring(),removedIds.size());
+            const auto backupLabel = backup.empty() ? L"not created" : backup.filename().wstring();
             PS::ConsolidatedLog<RC::LogLevel::Normal>(STR(
                 "[RuneSchema] [summary] Save cleanup | world='{}' | missing building IDs removed={} | backup='{}'.\n"),
                 target.filename().wstring(), removedIds.size(), backupLabel);
@@ -642,22 +628,22 @@ namespace {
     }
 
     fs::path BackupWorldBuildingPayload(const std::wstring& slot,
-        std::span<const std::uint8_t> original)
+        std::span<const std::uint8_t> original,bool enteringWorld)
     {
-        std::wstring safeSlot;
-        for(const auto ch:slot){if(safeSlot.size()==48)break;safeSlot.push_back((ch>=L'a'&&ch<=L'z')||(ch>=L'A'&&ch<=L'Z')||(ch>=L'0'&&ch<=L'9')||ch==L'-'||ch==L'_'?ch:L'_');}
-        if(safeSlot.empty())throw std::runtime_error("world slot is unavailable");
-        static std::atomic<std::uint64_t> sequence{0};
-        const auto backup=PS::HostServices::StateDirectory()/L"backups"/L"world-building"/(safeSlot+L"-"+std::to_wstring(std::chrono::steady_clock::now().time_since_epoch().count())+L"-"+std::to_wstring(sequence.fetch_add(1,std::memory_order_relaxed))+L".sav");
-        const auto view=std::string_view(reinterpret_cast<const char*>(original.data()),original.size());
-        PS::CacheBundleIO::Publish(backup,view);PS::SaveBackups::Verify(backup,view);
         try{
             const auto runtime=std::string(PS::Storefront::MappingCachePlatform(PS::Storefront::CurrentDetection()));
             const auto directory=PS::WorldBackups::Directory(PS::RuneSchemaData::Directory(),runtime);
-            if(PS::WorldBackups::Enabled(directory))PS::WorldBackups::Store(directory,PS::WorldBackups::Slot(fs::path(slot)),view,
-                "Before cleanup",{{"Mods",PS::SaveBackups::ActiveMods()},{"LastPlayedUtc",PS::SaveBackups::Now()}});
-        }catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[RS-SAVE-005] Experimental world snapshot unavailable: {}. The verified pre-cleanup backup remains available.\n"),PS::ToWideSafe(error.what()));}
-        return backup;
+            std::string issue;
+            PS::SaveBackups::Json context={{"Mods",PS::SaveBackups::ActiveMods()}};
+            if(enteringWorld)context["LastPlayedUtc"]=PS::SaveBackups::Now();
+            const auto file=PS::WorldBackups::BeforeCleanup(directory,PS::WorldBackups::Slot(fs::path(slot)),
+                std::string_view(reinterpret_cast<const char*>(original.data()),original.size()),
+                std::move(context),issue);
+            if(!issue.empty())PS::Log<LogLevel::Warning>(STR("[RS-SAVE-005] Optional world backup unavailable: {}. Validated world cleanup continues.\n"),PS::ToWideSafe(issue));
+            return file;
+        }catch(const std::exception& error){
+            PS::Log<LogLevel::Warning>(STR("[RS-SAVE-005] Optional world backup unavailable: {}. Validated world cleanup continues.\n"),PS::ToWideSafe(error.what()));return {};
+        }
     }
     void NativeSpudLoadGameReadOnly(void* subsystem, const void* slotName,
         std::uint8_t clientLoadingListen)
@@ -830,11 +816,12 @@ namespace {
                                                 std::memcpy(static_cast<std::uint8_t*>(
                                                     const_cast<void*>(array)) + 0x08,
                                                     &repairedCount, sizeof(repairedCount));
+                                                WorldCleanupReceipt.Record(ActiveSpudLoadSlot,removed.size());
                                                 PS::ConsolidatedLog<RC::LogLevel::Normal>(STR(
                                                     "[RuneSchema] [summary] Save cleanup | world='{}' | missing building IDs removed={} | retained={} | backup='{}'.\n"),
                                                     ActiveSpudLoadSlot, removed.size(),
                                                     verified.pieces.size(),
-                                                    backup.empty() ? L"disabled" : backup.filename().wstring());
+                                                    backup.empty() ? L"not created" : backup.filename().wstring());
                                             } else {
                                                 PS::CodedLog<RC::LogLevel::Warning>(PS::Diagnostics::Id::WorldCleanupBufferChanged,STR(
                                                     "[SAVE-CLEANUP][BUILDINGS][SKIPPED] Native buffer changed during validation; world unchanged.\n"));
@@ -1210,17 +1197,19 @@ namespace DragonWilds {
         }
         Hook::FCallbackOptions loadOptions{};loadOptions.OwnerModName=TEXT("RuneSchema");loadOptions.HookName=TEXT("SaveCleanupEntryPolicy");
         m_cleanupLoadMapPreId=Hook::RegisterLoadMapPreCallback(
-            [this](auto&,UEngine*,FWorldContext&,FURL url,UPendingNetGame* pending,FString&) {
+            [this](auto&,UEngine*,FWorldContext& context,FURL url,UPendingNetGame* pending,FString&) {
                 if(GetCurrentThreadId()!=m_cleanupThread)return;
                 const auto map=ReadProbeFString(&url.Map);
-                if(!PS::WorldCleanupPolicy::NativeGameplayMap(map)){m_cleanupPrepared=false;return;}
+                if(!PS::WorldCleanupPolicy::NativeGameplayMap(map)){m_cleanupPrepared=false;WorldCleanupReceipt.Begin({});WorldCleanupReceiptWorld.Reset();return;}
+                if(WorldCleanupReceipt.Bound())WorldCleanupReceipt.Begin({});
+                WorldCleanupReceipt.Entering(context.GetThisCurrentWorld().Get());WorldCleanupReceiptWorld.Reset();
                 // Direct joins/new worlds may have no local SPUD file-read boundary.
                 // Character cleanup can still run; an already-read world file is not replaced.
                 if(!m_cleanupPrepared)PrepareWorldSaveCleanup({},pending!=nullptr,false);
             },loadOptions);
         loadOptions.HookName=TEXT("SaveCleanupEntryPolicyFinished");
         m_cleanupLoadMapPostId=Hook::RegisterLoadMapPostCallback(
-            [this](auto&,auto*,FWorldContext&,auto&&...){if(GetCurrentThreadId()==m_cleanupThread)m_cleanupPrepared=false;},loadOptions);
+            [this](auto&,auto*,FWorldContext& context,auto&&...){if(GetCurrentThreadId()==m_cleanupThread){m_cleanupPrepared=false;auto* world=context.GetThisCurrentWorld().Get();WorldCleanupReceipt.Entered(world);WorldCleanupReceiptWorld.Assign(world);}},loadOptions);
         if(m_cleanupLoadMapPreId==Hook::ERROR_ID||m_cleanupLoadMapPostId==Hook::ERROR_ID)
             PS::CodedLog<LogLevel::Warning>(PS::Diagnostics::Id::WorldCleanupHookUnavailable,STR(
                 "[SAVE-CLEANUP][ENTRY-HOOK][PARTIAL] Map entry callbacks are unavailable; only verified native load boundaries can apply cleanup.\n"));
@@ -1265,6 +1254,7 @@ namespace DragonWilds {
     {
         if(GetCurrentThreadId()!=m_cleanupThread||m_cleanupPrepared)return;
         m_cleanupPrepared=true;
+        if(beforeWorldRead)WorldCleanupReceipt.Begin(!clientLoadingListen?std::wstring(slot):std::wstring{});
         if(beforeWorldRead&&!clientLoadingListen&&!PS::WorldCleanupPolicy::LocalSlotEligible(slot,false)) {
             PS::CodedLog<LogLevel::Warning>(PS::Diagnostics::Id::WorldCleanupContractUnsafe,STR(
                 "[SAVE-CLEANUP][ENTRY][UNIDENTIFIED] Native slot could not be verified; no folder sweep or world replacement was authorized.\n"));
@@ -1486,6 +1476,12 @@ namespace DragonWilds {
         RegisterLoader(std::move(recipes));
         auto npcs=std::make_unique<DragonWildsNpcLoader>(recipeService);
         auto* npcService=npcs.get();
+        npcService->PublishCleanupNotice=[this](RC::Unreal::UObject* controller,std::size_t removed,const std::string& mod){return m_registryBridge.PublishCleanupNotice(controller,removed,mod);};
+        npcService->NotifyWorldCleanup=[this](RC::Unreal::UObject* controller){
+            auto* world=WorldCleanupReceiptWorld.Get();
+            if(controller&&world&&WorldCleanupReceipt.Pending(controller,controller->GetWorld())&&controller->GetWorld()==world
+                &&m_registryBridge.PublishCleanupNotice(controller,WorldCleanupReceipt.Removed,{}))WorldCleanupReceipt.Acknowledge(controller);
+        };
         m_dataRegistrar.SetCharacterRegistryPreparation([npcService](RC::Unreal::UObject* context){npcService->PrepareQuests(context);});
         m_registryBridge.QuestControl=[npcService](RC::Unreal::UObject* player,const std::string& quest,
             const std::string& action,const std::string& payload){

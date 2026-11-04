@@ -6,6 +6,7 @@
 #include <imgui_internal.h>
 #include <cstring>
 #include <utility>
+#include <optional>
 
 namespace PS::HelpyControllerInput {
 using StateFn=DWORD(WINAPI*)(DWORD,XINPUT_STATE*);using CapsFn=DWORD(WINAPI*)(DWORD,DWORD,XINPUT_CAPABILITIES*);
@@ -16,6 +17,10 @@ inline HelpyControllerDevice::Labels ReportedGlyphs=HelpyControllerDevice::Xbox;
 inline bool JustActivated=false;
 inline bool KeepShortcuts=false;
 inline bool ShortcutActivated=false;
+inline HelpyControllerDevice::Reading PointerReading;
+inline bool TouchUsing=false,TouchTracking=false,TouchClickArmed=false,TouchMouseDown=false;
+inline uint32_t TouchDevice=0;
+inline float TouchX=0,TouchY=0;
 inline auto DeviceRead=&HelpyControllerDevice::Read;
 #if defined(HELPY_PREVIEW)
 inline HelpyControllerDevice::Reading PreviewReading;
@@ -34,10 +39,10 @@ inline void Feed(const XINPUT_GAMEPAD& pad){
     analog(ImGuiKey_GamepadRStickLeft,pad.sThumbRX,-8689,-32768);analog(ImGuiKey_GamepadRStickRight,pad.sThumbRX,8689,32767);analog(ImGuiKey_GamepadRStickUp,pad.sThumbRY,8689,32767);analog(ImGuiKey_GamepadRStickDown,pad.sThumbRY,-8689,-32768);
 }
 inline void Poll(int mode,const XINPUT_GAMEPAD* native=nullptr){
-    auto& io=ImGui::GetIO();if(mode==1){Feed({});if(!KeepShortcuts)HelpyControllerDevice::Shutdown();io.ConfigFlags&=~ImGuiConfigFlags_NavEnableGamepad;io.BackendFlags&=~ImGuiBackendFlags_HasGamepad;return;}
+    PointerReading={};auto& io=ImGui::GetIO();if(mode==1){Feed({});if(!KeepShortcuts)HelpyControllerDevice::Shutdown();io.ConfigFlags&=~ImGuiConfigFlags_NavEnableGamepad;io.BackendFlags&=~ImGuiBackendFlags_HasGamepad;return;}
     io.ConfigFlags|=ImGuiConfigFlags_NavEnableGamepad;
     const auto mapped=DeviceRead(Refresh);
-    if(mapped.Connected){ReportedGlyphs=mapped.Glyphs;Feed(mapped.Pad);Refresh=false;return;}
+    if(mapped.Connected){PointerReading=mapped;ReportedGlyphs=mapped.Glyphs;Feed(mapped.Pad);Refresh=false;return;}
     if(native){Refresh=false;ReportedGlyphs=mapped.Connected?mapped.Glyphs:HelpyControllerDevice::Xbox;Feed(*native);return;}Initialize();
     if(Refresh){Connected=0;if(GetCaps)for(unsigned i=0;i<4;++i){XINPUT_CAPABILITIES caps{};if(GetCaps(i,XINPUT_FLAG_GAMEPAD,&caps)==ERROR_SUCCESS)Connected|=1u<<i;}Refresh=false;for(int i=0;i<4;++i)if(Connected&(1u<<i)){Slot=i;break;}}
     XINPUT_STATE chosen{};bool found=false;static std::array<XINPUT_GAMEPAD,4> prior{};
@@ -49,16 +54,54 @@ inline void Poll(int mode,const XINPUT_GAMEPAD* native=nullptr){
     }
     if(found){ReportedGlyphs=HelpyControllerDevice::Xbox;Feed(chosen.Gamepad);}else{Feed({});io.BackendFlags&=~ImGuiBackendFlags_HasGamepad;}
 }
+inline std::optional<ImVec2> UpdatePointer(bool enabled){
+    auto& io=ImGui::GetIO();const auto& touch=PointerReading.Touch;
+    enabled=enabled&&PointerReading.Connected;TouchUsing=enabled&&(touch.Down||touch.Clicked);
+    if(!enabled||TouchDevice!=PointerReading.Id){TouchTracking=false;TouchClickArmed=false;}
+    TouchDevice=PointerReading.Id;
+    if(enabled&&!touch.Clicked)TouchClickArmed=true;
+    const bool down=enabled&&touch.Clicked&&TouchClickArmed;
+    if(down!=TouchMouseDown){io.AddMouseButtonEvent(ImGuiMouseButton_Left,down);TouchMouseDown=down;}
+    std::optional<ImVec2> result;
+    if(enabled&&touch.Down&&std::isfinite(touch.X)&&std::isfinite(touch.Y)&&io.DisplaySize.x>=1&&io.DisplaySize.y>=1){
+        if(TouchTracking){
+            const float dx=(touch.X-TouchX)*io.DisplaySize.x,dy=(touch.Y-TouchY)*io.DisplaySize.y;
+            if(dx!=0||dy!=0){
+                const auto origin=ImGui::IsMousePosValid(&io.MousePos)?io.MousePos:ImVec2(io.DisplaySize.x*.5f,io.DisplaySize.y*.5f);
+                result=ImVec2(std::clamp(origin.x+dx,0.f,io.DisplaySize.x-1),std::clamp(origin.y+dy,0.f,io.DisplaySize.y-1));
+                io.AddMousePosEvent(result->x,result->y);
+            }
+        }
+        TouchX=touch.X;TouchY=touch.Y;TouchTracking=true;
+    }else TouchTracking=false;
+    return result;
+}
 inline void Observe(int mode){
     bool pad=false,keys=false;static std::array<float,ImGuiKey_GamepadRStickDown-ImGuiKey_GamepadStart+1> previous{};
     for(int key=ImGuiKey_GamepadStart;key<=ImGuiKey_GamepadRStickDown;++key){const auto value=ImGui::GetKeyData(ImGuiKey(key))->AnalogValue;auto& prior=previous[key-ImGuiKey_GamepadStart];pad|=ImGui::IsKeyPressed(ImGuiKey(key),false)||(value>.1f&&std::abs(value-prior)>.08f);prior=value;}
     for(int key=ImGuiKey_Tab;key<=ImGuiKey_KeypadEqual;++key)keys|=ImGui::IsKeyPressed(ImGuiKey(key),false);
     const auto& io=ImGui::GetIO();keys|=io.MouseDelta.x!=0||io.MouseDelta.y!=0||io.MouseWheel!=0||ImGui::IsMouseClicked(0)||ImGui::IsMouseClicked(1);
-    const bool prior=Selection.Controller;const bool shortcut=std::exchange(ShortcutActivated,false);Selection.Update(HelpyInputMode::Mode(mode),pad||shortcut,keys&&!shortcut);JustActivated=Selection.Controller&&!prior;
+    const bool prior=Selection.Controller;const bool shortcut=std::exchange(ShortcutActivated,false);Selection.Update(HelpyInputMode::Mode(mode),pad||shortcut||TouchUsing,keys&&!shortcut&&!TouchUsing);JustActivated=Selection.Controller&&!prior;
+}
+// Enter a pane without opening the keyboard or activating its first field.
+inline void FocusNext(){ImGui::NavClearPreferredPosForAxis(ImGuiAxis_X);ImGui::NavClearPreferredPosForAxis(ImGuiAxis_Y);ImGui::SetKeyboardFocusHere();ImGui::GetCurrentContext()->NavMoveFlags&=~ImGuiNavMoveFlags_Activate;}
+inline bool NavigationSourceItem(){
+    const auto& context=*ImGui::GetCurrentContext();const auto* window=ImGui::GetCurrentWindow();
+    return ImGui::IsItemFocused()||(context.NavMoveSubmitted&&!context.NavId&&context.NavWindow==window&&context.LastItemData.ID&&window->NavLastIds[context.NavLayer]==context.LastItemData.ID);
+}
+inline void ResolvePaneNavigation(){
+    auto& context=*ImGui::GetCurrentContext();
+    if(!Selection.Controller||!context.NavWindow||!context.NavMoveScoringItems||(context.NavMoveFlags&(ImGuiNavMoveFlags_IsTabbing|ImGuiNavMoveFlags_AlsoScoreVisibleSet)))return;
+    auto& local=context.NavMoveResultLocal;const auto& other=HelpyImGuiTheme::PaneNavigationSource==context.NavWindow?HelpyImGuiTheme::PaneNavigationBest:context.NavMoveResultOther;
+    // ImGui compares a direct flattened child; Helpy's content can be several panes deep.
+    if(other.ID&&ImGui::IsWindowChildOf(other.Window,context.NavWindow,false)&&
+        (!local.ID||other.DistBox<local.DistBox||(other.DistBox==local.DistBox&&other.DistCenter<local.DistCenter)))local=other;
 }
 inline bool DefaultFocus(bool arriving=false){
     auto& context=*ImGui::GetCurrentContext();auto* window=ImGui::GetCurrentWindow();
     if(!Selection.Controller||!context.LastItemData.ID||context.ActiveId||context.DragDropActive||ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId))return false;
+    // Scrolling navigation can temporarily clear NavId; do not pull it back to an outer header.
+    if(context.NavWindow&&(context.NavMoveSubmitted||context.NavInitRequestFromMove))return false;
     const bool missing=!context.NavWindow||!context.NavId||(!context.NavWindow->Active&&!context.NavWindow->WasActive);
     if(!missing&&(!arriving||context.NavWindow->RootWindow!=window->RootWindow))return false;
     // NoFocusOnAppearing keeps mouse-mode windows passive; controller entry needs an explicit target.
@@ -81,6 +124,6 @@ inline void Glyph(const char* label,size_t button,int style){
     ImGui::Dummy({size,size});ImGui::SameLine();ImGui::AlignTextToFramePadding();ImGui::TextUnformatted(label);
 }
 inline void Hints(int style){Glyph("Select",0,style);ImGui::SameLine();Glyph("Back / hide",1,style);if(ImGui::GetContentRegionAvail().x>150){ImGui::SameLine();Glyph("Actions",2,style);}if(ImGui::GetContentRegionAvail().x>260){ImGui::SameLine();ImGui::AlignTextToFramePadding();const auto labels=HelpyControllerDevice::Resolve(style,ReportedGlyphs);ImGui::TextUnformatted(labels==HelpyControllerDevice::PlayStation?"L1/R1 Tabs · L2/R2 Pages":labels==HelpyControllerDevice::Nintendo?"L/R Tabs · ZL/ZR Pages":"LB/RB Tabs · LT/RT Pages");}}
-inline void Suspend(){if(!KeepShortcuts){HelpyControllerDevice::Shutdown();Refresh=true;}Connected=0;}
-inline void Shutdown(){KeepShortcuts=false;ShortcutActivated=false;Suspend();if(Library)FreeLibrary(Library);Library=nullptr;GetState=nullptr;GetCaps=nullptr;Initialized=false;}
+inline void Suspend(){PointerReading={};TouchTracking=false;TouchClickArmed=false;TouchUsing=false;if(!KeepShortcuts){HelpyControllerDevice::Shutdown();Refresh=true;}Connected=0;}
+inline void Shutdown(){KeepShortcuts=false;ShortcutActivated=false;Suspend();TouchMouseDown=false;if(Library)FreeLibrary(Library);Library=nullptr;GetState=nullptr;GetCaps=nullptr;Initialized=false;}
 }

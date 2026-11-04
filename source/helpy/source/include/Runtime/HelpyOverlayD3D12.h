@@ -4,8 +4,9 @@
 #include <dxgi1_4.h>
 #include <d3dcompiler.h>
 #include <vector>
+#include <algorithm>
 
-namespace PS::HelpyOverlayGpu {
+namespace PS::HudGpu {
 inline constexpr char Shader[]=R"(
 Texture2D picture:register(t0);SamplerState linearClamp:register(s0);cbuffer Options:register(b0){float opacity;};
 struct Vertex{float4 position:SV_POSITION;float2 uv:TEXCOORD0;};

@@ -199,7 +199,7 @@ inline void Rebuild(const json& catalog,State& state,uint64_t revision) {
         const auto& row=items[i];
         if(!row.is_object())continue;
         if(!HelpyImGuiTheme::Current.itemShowPlaceholders&&ItemPresentation::Placeholder(row))continue;
-        if(!ItemSource::Matches(state.SourceFilter,ItemSource::Row(row),state.SourceProvider)||!ItemFamily::Matches(state.FamilyKey,ItemPresentation::OriginalName(row))||!PersonalizationPanel::Matches(row,state.FavoritesOnly,state.PersonalTag))continue;
+        if(!ItemSource::Matches(state.SourceFilter,ItemSource::Row(row),state.SourceProvider)||!ItemFamily::MatchesRow(state.FamilyKey,row)||!PersonalizationPanel::Matches(row,state.FavoritesOnly,state.PersonalTag))continue;
         if(state.ActiveCategory!="All"&&ItemCategory::Resolve(row)!=state.ActiveCategory)continue;
         const auto labels=HelpyPersonalization::SearchText(row);if(labels.empty()){if(query(row))state.Matches.push_back(i);}else{auto searchable=row;searchable["Tags"]=ItemPresentation::Text(row,"Tags")+" "+labels;if(query(searchable))state.Matches.push_back(i);}
     }
@@ -269,6 +269,16 @@ inline void LayoutControls() {
     ImGui::SetNextWindowSizeConstraints({popupWidth,0},{popupWidth,std::max(1.f,area.y-theme.Y(24))});
     if(ImGui::BeginPopup("##item-bay-layout")) {
         ImGui::TextUnformatted("Item Bay settings");ImGui::Separator();
+        bool cached=HelpyRuntimePreferences::CacheFirst.load(),passive=HelpyRuntimePreferences::PassiveRefresh.load();
+        bool policyChanged=HelpyImGuiTheme::Toggle("Prefer saved cache",&cached);
+#if defined(HELPY_PREVIEW)
+        HelpyPreviewHooks::ItemCacheFirstSwitch=HelpyPreviewHooks::LastRect();
+#endif
+        if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Use this platform's AppData cache first, including after restarting Helpy. Uncached searches still check the connected game. This is the same saved preference as Quick Settings > Cache.");
+        policyChanged|=HelpyImGuiTheme::Toggle("Passive cache updates",&passive);
+        if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Turn off for manual refreshes of cached searches. Cache misses still check the game. Refresh search checks the current text and filters; Refresh source checks the whole selected mod.");
+        if(policyChanged){HelpyRuntimePreferences::CacheFirst=cached;HelpyRuntimePreferences::PassiveRefresh=passive;dirty=true;auto& list=LazyCatalog::For(0);list.Cache.clear();if(list.Started)LazyCatalog::Retry(0);}
+        ImGui::Separator();
         if(HelpyImGuiTheme::Toggle("Show internal names",&theme.itemInternalNames))dirty=true;
 #if defined(HELPY_PREVIEW)
         HelpyPreviewHooks::ItemNamesSwitch=HelpyPreviewHooks::LastRect();
@@ -284,7 +294,11 @@ inline void LayoutControls() {
         if(HelpyImGuiTheme::Toggle("Size grid by rows",&theme.itemGridFitRows))dirty=true;
         if(HelpyImGuiTheme::Toggle("Show [PH] placeholder items",&theme.itemShowPlaceholders))dirty=true;
         if(HelpyImGuiTheme::SoftButton("Reset to 5 x 4")){theme.itemGridColumns=ItemBayLayout::DefaultColumns;theme.itemGridRows=ItemBayLayout::DefaultRows;theme.itemGridFitRows=true;dirty=true;}}
-        if(HelpyImGuiTheme::SoftButton("Reload items")){ItemIconCache::RetryFailed();LazyCatalog::Retry(0);}ImGui::EndPopup();
+        if(HelpyImGuiTheme::SoftButton("Reload items / groupings")){HelpyCachedCatalog::Files.Invalidate();LazyCatalog::For(0).Cache.clear();ItemIconCache::RetryFailed();LazyCatalog::Retry(0);}
+        if(HelpyImGuiTheme::SoftButton("Grouping reference...")){const auto directory=HostServices::ModDirectory()/"plugins/RuneSchema.Helpy/settings";const auto active=directory/"item-groupings.json",example=directory/"item-groupings.example.json";const auto file=std::filesystem::is_regular_file(active)?active:std::filesystem::is_regular_file(example)?example:directory;ShellExecuteW(nullptr,L"open",file.c_str(),nullptr,nullptr,SW_SHOWNORMAL);}
+        ImGui::BeginDisabled(HelpyIconPacks::Busy()||HelpyIconPacks::Building());if(HelpyImGuiTheme::SoftButton("Import taglines..."))HelpyIconPacks::ChooseTaglines(true);if(HelpyImGuiTheme::SoftButton("Export combined taglines..."))HelpyIconPacks::ChooseTaglines(false);ImGui::EndDisabled();
+        if(!HelpyIconPacks::Status.empty())ImGui::TextWrapped("%s",HelpyIconPacks::Status.c_str());
+        if(!HelpyCachedCatalog::Files.GroupingStatus.empty())ImGui::TextWrapped("%s",HelpyCachedCatalog::Files.GroupingStatus.c_str());ImGui::EndPopup();
     }
     if(dirty&&!ImGui::IsAnyItemActive()){HelpyImGuiTheme::SaveCurrent();dirty=false;}
 }
@@ -420,7 +434,7 @@ inline void ContextMenu(const json& catalog,const json& row,const std::string& p
     const auto origin=ItemSource::Row(row);ImGui::TextDisabled("Source: %s%s%s",ItemSource::Label(origin.Group),origin.Name.empty()?"":" / ",origin.Name.c_str());
     if(multi)ImGui::TextDisabled("Actions apply to all %zu selected items.",selectedCount);ImGui::Separator();
     InspectActions(row);
-    const auto family=ItemFamily::Key(ItemPresentation::OriginalName(row));
+    const auto family=ItemFamily::RowKey(row);
     if(ImGui::MenuItem("View family",nullptr,false,!family.empty())){state.PendingFamilyKey=family;state.PendingFamilyProvider.clear();}
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::ViewFamily=HelpyPreviewHooks::LastRect();
@@ -570,7 +584,7 @@ inline void DrawLoadingSpinner(const HelpyImGuiTheme::Theme& theme,const char* l
     const ImVec2 center((a.x+b.x)*.5f,(a.y+b.y)*.5f);
     const auto& loading=LazyCatalog::For(0);
     HelpyLoadingIndicator::Draw(center,radius,theme,label,"Stage: "+loading.PopulationStage+"\n"+loading.Coverage+"\nItems received: "+std::to_string(loading.Rows.size())+"\nRecords checked: "+std::to_string(loading.PopulationDone)+(loading.PopulationTotal?" / "+std::to_string(loading.PopulationTotal):" (total not known yet)")+"\nChecking local cache before requesting missing data from the runtime.");
-    const auto restore=ImGui::GetCursorScreenPos();ImGui::SetCursorScreenPos({center.x-radius,center.y-radius});ImGui::InvisibleButton("##loading-actions",{radius*2,radius*2});
+    const auto restore=ImGui::GetCursorScreenPos();ImGui::SetCursorScreenPos({center.x-radius,center.y-radius});ImGui::InvisibleButton("##loading-actions",{radius*2,radius*2},ImGuiButtonFlags_EnableNav);
     if(ImGui::BeginPopupContextItem("##loading-menu")){
         if(ImGui::MenuItem("Cancel loading"))LazyCatalog::CancelLoading(0);
         if(ImGui::MenuItem("Retry this search"))LazyCatalog::Retry(0);ImGui::EndPopup();
@@ -622,7 +636,7 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
     const bool compact=showControls&&quickActions&&ImGui::GetContentRegionAvail().y<theme.Y(300);
     if(showControls){
     const float categoryWidth=theme.X(width<theme.X(600)?105:142),sourceWidth=theme.X(width<theme.X(600)?100:132);
-    const float controls=categoryWidth+sourceWidth+ImGui::CalcTextSize("Search").x+ImGui::GetFrameHeight()+ImGui::CalcTextSize("Refresh source").x+ImGui::GetStyle().FramePadding.x*6+spacing*5;
+    const float controls=categoryWidth+sourceWidth+ImGui::CalcTextSize("Search").x+ImGui::GetFrameHeight()+ImGui::CalcTextSize("Refresh source").x+ImGui::CalcTextSize("Refresh search").x+ImGui::GetStyle().FramePadding.x*8+spacing*6;
     ImGui::SetNextItemWidth(std::max(theme.X(90.0f),width-(compact?theme.X(140):controls)));
     const bool enterSubmitted=HelpyTextInput::InputTextWithHint("##Search items","Search items...",filter,filterCapacity,ImGuiInputTextFlags_EnterReturnsTrue);
 #if defined(HELPY_PREVIEW)
@@ -632,16 +646,32 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::ItemSearchButton=HelpyPreviewHooks::LastRect();
 #endif
-    if(state.SearchInput!=filter){state.SearchInput=filter;state.SearchDue=ImGui::GetTime()+0.4;}
+    if(state.SearchInput!=filter){state.SearchInput=filter;state.SearchDue=ImGui::GetTime()+(HelpyRuntimePreferences::CacheFirst.load()?0.1:0.4);}
     if(!SearchAsYouType)state.SearchDue=0;
     if(enterSubmitted||searchSubmitted||(state.SearchDue>0&&ImGui::GetTime()>=state.SearchDue)){
         state.SearchDue=0;state.Query=filter;state.PageIndex=0;state.ResetScroll=true;
         LazyCatalog::Search(0,BackendQuery(state));state.Matches.clear();state.CatalogRevision=0;
     }
+    const bool refreshing=HelpyCachedCatalog::Check&&HelpyCachedCatalog::Check->Interactive;
+    const bool cachedUpdate=!localCatalog&&state.Query==filter&&HelpyCachedCatalog::RefreshAvailable()&&BackendQuery(state)==LazyCatalog::For(0).Query;
+    const auto refreshWidth=ImGui::CalcTextSize("Refresh search").x+2*ImGui::GetStyle().FramePadding.x;
+    if(ImGui::GetItemRectMax().x+spacing+refreshWidth<=ImGui::GetWindowPos().x+ImGui::GetWindowContentRegionMax().x)ImGui::SameLine();
+    ImGui::BeginDisabled(localCatalog||(!cachedUpdate&&(!HelpyCachedCatalog::Connected()||(!*filter&&state.FamilyKey.empty())))||refreshing);
+    if(cachedUpdate){auto green=HelpyImGuiTheme::Current.success;green.w=.3f;ImGui::PushStyleColor(ImGuiCol_Button,green);green.w=.5f;ImGui::PushStyleColor(ImGuiCol_ButtonHovered,green);ImGui::PushStyleColor(ImGuiCol_Border,HelpyImGuiTheme::Current.success);}
+    if(HelpyImGuiTheme::SoftButton(refreshing?"Refreshing...":"Refresh search")){
+        const bool changed=state.Query!=filter;state.SearchDue=0;state.SearchInput=filter;state.Query=filter;
+        if(changed){state.PageIndex=0;state.ResetScroll=true;state.Matches.clear();state.CatalogRevision=0;}
+        if(cachedUpdate){state.PageIndex=0;state.ResetScroll=true;state.Matches.clear();state.CatalogRevision=0;HelpyCachedCatalog::RefreshCached();}else HelpyCachedCatalog::RefreshSearch(BackendQuery(state));
+    }if(cachedUpdate)ImGui::PopStyleColor(3);ImGui::EndDisabled();
+    if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))HelpyImGuiTheme::Tooltip(cachedUpdate?"Updated cached results are ready. Click to apply them to this page. Your current results stay in place until you refresh.":"Check uncached mounted items for the text currently entered, with the selected category, source and family filters. Keeps cached results and saves discoveries for later searches. Requires the mod to be enabled and mounted in a connected game.\n%s",HelpyCachedCatalog::CheckStatus.c_str());
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::RefreshSearch=HelpyPreviewHooks::LastRect();
+#endif
     const auto inlineControl=[&](float next){if(ImGui::GetItemRectMax().x+spacing+next<=ImGui::GetWindowPos().x+ImGui::GetWindowContentRegionMax().x)ImGui::SameLine();};
     bool filtersVisible=!compact;
     if(compact){
-        ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Options"))ImGui::OpenPopup("##item-bay-options");
+        if(ImGui::GetItemRectMax().x+spacing+ImGui::CalcTextSize("Options").x+2*ImGui::GetStyle().FramePadding.x<=ImGui::GetWindowPos().x+ImGui::GetWindowContentRegionMax().x)ImGui::SameLine();
+        if(HelpyImGuiTheme::SoftButton("Options"))ImGui::OpenPopup("##item-bay-options");
 #if defined(HELPY_PREVIEW)
         HelpyPreviewHooks::ItemOptions=HelpyPreviewHooks::LastRect();
 #endif
@@ -688,7 +718,7 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
     HelpyPreviewHooks::SourceFilter=HelpyPreviewHooks::LastRect();
 #endif
     inlineControl(theme.X(110));
-    ImGui::BeginDisabled(localCatalog||!state.SourceProvider.starts_with("mods/")||HelpyCachedCatalog::Check.has_value());
+    ImGui::BeginDisabled(localCatalog||!HelpyCachedCatalog::Connected()||!state.SourceProvider.starts_with("mods/")||HelpyCachedCatalog::Check.has_value());
     if(ImGui::SmallButton(HelpyCachedCatalog::Check?"Checking source...":"Refresh source")){
         if(!HelpyCachedCatalog::RefreshSource(state.SourceProvider))HelpyCachedCatalog::CheckStatus="Select an enabled mod source and open its game to refresh. Existing cache is retained.";
     }ImGui::EndDisabled();
@@ -753,6 +783,8 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
         if(const auto* payload=ImGui::AcceptDragDropPayload("RS_CART_PATH"))if(payload->DataSize>0 && payload->DataSize<=4097 && static_cast<const char*>(payload->Data)[payload->DataSize-1]=='\0')RemoveFromCart(static_cast<const char*>(payload->Data));
         ImGui::EndDragDropTarget();
     }
+    bool focusCart=false;
+    const auto leaveRows=[&](bool lastRow){const auto& nav=*ImGui::GetCurrentContext();if(lastRow&&quickActions&&allowMulti&&!state.SelectedPaths.empty()&&!SharedCart.Delivery()&&ImGui::IsItemFocused()&&nav.NavMoveSubmitted&&nav.NavMoveDir==ImGuiDir_Down){ImGui::NavMoveRequestCancel();focusCart=true;}};
     const bool populationWait=lazy.LastError.empty()&&(state.CatalogRevision!=revision||!lazy.Started||lazy.Pending||lazy.PreparingAlphabetical||lazy.HasMore)&&state.Matches.empty();
     if(populationWait){if(localCatalog)ImGui::TextDisabled("Checking the cached matching items…");else{const auto progress=ItemPopulation::Describe(lazy.PopulationStage,false,lazy.PopulationDone,{},lazy.CheckingChanges,lazy.PopulationTotal);DrawLoadingSpinner(theme,progress.Label.c_str());}}
     else if(catalog.contains("Items")&&catalog["Items"].is_array()) {
@@ -770,6 +802,7 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
 #endif
                     ImGui::PushID(rowIndex);ImGui::PushID(path.c_str());const float rowWidth=ImGui::GetContentRegionAvail().x;ImGui::BeginDisabled(!fits);const auto rowPos=ImGui::GetCursorScreenPos();
                     const bool clicked=ImGui::Selectable("##item",selectedThis,0,ImVec2(rowWidth,itemHeight));
+                    leaveRows(rowIndex==total-1);
                     if(fits&&ImGui::IsItemFocused()&&ImGui::IsKeyPressed(ImGuiKey_GamepadFaceLeft,false))ImGui::OpenPopup("##item-actions");
 #if defined(HELPY_PREVIEW)
                     HelpyPreviewHooks::ItemFocus[path]={ImGui::GetItemID(),ImGui::GetCurrentWindow()->ID};
@@ -807,6 +840,7 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
                         const auto& row=items[index];const auto path=row.value("Path",std::string{}),name=ItemPresentation::Name(row,theme.itemInternalNames),iconPath=IconForRow(row);const bool fits=path.size()<selectedCapacity,selectedThis=IsSelected(state,path);
                         if(!iconPath.empty())visibleIcons.insert(iconPath);
                         ImGui::PushID(rowIndex);ImGui::PushID(path.c_str());const auto cardMin=ImGui::GetCursorScreenPos();ImGui::BeginDisabled(!fits);const bool clicked=ImGui::InvisibleButton("##card",ImVec2(cardWidth,cardHeight),ImGuiButtonFlags_EnableNav);ImGui::EndDisabled();const auto cardMax=ImVec2(cardMin.x+cardWidth,cardMin.y+cardHeight);auto* draw=ImGui::GetWindowDrawList();
+                        leaveRows(gridRow==gridRows-1);
                         if(fits&&ImGui::IsItemFocused()&&ImGui::IsKeyPressed(ImGuiKey_GamepadFaceLeft,false))ImGui::OpenPopup("##item-actions");
 #if defined(HELPY_PREVIEW)
                         HelpyPreviewHooks::ItemFocus[path]={ImGui::GetItemID(),ImGui::GetCurrentWindow()->ID};
@@ -835,6 +869,8 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
     if(quickActions&&allowMulti){
         ImGui::BeginDisabled(state.SelectedPaths.empty()||SharedCart.Delivery()!=0);
         const auto label="Send to cart ("+std::to_string(state.SelectedPaths.size())+")";
+        // The scrolled grid's last row can lie below the fixed footer in ImGui's scoring coordinates.
+        if(focusCart)HelpyControllerInput::FocusNext();
         if(ImGui::Button(label.c_str(),{ImGui::GetContentRegionAvail().x,0}))SendSelectionToCart(catalog,state,selected,selectedCapacity);
 #if defined(HELPY_PREVIEW)
         HelpyPreviewHooks::BaySendToCart=HelpyPreviewHooks::LastRect();
@@ -884,7 +920,7 @@ inline void RenderSelectedDetails(){
     if(!*Bay.Selected){ImGui::TextDisabled("Select an item to inspect its description and stats.");return;}
     if(!Bay.Picker.MultiSelect&&Bay.Picker.SelectedPaths.size()<2)ItemDetails::Request(Bay.Selected);const auto* details=ItemDetails::Find(Bay.Selected);
     const auto& row=Bay.DetailsRow;const auto& native=details?details->Native:row;
-    if(ImGui::BeginChild("##bay-selected-details",{0,0},false)){
+    if(HelpyImGuiTheme::BeginPanel("##bay-selected-details",{0,0},false)){
         SourceBanners::DetailsBackground(row);
         auto name=HelpyImGuiTheme::Current.itemInternalNames?ItemPresentation::Name(row,true):HelpyPersonalization::Nickname(HelpyPersonalization::ItemKey(row));if(name.empty())name=ItemPresentation::CleanName(ItemPresentation::Text(native,"Name"));if(name.empty())name=ItemPresentation::Name(row);
         const auto a=ImGui::GetCursorScreenPos();const float size=HelpyImGuiTheme::Current.Y(36);
@@ -908,7 +944,7 @@ inline void RenderSelectedDetails(){
         }
         if(!details)ImGui::TextDisabled("Reading native details...");else if(!details->Error.empty())ImGui::TextWrapped("%s",details->Error.c_str());
         if(ImGui::SmallButton("Reload details"))ItemDetails::Reload(Bay.Selected);ImGui::SameLine();if(ImGui::SmallButton("Copy item path"))ImGui::SetClipboardText(Bay.Selected);
-    }ImGui::EndChild();
+    }PS::HelpyImGuiTheme::EndPanel();
 }
 inline Result RenderShared(const json& catalog,uint64_t revision,bool fillSpace=true){
     const auto sameRow=[&](float width){if(ImGui::GetItemRectMax().x+ImGui::GetStyle().ItemSpacing.x+width<=ImGui::GetWindowPos().x+ImGui::GetWindowContentRegionMax().x)ImGui::SameLine();};
@@ -939,9 +975,9 @@ inline Result RenderShared(const json& catalog,uint64_t revision,bool fillSpace=
     const float splitter=theme.Y(8)+ImGui::GetStyle().ItemSpacing.y;
     const float browse=Bay.Expanded?std::max(1.f,available):available<theme.Y(380)?std::max(1.f,available-ImGui::GetFrameHeightWithSpacing()-splitter):ItemBayLayout::PaneHeight(Bay.DetailsExpanded?available*theme.itemBayBrowseRatio:available-ImGui::GetFrameHeightWithSpacing()-splitter,std::max(1.0f,available-theme.Y(45)-splitter),theme.Y(100));
     Result result;
-    if(ImGui::BeginChild("##bay-browse-with-details",{0,browse},false))
+    if(HelpyImGuiTheme::BeginPanel("##bay-browse-with-details",{0,browse},false))
         result=Render("shared-item-bay",Bay.Catalog,Bay.Filter,sizeof(Bay.Filter),Bay.Selected,sizeof(Bay.Selected),Bay.Picker,Bay.Revision,true,true,fillSpace,true);
-    ImGui::EndChild();
+    PS::HelpyImGuiTheme::EndPanel();
     if(!Bay.Expanded)ResizeDivider("item-bay-details",true,HelpyImGuiTheme::Current.itemBayBrowseRatio,.25f,.90f,1.0f/std::max(1.0f,available));
     if(const auto* selected=Find(Bay.Catalog,Bay.Selected))Bay.DetailsRow=*selected;
     else if(ItemPresentation::Text(Bay.DetailsRow,"Path")!=Bay.Selected)Bay.DetailsRow={{"Path",Bay.Selected}};

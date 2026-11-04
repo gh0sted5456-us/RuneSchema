@@ -39,8 +39,8 @@ inline bool Browsable(const Json& value,const HelpySourceCache::Snapshot& snapsh
     }return false;
 }
 inline Json Read(const fs::path& cache,const fs::path& root,const HelpySourceCache::Snapshot& snapshot,const std::string& locale,const std::string& kind={},bool stale=true){
-    auto result=Json::array();std::set<std::string> seen;size_t bytes=0;
-    if(stale)try{for(auto row:HelpyPresentationCache::Records(cache,locale,kind)){if(!Browsable(row,snapshot))continue;seen.insert(row.at("Kind").get<std::string>()+"|"+row.at("Path").get<std::string>());result.push_back(std::move(row));}}catch(...){}
+    auto result=Json::array();std::map<std::string,size_t> seen;size_t bytes=0;
+    if(stale)try{for(auto row:HelpyPresentationCache::Records(cache,locale,kind)){if(!Browsable(row,snapshot))continue;seen.emplace(row.at("Kind").get<std::string>()+"|"+row.at("Path").get<std::string>(),result.size());result.push_back(std::move(row));}}catch(...){}
     for(const auto& folder:std::set<fs::path>{Directory(cache,root),Directory(cache,cache.parent_path())}){
     const auto index=Index(folder);
     for(const auto& [route,entry]:index["Routes"].items()){
@@ -54,7 +54,14 @@ inline Json Read(const fs::path& cache,const fs::path& root,const HelpySourceCac
             if(CacheBundleIO::Hash(text)!=digest)continue;
             for(auto row:CacheBundle::Records(Parse(text))){
                 if(row.Kind!=entry.value("Kind",std::string{})||row.Source!=source||row.Owner!=entry.value("Owner",std::string{})||!ActiveOwner(row,snapshot)||(!kind.empty()&&row.Kind!=kind))continue;
-                const auto identity=row.Kind+"|"+row.Path;if(!seen.insert(identity).second)continue;
+                const auto identity=row.Kind+"|"+row.Path;const auto [found,inserted]=seen.emplace(identity,result.size());
+                if(!inserted){
+                    auto& cached=result.at(found->second).at("Data");
+                    if(row.Kind=="items"&&ItemName::Resolved(row.Data)&&((current&&folder==Directory(cache,cache.parent_path()))||!ItemName::Resolved(cached))){
+                        const auto merged=ItemName::Merge(cached,row.Data);for(const auto* field:{"Name","DisplayName"})if(merged.contains(field))cached[field]=merged.at(field);
+                    }
+                    continue;
+                }
                 row.Data["CacheSourceVerified"]=current;row.Data["CheckingChanges"]=true;
                 if(snapshot.ContainerAssets&&snapshot.ContainerAssets->contains(HelpyCacheSources::AssetKey(row.Path))&&CacheBundle::OriginalOwnerProven(row,Plan(snapshot),snapshot.NativePlugins)){
                     const auto fields=ItemSource::Fields(ItemSource::Describe(row.Path,Plan(snapshot),snapshot.NativePlugins));

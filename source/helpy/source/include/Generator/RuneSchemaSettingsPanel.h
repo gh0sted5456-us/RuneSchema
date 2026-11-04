@@ -2,6 +2,7 @@
 #include "Generator/HelpyTextInput.h"
 #include "Generator/HelpyImGuiTheme.h"
 #include "Generator/HelpyMenu.h"
+#include "Generator/HelpyHudPanel.h"
 #include "Core/HelpyControllerDevice.h"
 #include "Runtime/HelpySettings.h"
 #include "Runtime/HelpyPaths.h"
@@ -87,11 +88,15 @@ inline void CachePreferences(){
     if(HelpyImGuiTheme::Status.starts_with("[RS-CFG-003]"))ImGui::TextWrapped("%s",HelpyImGuiTheme::Status.c_str());
 }
 inline int QuickSection=0;
+inline std::function<void()> ModMenuSettings;
 inline void QuickSettings(){
-    constexpr std::array labels{"Display","Startup","Cache","Performance","Saves"};
+    HelpyFeatureSettings::Load();constexpr std::array allLabels{"Display","Startup","Cache","Performance","Saves","HUD","Mod Menu 2"};
+    const auto labels=std::span(allLabels).first(HelpyFeatureSettings::Key?7:6);
     HelpyMenu::Tabs("helpy-settings",labels,QuickSection);
     const bool body=HelpyMenu::BeginBody("Quick settings body",QuickSection);
     if(body){
+    if(QuickSection==5)HelpyHudPanel::Render();
+    if(QuickSection==6&&ModMenuSettings)ModMenuSettings();
     const auto hint=[](const std::string& text){if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)){
         PS::HelpyImGuiTheme::Tooltip("%s",text.c_str());}};
     if((QuickSection==1||QuickSection==4)&&!Loaded&&Status.empty())Load();
@@ -117,7 +122,7 @@ inline void QuickSettings(){
         if(checkedRoot!=root){checkedRoot=root;try{enrolled=HelpyVulkanSetup::Enrolled(directory,HelpyVulkanSetup::GameExecutable(root));message.clear();}catch(const std::exception& error){message=error.what();}}
         ImGui::TextWrapped("Opt in for this runtime, then restart Dragonwilds. A small per-user Vulkan selector loads the bridge only for enrolled game executables. Other renderers use their own adapter.");
         if(HelpyImGuiTheme::SoftButton(enrolled?"Remove Vulkan startup adapter for this runtime":"Enable Vulkan startup adapter for this runtime"))try{
-            const auto game=HelpyVulkanSetup::GameExecutable(root);HelpyVulkanSetup::Configure(directory,game,HelpyPaths::PluginRoot()/"dll/RuneSchema.Helpy.dll",HelpyPaths::PluginRoot()/"dll/RuneSchema.Helpy.Vulkan.dll",!enrolled);enrolled=!enrolled;message=enrolled?"Enabled for the next game launch.":"Removed for this runtime. Restart the game to unload its active adapter.";
+            const auto game=HelpyVulkanSetup::GameExecutable(root);HelpyVulkanSetup::Configure(directory,game,HelpyPaths::PluginRoot().parent_path()/"RuneSchema.HUD/dll/RuneSchema.HUD.dll",HelpyPaths::PluginRoot()/"dll/RuneSchema.Helpy.Vulkan.dll",!enrolled);enrolled=!enrolled;message=enrolled?"Enabled for the next game launch.":"Removed for this runtime. Restart the game to unload its active adapter.";
         }catch(const std::exception& error){message=error.what();}
         if(!message.empty())ImGui::TextWrapped("%s",message.c_str());ImGui::TreePop();
     }
@@ -141,11 +146,22 @@ inline void QuickSettings(){
 #endif
     ImGui::EndDisabled();ImGui::EndDisabled();
     if(displayChanged)HelpyImGuiTheme::SaveCurrent();
+    ImGui::SeparatorText("Game HUD");ImGui::BeginDisabled(HelpyEnvironment::Server());
+    if(HelpyImGuiTheme::Toggle("Show player coordinates in game",&theme.showCoordinates))HelpyImGuiTheme::SaveCurrent();
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::AuthoringButtons["Player coordinates"]=HelpyPreviewHooks::LastRect();
+#endif
+    hint("Shows your local character's X/Y/Z world coordinates at the bottom-right of the game window while Helpy is hidden. Updates twice per second. Off stops coordinate requests and drawing. Native presentation supports fullscreen; desktop presentation supports borderless/windowed games.");
+    if(HelpyImGuiTheme::Toggle("Show game startup indicator",&theme.showStartupProgress))HelpyImGuiTheme::SaveCurrent();
+    hint("Alternates the Dragonwilds and RuneSchema logos with a centered loading bar during startup. Uses actual RuneSchema stages and stops once the game reaches its menu/world and registration has completed. Unknown remaining work uses an animated bar instead of an invented percentage. Requires Start Helpy with Dragonwilds.");
+    ImGui::EndDisabled();
     if(ImGui::TreeNode("Controller navigation")){
         ImGui::TextUnformatted("Input mode");ImGui::SetNextItemWidth(-1);bool inputChanged=ImGui::Combo("##input-mode",&theme.inputMode,"Automatic\0Mouse & keyboard\0Controller\0");
         hint("Automatic follows your latest input. Controller mode keeps the navigation hints visible. Device discovery runs on device changes; state reads run only while Helpy renders.");
         ImGui::TextUnformatted("Controller glyphs");ImGui::SetNextItemWidth(-1);inputChanged|=ImGui::Combo("##controller-glyphs",&theme.controllerGlyphs,"Automatic (device labels)\0Xbox\0PlayStation\0Generic\0Nintendo\0");
         hint("Xbox, DualShock/DualSense and supported Nintendo controllers use the same navigation. Automatic follows the device button labels; choose a manual layout when a mapper hides its identity.");
+        inputChanged|=HelpyImGuiTheme::Toggle("PlayStation touchpad pointer",&theme.controllerTouchpad);
+        hint("Slide one finger to move Helpy's pointer; press the touchpad to click or drag. Active only while Helpy has focus. Requires a controller connection that exposes its touchpad to SDL; some Steam Input mappings hide it.");
         ImGui::TextWrapped("%s",HelpyControllerDevice::Status().c_str());
         if(inputChanged)HelpyImGuiTheme::SaveCurrent();ImGui::TreePop();
     }
@@ -234,8 +250,10 @@ inline void QuickSettings(){
         hint("Toggle the in-game counter while Dragonwilds or Helpy has focus. F10 by default. Choose a different key from Helpy's own shortcut; function keys avoid typing conflicts.");
         if(const auto* binding=HelpyShortcut::Find(theme.fpsHotkey);binding&&binding->Key==HelpySettings::Hotkey.load())ImGui::TextWrapped("Choose a different FPS shortcut from Helpy's own key.");
         ImGui::SetNextItemWidth(HelpyImGuiTheme::Current.X(150));
-        ImGui::SliderInt("Helpy FPS limit",&theme.helpyFpsLimit,15,144,"%d",ImGuiSliderFlags_AlwaysClamp);
-        save|=ImGui::IsItemDeactivatedAfterEdit();
+        save|=ImGui::SliderInt("Helpy FPS limit",&theme.helpyFpsLimit,15,144,"%d",ImGuiSliderFlags_AlwaysClamp);
+#if defined(HELPY_PREVIEW)
+        HelpyPreviewHooks::AuthoringButtons["Helpy FPS limit"]=HelpyPreviewHooks::LastRect();
+#endif
         hint("Limits Helpy rendering only. Default 60, adjustable up to 144; unfocused Helpy is limited to 10 FPS and hidden/minimized windows stop rendering. The game frame-rate limit is unchanged.");
         int interval=theme.fpsRefreshMs<=500?0:theme.fpsRefreshMs<=1000?1:2;
         const char* intervals[]{"0.5 seconds","1 second","2 seconds"};
@@ -309,7 +327,7 @@ inline void QuickSettings(){
         if(Loaded){QuickToggle("Save Bypass","/persistence/allowCorruptCharacterEntry",true);
             hint("Enabled: use bypass by default. Disabled: Normal, Quick Launch and dedicated servers use relaxed native loading first, then fallback only after native rejection. Native loading runs once. Does not repair unreadable data; keep backups and disable any standalone bypass. Next launch only.\n\nCurrent session: "+Snapshot.value("BypassStatus",std::string("Not reported")));}
         ImGui::TextDisabled("Backup-first save pruning");
-        hint("RuneSchema verifies a whole-save backup before removing orphaned mod data. Active quests from disabled mods are removed when their IDs no longer resolve in the certified quest registry. Backups are restored manually; old Recovery archives are not loaded or deleted.");
+        hint("RuneSchema verifies a character backup before removing orphaned character data. World backups use the optional world recovery setting below. Active quests from disabled mods are removed when their IDs no longer resolve in the certified quest registry. Old Recovery archives are not loaded or deleted.");
         ImGui::SeparatorText("Experimental recovery");
         std::string recoveryRuntime;using Kind=HelpyEnvironment::Kind;
         switch(HelpyEnvironment::Current){case Kind::Steam:recoveryRuntime="steam";break;case Kind::Epic:recoveryRuntime="epic";break;case Kind::GamePass:recoveryRuntime="gamepass";break;case Kind::Dedicated:recoveryRuntime="server";break;default:break;}
@@ -318,7 +336,7 @@ inline void QuickSettings(){
             const auto directory=SaveBackups::Directory(RuneSchemaData::Directory(),recoveryRuntime);
             if(checked!=directory){checked=directory;try{enabled=SaveBackups::ExperimentalWorldRecovery(directory);message.clear();}catch(const std::exception& error){enabled=false;message=error.what();}}
             if(HelpyImGuiTheme::Toggle("World save recovery (experimental)",&enabled))try{SaveBackups::SetWorldRecovery(directory,enabled);message.clear();}catch(const std::exception& error){enabled=!enabled;message=error.what();}
-            hint("Off by default for each runtime. Unlocks world snapshots and restoration in Save Recovery. Applies at the next world entry; refresh the recovery list after changing it. Character backups and the existing backup before world cleanup remain enabled. No periodic save scan is added.");
+            hint("Off by default for each runtime. Enables AppData world snapshots before cleanup and unlocks restoration in Save Recovery. World cleanup continues with this off, or if a backup fails. Character backups remain enabled. Applies at the next world entry; refresh the recovery list after changing it. No periodic save scan is added.");
             if(!message.empty())ImGui::TextWrapped("%s",message.c_str());
         }else ImGui::TextDisabled("Choose a runtime to configure world recovery.");
         if(QuickToggleError||!Loaded){ImGui::TextColored(HelpyImGuiTheme::Current.error,"RuneSchema settings need attention. Hover for details.");hint(Status);}

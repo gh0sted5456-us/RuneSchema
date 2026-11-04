@@ -9,12 +9,40 @@ promote_to: CHANGELOG-0.8.1.0.md
 
 # RuneSchema 0.8.1.0 — experimental
 
+Development history follows. Earlier local-testing/publication holds describe
+those stages; use the [current candidate notes](PRE-RELEASE.md) for downloads,
+installation and remaining limits.
+
+- Add registered [multiplayer character appearance](CHARACTER-APPEARANCE.md), server-derived actor/GUID binding, deduplicated committed snapshots, late-join/resync delivery and an optional cooked consumer. The matching RSNetworking trio carries the reliable Actor-reference callback; provider rendering and local profile storage stay mod-owned. Real provider multiplayer acceptance remains pending.
+
+- Add key-gated Mod Menu 2 with Helpy presentation, legacy settings/config callbacks, direct shortcut and optional character-editor tabs/preview transport. Skip its backend beside an enabled or already-loaded external Mod Menu. Preserve Maxxfilth's MIT notice.
+- Add a public HUD layout preview for minimap, coordinates, notifications and loading artwork. Save positions without restarting; passive widgets leave input to the game, and interactive Mod Menu 2 uses normal Helpy input capture.
+
+- Prepare saved Item Bay indexes during startup on a background file worker; reuse in-memory category/family buckets for immediate warm filtering. Add portable `cache/taglines.json` rules and optional `cache/tips.json`, shared through cache bundles and preserved across rebuilds.
+- Add exact-text ID.txt editing, opt-in local update fingerprints and evidence-based mod-manager labels. Add next-launch UE4SS toggles, per-owner `ue4ss/status.txt`, card/compact views and loading tips. Keep the passive startup indicator independent of the main window mode and retain overlay mode after presentation failures.
+
+- Added Home cache building for enabled mods, plus a persistent per-platform Notifications inbox for mod/game version changes and cache job results. Players offers a confirmed vanilla resync after a reported platform build change. ID.txt versions take precedence over legacy mod.json versions; blank versions do not create update alerts.
+- Allowed installed-mod and vanilla PAK cache reading in a separate lower-priority worker while connected. Kept inputs read-only, checked source stability, retained existing cache during updates, and let explicit batches continue/import while Helpy is in the tray. Live lookup remains available for runtime-only data.
+- Documented the Wine/Proton investigation and the distinction between a Windows server under Wine and a native Linux hosted server. Linux/Wine runtime verification is still pending.
+- Added a separate [Wine compatibility packaging path](COMPATIBILITY.md#0810-wine-compatibility-packaging) with unpacked native DLLs, preserved runtime contents/licenses and a read-only UE4SS export checker. Windows packages retain UPX compression; a real Proton load is still required before claiming the reported `0x45A` failure is fixed.
+
+- Decoupled selected-world cleanup from optional world backups. Disabled world recovery no longer attempts a legacy backup through Game Pass's redirected LocalState folder. Enabled world backups use the AppData archive, and a backup error cannot stop an otherwise validated building repair. Kept the checks that preserve valid records and unrelated world bytes.
+
+
 This experimental update brings the maintained RuneSchema core, standalone
 Helpy app and matching bridge together. Keep the three components from the
 same build. The stable release remains separate.
 
 ## Local follow-up: Helpy, server access and performance
 
+- Added Item Bay switches for the existing saved cache-first policy and passive updates, plus **Refresh search** for the entered query and current filters. Manual refreshes bypass the automatic cooldown, keep cached rows and use bounded priority requests. Kept offline items, pictures and cart editing available; offline cache misses no longer attempt a game request. Unchanged live checks no longer discard the prepared file index.
+- Unified saved native observations and imported references in a reusable search index on the file worker. Removed the older label-only merge and repeated native-page scans for each query; retained source filtering, cache invalidation, and the paged fallback for older caches.
+- Smoothed startup artwork and the loading bar at 60 FPS, added buffered desktop painting, and removed the frame limiter's obsolete 15-FPS floor for passive HUDs. Reduced-motion mode stays stationary and startup-stage polling remains once per second.
+- Added an optional centered startup display during the black loading screen: alternating Dragonwilds/RuneSchema artwork, an indeterminate loading bar, and current startup stages. Started the desktop companion earlier, retained the normal plugin Unreal-init order, and made completion wait for registration and the menu/world handoff. Startup and coordinate-only HUDs use small passive surfaces, with input left to the game.
+- Added an optional **Show player coordinates in game** toggle under Quick Settings → Display. Displays local X/Y/Z and look rotation on one horizontal line at the bottom-right of the game while Helpy is hidden, in Unreal order: Pitch, then Yaw (degrees). Uses a coalesced game-thread sample twice per second, expires unavailable/stale positions, and draws without capturing input. Native presentation supports fullscreen; desktop presentation retains a click-through windowed/borderless fallback.
+- Made cache-first searches reuse prepared local search text, shortened their typing delay to 100 ms, and removed immediate game queries on cache hits. Cache misses use the focused live-search route; live discoveries continue saving asynchronously to platform AppData. Passive checks run once per minute while Helpy is open, and explicit source refresh remains available.
+- Joined Helpy pane navigation across sections so controllers can leave top tabs and enter Item Bay, settings, tools and other content without confirming empty pane borders. Stopped header focus recovery from interrupting native navigation during scrolling, added direct content entry without automatically activating text fields, and added regressions that follow the real focus path through all sections and the map.
+- Added a saved PlayStation touchpad pointer option for PS5/DualSense and DualShock controllers: relative movement, press-to-click/drag, retouch without jumps and click release on focus loss, disconnect or disable. Kept pointer clicks within Helpy's input path.
 - Added a saved controller show/hide shortcut: Xbox/PS/Home by default, a View + Menu alternative, or Disabled. Retained the keyboard binding, bounded hidden-state checks to the assigned foreground game and prevented held/rebound/duplicate reports from repeatedly toggling the panel.
 - Added an optional Windows GameInput Guide reservation in the game bridge, with direct Guide forwarding, automatic release on Helpy exit and a five-second disconnect lease. Documented that Steam can read controllers independently and still require its own Guide-button configuration.
 - Added a saved Resource alerts during startup switch in Quick Settings and Diagnostics. Kept sampling active while suppressing expected startup resource notices for the first two minutes by default, with fresh thresholds and growth baselines afterward.

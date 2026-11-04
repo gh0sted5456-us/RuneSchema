@@ -10,6 +10,7 @@
 #include <vector>
 #include <map>
 #include "Core/CharacterWorkbench.h"
+#include "Core/SavedLoadout.h"
 
 // Independent, copy-only character editing. No file I/O or provider writes.
 namespace PS::CharacterSaveEditor {
@@ -83,8 +84,17 @@ public:
     Json Loadout()const{
         const auto& game=Draft().at("GameProgress");Json rows=Json::array();if(!game.contains("Loadout"))return rows;const auto& loadout=game.at("Loadout");if(!loadout.is_object()||loadout.size()>65)throw std::runtime_error("Unsupported saved loadout");
         for(const auto& [key,value]:loadout.items())if(key!="MaxSlotIndex"){
-            if(key.empty()||key.size()>2||key.find_first_not_of("0123456789")!=key.npos||std::stoi(key)>63||!value.is_object())continue;const auto index=value.value("PlayerInventoryItemIndex",-1);if(index<0||index>4096)continue;const auto slot=std::to_string(index);const auto& bag=game.at("Inventory");if(!bag.contains(slot)||!bag[slot].is_object()||!bag[slot].contains("ItemData"))continue;
-            rows.push_back({{"LoadoutSlot",std::stoi(key)},{"Slot",slot},{"Pointer","/GameProgress/Inventory/"+slot},{"PersistenceID",bag[slot].at("ItemData")},{"Equipped",true},{"Count",bag[slot].value("Count",Json(1))}});
+            if(key.empty()||key.size()>2||key.find_first_not_of("0123456789")!=key.npos||std::stoi(key)>63||!value.is_object())continue;
+            const Json* item=&value;auto slot=key,pointer="/GameProgress/Loadout/"+key;
+            if(SavedLoadout::InventoryReference(value)){
+                const auto& index=value.at("PlayerInventoryItemIndex");
+                if(!index.is_number_integer()||index<0||index>4096)continue;
+                slot=std::to_string(index.get<int>());const auto& bag=game.at("Inventory");
+                if(!bag.contains(slot))continue;item=&bag.at(slot);pointer="/GameProgress/Inventory/"+slot;
+            }
+            if(!item->is_object()||!item->contains("ItemData")||!item->at("ItemData").is_string()||item->at("ItemData").get_ref<const std::string&>().empty())continue;
+            rows.push_back({{"LoadoutSlot",std::stoi(key)},{"Slot",slot},{"Pointer",pointer},{"PersistenceID",item->at("ItemData")},
+                {"InstanceID",item->value("GUID",Json{})},{"Equipped",true},{"ReadOnly",!SavedLoadout::InventoryReference(value)},{"Count",item->value("Count",Json(1))}});
         }return rows;
     }
     Json Appearance()const{return {{"Name",draft.contains("meta_data")?draft.at("meta_data").value("char_name",std::string{}):std::string{}},{"CharacterGuid",CharacterGuid()},{"Appearance",CharacterWorkbench::Appearance(Draft())},{"Revision",revision},{"BeardColorSupported",false}};}
@@ -129,7 +139,7 @@ public:
                 const auto& item=values.at(slot);const auto id=item.at("ItemData").get<std::string>();if(id.empty()||id.size()>2048)continue;
                 const bool count=item.contains("Count")&&item.at("Count").is_number_integer()&&item.at("Count")>=1&&item.at("Count")<=10000;
                 bool equipped=false;if(std::string_view(container)=="Inventory"&&game.contains("Loadout")&&game.at("Loadout").is_object())
-                    for(const auto& value:game.at("Loadout"))if(value.is_object()&&value.contains("PlayerInventoryItemIndex")&&value.at("PlayerInventoryItemIndex").is_number_integer()&&value.at("PlayerInventoryItemIndex")==number)equipped=true;
+                    for(const auto& value:game.at("Loadout"))if(SavedLoadout::InventoryReference(value)&&value.at("PlayerInventoryItemIndex").is_number_integer()&&value.at("PlayerInventoryItemIndex")==number)equipped=true;
                 rows.push_back({{"Pointer",std::string("/GameProgress/")+container+"/"+slot},{"Container",container},{"Slot",slot},{"PersistenceID",id},
                     {"InstanceID",item.value("GUID",Json{})},{"Count",item.value("Count",Json(1))},{"StackEditable",count},{"Equipped",equipped},
                     {"DisplayName",nullptr},{"AssetPath",nullptr},{"Origin","Unresolved"}});
@@ -159,7 +169,7 @@ public:
         auto& game=next.at("GameProgress");if(!inventorySlots.empty()&&game.contains("Loadout")){
             auto& loadout=game.at("Loadout");if(!loadout.is_object()||loadout.size()>256)throw std::runtime_error("Unsupported native equipment links");
             for(auto it=loadout.begin();it!=loadout.end();){const auto& item=it.value();bool remove=false;
-                if(item.is_object()&&item.contains("PlayerInventoryItemIndex")){
+                if(SavedLoadout::InventoryReference(item)){
                     const auto& slot=item.at("PlayerInventoryItemIndex");if(!slot.is_number_integer()||slot<0||slot>2147483647)throw std::runtime_error("Unsupported native equipment reference; no removal staged");
                     remove=inventorySlots.contains(std::to_string(slot.get<int64_t>()));}
                 if(remove)it=loadout.erase(it);else ++it;

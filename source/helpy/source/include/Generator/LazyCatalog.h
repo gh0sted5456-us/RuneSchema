@@ -61,6 +61,7 @@ inline constexpr int MaxCachedQueries=16;
 inline constexpr size_t MaxCachedRows=8192,MaxRowsPerQuery=2048;
 inline std::function<bool(json)> RemoteSubmit;
 inline std::function<bool(const json&)> LocalSubmit,IgnoreResponse;
+inline std::function<bool(uint64_t)> LocalWaiting;
 inline std::function<void()> LocalPoll,LocalShutdown;
 inline std::function<void(int,uint64_t)> RemoteCancel;
 inline std::array<uint64_t,3> PendingCancels{};inline ProcessExitFuture<void> Cancelling;
@@ -73,7 +74,7 @@ inline void PumpCancellations(){
 }
 inline void QueueCancel(int category,uint64_t generation){if(category<0||category>2||!RemoteCancel)return;PendingCancels[size_t(category)]=std::max(PendingCancels[size_t(category)],generation);PumpCancellations();}
 inline void ConfigureRemote(std::function<bool(json)> submit,std::function<void(int,uint64_t)> cancel){DrainCancellations();RemoteSubmit=std::move(submit);RemoteCancel=std::move(cancel);}
-inline void ClearRemote(){DrainCancellations();if(LocalShutdown)LocalShutdown();LocalSubmit={};LocalPoll={};LocalShutdown={};IgnoreResponse={};RemoteSubmit={};RemoteCancel={};}
+inline void ClearRemote(){DrainCancellations();if(LocalShutdown)LocalShutdown();LocalSubmit={};LocalPoll={};LocalShutdown={};LocalWaiting={};IgnoreResponse={};RemoteSubmit={};RemoteCancel={};}
 
 inline State& For(int category){return Windows[static_cast<size_t>(std::clamp(category,0,2))];}
 inline const char* KeyFor(int category){return category==0?"Items":"Definitions";}
@@ -163,7 +164,8 @@ inline void CancelLoading(int category){
 inline void CheckTimeouts(std::chrono::steady_clock::time_point now=std::chrono::steady_clock::now()) {
     PumpCancellations();
     if(LocalPoll)LocalPoll();
-    for(auto& state:Windows)if(state.Pending&&now-state.RequestedAt>std::chrono::seconds(15)) {
+    for(auto& state:Windows)if(state.Pending&&now-state.RequestedAt>std::chrono::seconds(15)
+        &&(!LocalWaiting||!LocalWaiting(state.ActiveRequestId))) {
         state.Pending=false;state.ActiveRequestId=0;
         ++state.CancelGeneration;
         QueueCancel(static_cast<int>(&state-Windows.data()),state.CancelGeneration);

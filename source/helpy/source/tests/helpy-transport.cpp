@@ -31,7 +31,12 @@ int32_t RS_PLUGIN_CALL HostCall(const char*,const char* service,const char* inpu
     const auto action=request.value("Action",std::string{});
     if((BlockAction==1&&action=="QuerySubmit")||(BlockAction==2&&action=="Read")||(BlockAction==3&&action=="IconSubmit")||(BlockAction==4&&action=="Submit")){BlockEntered=true;HostRelease.wait();}
     std::lock_guard lock(HostMutex);++HostCalls[action];
-    if(action=="HelpyNativeOverlay"){
+    if(action=="HelpyModMenuRead")reply={{"Available",true},{"Revision",7},{"Snapshot",{{"Pages",json::array()},{"Padding",std::string(32000,'m')}}}};
+    else if(action=="HudExtensions"){
+        if(!output||capacity<8192){*size=8192;return RS_PLUGIN_BUFFER_TOO_SMALL;}
+        ++GuardedCalls[action];reply={{"Available",true},{"Accepted",true}};
+    }
+    else if(action=="HelpyNativeOverlay"){
         if(!output||capacity<8192){*size=8192;return RS_PLUGIN_BUFFER_TOO_SMALL;}
         ++GuardedCalls[action];reply={{"Ready",true},{"Api","D3D12"}};
     }
@@ -152,16 +157,19 @@ int main(){
     {
         auto preferences=PS::HelpyImGuiTheme::Theme{};preferences.runtimeTimeUnit=3;preferences.backgroundFile="Scene.png";preferences.backgroundStrength=.2f;
         preferences.showFps=true;preferences.helpyFpsLimit=45;preferences.fpsRefreshMs=500;
-        preferences.showGameFps=true;preferences.fpsHotkey="F11";
+        preferences.showGameFps=true;preferences.showCoordinates=true;preferences.showStartupProgress=false;preferences.fpsHotkey="F11";
         preferences.gameOverlay=true;preferences.overlayOpacity=.77f;preferences.diagnosticRegistryActivity=true;preferences.itemInternalNames=true;
         preferences.playTimeReminders=false;preferences.resourceDiagnostics=false;preferences.gpuResourceDiagnostics=false;preferences.ue4ssDiagnostics=false;
         preferences.startupResourceAlerts=true;
-        preferences.controllerShortcut=2;preferences.reserveControllerGuide=false;
+        preferences.controllerShortcut=2;preferences.reserveControllerGuide=false;preferences.controllerTouchpad=false;
         preferences.navigationCollapsed=true;preferences.navigationPinned=true;
         preferences.resourceCpuThreshold=85;preferences.resourceMemoryThreshold=91;preferences.resourceGpuThreshold=99;preferences.ue4ssLogBudget=234;preferences.ue4ssOverlapSeconds=7;
         preferences.diagnosticToastsEnabled=false;preferences.diagnosticToastLimit=2;preferences.diagnosticHistoryDays=7;preferences.diagnosticSplitRatio=.6f;preferences.diagnosticDeveloperMode=true;
         PS::HelpyRuntimePreferences::CacheFirst=false;PS::HelpyRuntimePreferences::PassiveRefresh=false;
         const auto document=PS::HelpyImGuiTheme::DocumentFrom(preferences,200);
+        assert(document["input"]["touchpad"]==false&&PS::HelpyImGuiTheme::DefaultDocument()["input"]["touchpad"]==true);
+        PS::HelpyOverlayFrames::Page pointerPage;pointerPage.Left=160;pointerPage.Top=90;pointerPage.ViewportWidth=1920;pointerPage.ViewportHeight=1080;
+        const auto clientPointer=PS::HelpyOverlayInput::ClientPosition(pointerPage,{320,180},{1280,720});assert(clientPointer.x==320&&clientPointer.y==180);
         assert(document["navigation"]["collapsed"]==true&&document["navigation"]["pinned"]==true&&!PS::HelpyImGuiTheme::DefaultDocument()["navigation"]["collapsed"].get<bool>());
         assert(document["cache"]["loadOrder"]=="gameFirst"&&document["cache"]["passiveRefresh"]==false);
         assert(PS::HelpyImGuiTheme::DefaultDocument()["cache"]["loadOrder"]=="cacheFirst");
@@ -169,7 +177,8 @@ int main(){
         PS::HelpyRuntimePreferences::CacheFirst=true;PS::HelpyRuntimePreferences::PassiveRefresh=true;
         assert(document["runtime"]["timeUnit"]==3&&document["background"]["file"]=="Scene.png"&&document["background"]["strength"].get<float>()==.2f);
         assert(document["runtime"]["showFps"]==true&&document["runtime"]["helpyFpsLimit"]==45&&document["runtime"]["fpsRefreshMs"]==500);
-        assert(document["runtime"]["showGameFps"]==true&&document["runtime"]["fpsHotkey"]=="F11");
+        assert(document["runtime"]["showGameFps"]==true&&document["runtime"]["showCoordinates"]==true&&document["runtime"]["fpsHotkey"]=="F11");
+        assert(document["runtime"]["showStartupProgress"]==false&&PS::HelpyImGuiTheme::DefaultDocument()["runtime"]["showStartupProgress"]==true);
         assert(document["runtime"]["gameOverlay"]==true&&document["runtime"]["overlayOpacity"].get<float>()==.77f);
         assert(document["views"]["itemInternalNames"]==true&&!PS::HelpyImGuiTheme::DefaultDocument()["views"]["itemInternalNames"].get<bool>());
         assert(document["monitoring"]["resources"]==false&&document["monitoring"]["gpu"]==false&&document["monitoring"]["ue4ss"]==false&&document["monitoring"]["playTimeReminders"]==false);
@@ -180,7 +189,7 @@ int main(){
         assert(document["notifications"]["registryActivity"]==true);
         const auto defaults=PS::HelpyImGuiTheme::DefaultDocument()["runtime"];
         assert(defaults["showFps"]==false&&defaults["helpyFpsLimit"]==60&&defaults["fpsRefreshMs"]==1000);
-        assert(defaults["showGameFps"]==false&&defaults["fpsHotkey"]=="F10");
+        assert(defaults["showGameFps"]==false&&defaults["showCoordinates"]==false&&defaults["fpsHotkey"]=="F10");
     assert(defaults["gameOverlay"]==true&&defaults["nativeOverlay"]==true&&!PS::HelpyImGuiTheme::DefaultDocument()["notifications"]["registryActivity"].get<bool>());
         assert(!document["notifications"]["enabled"].get<bool>()&&document["notifications"]["visibleLimit"]==2&&document["diagnosticHistory"]["ageDays"]==7);
         assert(document["diagnosticPresentation"]["splitRatio"].get<float>()==.6f&&document["diagnosticPresentation"]["developerMode"].get<bool>());
@@ -195,7 +204,13 @@ int main(){
         assert(picker.ActiveCategory=="All"&&picker.PageIndex==0&&picker.SourceProvider=="mods/dye"&&picker.ResetScroll);
     }
     RuneSchemaHostApi host{};host.CallService=HostCall;State state{&host};ConfigureTransport(&state);
+    {const json admin={{"Kind","RuneSchemaServerControl1"},{"CanManage",true}};
+        StoreReceipt(&state,{{"_RequestId",90001},{"Status","Native role confirmed"},{"ServerControl",admin}});
+        assert(state.Completed.at(90001).at("ServerControl")==admin);state.Completed.erase(90001);}
     const auto syncHost=[&](bool metadata=false){SyncHost(&state,true,metadata);state.NextHostRead=state.NextMetadataRead=std::chrono::steady_clock::time_point::max();};syncHost();
+    {const auto previous=HostSnapshot;HostSnapshot={{"_RequestId",90002},{"_InProgress",false},{"Status","Recovered native role result"},{"ServerControl",{{"Kind","RuneSchemaServerControl1"},{"CanManage",true}}}};++HostRevision;syncHost();
+        json receipt;assert(PS::SpawnToolRequests::TakeCompleted(90002,receipt)&&receipt.at("ServerControl").at("CanManage")==true);
+        HostSnapshot=previous;++HostRevision;syncHost();}
     const auto flushCatalog=[&]{while(state.CatalogSubmit.valid()||!state.CatalogQueue.empty()){if(state.CatalogSubmit.valid())state.CatalogSubmit.wait();PumpCatalog(&state);}};
     for(const auto* action:{"Prepare","Open","Show","Hide","Status"}){
         const auto before=HostCalls["HelpyNativeOverlay"];json reply;
@@ -203,6 +218,8 @@ int main(){
         assert(HostCalls["HelpyNativeOverlay"]==before+1&&GuardedCalls["HelpyNativeOverlay"]==before+1);
     }
     {json reply;assert(CallCore(&state,{{"Action","CrashDumpRead"}},reply)&&reply.at("ExpectedContents").get<std::string>().size()==10000&&CrashOptionReads==2);}
+    {json reply;const auto before=HostCalls["HelpyModMenuRead"];assert(CallCore(&state,{{"Action","HelpyModMenuRead"}},reply)&&reply.at("Available")==true&&reply.at("Snapshot").at("Padding").get<std::string>().size()==32000);assert(HostCalls["HelpyModMenuRead"]==before+2);}
+    for(const auto* action:{"List","Activate","Deactivate"}){json reply;const auto before=HostCalls["HudExtensions"];assert(CallCore(&state,{{"Action","HudExtensions"},{"Payload",{{"Action",action}}}},reply)&&reply.at("Accepted")==true);assert(HostCalls["HudExtensions"]==before+1);}
     {json manifest;assert(PS::HelpySourceCache::RemoteSnapshot(manifest)&&manifest.at("Padding").get<std::string>().size()==20000&&IconManifestReads==2);
         PS::HelpySourceCache::Current.Provisional=true;PS::HelpySourceCache::CachedSourcesAttempted=true;PS::HelpySourceCache::Next={};
         assert(PS::HelpySourceCache::Poll({})&&PS::HelpySourceCache::Ready()&&!PS::HelpySourceCache::Current.Provisional);

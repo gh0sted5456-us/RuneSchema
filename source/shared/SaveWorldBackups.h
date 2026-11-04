@@ -28,6 +28,11 @@ inline fs::path Store(const fs::path& directory,const std::string& slot,std::str
     for(const auto& [name,value]:context.items())if(name=="LastPlayedUtc"||(name=="Mods"&&!meta.contains(name)))meta[name]=value;
     meta["LastObservedUtc"]=Now();CacheBundleIO::Publish(Metadata(file),meta.dump());return file;
 }
+inline fs::path BeforeCleanup(const fs::path& directory,const std::string& slot,std::string_view bytes,Json context,std::string& issue){
+    issue.clear();
+    try{if(!Enabled(directory))return {};return Store(directory,slot,bytes,"Before cleanup",std::move(context));}
+    catch(const std::exception& error){issue=error.what();return {};}
+}
 struct Entry:SaveBackups::Entry {std::string Slot;};
 inline std::vector<Entry> List(const fs::path& directory){
     std::vector<Entry> rows;CacheBundleIO::Safe(directory);if(!fs::exists(directory))return rows;size_t examined=0;

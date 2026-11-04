@@ -2,6 +2,7 @@
 #include "Generator/HelpyTextInput.h"
 #include "Core/ProcessExitFuture.h"
 #include "Generator/HelpyImGuiTheme.h"
+#include "Generator/HelpyControllerInput.h"
 #include "Core/MapProjection.h"
 #include "Core/MapViewport.h"
 #include "Core/MapSpawnRequest.h"
@@ -90,13 +91,13 @@ inline void Filters(){
 #endif
     ImGui::SetNextWindowSizeConstraints({theme.X(300),0},{std::max(theme.X(300),ImGui::GetIO().DisplaySize.x-theme.X(32)),ImGui::GetIO().DisplaySize.y-theme.Y(24)});
     if(!ImGui::BeginPopup("Map filters"))return;
-    ImGui::BeginChild("##filter-body",{theme.X(330),std::max(theme.Y(120),ImGui::GetIO().DisplaySize.y-theme.Y(160))},false);
+    HelpyImGuiTheme::BeginPanel("##filter-body",{theme.X(330),std::max(theme.Y(120),ImGui::GetIO().DisplaySize.y-theme.Y(160))},false);
     bool changed=false;ImGui::SeparatorText("Cached map layers");
     changed|=HelpyImGuiTheme::Toggle("Show cached locations",&cache.Filters.ShowCached);
     if(cache.Data){
         if(ImGui::SmallButton("Show all")){cache.Filters.ShowCached=true;cache.Filters.Hidden.clear();changed=true;}ImGui::SameLine();
         if(ImGui::SmallButton("Hide all")){for(const auto& category:cache.Data->Categories)cache.Filters.Hidden.insert(category.Key);changed=true;}
-        ImGui::BeginChild("##map-filter-list",{theme.X(320),std::min(theme.Y(190),ImGui::GetIO().DisplaySize.y*.22f)},true);
+        HelpyImGuiTheme::BeginPanel("##map-filter-list",{theme.X(320),std::min(theme.Y(190),ImGui::GetIO().DisplaySize.y*.22f)},true);
         size_t at=0;while(at<cache.Data->Categories.size()){
             const auto& first=cache.Data->Categories[at];size_t end=at;while(end<cache.Data->Categories.size()&&cache.Data->Categories[end].Group==first.Group)++end;
             bool all=true;size_t total=0;for(size_t i=at;i<end;++i){all=all&&!cache.Filters.Hidden.contains(cache.Data->Categories[i].Key);total+=cache.Data->Categories[i].Count;}
@@ -116,7 +117,7 @@ inline void Filters(){
 #endif
                 ImGui::SameLine();const auto side=theme.Y(20);const auto at=ImGui::GetCursorScreenPos();MapLayerIcons::Resource(HelpyGlyphs::Resource(category.Group,MapFilters::Fold(category.Name)),category.Name,{at.x+side*.5f,at.y+side*.5f},side);ImGui::Dummy({side,side});ImGui::SameLine();ImGui::TextUnformatted(label.c_str());ImGui::PopID();
             }ImGui::TreePop();}ImGui::PopID();at=end;
-        }ImGui::EndChild();
+        }PS::HelpyImGuiTheme::EndPanel();
         changed|=HelpyImGuiTheme::Toggle("Update after confirmed game patches",&cache.Filters.UpdateAfterGamePatch);
         if(ImGui::TreeNode("Cache details")){
             ImGui::TextWrapped("Reference data: %s. Cached for %s. No timed online polling.",cache.Data->Built.c_str(),cache.CachedBuild.empty()?"unconfirmed build":cache.CachedBuild.c_str());
@@ -138,7 +139,7 @@ inline void Filters(){
     if(nativeChanged)SaveNativeFilters();
     ImGui::TextWrapped("Loaded areas vs. cached world references. Search applies to both.");
     if(changed)HelpyMapCache::SaveFilters();
-    ImGui::EndChild();
+    PS::HelpyImGuiTheme::EndPanel();
     if(HelpyImGuiTheme::SoftButton("Done"))ImGui::CloseCurrentPopup();
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::MapFiltersClose=HelpyPreviewHooks::LastRect();
@@ -249,7 +250,7 @@ inline void BuildingBrowser(){
     if(Data.BuildingsPending||Data.BuildingsWanted)ImGui::TextDisabled("Loading menu... %zu pieces received",Data.Buildings.size());
     else ImGui::TextDisabled("%zu pieces",Data.Buildings.size());
     const float body=std::max(t.Y(80),ImGui::GetContentRegionAvail().y-ImGui::GetFrameHeightWithSpacing()*2-t.Y(12));
-    if(ImGui::BeginChild("##building-categories",ImVec2(t.X(150),body),true)){
+    if(HelpyImGuiTheme::BeginPanel("##building-categories",ImVec2(t.X(150),body),true)){
         if(ImGui::Selectable("All categories",Data.BuildingCategory<0))Data.BuildingCategory=-1;
         for(const auto& category:Data.BuildingCategories){
             const auto id=category.value("Id",-1);const auto name=ItemPresentation::Text(category,"Name"),icon=ItemPresentation::Text(category,"Icon");ImGui::PushID(id);
@@ -260,8 +261,8 @@ inline void BuildingBrowser(){
             ImGui::GetWindowDrawList()->AddText(ImGui::GetFont(),ImGui::GetFontSize(),ImVec2(a.x+t.X(25),a.y+t.Y(3)),ImGui::GetColorU32(t.text),name.c_str(),nullptr,labelWidth);
             ImGui::PopID();
         }
-    }ImGui::EndChild();ImGui::SameLine();
-    if(ImGui::BeginChild("##building-grid",ImVec2(0,body),true)){
+    }PS::HelpyImGuiTheme::EndPanel();ImGui::SameLine();
+    if(HelpyImGuiTheme::BeginPanel("##building-grid",ImVec2(0,body),true)){
         const float width=ImGui::GetContentRegionAvail().x;const int columns=std::max(1,static_cast<int>((width+t.X(8))/(t.X(132)+t.X(8))));
         const float cardWidth=std::max(1.0f,(width-t.X(8)*(columns-1))/columns);size_t shown=0;
         for(const auto& row:Data.Buildings){if(!BuildingMenu::Matches(row,Data.BuildingSearch,Data.BuildingCategory))continue;
@@ -282,7 +283,7 @@ inline void BuildingBrowser(){
             ImGui::PopID();++shown;
         }
         if(!shown)ImGui::TextWrapped("%s",Data.BuildingsPending||Data.BuildingsWanted?"Looking through the game's menu...":"No pieces match this search/category.");
-    }ImGui::EndChild();
+    }PS::HelpyImGuiTheme::EndPanel();
     ImGui::TextWrapped("Selected: %s",Data.Building.empty()?"None":ItemPresentation::Text(Data.Building,"Name").c_str());
     ImGui::BeginDisabled(Data.Building.empty());if(HelpyImGuiTheme::SoftButton("Use selected piece")){Data.BuildingBrowserOpen=false;ImGui::CloseCurrentPopup();}
 #if defined(HELPY_PREVIEW)
@@ -309,7 +310,7 @@ inline void PlacePopup(){
     HelpyPreviewHooks::MapPopupWindow={ImGui::GetWindowPos().x,ImGui::GetWindowPos().y,ImGui::GetWindowPos().x+size.x,ImGui::GetWindowPos().y+size.y};
 #endif
     ImGui::PushStyleVar(ImGuiStyleVar_SeparatorTextAlign,{.5f,.5f});
-    ImGui::BeginChild("##map-options-body",{0,std::max(t.Y(60),ImGui::GetContentRegionAvail().y-t.Y(Data.Operation==2?80:110))},false);
+    HelpyImGuiTheme::BeginPanel("##map-options-body",{0,std::max(t.Y(60),ImGui::GetContentRegionAvail().y-t.Y(Data.Operation==2?80:110))},false);
 #if defined(HELPY_PREVIEW)
     {const auto a=ImGui::GetCursorScreenPos();HelpyPreviewHooks::MapOptionsBody={a.x,a.y,a.x+ImGui::GetContentRegionAvail().x,a.y};}
 #endif
@@ -351,7 +352,7 @@ inline void PlacePopup(){
     if(enter||search){Data.SearchWanted=true;Data.SearchDue={};}
     const auto query=std::string(Data.Search)+(Data.SpawnType==1?" ore node":Data.SpawnType==2?" tree":"");
     if(Data.SearchWanted&&Clock::now()>=Data.SearchDue){LazyCatalog::Search(Data.Kind,query);Data.SearchWanted=false;}
-    ImGui::BeginChild("##spawn-results",ImVec2(0,t.Y(130)),true);
+    HelpyImGuiTheme::BeginPanel("##spawn-results",ImVec2(0,t.Y(130)),true);
     size_t matches=0;
     if(!Data.SearchWanted&&window.Query==query)for(const auto& row:window.Rows){
         const auto type=ItemPresentation::Text(row,"Type");if(type!=(Data.Kind==2?"Resource":"AI")||!SpawnCatalogSearch::Matches(row,query))continue;
@@ -360,7 +361,7 @@ inline void PlacePopup(){
     }
     if(!matches)ImGui::TextWrapped("%s",window.Pending||Data.SearchWanted?"Searching native actors...":"No matching actors in this slice.");
     if(window.HasMore&&!window.Pending&&!Data.SearchWanted&&ImGui::SmallButton("Load more results"))LazyCatalog::More(Data.Kind);
-    ImGui::EndChild();
+    PS::HelpyImGuiTheme::EndPanel();
     if(!Data.Definition.empty())ImGui::TextWrapped("Selected: %s",ItemPresentation::Text(Data.Definition,"Name").c_str());
     if(!window.LastError.empty())ImGui::TextWrapped("%s",window.LastError.c_str());
     }else if(Data.Operation==1){
@@ -387,7 +388,7 @@ inline void PlacePopup(){
     }
     HelpyImGuiTheme::DetailsTextUnformatted(Data.Operation==2?"Player to teleport":"Player context");SpawnToolsPanel::RenderCartRecipient(SpawnToolsPanel::UiSnapshot);
     if(Data.Operation==2)HelpyImGuiTheme::DetailsText("%s",Data.NearMarker?"Loads this destination, checks ground beside the stone (within 2 metres), then uses native travel.":"Loads the destination before departure, verifies a safe landing, then uses the game's native travel and loading screen. Unsafe or unavailable ground cancels departure.");
-    ImGui::EndChild();
+    PS::HelpyImGuiTheme::EndPanel();
     const bool choice=Data.Operation==2||(Data.Operation==1?(!Data.Building.empty()||!Data.Prefab.empty()):!Data.Definition.empty());
     const bool authority=Data.Operation==0||Data.Snapshot.value("CanBuildAndTeleport",false)
         ||(Data.Operation==2&&Data.Snapshot.value("RemoteSelfTeleport",false));
@@ -447,7 +448,7 @@ inline void Party(ImVec2 mapMin,ImVec2 mapMax,bool detached=false){
         // A bounded in-flow section, never an overlay or auto-sized window.
         const float height=std::clamp(ImGui::GetContentRegionAvail().y,t.Y(100),t.Y(240));
         ImGui::PushStyleColor(ImGuiCol_ChildBg,ImVec4(.025f,.028f,.025f,1));
-        expanded=ImGui::BeginChild("Party##helpy-map-party",{0,height},ImGuiChildFlags_Borders|ImGuiChildFlags_AlwaysUseWindowPadding);
+        expanded=HelpyImGuiTheme::BeginPanel("Party##helpy-map-party",{0,height},ImGuiChildFlags_Borders|ImGuiChildFlags_AlwaysUseWindowPadding);
         ImGui::PopStyleColor();
     }
     const auto position=ImGui::GetWindowPos(),size=ImGui::GetWindowSize();
@@ -468,7 +469,7 @@ inline void Party(ImVec2 mapMin,ImVec2 mapMax,bool detached=false){
     if(expanded&&!haveRows)ImGui::TextDisabled("No connected players in the current map snapshot.");
     if(expanded&&haveRows){
     ImGui::PushStyleColor(ImGuiCol_ChildBg,ImVec4(0,0,0,0));
-    ImGui::BeginChild("##map-party",{0,0},false);
+    HelpyImGuiTheme::BeginPanel("##map-party",{0,0},false);
     ImGui::PopStyleColor();
     const bool placards=PlayerPortraitPicker::Choices.CompactParty;const float cardWidth=placards?std::min(t.X(310),ImGui::GetContentRegionAvail().x):ImGui::GetContentRegionAvail().x;
     const auto cardColumns=std::max(1,int((ImGui::GetContentRegionAvail().x+ImGui::GetStyle().ItemSpacing.x)/(cardWidth+ImGui::GetStyle().ItemSpacing.x)));size_t cardIndex=0;
@@ -479,7 +480,7 @@ inline void Party(ImVec2 mapMin,ImVec2 mapMax,bool detached=false){
         ImGui::PushStyleColor(ImGuiCol_ChildBg,ImVec4(t.panelAlt.x,t.panelAlt.y,t.panelAlt.z,.96f));
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,{t.X(6),t.Y(6)});
         const float cardHeight=PartyMemberView::CardHeight(row,cardWidth-t.X(12));
-        const bool card=ImGui::BeginChild("##party-member-card",{cardWidth,cardHeight},ImGuiChildFlags_Borders|ImGuiChildFlags_AlwaysUseWindowPadding,ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse);
+        const bool card=HelpyImGuiTheme::BeginPanel("##party-member-card",{cardWidth,cardHeight},ImGuiChildFlags_Borders|ImGuiChildFlags_AlwaysUseWindowPadding,ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse);
         ImGui::PopStyleVar();ImGui::PopStyleColor(2);
         if(card){
         {const auto a=ImGui::GetWindowPos(),size=ImGui::GetWindowSize();SourceBanners::DrawCard(PlayerPortraitPicker::Choices.GetBackground(ItemPresentation::Text(row,"Guid")),a,{a.x+size.x,a.y+size.y});}
@@ -528,9 +529,9 @@ inline void Party(ImVec2 mapMin,ImVec2 mapMax,bool detached=false){
             ImGui::EndPopup();
         }
         if(!PlayerPortraitPicker::Choices.CompactParty&&PlayerPortraitPicker::Choices.Skills&&PartyMemberView::SkillsFresh(row,PartyMemberView::Now()))PartyMemberView::Skills(row,PartyMemberView::Now());
-        }ImGui::EndChild();
+        }PS::HelpyImGuiTheme::EndPanel();
         ImGui::PopID();
-    }ImGui::EndChild();}
+    }PS::HelpyImGuiTheme::EndPanel();}
     if(Data.PartyConfirmWanted){Data.PartyConfirmWanted=false;ImGui::OpenPopup("Confirm party travel");}
     if(ImGui::IsPopupOpen("Confirm party travel")){
         ImGui::SetNextWindowSize({std::min(t.X(420),ImGui::GetIO().DisplaySize.x-t.X(32)),0},ImGuiCond_Appearing);
@@ -558,7 +559,7 @@ inline void Party(ImVec2 mapMin,ImVec2 mapMax,bool detached=false){
 #endif
         ImGui::EndPopup();
     }
-    if(detached)ImGui::End();else ImGui::EndChild();
+    if(detached)ImGui::End();else PS::HelpyImGuiTheme::EndPanel();
 }
 inline std::string WikiUrl(const std::string& name){
     constexpr char hex[]="0123456789ABCDEF";std::string url="https://dragonwilds.runescape.wiki/?search=";
@@ -658,7 +659,7 @@ inline void Render(){
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::MapCanvasID=ImGui::GetItemID();HelpyPreviewHooks::MapCanvasWindow=ImGui::GetCurrentWindow()->ID;
 #endif
-    auto& io=ImGui::GetIO();const bool controllerMap=ImGui::IsItemFocused()&&ImGui::GetCurrentContext()->NavInputSource==ImGuiInputSource_Gamepad;
+    auto& io=ImGui::GetIO();const bool controllerMap=ImGui::IsItemFocused()&&HelpyControllerInput::Selection.Controller&&!HelpyControllerInput::TouchUsing&&ImGui::GetCurrentContext()->NavInputSource==ImGuiInputSource_Gamepad;
     const bool hovered=ImGui::IsItemHovered()||controllerMap;const ImVec2 pointer=controllerMap?ImVec2(min.x+width*.5f,min.y+height*.5f):io.MousePos;
     if(controllerMap){
         const auto amount=[](ImGuiKey positive,ImGuiKey negative){return ImGui::GetKeyData(positive)->AnalogValue-ImGui::GetKeyData(negative)->AnalogValue;};

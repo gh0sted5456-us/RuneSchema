@@ -14,5 +14,6 @@
     "authoring.export"
   ],
   "MountPaks": false,
+  "NativeHudPlugin": "RuneSchema.HUD",
   "Name": "RuneSchema Helpy"
 }

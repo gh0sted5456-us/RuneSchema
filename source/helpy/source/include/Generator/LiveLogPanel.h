@@ -258,7 +258,7 @@ inline void RenderStream(size_t index){
         }else if(Follow&&changed)ImGui::SetScrollY(ImGui::GetScrollMaxY());ImGui::EndTable();
     }
     if(selected!=History.Rows.end()){
-        if(ImGui::BeginChild("Selected log details",ImVec2(0,0),true)){
+        if(HelpyImGuiTheme::BeginPanel("Selected log details",ImVec2(0,0),true)){
             if(ImGui::SmallButton("Copy original"))ImGui::SetClipboardText(selected->Text.c_str());ImGui::SameLine();
             if(ImGui::SmallButton("Close details"))Selected=0;ImGui::SameLine();HelpyImGuiTheme::Toggle("Technical text",&state.RawDetails);
             if(selected->Help>=0){const auto& guide=LiveLog::Guides[selected->Help];ImGui::SeparatorText(selected->Suggested?"Suggested reference - not a diagnosed cause":guide.Title.data());
@@ -266,7 +266,7 @@ inline void RenderStream(size_t index){
                 if(ImGui::SmallButton("Open code reference")){const auto url=LiveLog::HelpUrl(guide);ShellExecuteA(nullptr,"open",url.c_str(),nullptr,nullptr,SW_SHOWNORMAL);}ImGui::SameLine();if(ImGui::SmallButton("Copy code"))ImGui::SetClipboardText(guide.Code.data());
             }else{ImGui::TextWrapped("%s",selected->Message.c_str());if(!selected->ReportedCode.empty())ImGui::TextDisabled("Unrecognized code: %s",selected->ReportedCode.c_str());if(ImGui::SmallButton("Open reference")){const auto url=LiveLog::ReferenceUrl(*selected);ShellExecuteA(nullptr,"open",url.c_str(),nullptr,nullptr,SW_SHOWNORMAL);}}
             if(state.RawDetails){ImGui::SeparatorText("Original entry");ImGui::TextWrapped("%s",selected->Text.c_str());}
-        }ImGui::EndChild();
+        }PS::HelpyImGuiTheme::EndPanel();
     }
 }
 inline void RenderCrashDumpOptions(){

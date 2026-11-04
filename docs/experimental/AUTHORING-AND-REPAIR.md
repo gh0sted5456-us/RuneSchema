@@ -14,8 +14,9 @@ promote_to: ADVANCED-AUTHORING-TOOLS.md
 1. Open **Mods**, right-click the installed mod and choose **Create/Update Cache**.
 2. Helpy opens **Tools â†’ Utilities â†’ Authoring tools**, focused on that mod in
    the **Installed** tab. Confirm the folder and source name.
-3. Close the assigned Dragonwilds game or dedicated server before starting the
-   offline build. Other unrelated private installs are not the selected source.
+3. The assigned Dragonwilds game or dedicated server may remain open. Installed-mod
+   capture reads its PAK inputs in a separate, lower-priority worker. It does not
+   mount content, run mod code or change the game, mappings, settings or saves.
 4. Choose **Start cache build**. The console reports extraction, discovery,
    icon processing and publication. **Pause**, **Resume** and **Stop** control
    the worker; pausing or stopping is separate from closing the panel.
@@ -35,16 +36,23 @@ order. One worker runs at a time, and each completed bundle is offered to Helpy
 before the next job. JSON-only, disabled and missing entries are not built.
 The progress pane reports completed, failed and skipped jobs. Pause applies to
 the active worker and the queue; Stop cancels the remaining queue at safe
-checkpoints. Switching pages does not cancel a build. Keep Helpy open for queue
-advancement; an active worker can finish while hidden, but the next job waits
-until the application is visible again. Keep the assigned game closed for offline authoring.
+checkpoints. Switching pages or minimizing Helpy does not cancel a build; explicit
+jobs continue in the tray, including importing completed bundles into AppData.
+**Home → Build enabled mod caches** opens the same progress view.
+
+The current cache stays searchable during capture. Input stamps are checked again
+before publication; changed or inaccessible inputs fail the job while retaining the
+previous cache. First-use dependency preparation and a full PAK read can still take
+time and use disk/CPU. Cache results remain presentation data: live lookup is kept
+for runtime-generated or changed content that cannot be read from cooked packages.
+Creation/conversion and repair retain their closed-game requirements.
 
 The advanced authoring preference can detect and install the required .NET
 10 SDK when missing. It is an explicit tool job, not a background
 installation check. The [offline cache guide](modders/offline-helpy-cache.md)
 explains the standalone BAT route and dependencies. The current experimental
-[authoring tools ZIP](https://github.com/gh0sted5456-us/RuneSchema/raw/refs/heads/experimental/resources/tools/authoring-tools/b357a6538135e98184702bbf2ef663aaf4171c69b6a980cc851c78cc8c1769d6.zip)
-is also available directly from this branch.
+authoring tools ZIP is available through Tools; its content-addressed download index
+selects the matching reviewed scripts.
 
 The local follow-up reads cooked culture-invariant display text as well as
 localized/source text. An unresolved localization key is not treated as a

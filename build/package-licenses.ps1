@@ -16,7 +16,7 @@ if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
 $RepositoryRoot = [IO.Path]::GetFullPath($RepositoryRoot)
 $required = @('LICENSE', 'AUTHORS.md', 'LICENSING.md', 'CONTRIBUTING.md', 'THIRD_PARTY_NOTICES.md',
     'licenses/PalSchema-MIT.txt', 'licenses/UE4SS-MIT.txt',
-    'licenses/nlohmann-json-MIT.txt', 'licenses/SDL3-zlib.txt')
+    'licenses/nlohmann-json-MIT.txt', 'licenses/SDL3-zlib.txt', 'licenses/ModMenu-MIT.txt')
 foreach ($relative in $required) {
     $path = Join-Path $RepositoryRoot $relative
     if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or
@@ -205,7 +205,8 @@ function Write-ConsolidatedLicenseFile {
         @{ Name = 'PalSchema — MIT License'; File = 'PalSchema-MIT.txt'; Upstream = 'https://github.com/Okaetsu/PalSchema' },
         @{ Name = 'UE4SS / RE-UE4SS — MIT License'; File = 'UE4SS-MIT.txt'; Upstream = 'https://github.com/UE4SS-RE/RE-UE4SS' },
         @{ Name = 'JSON for Modern C++ — MIT License'; File = 'nlohmann-json-MIT.txt'; Upstream = 'https://github.com/nlohmann/json' },
-        @{ Name = 'SDL 3.4.16 — zlib License'; File = 'SDL3-zlib.txt'; Upstream = 'https://github.com/libsdl-org/SDL/tree/release-3.4.16' }
+        @{ Name = 'SDL 3.4.16 — zlib License'; File = 'SDL3-zlib.txt'; Upstream = 'https://github.com/libsdl-org/SDL/tree/release-3.4.16' },
+        @{ Name = 'Maxxfilth Mod Menu — MIT License'; File = 'ModMenu-MIT.txt'; Upstream = 'https://www.curseforge.com/runescape-dragonwilds/ue4ss-mods/mod-menu' }
     )
     foreach ($section in $sections) {
         $lines.Add('')

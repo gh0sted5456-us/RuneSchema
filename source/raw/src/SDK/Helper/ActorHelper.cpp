@@ -5,6 +5,7 @@
 #include "Unreal/AActor.hpp"
 #include "Unreal/CoreUObject/UObject/Class.hpp"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
+#include "Unreal/CoreUObject/UObject/FStrProperty.hpp"
 #include "Unreal/Property/FEnumProperty.hpp"
 #include "Unreal/Transform.hpp"
 #include "Unreal/UFunctionStructs.hpp"
@@ -358,7 +359,14 @@ namespace DragonWilds::ActorHelper {
 
     FunctionCall& FunctionCall::StringArg(const CharType* Name, const std::string& Value)
     {
-        return JsonArg(Name, nlohmann::json(Value));
+        auto* property=CastField<FStrProperty>(m_function->FindProperty(FName(Name,FNAME_Find)));
+        if(!ReflectedContract::Input(property,m_function)||property->GetArrayDim()!=1||property->GetElementSize()!=sizeof(FString))
+            throw std::runtime_error("String argument did not match its native FString parameter");
+        // Early save callbacks can run before the generic property-class cache is initialized.
+        property->InitializeValue_InContainer(m_params.data());m_initialized.push_back(property);
+        const FString text(RC::to_generic_string(Value).c_str());
+        property->SetPropertyValue(property->ContainerPtrToValuePtr<void>(m_params.data()),text);
+        return *this;
     }
 
     FunctionCall& FunctionCall::SoftObjectArg(const CharType* Name, UObject* Value)

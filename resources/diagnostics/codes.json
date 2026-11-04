@@ -857,8 +857,8 @@
       "title": "Server mod list received",
       "severity": "info",
       "subsystem": "Multiplayer",
-      "summary": "The client received and validated the host’s enabled RuneSchema mod list.",
-      "impact": "The complete list is available in Helpy → Mods → Server comparison. This is informational and grants no gameplay permission.",
+      "summary": "The client received and validated the host\u00e2\u20ac\u2122s enabled RuneSchema mod list.",
+      "impact": "The complete list is available in Helpy \u00e2\u2020\u2019 Mods \u00e2\u2020\u2019 Server comparison. This is informational and grants no gameplay permission.",
       "action": "Browse or search the server list when checking required content."
     },
     {
@@ -970,6 +970,16 @@
       "summary": "The server validated the supplied PIN for the current owning character and world.",
       "impact": "Delivery and teleport requests execute on the server with existing identity, item registry, quantity and ground checks. This does not grant arbitrary administrator rights.",
       "action": "Use the allowed self-service actions. Reconnect after changing character/world or if the server revokes access."
+    },
+    {
+      "id": "SaveCleanupCompleted",
+      "code": "RS-SAVE-006",
+      "title": "Save records removed",
+      "severity": "info",
+      "subsystem": "Save cleanup",
+      "summary": "RuneSchema removed records during a verified character or world cleanup.",
+      "impact": "The player receives a short notification after becoming ready in the loaded world. The original technical cleanup receipt remains in RuneSchema.log.",
+      "action": "No action is needed. A mod name is shown only when the removed records have an attributed owner that is absent from the active mod set."
     }
   ]
 }

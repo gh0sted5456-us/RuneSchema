@@ -121,7 +121,7 @@ inline void Inventory(float height){
         matches.push_back(i);
     }
     ImGui::TextDisabled("%zu items%s",matches.size(),Pending||Refresh?" · reading…":"");
-    ImGui::BeginChild("##inventory-rows",{0,t.Y(height)},true);
+    HelpyImGuiTheme::BeginPanel("##inventory-rows",{0,t.Y(height)},true);
     const auto dropMin=ImGui::GetWindowPos(),dropSize=ImGui::GetWindowSize();
 #ifdef HELPY_PREVIEW
     HelpyPreviewHooks::LiveInventoryViewport=HelpyPreviewHooks::WindowRect();
@@ -141,13 +141,13 @@ inline void Inventory(float height){
     }
     if(matches.empty())ImGui::TextWrapped("%s",Pending||Refresh?"Reading inventory pages…":Group=="Equipped"&&Snapshot.contains("LoadoutError")?Snapshot["LoadoutError"].get_ref<const std::string&>().c_str():"No matching items in this tab.");
     if(ImGui::BeginDragDropTargetCustom(ImRect(dropMin,{dropMin.x+dropSize.x,dropMin.y+dropSize.y}),ImGui::GetID("##inventory-cart-drop"))){if(auto row=ItemGridPicker::AcceptItemDrop(Status))Stage(*row);ImGui::EndDragDropTarget();}
-    ImGui::EndChild();ImGui::TextDisabled("Drop Item Bay items here to stage delivery—not move existing items.");ImGui::PopID();
+    PS::HelpyImGuiTheme::EndPanel();ImGui::TextDisabled("Drop Item Bay items here to stage delivery—not move existing items.");ImGui::PopID();
 }
 inline void Contents(){
     const auto& t=HelpyImGuiTheme::Current;ImGui::PushID("live-inventory-workbench");
     ImGui::TextWrapped("%s",RuneSchemaProfile::Name(Target).c_str());ImGui::SameLine();if(!HelpyImGuiTheme::NativePresentation&&HelpyImGuiTheme::SoftButton(Detached?"Dock inventory":"Detach inventory"))Detached=!Detached;
     const bool delivering=ItemGridPicker::SharedCart.Delivery()!=0;if(WasDelivering&&!delivering&&Generation==SpawnToolRequests::CurrentGeneration())Reload();WasDelivering=delivering;
-    ImGui::BeginChild("##inventory-workbench-body",{0,0});
+    HelpyImGuiTheme::BeginPanel("##inventory-workbench-body",{0,0});
     if(Container){ImGui::TextWrapped("Lock status: Unknown · locked by: not verified");ImGui::TextWrapped("%s",Snapshot.value("AccessReason",std::string("Direct chest deposits and unlock overrides require a verified native access contract.")).c_str());}
     ImGui::TextWrapped("%s",Status.c_str());
     if(ChangingGear){
@@ -183,7 +183,7 @@ inline void Contents(){
         ImGui::BeginDisabled(!ready);if(RenderCart)RenderCart(t.Y(400));ImGui::EndDisabled();
         if(FocusCart){ImGui::SetScrollHereY(1.f);FocusCart=false;}
     }else if(!ChangingGear)ImGui::TextDisabled("Your cart will appear here when you stage items.");
-    ImGui::EndChild();ImGui::PopID();
+    PS::HelpyImGuiTheme::EndPanel();ImGui::PopID();
 }
 inline void RenderDocked(){if(!Open||Detached||HelpyTaskbar::Current.Contains(HelpyTaskbar::Window::Inventory))return;HelpyWindowChrome::Prepare(Chrome);ImGui::SetNextWindowSize({1000,760},ImGuiCond_FirstUseEver);if(ImGui::Begin("Inventory workbench",&Open,ImGuiWindowFlags_NoSavedSettings)){HelpyWindowChrome::Render(Chrome,HelpyTaskbar::Window::Inventory);Contents();}ImGui::End();}
 }
