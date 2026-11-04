@@ -8,7 +8,8 @@
 #include "Core/HelpyTaskbar.h"
 #include <stdexcept>
 #include <set>
-int main(){
+#include <iostream>
+int main()try{
     {PS::HelpySplash::Exit exit;exit.Begin(0,1);if(!exit.At(.2,true,.2).Finished||exit.At(.2).Finished)throw std::runtime_error("Home exit must be shorter than the welcome animation");}
     {using namespace PS::BackgroundPolicy;
         if(!Filename("My art.PNG")||!Filename("Scene.jpeg")||Filename("../Scene.png")||Filename("C:\\Scene.png")||Filename("Scene.png.exe")||Filename("Scene.svg")||Filename(std::string("a\0.png",6)))throw std::runtime_error("Backgrounds must be local supported image filenames");
@@ -125,27 +126,34 @@ int main(){
     if(std::string_view(PS::HelpyEnvironment::Label())!="Epic Games"||!PS::HelpyEnvironment::Steam.empty())
         throw std::runtime_error("Epic must not present Steam build metadata as its own installed build");
     using namespace PS::HelpyNavigation;
+    {SidebarState rail;bool collapsed=false,pinned=false;
+        if(rail.Collapsed(collapsed,pinned,false)||!rail.Collapsed(collapsed,pinned,true))throw std::runtime_error("Controller navigation must collapse an unpinned rail");
+        rail.Toggle(collapsed,pinned,true);if(rail.Collapsed(collapsed,pinned,true))throw std::runtime_error("The controller must be able to expand navigation");
+        rail.Navigate();if(!rail.Collapsed(collapsed,pinned,true))throw std::runtime_error("Unpinned controller navigation must fold after choosing a page");
+        rail.TogglePin(collapsed,pinned);if(!pinned||rail.Collapsed(collapsed,pinned,true))throw std::runtime_error("Pinned navigation must remain expanded");
+        rail.Toggle(collapsed,pinned,true);if(!rail.Collapsed(collapsed,pinned,true))throw std::runtime_error("Explicit collapse must remain available when pinned");
+        rail.Toggle(collapsed,pinned,true);rail.TogglePin(collapsed,pinned);if(pinned||!rail.Collapsed(collapsed,pinned,true)||rail.Collapsed(collapsed,pinned,false))throw std::runtime_error("Input changes must restore the user's mouse navigation preference");}
     std::set<std::string_view> titles;
     for(auto page:Pages){
-        if(!Visible(page,{true,true,true,true})||std::string_view(Description(page)).empty())throw std::runtime_error("Enabled workspace is unreachable or unexplained");
+        if(!Visible(page,{true,true,true,true,true,true,true})||std::string_view(Description(page)).empty())throw std::runtime_error("Enabled workspace is unreachable or unexplained");
         titles.insert(Title(page));
     }
-    const std::set<std::string_view> expected{"Home","Players","Clone","Recipes","Spawns","World","Journal","Tools","Settings","Authoring","Diagnostics","Server / Co-op","Character","Mods","Profile","Report a bug"};
+    const std::set<std::string_view> expected{"Home","Players","Clone","Recipes","Spawns","World","Journal","Tools","Settings","Authoring","Diagnostics","Server / Co-op","Character","Mods","Profile","Report a bug","Save Recovery","Notifications","Mod Menu 2"};
     if(!Visible(Page::Creation)||TopLevel(Page::Creation)||TopLevel(Page::Recipes)||TopLevel(Page::SaveEditor)||TopLevel(Page::Spawns)||TopLevel(Page::Journal))throw std::runtime_error("Nested workflows must stay reachable without duplicate sidebar entries");
-    if(SidebarPages.size()!=9||!TopLevel(Page::BugReport)||!Visible(Page::BugReport)||std::find(SidebarPages.begin(),SidebarPages.end(),Page::BugReport)==SidebarPages.end()||!TopLevel(Page::Mods)||!Visible(Page::Mods)||PlayerTabs.size()!=3||ProfileTabs.size()!=2||Parent(Page::SaveEditor)!=Page::Profile||WorldTabs.size()!=3||ToolTabs.size()!=2||Parent(Page::Authoring)!=Page::Tools||TopLevel(Page::Authoring)||std::string_view(TabTitle(Page::Items))!="Items"||std::string_view(TabTitle(Page::Map))!="Map")throw std::runtime_error("Bug reports and Mods must be top-level while Players, World and Tools retain nested workflow tabs");
+    if(SidebarPages.size()!=12||!TopLevel(Page::Notifications)||!Visible(Page::Notifications)||!TopLevel(Page::SaveRecovery)||!Visible(Page::SaveRecovery)||!TopLevel(Page::BugReport)||!Visible(Page::BugReport)||std::find(SidebarPages.begin(),SidebarPages.end(),Page::BugReport)==SidebarPages.end()||!TopLevel(Page::Mods)||!Visible(Page::Mods)||PlayerTabs.size()!=3||ProfileTabs.size()!=2||Parent(Page::SaveEditor)!=Page::Profile||WorldTabs.size()!=3||ToolTabs.size()!=2||Parent(Page::Authoring)!=Page::Tools||TopLevel(Page::Authoring)||std::string_view(TabTitle(Page::Items))!="Items"||std::string_view(TabTitle(Page::Map))!="Map")throw std::runtime_error("Bug reports and Mods must be top-level while Players, World and Tools retain nested workflow tabs");
     if(!Visible(Page::Tools,{true,false})||!Visible(Page::Authoring,{true,false})||Visible(Page::Authoring,{false,true}))throw std::runtime_error("Legacy authoring-only settings must expose Tools without enabling Authoring for tools-only users");
     for(auto page:SidebarPages)if(!TopLevel(page))throw std::runtime_error("Sidebar contains a nested workflow");
     for(auto page:PlayerTabs)if(Parent(page)!=Page::Items)throw std::runtime_error("Player workflow has the wrong parent");
     for(auto page:WorldTabs)if(Parent(page)!=Page::Map)throw std::runtime_error("World workflow has the wrong parent");
     if(titles!=expected)throw std::runtime_error("All destinations must stay reachable");
-    for(auto page:{Page::Authoring,Page::LiveLog})if(Visible(page))throw std::runtime_error("Optional workspace must require opt-in");
+    for(auto page:{Page::Authoring,Page::LiveLog,Page::ModMenu2})if(Visible(page))throw std::runtime_error("Optional workspace must require opt-in");
     if(!Visible(Page::Settings)||!Visible(Page::Items)||!Visible(Page::LiveLog,{false,false,true,false})||!Visible(Page::Tools))throw std::runtime_error("Settings and the Tools Item Cache must stay reachable without optional workspaces");
-    for(int mask=0;mask<64;++mask){
-        const Workspaces enabled{bool(mask&1),bool(mask&2),bool(mask&4),bool(mask&8),bool(mask&16),bool(mask&32)};
+    for(int mask=0;mask<128;++mask){
+        const Workspaces enabled{bool(mask&1),bool(mask&2),bool(mask&4),bool(mask&8),bool(mask&16),bool(mask&32),bool(mask&64)};
         for(auto page:Pages){
             if(Available(page,enabled,false)!=(Visible(page,enabled)&&(page!=Page::DedicatedServer||enabled.ServerTools))||Available(page,enabled,true)!=Visible(page,enabled))
                 throw std::runtime_error("Home and sidebar must share workspace and server availability");
             if(ShowSidebar(page)==(page==Page::Home))throw std::runtime_error("Home must collapse the sidebar; tools must restore it");
         }
     }
-}
+}catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}

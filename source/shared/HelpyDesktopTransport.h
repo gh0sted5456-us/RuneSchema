@@ -1,4 +1,5 @@
 #pragma once
+#include "RuneSchemaUserSecurity.h"
 #include <windows.h>
 #include <sddl.h>
 #include <nlohmann/json.hpp>
@@ -58,14 +59,8 @@ inline bool Receive(HANDLE pipe,Json& value,bool overlapped=false){
     std::string text(size,'\0');if(!Transfer(pipe,text.data(),size,false,overlapped))return false;
     try{value=Parse(text);return value.is_object();}catch(...){return false;}
 }
-inline bool SameUserPipeSecurity(PSECURITY_DESCRIPTOR& descriptor){
-    HANDLE token{};if(!OpenProcessToken(GetCurrentProcess(),TOKEN_QUERY,&token))return false;DWORD bytes=0;
-    GetTokenInformation(token,TokenUser,nullptr,0,&bytes);std::vector<char> data(bytes);
-    const bool ok=bytes&&GetTokenInformation(token,TokenUser,data.data(),bytes,&bytes);CloseHandle(token);if(!ok)return false;
-    LPWSTR sid{};if(!ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER*>(data.data())->User.Sid,&sid))return false;
-    const auto sddl=std::wstring(L"D:P(A;;GA;;;")+sid+L")";LocalFree(sid);
-    return ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl.c_str(),SDDL_REVISION_1,&descriptor,nullptr)!=FALSE;
-}
+inline bool SameUserPipeSecurity(PSECURITY_DESCRIPTOR& descriptor){return UserSecurity::SameUserPipeSecurity(descriptor);}
+
 class Server {
 public:
     using Handler=std::function<Json(const Json&)>;

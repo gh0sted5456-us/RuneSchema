@@ -4,6 +4,7 @@
 #include <map>
 #include <string>
 #include <string_view>
+#include <nlohmann/json.hpp>
 
 namespace PS::HelpyRemoteAccess {
 // Game-thread only. Native RPC ownership supplies peer/world identities.
@@ -37,11 +38,11 @@ public:
         entry.Failures=0;return Result::Granted;
     }
     bool Allowed(const std::string& peer,const std::string& world,bool enabled,const std::string& pin,
-        Clock::time_point now=Clock::now()){
+        Clock::time_point now=Clock::now(),bool touch=true){
         Configure(world,enabled,pin);
         const auto found=m_peers.find(peer);
         if(!enabled||!ValidPin(pin)||found==m_peers.end()||!found->second.Granted||found->second.Expires<=now)return false;
-        found->second.Expires=now+std::chrono::hours(1);return true;
+        if(touch)found->second.Expires=now+std::chrono::hours(1);return true;
     }
     void Revoke(const std::string& peer){const auto found=m_peers.find(peer);if(found!=m_peers.end())found->second.Granted=false;}
 private:
@@ -56,6 +57,11 @@ private:
     }
 };
 inline Sessions Server;
+inline nlohmann::json AccessStatus(bool enabled,bool allowed,bool authenticated,bool items,bool teleport,const std::string& guid,std::string detail){
+    return {{"Kind","HelpyRemoteAccess1"},{"Available",enabled},{"Allowed",allowed},{"PinRequired",enabled&&!allowed},
+        {"Authenticated",allowed&&authenticated},{"ItemDelivery",allowed&&items},{"Teleport",allowed&&teleport},
+        {"CharacterGuid",guid},{"Detail",std::move(detail)}};
+}
 inline constexpr auto ItemLane="network:ITEM:/Script/Dominion.ItemSubsystem";
 inline bool ItemIdsMatch(const std::map<std::string,std::string>& client,const std::map<std::string,std::string>& authority,bool authorityProof){
     const auto own=authority.find(ItemLane),peer=client.find(ItemLane);

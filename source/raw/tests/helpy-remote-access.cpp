@@ -1,4 +1,5 @@
 #include "Core/HelpyRemoteAccess.h"
+#include "../../shared/HelpyAuthorityStatus.h"
 #include "Core/HelpyRemoteResult.h"
 #include "Generator/ToolRequest.h"
 #include <stdexcept>
@@ -12,9 +13,20 @@ int Run(){
     Check(!S::ValidPin("invalid pin")&&!S::ValidPin("invalid\nPIN"));
     Check(state.Authenticate("p1","w1",false,pin,pin,now)==S::Result::Disabled);
     Check(!state.Allowed("p1","w1",true,pin,now));
+    const auto challenge=PS::HelpyRemoteAccess::AccessStatus(true,false,false,true,true,"character-guid","Enter the world PIN.");
+    Check(challenge["PinRequired"]==true&&challenge["Allowed"]==false&&challenge["ItemDelivery"]==false&&challenge["Teleport"]==false);
+    Check(!challenge.contains("Pin")&&!challenge.contains("accessPin")&&challenge.dump().find(pin)==std::string::npos);
+    Check(PS::HelpyAuthorityStatus::Valid(challenge));auto malformed=challenge;malformed["Allowed"]="true";Check(!PS::HelpyAuthorityStatus::Valid(malformed));
+    malformed=challenge;malformed["PinRequired"]=1;Check(!PS::HelpyAuthorityStatus::Valid(malformed));malformed=challenge;malformed["Kind"]=false;Check(!PS::HelpyAuthorityStatus::Valid(malformed));
+    malformed=challenge;malformed["CharacterGuid"]=std::string(65,'a');Check(!PS::HelpyAuthorityStatus::Valid(malformed));
     Check(state.Authenticate("p1","w1",true,pin,"bad",now)==S::Result::Denied);
     Check(state.Authenticate("p1","w1",true,pin,pin,now)==S::Result::Granted);
     Check(state.Allowed("p1","w1",true,pin,now)&&!state.Allowed("p2","w1",true,pin,now));
+    const auto granted=PS::HelpyRemoteAccess::AccessStatus(true,true,true,true,true,std::string(32,'a'),
+        "Client-server authority bridged. Requests for your current character are validated and executed by the server.");
+    Check(granted["Authenticated"]==true&&granted["PinRequired"]==false&&granted["ItemDelivery"]==true&&granted["Teleport"]==true&&granted.dump().size()<=512);
+    Check(PS::HelpyRemoteAccess::AccessStatus(true,true,false,true,false,"guid","Active")["Authenticated"]==false);
+    Check(PS::HelpyRemoteAccess::AccessStatus(false,false,false,true,true,"guid","Disabled")["PinRequired"]==false);
     Check(!state.Allowed("p1","w2",true,pin,now));
     Check(state.Authenticate("p1","w2",true,pin,pin,now)==S::Result::Granted);
     Check(!state.Allowed("p1","w2",true,"Rotated-92738",now));
@@ -23,6 +35,9 @@ int Run(){
     state.Revoke("p1");Check(state.Authenticate("p1","w2",true,pin,pin,now)==S::Result::RateLimited);
     Check(state.Authenticate("p1","w2",true,pin,pin,now+minutes(1))==S::Result::Granted);
     Check(!state.Allowed("p1","w2",true,pin,now+hours(2)));
+    Check(state.Authenticate("p1","w2",true,pin,pin,now+hours(2))==S::Result::Granted);
+    Check(state.Allowed("p1","w2",true,pin,now+hours(2)+minutes(59),false));
+    Check(!state.Allowed("p1","w2",true,pin,now+hours(3),false));
     Check(state.Authenticate("p1","w2",true,pin,pin,now+hours(2))==S::Result::Granted);
     state.Revoke("p1");Check(!state.Allowed("p1","w2",true,pin,now+hours(2)));
     state.Reset();

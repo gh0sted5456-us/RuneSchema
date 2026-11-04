@@ -1,4 +1,5 @@
 #pragma once
+#include "Generator/HelpyTextInput.h"
 #include "Core/RuneSchemaProfile.h"
 #include "Core/PlayerStatus.h"
 #include "Generator/PlayerPortraitPicker.h"
@@ -31,7 +32,7 @@ inline void OpenLink(const char* key,const char* value){
 inline void SocialInput(const char* key,const char* hint,char* value,size_t size){
     const auto& t=HelpyImGuiTheme::Current;ImGui::PushID(key);const bool discord=std::string_view(key)=="Discord";
     ImGui::SetNextItemWidth(std::max(t.X(80),ImGui::GetContentRegionAvail().x-t.X(68)-ImGui::GetStyle().ItemSpacing.x));
-    Dirty|=ImGui::InputTextWithHint("##link",hint,value,size);ImGui::SameLine();
+    Dirty|=HelpyTextInput::InputTextWithHint("##link",hint,value,size);ImGui::SameLine();
     ImGui::BeginDisabled(!*value||!RuneSchemaProfile::Link(key,value));if(HelpyImGuiTheme::SoftButton(discord?"Copy":"Open",{t.X(68),0})){if(discord)ImGui::SetClipboardText(value);else OpenLink(key,value);}ImGui::EndDisabled();
 #ifdef HELPY_PREVIEW
     HelpyPreviewHooks::AuthoringButtons[std::string("Profile ")+key]=HelpyPreviewHooks::LastRect();
@@ -45,7 +46,7 @@ inline bool Render(const nlohmann::json& catalog){
     if(!Dirty&&DraftRevision!=P::Revision)Refresh();const auto doc=P::Read();const auto* local=PlayerStatus::LocalCharacter(catalog);
     const auto id=doc.at("ProfileId").get<std::string>(),localGuid=local?HelpyPersonalization::Guid(local->value("Guid",std::string{})):std::string{};
     const bool named=!doc.at("ProfileName").get<std::string>().empty();const nlohmann::json account={{"Guid",id},{"Name",named?doc.at("ProfileName").get<std::string>():std::string("Profile")}};
-    if(ImGui::BeginChild("##profile-account",{0,t.Y(112)},ImGuiChildFlags_Borders)){
+    if(HelpyImGuiTheme::BeginPanel("##profile-account",{0,t.Y(112)},ImGuiChildFlags_Borders)){
         const auto a=ImGui::GetCursorScreenPos();const float side=t.Y(84);ImGui::BeginGroup();
         const bool picture=ImGui::InvisibleButton("##account-portrait",{side,side},ImGuiButtonFlags_EnableNav);
 #ifdef HELPY_PREVIEW
@@ -57,13 +58,13 @@ inline bool Render(const nlohmann::json& catalog){
         if(picture)PlayerPortraitPicker::Request(account);if(portraitHover)HelpyImGuiTheme::Tooltip("Change your picture · drop and crop an image in the picker");
         ImGui::EndGroup();ImGui::SameLine(0,t.X(16));ImGui::BeginGroup();
         if(named){ImGui::TextUnformatted(Name);if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Your permanent profile name");}
-        else {ImGui::SetNextItemWidth(std::min(t.X(320),ImGui::GetContentRegionAvail().x));Dirty|=ImGui::InputTextWithHint("##profile-name","Choose your permanent profile name",Name,sizeof(Name));}
+        else {ImGui::SetNextItemWidth(std::min(t.X(320),ImGui::GetContentRegionAvail().x));Dirty|=HelpyTextInput::InputTextWithHint("##profile-name","Choose your permanent profile name",Name,sizeof(Name));}
         if(local)ImGui::TextDisabled("Playing: %s",local->value("Name",std::string("Player")).c_str());else ImGui::TextDisabled("One profile across your characters");
         if(HelpyImGuiTheme::SoftButton("Picture..."))PlayerPortraitPicker::Request(account);ImGui::SameLine();
         ImGui::BeginDisabled(!Dirty||(!named&&HelpyPersonalization::Trim(Name).empty()));
         if(HelpyImGuiTheme::SoftButton(named?"Save details":"Create profile")){if(P::Save(Name,{{"Steam",std::string(Steam)},{"Nexus",std::string(Nexus)},{"Discord",std::string(Discord)}}))Refresh();}
         ImGui::EndDisabled();ImGui::EndGroup();
-    }ImGui::EndChild();
+    }PS::HelpyImGuiTheme::EndPanel();
     if(!P::Status.empty())ImGui::TextWrapped("%s",P::Status.c_str());
 #ifdef HELPY_PREVIEW
     PlatformLogos=0;CharacterRows.clear();
@@ -93,11 +94,11 @@ inline bool Render(const nlohmann::json& catalog){
         used+=width;ImGui::PopID();
     }
     if(platforms.empty())ImGui::TextDisabled("Play a character to link a platform.");
-    ImGui::SeparatorText("Characters");ImGui::SetNextItemWidth(-1);ImGui::InputTextWithHint("##profile-character-search","Find a linked character...",CharacterSearch,sizeof(CharacterSearch));
+    ImGui::SeparatorText("Characters");ImGui::SetNextItemWidth(-1);HelpyTextInput::InputTextWithHint("##profile-character-search","Find a linked character...",CharacterSearch,sizeof(CharacterSearch));
     const auto query=HelpyPersonalization::Fold(CharacterSearch);size_t matches=0;
     for(const auto& [guid,row]:doc.at("Characters").items())if(MatchesPlatform(row)&&HelpyPersonalization::Fold(row.at("Name").get<std::string>()).find(query)!=std::string::npos)++matches;
     const float visibleRows=float(std::clamp<size_t>(matches,1,3)),listHeight=visibleRows*t.Y(40)+(visibleRows-1)*ImGui::GetStyle().ItemSpacing.y+ImGui::GetStyle().WindowPadding.y*2+ImGui::GetStyle().ChildBorderSize*2;
-    if(ImGui::BeginChild("##profile-characters",{0,listHeight},ImGuiChildFlags_Borders)){
+    if(HelpyImGuiTheme::BeginPanel("##profile-characters",{0,listHeight},ImGuiChildFlags_Borders)){
         if(!matches)ImGui::TextDisabled("No matching characters.");
         for(const auto& [guid,row]:doc.at("Characters").items()){
             if(!MatchesPlatform(row)||HelpyPersonalization::Fold(row.at("Name").get<std::string>()).find(query)==std::string::npos)continue;
@@ -113,7 +114,7 @@ inline bool Render(const nlohmann::json& catalog){
             if(clicked){const auto platform=!PlatformFilter.empty()?PlatformFilter:current&&local?PlatformKey(local->value("Platform",std::string{})):row.at("Platforms").size()==1?PlatformKey(row.at("Platforms")[0].get<std::string>()):std::string{};openCharacter=SaveEditorPanel::RequestProfileCharacter(guid,platform);}
             ImGui::PopID();
         }
-    }ImGui::EndChild();
+    }PS::HelpyImGuiTheme::EndPanel();
     const bool links=ImGui::CollapsingHeader("Social links");
 #ifdef HELPY_PREVIEW
     HelpyPreviewHooks::AuthoringButtons["Profile links"]=HelpyPreviewHooks::LastRect();

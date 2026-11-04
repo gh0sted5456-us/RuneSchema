@@ -1,6 +1,7 @@
 #include "Utility/NativeFunctionHook.h"
 #include "Core/CookedPakRegistryManifest.h"
 #include "Core/RegistryEnrollment.h"
+#include "Core/NativeAssetLoadTiming.h"
 #include "SDK/WeakObjectHandle.h"
 #include <algorithm>
 #include <atomic>
@@ -953,6 +954,7 @@ namespace DragonWilds {
     {
         if (!m_recipeClass || !m_progressComponentClass) return;
         const auto started=std::chrono::steady_clock::now();
+        PS::NativeAssetLoadTiming::Batch loads;
         ApplyPendingPatches();
         ReferenceBatch batch;
         struct BatchScope {ReferenceBatch*& Active;ReferenceBatch* Before;~BatchScope(){Active=Before;}} scope{m_referenceBatch,m_referenceBatch};
@@ -968,7 +970,8 @@ namespace DragonWilds {
         }
         const auto elapsed=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-started).count();
         if(elapsed>=1000)PS::Log<LogLevel::Normal>(STR("[PERF][RECIPES] Reference preparation for {} recipes took {} ms.\n"),m_recipeDefs.size(),elapsed);
-        if(m_recipeDefs.size()>=1000)PS::Log<LogLevel::Normal>(STR("[PERF][RECIPES][REFERENCES] recipes={} snapshot_hits={} native_load_requests={} elapsed_ms={}; every required recipe still resolves and validates.\n"),m_recipeDefs.size(),batch.Hits,batch.Loads,elapsed);
+        if(m_recipeDefs.size()>=1000)PS::Log<LogLevel::Normal>(STR("[PERF][RECIPES][REFERENCES] recipes={} snapshot_hits={} live_hits={} native_load_requests={} elapsed_ms={}; every required recipe still resolves and validates.\n"),m_recipeDefs.size(),batch.Hits,batch.LiveHits,batch.Loads,elapsed);
+        PS::Log<LogLevel::Normal>(STR("[PERF][RECIPES][LOAD-COST] calls={} wrapper_ms={} native_ms={}; native includes engine loading and ProcessEvent callbacks.\n"),loads.Cost.Calls,loads.Cost.WrapperMs(),loads.Cost.NativeMs());
     }
 
     std::vector<RC::StringType> DragonWildsRecipeModLoader::CookedReferencePaths() const
@@ -1390,7 +1393,7 @@ namespace DragonWilds {
                     |RF_NeedLoad|RF_NeedPostLoad|RF_NeedInitialization));
             };
             UObject* recipe=nullptr;
-            if(m_referenceBatch)recipe=m_referenceBatch->Resolve(def.Key,load,valid,[](UObject* object){return PS::WeakObjectHandle(object);});
+            if(m_referenceBatch)recipe=m_referenceBatch->Resolve(def.Key,[&]{return UECustom::UObjectGlobals::StaticFindObject(nullptr,nullptr,def.Key.c_str(),false);},load,valid,[](UObject* object){return PS::WeakObjectHandle(object);});
             else {
                 recipe=UECustom::UObjectGlobals::StaticFindObject(nullptr,nullptr,def.Key.c_str(),false);
                 if(!recipe||!valid(recipe))recipe=load();

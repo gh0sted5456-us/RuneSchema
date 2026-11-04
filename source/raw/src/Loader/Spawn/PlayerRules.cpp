@@ -48,6 +48,7 @@
 #include "Core/JsonLoadOrderMerge.h"
 #include "Core/AppearanceDefaults.h"
 #include "Core/PlayerCarryWeight.h"
+#include "Runtime/PlayerAttributeEffect.h"
 #include "Runtime/HostServices.h"
 
 using namespace RC;
@@ -2713,12 +2714,17 @@ namespace DragonWilds {
                 }
             }
 
+            std::erase_if(m_playerAdjustments, [&](const PlayerAdjustmentState& previous) {
+                return !previous.Pawn.Get() || !previous.Controller.Get()
+                    || (previous.Controller.Get() == controller && previous.Pawn.Get() != pawn);
+            });
             auto state = std::find_if(m_playerAdjustments.begin(), m_playerAdjustments.end(),
                 [&](const PlayerAdjustmentState& value) { return value.Pawn.Get() == pawn; });
             if (state == m_playerAdjustments.end())
             {
                 PlayerAdjustmentState initial;
                 initial.Pawn.Assign(pawn);
+                initial.Controller.Assign(controller);
                 initial.BaseScale = static_cast<AActor*>(pawn)->GetActorScale3D();
                 m_playerAdjustments.push_back(std::move(initial));
                 state = std::prev(m_playerAdjustments.end());
@@ -2791,6 +2797,8 @@ namespace DragonWilds {
                         baseline.Index = index;
                         baseline.Value = valueInner->GetFloatingPointPropertyValue(
                             valueData + index * valueSize);
+                        if (PS::PlayerAttributeEffect::Template(attribute))
+                            baseline.Value = PS::PlayerAttributeEffect::Base(attributes, attribute);
                         baseline.Valid = std::isfinite(baseline.Value);
                         return;
                     }
@@ -2805,6 +2813,9 @@ namespace DragonWilds {
                 if (!baseline.Valid || !baseline.Attributes || !baseline.ValuesProperty
                     || !baseline.Attribute || baseline.Index < 0 || !std::isfinite(value))
                     return false;
+                if (PS::PlayerAttributeEffect::Template(baseline.Attribute))
+                    return PS::PlayerAttributeEffect::Set(pawn, baseline.Attribute, baseline.Value, value,
+                        state->NativeAttributeEffects[baseline.Attribute]);
                 auto* numeric = CastField<FNumericProperty>(baseline.ValuesProperty->GetInner());
                 auto* values = baseline.ValuesProperty->ContainerPtrToValuePtr<FScriptArray>(
                     baseline.Attributes);
@@ -2862,256 +2873,27 @@ namespace DragonWilds {
 
             if (setHealth || setMaxHealth)
             {
-                UObject* health = nullptr;
-                std::vector<UObject*> healthCandidates;
-                const auto addHealthCandidate = [&](UObject* candidate) {
-                    if (candidate && std::find(healthCandidates.begin(),
-                        healthCandidates.end(), candidate) == healthCandidates.end())
-                        healthCandidates.push_back(candidate);
-                };
-                for (const auto* propertyName : {
-                    TEXT("HealthComponent"), TEXT("BP_Components_Health")})
-                {
-                    auto* address = PropertyHelper::GetValuePtrByPropertyNameInChain<
-                        TObjectPtr<UObject>>(pawn, propertyName);
-                    addHealthCandidate(address ? address->Get() : nullptr);
-                }
-                try
-                {
-                    auto getPlayerHealth = ActorHelper::FunctionCall(
-                        pawn,
-                        STR("/Script/Dominion.DominionPlayerCharacter:GetHealthComponent"));
-                    getPlayerHealth.Invoke();
-                    addHealthCandidate(getPlayerHealth.Result<UObject*>());
-                }
-                catch (...)
-                {
-                }
-                try
-                {
-                    auto getComponent = ActorHelper::FunctionCall(
-                        pawn, STR("/Script/Dominion.HealthInterface:GetBaseHealthComponent"));
-                    getComponent.Invoke();
-                    addHealthCandidate(getComponent.Result<UObject*>());
-                }
-                catch (...)
-                {
-                }
-                // Select a live health component with a positive maximum.
-                for (auto* candidate : healthCandidates)
-                {
-                    try
-                    {
-                        auto getMax = ActorHelper::FunctionCall(
-                            candidate, STR("/Script/Dominion.HealthComponent:GetMaxHealth"));
-                        getMax.Invoke();
-                        const double candidateMaximum = getMax.NumericResult();
-                        if (!std::isfinite(candidateMaximum) || candidateMaximum <= 0.0)
-                            continue;
-                        health = candidate;
-                        if (!state->HasBaseHealth)
-                        {
-                            state->BaseMaxHealth = candidateMaximum;
-                            state->HasBaseHealth = true;
-                        }
-                        break;
-                    }
-                    catch (...)
-                    {
-                    }
-                }
-                if (!health)
-                    PS::Log<LogLevel::Warning>(
-                        STR("No authoritative positive player health component was available.\n"));
-                // Use the public attribute API; private health delegates can crash.
                 captureAttribute(state->HealthAttribute, playerAttributes,
                     [](const std::string& name) {
                         return name == "da_attribute_maxhealth"
-                            || name == "maxhealthattribute"
-                            || (name.find("health") != std::string::npos
-                                && name.find("max") != std::string::npos);
+                            || name == "maxhealthattribute";
                     });
-                const double desired = setMaxHealth ? maxHealth
-                    : state->HealthAttribute.Valid
-                    ? state->HealthAttribute.Value * healthMultiplier
-                    : state->HasBaseHealth ? state->BaseMaxHealth * healthMultiplier : 0.0;
-                if (health)
+                const auto& baseline = state->HealthAttribute;
+                const double desired = setMaxHealth ? maxHealth : baseline.Value * healthMultiplier;
+                healthApplied = applyAttributeValue(state->HealthAttribute, desired);
+                if (healthApplied)
                 {
-                    if (state->HasBaseHealth)
+                    auto* health = ActorHelper::GetObjectRef(pawn, TEXT("HealthComponent"));
+                    auto maximum = ActorHelper::FunctionCall(
+                        health, STR("/Script/Dominion.HealthComponent:GetMaxHealth"));
+                    maximum.Invoke();
+                    const double effective = maximum.NumericResult();
+                    healthApplied = std::isfinite(effective) && effective > 0.0;
+                    if (healthApplied)
                     {
-                        const double desiredMaximum = desired;
-                        auto verifyMax = ActorHelper::FunctionCall(
-                            health, STR("/Script/Dominion.HealthComponent:GetMaxHealth"));
-                        verifyMax.Invoke();
-                        double currentMaximum = verifyMax.NumericResult();
-                        healthApplied = std::isfinite(currentMaximum)
-                            && std::abs(currentMaximum - desiredMaximum) < 0.01;
-                        if (!healthApplied && std::isfinite(currentMaximum) && currentMaximum > 0.0)
-                        {
-                            // ModifyMaxHealth takes an absolute maximum, not a delta.
-                            auto modifyMax = ActorHelper::FunctionCall(
-                                health, STR("/Script/Dominion.HealthComponent:ModifyMaxHealth"));
-                            modifyMax.FirstNumericArg(desiredMaximum).Invoke();
-                            auto verifyFallback = ActorHelper::FunctionCall(
-                                health, STR("/Script/Dominion.HealthComponent:GetMaxHealth"));
-                            verifyFallback.Invoke();
-                            currentMaximum = verifyFallback.NumericResult();
-                            healthApplied = std::isfinite(currentMaximum)
-                                && std::abs(currentMaximum - desiredMaximum) < 0.01;
-                            if (!healthApplied && state->HealthAttribute.Valid
-                                && state->HealthAttribute.Value > 0.0)
-                            {
-                                // Update the live MaxHealthAttribute and notify its change.
-                                const double absoluteMultiplier =
-                                    desiredMaximum / state->HealthAttribute.Value;
-                                if (std::isfinite(absoluteMultiplier)
-                                    && applyAttribute(state->HealthAttribute,
-                                        absoluteMultiplier))
-                                {
-                                    auto verifyAttribute = ActorHelper::FunctionCall(
-                                        health,
-                                        STR("/Script/Dominion.HealthComponent:GetMaxHealth"));
-                                    verifyAttribute.Invoke();
-                                    currentMaximum = verifyAttribute.NumericResult();
-                                    healthApplied = std::isfinite(currentMaximum)
-                                        && std::abs(currentMaximum - desiredMaximum) < 0.01;
-                                }
-                            }
-                            if (!healthApplied)
-                            {
-                                try
-                                {
-                                    auto* effectClass = ActorHelper::ResolveClass(STR(
-                                        "/Game/Gameplay/GameplayEffects/Effects/GE_ModifyMaxHealth.GE_ModifyMaxHealth_C"));
-                                    auto effectObject = effectClass
-                                        ? effectClass->GetClassDefaultObject() : TObjectPtr<UObject>{};
-                                    auto* effect = effectObject.Get();
-                                    auto* dataProperty = effect ? CastField<FStructProperty>(
-                                        PropertyHelper::GetPropertyByName(
-                                            effect->GetClassPrivate(), TEXT("Data"))) : nullptr;
-                                    auto* dataStruct = dataProperty ? dataProperty->GetStruct().Get() : nullptr;
-                                    auto* amountProperty = dataStruct ? CastField<FStructProperty>(
-                                        PropertyHelper::GetPropertyByName(
-                                            dataStruct, TEXT("AmountToModify"))) : nullptr;
-                                    auto* amountStruct = amountProperty
-                                        ? amountProperty->GetStruct().Get() : nullptr;
-                                    auto* valueProperty = amountStruct ? CastField<FNumericProperty>(
-                                        PropertyHelper::GetPropertyByName(
-                                            amountStruct, TEXT("Value"))) : nullptr;
-                                    if (!effect || !dataProperty || !amountProperty
-                                        || !valueProperty || !valueProperty->IsFloatingPoint())
-                                        throw std::runtime_error(
-                                            "GE_ModifyMaxHealth magnitude was unavailable");
-                                    auto* data = dataProperty->ContainerPtrToValuePtr<void>(effect);
-                                    auto* amount = amountProperty->ContainerPtrToValuePtr<void>(data);
-                                    auto* magnitude = valueProperty->ContainerPtrToValuePtr<void>(amount);
-                                    const double originalMagnitude =
-                                        valueProperty->GetFloatingPointPropertyValue(magnitude);
-                                    const double delta = desiredMaximum - currentMaximum;
-                                    valueProperty->SetFloatingPointPropertyValue(magnitude, delta);
-                                    try
-                                    {
-                                        auto applyEffect = ActorHelper::FunctionCall(pawn,
-                                            STR("/Script/Dominion.DominionPlayerCharacter:AddGameplayEffect"));
-                                        applyEffect.Arg(STR("GameplayEffectData"), effect)
-                                            .Arg(STR("EffectInstigator"), static_cast<AActor*>(pawn))
-                                            .Arg(STR("EffectSource"), pawn)
-                                            .Invoke();
-                                    }
-                                    catch (...)
-                                    {
-                                        valueProperty->SetFloatingPointPropertyValue(
-                                            magnitude, originalMagnitude);
-                                        throw;
-                                    }
-                                    valueProperty->SetFloatingPointPropertyValue(
-                                        magnitude, originalMagnitude);
-                                    auto verifyEffect = ActorHelper::FunctionCall(
-                                        health, STR("/Script/Dominion.HealthComponent:GetMaxHealth"));
-                                    verifyEffect.Invoke();
-                                    currentMaximum = verifyEffect.NumericResult();
-                                    healthApplied = std::isfinite(currentMaximum)
-                                        && std::abs(currentMaximum - desiredMaximum) < 0.01;
-                                    if (!healthApplied)
-                                    {
-                                        // Fallback preserves the native 24-byte effect handle.
-                                        UObject* gameplayEffects = nullptr;
-                                        try
-                                        {
-                                            auto getEffects = ActorHelper::FunctionCall(pawn,
-                                                STR("/Script/Dominion.DominionPlayerCharacter:GetPlayerGameplayEffectsComponent"));
-                                            getEffects.Invoke();
-                                            gameplayEffects = getEffects.Result<UObject*>();
-                                        }
-                                        catch (...)
-                                        {
-                                            auto* address = PropertyHelper::GetValuePtrByPropertyNameInChain<
-                                                TObjectPtr<UObject>>(pawn, TEXT("GameplayEffectsComponent"));
-                                            gameplayEffects = address ? address->Get() : nullptr;
-                                        }
-                                        if (!gameplayEffects)
-                                            throw std::runtime_error(
-                                                "player gameplay-effects component was unavailable");
-
-                                        valueProperty->SetFloatingPointPropertyValue(magnitude, delta);
-                                        std::array<uint8_t, 24> effectHandle{};
-                                        try
-                                        {
-                                            auto instantiate = ActorHelper::FunctionCall(gameplayEffects,
-                                                STR("/Script/Dominion.DominionGameplayEffectsComponent:InstantiateGameplayEffect"));
-                                            instantiate.Arg(STR("DataClass"), effectClass)
-                                                .Arg(STR("InstigatingGE"), static_cast<UObject*>(nullptr))
-                                                .Arg(STR("bForceNewInstance"), true)
-                                                .Invoke();
-                                            instantiate.MoveResult(effectHandle.data(), effectHandle.size());
-                                        }
-                                        catch (...)
-                                        {
-                                            valueProperty->SetFloatingPointPropertyValue(
-                                                magnitude, originalMagnitude);
-                                            throw;
-                                        }
-                                        valueProperty->SetFloatingPointPropertyValue(
-                                            magnitude, originalMagnitude);
-                                        auto apply = ActorHelper::FunctionCall(gameplayEffects,
-                                            STR("/Script/Dominion.DominionGameplayEffectsComponent:ApplyGameplayEffect"));
-                                        apply.Arg(STR("Instigator"), static_cast<AActor*>(pawn))
-                                            .Arg(STR("Source"), pawn)
-                                            .Arg(STR("Handle"), effectHandle)
-                                            .Arg(STR("bIgnoreChanceToApply"), true)
-                                            .Invoke();
-                                        auto verifyNative = ActorHelper::FunctionCall(
-                                            health, STR("/Script/Dominion.HealthComponent:GetMaxHealth"));
-                                        verifyNative.Invoke();
-                                        currentMaximum = verifyNative.NumericResult();
-                                        healthApplied = std::isfinite(currentMaximum)
-                                            && std::abs(currentMaximum - desiredMaximum) < 0.01;
-                                    }
-                                    if (!healthApplied)
-                                    {
-                                        const auto diagnosticKey = std::format(
-                                            "max-health-effect\n{}\n{}\n{}",
-                                            resolvedPlayerGuid, currentMaximum, desiredMaximum);
-                                        if (m_reportedPlayerRuleFailures.insert(diagnosticKey).second)
-                                            PS::Log<LogLevel::Warning>(
-                                                STR("GE_ModifyMaxHealth dispatched but verification returned {} (requested {}).\n"),
-                                                currentMaximum, desiredMaximum);
-                                    }
-                                }
-                                catch (const std::exception& error)
-                                {
-                                    PS::Log<LogLevel::Warning>(
-                                        STR("Max-health gameplay effect failed: {}\n"),
-                                        PS::ToWideSafe(error.what()));
-                                }
-                            }
-                        }
-                        if (healthApplied)
-                        {
-                            auto setHealthCall = ActorHelper::FunctionCall(
-                                health, STR("/Script/Dominion.HealthComponent:SetHealth"));
-                            setHealthCall.FirstNumericArg(desiredMaximum).Invoke();
-                        }
+                        auto fill = ActorHelper::FunctionCall(
+                            health, STR("/Script/Dominion.HealthComponent:SetHealth"));
+                        fill.FirstNumericArg(effective).Invoke();
                     }
                 }
             }
@@ -3122,95 +2904,25 @@ namespace DragonWilds {
                     pawn, STR("/Script/Dominion.DominionPlayerCharacter:GetStaminaComponent"));
                 getStamina.Invoke();
                 auto* stamina = getStamina.Result<UObject*>();
-                if (stamina && !state->HasBaseStamina)
+                auto* attributes = stamina
+                    ? ActorHelper::GetObjectRef(stamina, TEXT("AttributesComponent")) : nullptr;
+                captureAttribute(state->StaminaAttribute, attributes,
+                    [](const std::string& name) {
+                        return name == "da_attribute_maxstamina"
+                            || name == "maxstaminaattribute";
+                    });
+                const double desired = setMaxStamina ? maxStamina
+                    : state->StaminaAttribute.Value * staminaMultiplier;
+                staminaApplied = applyAttributeValue(state->StaminaAttribute, desired);
+                if (staminaApplied)
                 {
-                    auto getMaximum = ActorHelper::FunctionCall(
+                    auto maximum = ActorHelper::FunctionCall(
                         stamina, STR("/Script/Dominion.StaminaComponent:GetMaxStamina"));
-                    getMaximum.Invoke();
-                    const double baseMaximum = getMaximum.NumericResult();
-                    auto* attributesAddress = PropertyHelper::GetValuePtrByPropertyNameInChain<
-                        TObjectPtr<UObject>>(stamina, TEXT("AttributesComponent"));
-                    auto* attributes = attributesAddress ? attributesAddress->Get() : nullptr;
-                    auto* attributesProperty = attributes ? CastField<FArrayProperty>(
-                        PropertyHelper::GetPropertyByName(
-                            attributes->GetClassPrivate(), TEXT("FloatAttributes"))) : nullptr;
-                    auto* valuesProperty = attributes ? CastField<FArrayProperty>(
-                        PropertyHelper::GetPropertyByName(
-                            attributes->GetClassPrivate(), TEXT("AttributeValues"))) : nullptr;
-                    auto* attributeInner = attributesProperty
-                        ? CastField<FObjectPropertyBase>(attributesProperty->GetInner()) : nullptr;
-                    auto* valueInner = valuesProperty
-                        ? CastField<FNumericProperty>(valuesProperty->GetInner()) : nullptr;
-                    auto* attributeArray = attributesProperty
-                        ? attributesProperty->ContainerPtrToValuePtr<FScriptArray>(attributes) : nullptr;
-                    auto* valueArray = valuesProperty
-                        ? valuesProperty->ContainerPtrToValuePtr<FScriptArray>(attributes) : nullptr;
-                    if (attributes && attributesProperty && valuesProperty && attributeInner && valueInner
-                        && valueInner->IsFloatingPoint() && attributeArray && valueArray
-                        && attributeArray->Num() == valueArray->Num()
-                        && std::isfinite(baseMaximum) && baseMaximum > 0.0)
-                    {
-                        const int32 attributeSize = attributesProperty->GetInner()->GetElementSize();
-                        auto* attributeData = static_cast<uint8*>(attributeArray->GetData());
-                        for (int32 index = 0; index < attributeArray->Num(); ++index)
-                        {
-                            UObject* attribute = nullptr;
-                            std::memcpy(&attribute, attributeData + index * attributeSize, sizeof(attribute));
-                            if (!attribute) continue;
-                            std::array<std::string, 2> names{
-                                RC::to_string(attribute->GetName()),
-                                attribute->GetClassPrivate()
-                                    ? RC::to_string(attribute->GetClassPrivate()->GetName())
-                                    : std::string{},
-                            };
-                            const bool isMaximumStamina = std::any_of(
-                                names.begin(), names.end(), [](std::string name) {
-                                    std::transform(name.begin(), name.end(), name.begin(),
-                                        [](unsigned char character) {
-                                            return static_cast<char>(std::tolower(character));
-                                        });
-                                    return name.find("stamina") != std::string::npos
-                                        && name.find("max") != std::string::npos;
-                                });
-                            if (!isMaximumStamina) continue;
-                            state->StaminaAttributes = attributes;
-                            state->StaminaValuesProperty = valuesProperty;
-                            state->MaxStaminaAttribute = attribute;
-                            state->MaxStaminaIndex = index;
-                            state->BaseMaxStamina = baseMaximum;
-                            state->HasBaseStamina = true;
-                            break;
-                        }
-                    }
-                }
-                if (stamina && state->HasBaseStamina && state->StaminaAttributes
-                    && state->StaminaValuesProperty && state->MaxStaminaAttribute
-                    && state->MaxStaminaIndex >= 0)
-                {
-                    auto* valueInner = CastField<FNumericProperty>(
-                        state->StaminaValuesProperty->GetInner());
-                    auto* values = state->StaminaValuesProperty->ContainerPtrToValuePtr<FScriptArray>(
-                        state->StaminaAttributes);
-                    if (valueInner && valueInner->IsFloatingPoint() && values
-                        && values->IsValidIndex(state->MaxStaminaIndex))
-                    {
-                        auto* valueAddress = static_cast<uint8*>(values->GetData())
-                            + state->MaxStaminaIndex * valueInner->GetElementSize();
-                        const double desired = setMaxStamina
-                            ? maxStamina : state->BaseMaxStamina * staminaMultiplier;
-                        valueInner->SetFloatingPointPropertyValue(valueAddress, desired);
-                        auto changed = ActorHelper::FunctionCall(
-                            state->StaminaAttributes,
-                            STR("/Script/Dominion.DominionAttributesComponent:OnAttributeChanged"));
-                        changed.Arg(STR("Attribute"), state->MaxStaminaAttribute).Invoke();
-                        auto maximumChanged = ActorHelper::FunctionCall(
-                            stamina, STR("/Script/Dominion.StaminaComponent:MaxStaminaChanged"));
-                        maximumChanged.FirstNumericArg(desired).Invoke();
-                        staminaApplied = true;
-                    }
+                    maximum.Invoke();
+                    const double effective = maximum.NumericResult();
+                    staminaApplied = std::isfinite(effective) && effective > 0.0;
                 }
             }
-
             const auto captureFields = [&](std::vector<PlayerNumericBaseline>& fields,
                 const std::vector<const TCHAR*>& directNames,
                 const std::vector<const TCHAR*>& inverseNames) {
@@ -3322,8 +3034,17 @@ namespace DragonWilds {
                         carryWeightApplied=false;carryWeightStatus="unsupported: attribute storage changed during refresh";
                     } else {
                         const auto actual=numeric->GetFloatingPointPropertyValue(static_cast<uint8*>(values->GetData())+baseline.Index*numeric->GetElementSize());
-                        carryWeightApplied=PS::PlayerCarryWeight::Verified(actual,requested);
-                        carryWeightStatus=std::format("{} (baseline {}, requested {}, readback {})",carryWeightApplied?"applied":"not retained",baseline.Value,requested,actual);
+                        if (PS::PlayerAttributeEffect::Template(baseline.Attribute)) {
+                            const auto owned = state->NativeAttributeEffects.find(baseline.Attribute);
+                            carryWeightApplied = std::isfinite(actual)
+                                && (owned != state->NativeAttributeEffects.end() && owned->second
+                                    ? owned->second->Exists() : PS::PlayerCarryWeight::Verified(requested, baseline.Value));
+                            carryWeightStatus = std::format("{} (base {}, profile {}, effective {})",
+                                carryWeightApplied ? "applied" : "not retained", baseline.Value, requested, actual);
+                        } else {
+                            carryWeightApplied=PS::PlayerCarryWeight::Verified(actual,requested);
+                            carryWeightStatus=std::format("{} (baseline {}, requested {}, readback {})",carryWeightApplied?"applied":"not retained",baseline.Value,requested,actual);
+                        }
                     }
                 }
             }

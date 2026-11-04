@@ -1,10 +1,13 @@
 #pragma once
 #include "Generator/RuneSchemaSettingsPanel.h"
 #include "Generator/ToolRequest.h"
+#include "Core/ProcessExitFuture.h"
 namespace PS::RuntimeConnectionPanel {
 inline nlohmann::json Snapshot=nlohmann::json::object();
 inline std::chrono::steady_clock::time_point Received{},Next{};
 inline uint64_t Generation=0;
+inline ProcessExitFuture<nlohmann::json> Pending;inline uint64_t RequestedGeneration=0;
+inline std::chrono::steady_clock::time_point RequestedAt{};
 #if defined(HELPY_PREVIEW)
 inline std::string PreviewRole="standalone";
 #endif
@@ -31,10 +34,13 @@ inline View Read(std::chrono::steady_clock::time_point now=std::chrono::steady_c
 inline void Poll(){
     const auto now=std::chrono::steady_clock::now();const auto generation=SpawnToolRequests::CurrentGeneration();
     if(Generation!=generation){Snapshot=nlohmann::json::object();Next={};Generation=generation;}
-    if(now<Next||!RuneSchemaSettingsPanel::Remote)return;Next=now+std::chrono::seconds(2);
-    try{nlohmann::json reply;if(RuneSchemaSettingsPanel::Remote({{"Action","NetworkStatus"}},reply)&&reply.is_object()
-        &&reply.value("Generation",uint64_t{})==generation){Snapshot=std::move(reply);Received=now;}}
-    catch(...){} // A diagnostic failure must not interrupt gameplay or UI.
+    if(Pending.valid()&&Pending.wait_for(std::chrono::milliseconds(0))==std::future_status::ready){
+        try{auto reply=Pending.get();if(RequestedGeneration==generation&&reply.is_object()&&reply.value("Generation",uint64_t{})==generation){Snapshot=std::move(reply);Received=RequestedAt;}}catch(...){}
+    }
+    if(Pending.valid()||now<Next||!RuneSchemaSettingsPanel::Remote)return;Next=now+std::chrono::seconds(2);
+    const auto remote=RuneSchemaSettingsPanel::Remote;RequestedGeneration=generation;RequestedAt=now;
+    // Pipe latency must not occupy the UI/render thread; retain one bounded read.
+    try{Pending=std::async(std::launch::async,[remote]{nlohmann::json reply;try{if(!remote({{"Action","NetworkStatus"}},reply))reply=nlohmann::json::object();}catch(...){reply=nlohmann::json::object();}return reply;});}catch(...){}
 }
 inline void Render(){
     const auto view=Read();ImGui::SeparatorText("Connection & health");

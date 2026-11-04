@@ -1,16 +1,23 @@
 #include "Loader/DragonWildsRegistryLoader.h"
 #include "Core/HelpyCacheSources.h"
+#include "Core/NativeAssetLoadTiming.h"
+#include "Core/PakDiscovery.h"
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <fstream>
 #include <stdexcept>
+#include <unordered_map>
 #include "Core/ConfigFiles.h"
 #include "Core/CookedPakRegistryManifest.h"
 #include "Core/CookedRegistryShards.h"
 #include "Core/MountedModRegistryOwners.h"
 #include "Core/RegistryEnrollment.h"
 #include "Core/ModDataRelay.h"
+#include "Core/ConsumedOwnerPresentation.h"
+#include "Core/CharacterAppearance.h"
+#include "Core/LocalModProfiles.h"
 #include "SDK/Helper/ReflectedContract.h"
 #include "Runtime/HostServices.h"
 #include "Runtime/RegistryBridge.h"
@@ -67,15 +74,18 @@ json AuthorDocument(const json& source) {
         json entries=json::array();for(const auto& row:source["entries"]) {
             json entry={{"Id",row.value("id",std::string{})},{"Kind",row.value("kind",std::string{})}};
             if(row.value("kind",std::string{})=="DataRelay"){entry["Relay"]=row.at("relay");entries.push_back(std::move(entry));continue;}
+            if(row.value("kind",std::string{})=="LocalProfile"){entry["Profile"]=row.at("profile");entries.push_back(std::move(entry));continue;}
+            if(row.value("kind",std::string{})=="CharacterAppearance"){entry["Appearance"]=row.at("appearance");entries.push_back(std::move(entry));continue;}
             if(row.contains("spell"))entry["Spell"]=row["spell"];
             if(row.contains("presentation")){entry["Presentation"]=json::array();for(const auto& p:row["presentation"]){json out={{"Phase",p.value("module",std::string{})},{"Class",p.value("path",std::string{})},{"Classification",p.value("classification",std::string{})}};if(p.contains("socket"))out["Socket"]=p["socket"];if(p.contains("parameters"))out["Parameters"]=p["parameters"];entry["Presentation"].push_back(std::move(out));}}
-            if(row.contains("authority")){const auto& a=row["authority"];entry["Authority"]={{"Action",a.value("action",std::string{})},{"GraphClass",a.value("graphClass",std::string{})},{"Function",a.value("function",std::string("Trigger"))},{"Bindings",a.value("bindings",json::object())}};if(a.contains("dataAsset"))entry["Authority"]["DataAsset"]=a["dataAsset"];}
+            if(row.contains("authority")){const auto& a=row["authority"];entry["Authority"]={{"Action",a.value("action",std::string{})},{"GraphClass",a.value("graphClass",std::string{})},{"Function",a.value("function",std::string("Trigger"))},{"Bindings",a.value("bindings",json::object())}};if(a.contains("dataAsset"))entry["Authority"]["DataAsset"]=a["dataAsset"];if(a.contains("ownerPresentation")){const auto& owner=a["ownerPresentation"];entry["Authority"]["OwnerPresentation"]={{"Connection",owner.at("connection")},{"Key",owner.at("key")}};}}
             if(row.contains("consumer")) {
                 const auto& c=row["consumer"];
                 entry["Consumer"]={{"Connection",c.value("connection",std::string{})},
                     {"Class",c.value("class",std::string{})},
                     {"Function",c.value("function",std::string("OnRuneSchemaPresentation"))},
                     {"AllowedKeys",c.value("allowedKeys",json::array())}};
+                if(c.contains("audience"))entry["Consumer"]["Audience"]=c["audience"];
             }
             if(row.contains("metadata"))entry["Metadata"]=row["metadata"];entries.push_back(std::move(entry));
         }return {{"SchemaVersion",1},{"Entries",std::move(entries)}};
@@ -127,7 +137,7 @@ bool DragonWildsRegistryLoader::OnInitialize() {
 }
 
 nlohmann::json DragonWildsRegistryLoader::NormalizeEntry(const json& entry,const std::string& owner) {
-    Fields(entry,{"Id","Kind","Spell","Presentation","Authority","Consumer","Metadata","Relay"},"registry entry");
+    Fields(entry,{"Id","Kind","Spell","Presentation","Authority","Consumer","Metadata","Relay","Profile","Appearance"},"registry entry");
     const auto id=entry.value("Id",std::string{});
     const auto kind=entry.value("Kind",std::string{});
     if(!Identifier(id))throw std::runtime_error("registry Id must use letters, numbers, dot, dash or underscore");
@@ -135,11 +145,21 @@ nlohmann::json DragonWildsRegistryLoader::NormalizeEntry(const json& entry,const
         && kind!="GameplayEffectPresentation" && kind!="EquipmentPresentation"
         && kind!="PersistentEffect" && kind!="WeatherPresentation"
         && kind!="WorldPresentation" && kind!="AudioPresentation" && kind!="CosmeticWrapper"
-        && kind!="GameplayAuthority"&&kind!="DataRelay")
+        && kind!="GameplayAuthority"&&kind!="DataRelay"&&kind!="LocalProfile"&&kind!="CharacterAppearance")
         throw std::runtime_error("registry Kind is unsupported");
     const auto key=owner+":"+id;
     if(m_keys.contains(key))throw std::runtime_error("duplicate registry key '"+key+"'");
     json result={{"key",key},{"owner",owner},{"id",id},{"kind",kind},{"presentation",json::array()}};
+    if(kind=="CharacterAppearance"){
+        if(!entry.contains("Appearance")||entry.size()!=3)throw std::runtime_error("CharacterAppearance requires only Id, Kind and Appearance");
+        (void)PS::CharacterAppearance::Declaration(owner,id,entry["Appearance"]);result["appearance"]=entry["Appearance"];
+        m_keys.insert(key);return result;
+    }else if(entry.contains("Appearance"))throw std::runtime_error("Appearance declarations require Kind CharacterAppearance");
+    if(kind=="LocalProfile"){
+        if(!entry.contains("Profile")||entry.size()!=3)throw std::runtime_error("LocalProfile requires only Id, Kind and Profile");
+        (void)PS::LocalModProfiles::Class(entry["Profile"]);result["profile"]=entry["Profile"];
+        m_keys.insert(key);return result;
+    }else if(entry.contains("Profile"))throw std::runtime_error("Profile declarations require Kind LocalProfile");
     if(entry.contains("Spell")) {
         if(!entry["Spell"].is_string() || !AssetPath(entry["Spell"].get<std::string>()))
             throw std::runtime_error("registry Spell must be a supported cooked asset path");
@@ -179,7 +199,7 @@ nlohmann::json DragonWildsRegistryLoader::NormalizeEntry(const json& entry,const
     }
     if(entry.contains("Authority")) {
         const auto& authority=entry["Authority"];
-        Fields(authority,{"Action","GraphClass","DataAsset","Function","Bindings"},"registry authority");
+        Fields(authority,{"Action","GraphClass","DataAsset","Function","Bindings","OwnerPresentation"},"registry authority");
         const auto action=authority.value("Action",std::string{});
         if(action!="SpawnFollower" && action!="ExecuteGraph" && action!="ConsumedItemAuthority")
             throw std::runtime_error("registry Authority Action is unsupported");
@@ -218,10 +238,18 @@ nlohmann::json DragonWildsRegistryLoader::NormalizeEntry(const json& entry,const
         }
         result["authority"]={{"action",action},{"graphClass",graph},{"function",function},{"bindings",bindings}};
         if(!asset.empty())result["authority"]["dataAsset"]=asset;
+        if(authority.contains("OwnerPresentation")){
+            PS::ConsumedOwnerPresentation::ValidateDeclaration(authority,entry.value("Consumer",json{}));
+            const auto& owner=authority["OwnerPresentation"];
+            result["authority"]["ownerPresentation"]={{"connection",owner["Connection"]},{"key",owner["Key"]}};
+        }
     }
     if(entry.contains("Consumer")) {
         const auto& consumer=entry["Consumer"];
-        Fields(consumer,{"Connection","Class","Function","AllowedKeys"},"registry consumer");
+        Fields(consumer,{"Connection","Class","Function","AllowedKeys","Audience"},"registry consumer");
+        const auto audience=consumer.value("Audience",std::string{"World"});
+        if(audience!="World"&&audience!="Owner")throw std::runtime_error("registry Consumer Audience must be World or Owner");
+        PS::ConsumedOwnerPresentation::ValidateDeclaration(entry.value("Authority",json::object()),consumer);
         const auto connection=consumer.value("Connection",std::string{});
         const auto classPath=consumer.value("Class",std::string{});
         const auto function=consumer.value("Function",std::string{"OnRuneSchemaPresentation"});
@@ -239,6 +267,7 @@ nlohmann::json DragonWildsRegistryLoader::NormalizeEntry(const json& entry,const
             if(unique.insert(value.get<std::string>()).second)allowed.push_back(value);
         }
         result["consumer"]={{"connection",connection},{"class",classPath},{"function",function},{"allowedKeys",std::move(allowed)}};
+        if(audience=="Owner")result["consumer"]["audience"]=audience;
     }
     if(entry.contains("Metadata")) {
         if(!entry["Metadata"].is_object() || entry["Metadata"].dump().size()>4096)
@@ -303,10 +332,13 @@ void DragonWildsRegistryLoader::OnLoad(const std::filesystem::path& path,const R
 }
 
 void DragonWildsRegistryLoader::LoadCookedRegistries() {
+    const auto started=std::chrono::steady_clock::now();
+    PS::NativeAssetLoadTiming::Batch loads;
     TArray<FAssetData> assets;bool metadataReady=false;
     try{auto interface=UAssetRegistryHelpers::GetAssetRegistry();auto* registry=static_cast<UAssetRegistry*>(interface.ObjectPointer);
         metadataReady=registry&&registry->GetAllAssets(assets,true)&&assets.Num()>=0&&assets.Num()<=262144;
     }catch(...){metadataReady=false;}
+    const auto queryComplete=std::chrono::steady_clock::now();
     if(!metadataReady) {
         (void)PS::LogStructuredFallback<RC::LogLevel::Warning>(
             PS::StructuredDiagnosticB3C::Report("RS-RGST-005","Warning","Partial","RegistryLoader",
@@ -390,6 +422,10 @@ void DragonWildsRegistryLoader::LoadCookedRegistries() {
         }
         PS::Log<RC::LogLevel::Normal>(STR("Registry: discovered cooked registry asset '{}' owned by '{}'.\n"),PS::ToWideSafe(path.c_str()),PS::ToWideSafe(root.Owner.c_str()));
     };
+    std::set<std::string> registryFiles;
+    for(const auto& owner:owners)for(const auto* prefix:{"DA_RuneSchemaRegistry_","DA_Registry_"})registryFiles.insert(PS::CookedRegistryShards::Fold(std::string(prefix)+owner+".uasset"));
+    const auto packages=owners.empty()?PS::PakDiscovery::Result{}:PS::PakDiscovery::ReadMountedPackages(PS::PakDiscovery::ReadRoots(),"RSDragonwilds",&registryFiles);
+    const auto censusComplete=std::chrono::steady_clock::now();
     std::size_t conventional=0;
     // Conventional roots run first, independent of Asset Registry enumeration.
     for(const auto& owner:PS::MountedModRegistryOwners::Snapshot()) {
@@ -397,19 +433,33 @@ void DragonWildsRegistryLoader::LoadCookedRegistries() {
         const auto name=std::string(prefix)+owner;
         const auto path="/Game/Mods/"+owner+"/Registry/"+name+"."+name;
         if(handled.contains(PS::CookedRegistryShards::Fold(path)))continue;
-        try {auto* object=ActorHelper::ResolveObject(PS::ToWideSafe(path.c_str()));
+        try {const auto nativePath=PS::ToWideSafe(path.c_str());
+            auto* object=UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,nativePath.c_str());
+            if(!object&&packages.Complete&&!packages.Packages.contains(PS::CookedRegistryShards::Fold(path.substr(0,path.find('.')))))continue;
+            if(!object)object=ActorHelper::ResolveObject(nativePath);
             if(!object)continue;
             consume(object,path,owner);++conventional;}
         catch(const std::exception& error){failedOwners.insert(owner);reject(path,error,owner);}
       }
     }
     std::size_t candidates=0;
+    const auto rootsComplete=std::chrono::steady_clock::now();
+    std::unordered_map<FName,std::string> directoryOwners;
     if(metadataReady)for(auto& asset:assets) {
         const auto name=RC::to_string(asset.AssetName().ToString());
-        const auto package=RC::to_string(asset.PackageName().ToString()),path=package+"."+name;
         const bool legacy=name.starts_with("DA_RuneSchemaRegistry")||name.starts_with("RSREG_");
-        const auto folderOwner=PS::CookedRegistryShards::RegistryFolderOwner(path);
+        std::string folderOwner;
+        const auto directory=asset.PackagePath();
+        if(directory!=NAME_None){
+            auto found=directoryOwners.find(directory);
+            if(found==directoryOwners.end()){
+                auto path=RC::to_string(directory.ToString());if(!path.ends_with('/'))path+='/';
+                found=directoryOwners.emplace(directory,PS::CookedRegistryShards::RegistryFolderOwner(path)).first;
+            }
+            folderOwner=found->second;
+        }else folderOwner=PS::CookedRegistryShards::RegistryFolderOwner(RC::to_string(asset.PackageName().ToString())+"."+name);
         if(!legacy&&folderOwner.empty())continue;
+        const auto package=RC::to_string(asset.PackageName().ToString()),path=package+"."+name;
         const auto ownerKey=PS::CookedRegistryShards::Fold(folderOwner);
         const auto enabled=folderOwner.empty()?owners.end():std::find_if(owners.begin(),owners.end(),[&](const auto& value){return PS::CookedRegistryShards::Fold(value)==ownerKey;});
         if(!folderOwner.empty()&&enabled==owners.end())continue;
@@ -433,6 +483,11 @@ void DragonWildsRegistryLoader::LoadCookedRegistries() {
         &&!failedOwners.contains(owner)&&unindexedOwners.insert(owner).second)
         reject(path,std::runtime_error("Unindexed registry shards were not enrolled; a complete enabled root is required"),owner);
     if(conventional)PS::Log<RC::LogLevel::Normal>(STR("Registry: directly loaded {} conventional cooked declaration{} missing from Asset Registry metadata.\n"),conventional,conventional==1?TEXT(""):TEXT("s"));
+    const auto finished=std::chrono::steady_clock::now();
+    PS::Log<RC::LogLevel::Normal>(STR("[PERF][REGISTRY][DECLARATION-LOAD-COST] calls={} wrapper_ms={} native_ms={}; native includes engine loading and ProcessEvent callbacks.\n"),loads.Cost.Calls,loads.Cost.WrapperMs(),loads.Cost.NativeMs());
+    const auto ms=[](auto from,auto to){return std::chrono::duration_cast<std::chrono::milliseconds>(to-from).count();};
+    PS::Log<RC::LogLevel::Normal>(STR("[PERF][REGISTRY][DECLARATIONS] query_ms={} roots_ms={} metadata_ms={} directories={} candidates={} census_ms={} conventional_ms={} filename_targets={} census_packages={}; conventional and legacy discovery retained.\n"),
+        ms(started,queryComplete),ms(queryComplete,rootsComplete),ms(rootsComplete,finished),directoryOwners.size(),candidates,ms(queryComplete,censusComplete),ms(censusComplete,rootsComplete),registryFiles.size(),packages.Packages.size());
 }
 
 void DragonWildsRegistryLoader::WriteMerged() {

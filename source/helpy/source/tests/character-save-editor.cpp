@@ -113,6 +113,22 @@ int main(){
     auto broken=inventory;broken["GameProgress"]["Loadout"]["0"]["PlayerInventoryItemIndex"]="2";session.Open(broken);
     Reject([&]{session.RemoveItems({"/GameProgress/Inventory/2"},session.Inventory()["Revision"],true);});
     assert(session.Inventory()["Total"]==3);
+    {
+        auto independent=inventory;
+        const Json worn={{"ItemData","helmet"},{"GUID","equipped-instance"},{"Durability",17},
+            {"PlayerInventoryItemIndex",2},{"ModData",{{"Keep",true}}}};
+        independent["GameProgress"]["Loadout"]["0"]=worn;
+        independent["GameProgress"]["Loadout"]["1"]={{"GUID","unknown-equipped"},{"PlayerInventoryItemIndex",2}};
+        session.Open(independent);
+        const auto rows=session.Inventory();
+        assert(!rows["Items"][0]["Equipped"].get<bool>());
+        const auto loadout=session.Loadout();
+        assert(loadout.size()==2&&loadout[0]["PersistenceID"]=="helmet"
+            &&loadout[0]["Pointer"]=="/GameProgress/Loadout/0"&&loadout[0]["InstanceID"]=="equipped-instance"&&loadout[0]["ReadOnly"]==true);
+        session.RemoveItems({"/GameProgress/Inventory/2"},session.Revision(),true);
+        assert(session.Draft()["GameProgress"]["Loadout"]["0"]==worn
+            &&session.Draft()["GameProgress"]["Loadout"]["1"]==independent["GameProgress"]["Loadout"]["1"]);
+    }
     Reject([&]{PS::HelpyAuthoring::Validate(request("SaveEditorStack",{{"Pointer","/GameProgress/Inventory/2"},{"Count",0},{"Revision",uint64_t(1)}}));});
     Reject([&]{PS::HelpyAuthoring::Validate(request("SaveEditorRemoveItems",{{"Pointers",selected},{"Confirm",false},{"Revision",uint64_t(1)}}));});
     assert(PS::HelpyAuthoring::Validate(request("SaveEditorRemoveItems",{{"Pointers",selected},{"Confirm",true},{"Revision",uint64_t(1)}}))["Operation"]=="SaveEditorRemoveItems");

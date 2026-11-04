@@ -105,6 +105,11 @@ class WorldEffects {
    }
    if(found!=rested.end())rested.erase(found);
    auto* component=Object(player,L"TrackedStatusEffectsComponent");if(!Live(component))continue;
+   auto* rest=Object(player,L"PlayerRestComponent");if(!Live(rest))continue;
+   auto* durationField=CastField<FFloatProperty>(Field(rest->GetClassPrivate(),L"WellRestedDurationSeconds"));if(!durationField)throw std::runtime_error("Native rest duration differs");
+   float duration=*durationField->ContainerPtrToValuePtr<float>(rest);if(!std::isfinite(duration)||duration<=0||duration>86400)throw std::runtime_error("Native rest duration is invalid");
+   Call trigger(component,L"TriggerWellRested");trigger.Copy(L"Duration",&duration);trigger.Invoke();
+   // Refresh can create or replace the instance; resolve it afterward.
    auto* array=CastField<FArrayProperty>(Field(component->GetClassPrivate(),L"TrackedStatusEffectInstances"));
    auto* object=array?CastField<FObjectPropertyBase>(array->GetInner()):nullptr;
    if(!object)throw std::runtime_error("Native tracked effect array differs");
@@ -112,10 +117,6 @@ class WorldEffects {
    FScriptArrayHelper items(array,values);UObject* instance=nullptr;
    for(int i=0;i<values->Num();++i){auto* value=object->GetObjectPropertyValue(items.GetRawPtr(i));if(Live(value)&&value->IsA(Find<UClass>(L"/Script/Dominion.TrackedStatusEffectInstanceWellRested"))){instance=value;break;}}
    if(!instance)continue;
-   auto* rest=Object(player,L"PlayerRestComponent");if(!Live(rest))continue;
-   auto* durationField=CastField<FFloatProperty>(Field(rest->GetClassPrivate(),L"WellRestedDurationSeconds"));if(!durationField)throw std::runtime_error("Native rest duration differs");
-   float duration=*durationField->ContainerPtrToValuePtr<float>(rest);if(!std::isfinite(duration)||duration<=0||duration>86400)throw std::runtime_error("Native rest duration is invalid");
-   Call trigger(component,L"TriggerWellRested");trigger.Copy(L"Duration",&duration);trigger.Invoke();
    float decay=RestDecay(instance);if(!std::isfinite(decay)||decay<=0)throw std::runtime_error("Native rested decay is invalid");
    Rested saved;saved.instance=instance;saved.decay=decay;rested.emplace(player,std::move(saved));RestDecay(instance)=0;
   }

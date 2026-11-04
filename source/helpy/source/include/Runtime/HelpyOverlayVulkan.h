@@ -10,7 +10,7 @@
 #include <vulkan/vulkan.h>
 #include <vector>
 
-namespace PS::HelpyOverlayGpu {
+namespace PS::HudGpu {
 inline void NeedVk(VkResult result,const char* reason){if(result!=VK_SUCCESS)throw std::runtime_error(std::string(reason)+" (Vulkan "+std::to_string(result)+")");}
 template<class T> T VkInfo(VkStructureType type){T value{};value.sType=type;return value;}
 struct VulkanApi {

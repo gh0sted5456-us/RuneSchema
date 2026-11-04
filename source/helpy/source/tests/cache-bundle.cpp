@@ -65,6 +65,14 @@ int main(){try{
     const auto mod=root/"mods"/"Example"/"assets"/"example.jsonc";fs::create_directories(mod.parent_path());{std::ofstream out(mod);out<<"{}";}
     auto snapshot=HelpySourceCache::Inspect(root,plan);snapshot.DeclaredOwners=plan.DeclaredOwners;
     const auto locale=CacheBundleStore::Locale();
+    {
+        auto groups=ItemGroupings::Parse({{"Format",99},{"Rules",Json::array({{{"Path",path},{"Owner","mods/example"},{"Category","Armor"},{"Family","example_set"}},{{"Path",path},{"Owner","mods/missing"},{"Category","Tools"}}})}});
+        const CacheBundleItems::Index grouped(Json::array({original}),groups);assert(grouped.Page("__helpycat:Armor __helpyfamily:example_set","",40)["Rows"].size()==1);assert(grouped.Page("__helpycat:Tools","",40)["Rows"].empty());
+        ItemGroupings::Import(cache,groups);assert(ItemGroupings::Read(cache/"taglines.json").size()==2);
+        const auto portable=ItemGroupings::Generate(Json::array({original}),groups);assert(portable.size()==2&&portable.at(ItemGroupings::Key(path,"mods/example")).Family=="example_set");
+        Reject([&]{ItemGroupings::Bound(groups,"mods/example");});Reject([&]{ItemGroupings::Parse({{"Rules",Json::array({{{"Path","/Game/../Bad"},{"Category","Armor"}}})}});});
+        fs::remove(cache/"taglines.json");
+    }
     assert(CacheBundleStore::Commit(cache,root,snapshot,locale,{row})==1);
     assert(CacheBundleStore::Commit(cache,root,snapshot,locale,{row})==0);
     auto references=CacheBundleStore::Read(cache,root,snapshot,locale,"items");assert(references.size()==1&&references[0]["PersistenceID"]==row.PersistenceID);
@@ -100,6 +108,22 @@ int main(){try{
     const CacheBundleItems::Index prepared(references);
     assert(prepared.Page("Health","",40)==page&&prepared.Page("missing","",40)["Rows"].empty());
     assert(prepared.Page("Health","",40)==page); // Repeated searches reuse the sorted rows and stable cursor identity.
+    {
+        Json records=Json::array();
+        for(int i=0;i<20000;++i){auto reference=references[0];reference["Data"]={{"Path","/ExampleMount/Items/Stone"+std::to_string(i)},{"Name","Stone "+std::to_string(i)},{"InternalName",i==19999?"adamant_catapult_contract":"stone"},{"PersistenceID","id-"+std::to_string(i)},{"Tags","Item.BuildingResource"},{"Class","ResourceData"},{"SourceKind","modded"},{"SourceName","example"}};records.push_back(std::move(reference));}
+        const CacheBundleItems::Index large(records);
+        const auto start=std::chrono::steady_clock::now();
+        for(const std::string query:{"catapult adamant","id-19999","__helpycat:resources catapult","__helpycat:weapons catapult","resourceData catapult","missing"}){
+            const ItemCatalogFilter::Query match(query);Json expected=Json::array();
+            for(const auto& record:records)if(match(record.at("Data")))expected.push_back(record.at("Data").at("Path"));
+            const auto found=large.Page(query,"",128);Json actual=Json::array();for(const auto& row:found.at("Rows"))actual.push_back(row.at("Path"));assert(actual==expected);
+        }
+        const auto warm=std::chrono::steady_clock::now();
+        for(int i=0;i<100;++i)assert(large.Page("catapult adamant","",28).at("Rows").size()==1);
+        std::cout<<"20,000-row cache: 100 warm searches in "<<std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-warm).count()<<" ms; filter parity including reference scan "<<std::chrono::duration_cast<std::chrono::milliseconds>(warm-start).count()<<" ms.\n";
+        const auto categories=std::chrono::steady_clock::now();for(int i=0;i<1000;++i){assert(large.Page("__helpycat:resources","",28).at("Rows").size()==28);assert(large.Page("__helpycat:weapons","",28).at("Rows").empty());}
+        std::cout<<"20,000-row cache: 2,000 warm category changes in "<<std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-categories).count()<<" ms.\n";
+    }
     auto stoneReference=references[0];stoneReference["Data"]={{"Path","/Game/Items/ITEM_Stone.ITEM_Stone"},{"Name","Stone"},{"Category","Building"},{"Tags","Item.BuildingResource ItemFilter.Material.Mineral"}};
     const auto stonePage=CacheBundleItems::Page(Json::array({stoneReference}),"__helpycat:resources stone","",40);
     assert(stonePage["Rows"].size()==1&&stonePage["Rows"][0]["Category"]=="Resources");
@@ -131,13 +155,46 @@ int main(){try{
             for(;;){if(auto page=store.Lookup(destination,root,snapshot,locale,"","",40))return *page;
                 assert(std::chrono::steady_clock::now()<end);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
         };
-        CacheBundleItems::Store first;auto page=awaitPage(first);assert(page.at("Rows").size()==1);
+        CacheBundleItems::Store first;const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);while(!first.Lookup(destination,root,snapshot,locale,"","",1,true)){assert(std::chrono::steady_clock::now()<deadline);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+        const auto initial=first.Lookup(destination,root,snapshot,locale,"","",40);assert(initial&&initial->at("Rows").size()==1);auto page=*initial;
+        const auto warm=first.Lookup(destination,root,snapshot,locale,"__helpycat:weapons","",40);assert(warm&&warm->at("Rows").empty());
         auto update=row;update.Data["Name"]="Immediately imported item";
         assert(CacheBundleStore::Commit(destination,root,snapshot,locale,{update})==1);
         first.Invalidate();assert(!first.Lookup(destination,root,snapshot,locale,"","",40));
         page=awaitPage(first);assert(page.at("Rows")[0].at("Name")=="Immediately imported item");first.Shutdown();
         CacheBundleItems::Store reopened;
         page=awaitPage(reopened);assert(page.at("Rows")[0].at("Name")=="Immediately imported item");reopened.Shutdown();
+        const auto grouping=root/"plugins/RuneSchema.Helpy/settings/item-groupings.json";
+        CacheBundleIO::Publish(grouping,Json{{"Format",99},{"Items",{{row.Path,{{"Category","Armor"},{"Family","manual_set"}}}}}}.dump());
+        CacheBundleItems::Store grouped;page=awaitPage(grouped);assert(page["Rows"][0]["HelpyCategory"]=="Armor"&&page["Rows"][0]["HelpyFamily"]=="manual_set");
+        const auto family=grouped.Lookup(destination,root,snapshot,locale,"__helpyfamily:manual_set","",40);assert(family&&family->at("Rows").size()==1&&family->at("Rows")[0]["Category"]=="Armor");
+        grouped.Shutdown();CacheBundleIO::Publish(grouping,"{ broken");CacheBundleItems::Store badGroups;page=awaitPage(badGroups);assert(!page["Rows"].empty()&&!badGroups.GroupingStatus.empty());badGroups.Shutdown();fs::remove(grouping);
+    }
+    {
+        const auto saved=fixture/"native-search"/"item-icons",manifest=saved.parent_path()/"item-catalogues"/"native-items.json";
+        assert(CacheBundleStore::Commit(saved,root,snapshot,locale,{row})==1);
+        Json rows=Json::array();std::vector<std::shared_ptr<const Json>> ordered;
+        for(int i=0;i<5000;++i){
+            Json item={{"Path","/Game/Items/Stone"+std::to_string(i)+".Stone"},{"Name","Stone "+std::to_string(10000+i)},{"SourceKind","vanilla"},{"SourceName","Game"}};
+            if(i==4999)item["InternalName"]="needle0 needle1 needle2 needle3 needle4";
+            rows.push_back(item);ordered.push_back(std::make_shared<const Json>(std::move(item)));
+        }
+        rows.push_back({{"Path","/Disabled/Items/Old.Old"},{"Name","needle removed"},{"SourceKind","modded"},{"SourceName","disabled"}});
+        const auto scope=Json::array({"item-browse-v2",snapshot.CatalogKey,Json::array(),locale}).dump();
+        CacheBundleIO::Publish(manifest,Json{{"Version",1},{"Scope",scope},{"Rows",rows}}.dump());PagedItemCatalog::Save(manifest,scope,ordered);
+        CacheBundleItems::Store reader;
+        const auto lookup=[&](const std::string& query){const auto end=std::chrono::steady_clock::now()+std::chrono::seconds(20);
+            for(;;){if(auto page=reader.Lookup(saved,root,snapshot,locale,query,"",28))return *page;
+                assert(reader.Awaiting()&&std::chrono::steady_clock::now()<end);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+        };
+        const auto cold=std::chrono::steady_clock::now();auto found=lookup("needle0");
+        const auto warm=std::chrono::steady_clock::now();for(int i=1;i<5;++i){found=lookup("needle"+std::to_string(i));assert(found.at("Rows").size()==1);}
+        std::cout<<"5,000 native rows: cold search "<<std::chrono::duration_cast<std::chrono::milliseconds>(warm-cold).count()<<" ms; four distinct warm searches "<<std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-warm).count()<<" ms.\n";
+        assert(found.at("Rows").size()==1&&found.at("NextCursor").get<std::string>().starts_with("B:")&&!found.value("HasMore",true));
+        auto off=snapshot;off.SourceKeys.erase("examplemount");std::optional<Json> hidden;
+        for(int tries=0;tries<2000;++tries){hidden=reader.Lookup(saved,root,off,locale,"Health","",28);if(hidden||!reader.Awaiting())break;std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+        assert((!hidden||hidden->at("Rows").empty())&&!reader.Awaiting());
+        reader.Shutdown();
     }
     imported=HelpyIconPack::Import(bundle,root,fixture/"denied"/"item-icons",snapshot,1024*1024,progress,HelpyIconPack::ImportPolicy::VerifiedContent,{},{},"mods/other");assert(imported.RecordsImported==0);
     imported=HelpyIconPack::Import(bundle,root,fixture/"visuals"/"item-icons",snapshot,1024*1024,progress,HelpyIconPack::ImportPolicy::ServerDisplayOnly);assert(imported.RecordsImported==0);
@@ -223,11 +280,14 @@ int main(){try{
         Reject([&]{MapPresentationCache::Pixels(std::string_view(pixels).substr(0,20));});
         assert(MapPresentationCache::Reference(mapCache)==before);
         const auto current=HelpySourceCache::Inspect(root,plan);const auto file=fixture/"world-map.rsmk-cache";
+        const auto groupMetadata=ItemGroupings::Parse({{"Rules",Json::array({{{"Path",path},{"Owner","mods/example"},{"Family","portable_set"},{"Category","Armor"}}})}});ItemGroupings::Import(mapCache,groupMetadata);
+        CacheTips::Import(mapCache,CacheTips::Parse({{"Tips",Json::array({{{"Owner","mods/example"},{"Text","A shared tip"}}})}}));
         HelpyIconPack::Progress progress;const auto exported=HelpyIconPack::Export(file,root,mapCache,current,progress);
         assert(exported.Message.find("World map and alignment included")!=std::string::npos);
         HelpySourceCache::Snapshot idleServer;
         const auto imported=HelpyIconPack::Import(file,root,serverCache,idleServer,1024*1024,progress,HelpyIconPack::ImportPolicy::Presentation);
         assert(imported.MapImported&&MapPresentationCache::Bytes(serverCache,MapPresentationCache::Reference(serverCache))==pixels);
+        assert(imported.MetadataImported&&ItemGroupings::Read(serverCache/"taglines.json").size()==1&&CacheTips::Read(serverCache/"tips.json").size()==1);
         assert(MapPresentationCache::Reference(serverCache)["Projection"]==projection.ToJson());
         auto bytes=HelpyIconPack::Read(file,HelpyIconPack::MaxPack);bytes.back()='x';HelpyIconPack::Publish(fixture/"bad-map.rsmk-cache",bytes);
         const auto installed=MapPresentationCache::Reference(serverCache);

@@ -21,7 +21,8 @@ int main(int argc,char** argv){
     const auto cacheOwnership=loader.find("for(const auto& manifest:group.Manifests)PS::HelpyCacheSources::DeclareManifest(manifest)");
     Check(cacheOwnership!=std::string::npos&&cacheOwnership>loader.find("catch(...){m_keys.swap(previousKeys);throw;}"),
         "Sharded PAK cache ownership must publish after the complete registry transaction succeeds");
-    Check(manifest.contains("auto next=Detail::Manifests")&&manifest.contains("MergeDefinitions(next,lane)")
-        &&manifest.find("MergeDefinitions(next,lane)")<manifest.find("Detail::Manifests.swap(next)"),
+    Check(manifest.contains("std::shared_ptr<const Manifest>")&&manifest.contains("std::make_shared<const Manifest>")
+        &&manifest.find("MergeDefinitions(next,lane,true)")<manifest.find("Detail::Manifests.swap(next)")
+        &&manifest.contains("static_assert(noexcept(Detail::Manifests.swap(next)))"),
         "Conflicting shard declarations must not partially publish");
 }

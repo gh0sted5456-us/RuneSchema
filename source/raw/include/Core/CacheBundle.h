@@ -1,6 +1,8 @@
 #pragma once
 #include "Core/ContentSource.h"
 #include "Core/SourceBanner.h"
+#include "Core/ItemName.h"
+#include "Core/ItemCategory.h"
 #include <nlohmann/json.hpp>
 #include <map>
 #include <set>
@@ -25,9 +27,9 @@ inline Record Parse(const Json& value){
     const auto& data=value.at("Data");if(!data.is_object()||!data.contains("Name")||!Text(data.at("Name"),4096)||data.dump().size()>(row.Kind=="art"&&data.contains("SourceBannerPixels")?524288:row.Kind=="journal"?262144:32768))
         throw std::runtime_error("[RS-CACHE-002] Invalid cached presentation data.");
     row.Data={{"Path",row.Path},{"Name",data.at("Name")},{"PersistenceID",row.PersistenceID},{"PersistenceIDKnown",!row.PersistenceID.empty()},{"ObservedCurrent",false},{"BundleReference",true}};
-    for(const char* field:{"Icon","Description","Type","Category","Section","InternalName","Tags"}){
+    for(const char* field:{"Icon","Description","DisplayName","Class","Type","Category","Section","InternalName","Tags"}){
         if(!data.contains(field))continue;
-        if(!Text(data[field],std::string_view(field)=="Description"?65536:2048))throw std::runtime_error("[RS-CACHE-002] Invalid presentation text.");
+        if(!Text(data[field],std::string_view(field)=="Description"?65536:std::string_view(field)=="DisplayName"?4096:2048))throw std::runtime_error("[RS-CACHE-002] Invalid presentation text.");
         if(std::string_view(field)=="Icon"&&!data[field].get_ref<const std::string&>().empty()&&!Asset(data[field].get<std::string>()))throw std::runtime_error("[RS-CACHE-002] Invalid artwork path.");
         row.Data[field]=data[field];
     }
@@ -51,6 +53,7 @@ inline Record Parse(const Json& value){
     row.Data["SourceName"]=row.Owner=="core"?"Dragonwilds":row.Owner.substr(row.Owner.find('/')+1);
     row.Data["SourceEvidence"]="Bundle presentation reference; runtime ownership is checked separately";
     if(row.Kind=="journal")row.Data["Native"]=true;
+    ItemName::Repair(row.Data);if(row.Kind=="items")ItemCategory::Repair(row.Data);
     return row;
 }
 inline Json Document(const Record& row){return {{"Kind",row.Kind},{"Owner",row.Owner},{"Source",row.Source},{"Path",row.Path},{"PersistenceID",row.PersistenceID},{"Data",row.Data}};}

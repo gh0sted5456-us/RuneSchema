@@ -71,6 +71,14 @@ try {
     Remove-Item -LiteralPath (Join-Path $payload 'plugins/RSNetworking/paks/Bridge.utoc')
     $incomplete=Join-Path $test 'incomplete.zip';[IO.Compression.ZipFile]::CreateFromDirectory((Split-Path $payload),$incomplete)
     New-RepairJob;$refused=$false;try{Get-RepairEntries $incomplete 'Win64' (Join-Path $script:Job 'stage') | Out-Null}catch{$refused=$_.Exception.Message -match 'triplet'};Check $refused 'Incomplete base triplet accepted'
+    Write-Fixture (Join-Path $payload 'plugins/RSNetworking/paks/Bridge.utoc') 'expected-pak'
+    Write-Fixture (Join-Path $payload 'plugins/RuneSchema.Helpy/plugin.json') '{"Id":"RuneSchema.Helpy","Version":"0.8.1.0","NativeHudPlugin":"RuneSchema.HUD"}'
+    $missingHud=Join-Path $test 'missing-hud.zip';[IO.Compression.ZipFile]::CreateFromDirectory((Split-Path $payload),$missingHud)
+    New-RepairJob;$refused=$false;try{Get-RepairEntries $missingHud 'Win64' (Join-Path $script:Job 'stage')|Out-Null}catch{$refused=$_.Exception.Message -match 'HUD'};Check $refused 'New Helpy package without its HUD was accepted'
+    Write-Fixture (Join-Path $payload 'plugins/RuneSchema.HUD/plugin.json') '{"Id":"RuneSchema.HUD","Version":"0.8.1.0"}'
+    Write-Fixture (Join-Path $payload 'plugins/RuneSchema.HUD/dll/RuneSchema.HUD.dll') 'expected-hud'
+    $completeHud=Join-Path $test 'complete-hud.zip';[IO.Compression.ZipFile]::CreateFromDirectory((Split-Path $payload),$completeHud)
+    New-RepairJob;$entries=Get-RepairEntries $completeHud 'Win64' (Join-Path $script:Job 'stage');Check ('plugins/RuneSchema.HUD/dll/RuneSchema.HUD.dll' -in $entries.Relative) 'Shared HUD was not included in repair'
     $script:ControlFile=Join-Path $script:Job 'control.json';Write-Fixture $script:ControlFile '{"Action":"stop"}'
     $refused=$false;try{Test-RepairControl}catch{$refused=$true};Check $refused 'Stop request ignored'
     'Repair checks passed: replacement, unchanged files, log context, backups, checksum refusal, lock refusal, rollback, traversal and cancellation.'

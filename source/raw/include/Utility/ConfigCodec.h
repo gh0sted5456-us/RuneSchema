@@ -30,6 +30,8 @@ namespace PS {
         const auto error = glz::read<glz::opts{.error_on_unknown_keys = false, .error_on_missing_keys = false}>(candidate, json);
         if (error) throw std::runtime_error(glz::format_error(error, json));
         const auto source=nlohmann::json::parse(json);
+        for(const auto& player:candidate.helpyAuthority.authorizedPlayers)
+            if(!HelpyPlayerAuthorization::Valid(player))throw std::runtime_error("Invalid saved Helpy player authorization");
         if(candidate.helpyAuthority.allowPinAccess&&!HelpyRemoteAccess::Sessions::ValidPin(candidate.helpyAuthority.accessPin))
             throw std::runtime_error("Helpy server PIN must contain 8-64 printable characters without spaces");
         const auto* shortcut=HelpyShortcut::Find(candidate.helpyHotkey);

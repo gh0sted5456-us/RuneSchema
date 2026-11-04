@@ -1,55 +1,45 @@
-# Contributing to RuneSchema
+# Contributing
 
-RuneSchema is developed and maintained by the RSDW Modding Community.
-The team coordinates updates, testing, and releases. See `AUTHORS.md` for
-community credits. Official repository and distribution work are published
-under `gh0sted5456-us`.
+RuneSchema is maintained by the RSDW Modding Community. Repository and release
+work is published under `gh0sted5456-us`.
 
-## License for new contributions
+## Make a focused change
 
-By intentionally submitting a new original contribution for inclusion, you
-agree to license it under the repository's MIT License, unless a different
-arrangement is explicitly agreed in writing before acceptance. You must have
-the rights needed to make that grant. This applies prospectively; it does not
-retroactively license earlier contributions.
+1. Record the problem, expected behavior, platform/version and reproduction.
+2. Trace the affected code, callers and platform variants. Fix the cause without
+   unrelated rewrites or dependency upgrades.
+3. Build and test the changed behavior. Inspect UI changes at small and large
+   sizes. State what was tested and what still needs live verification.
+4. Update the matching guide, diagnostic references and release notes.
+5. Submit a concise explanation of the change, validation and remaining limits.
 
-Contributors retain copyright in their original contributions unless a
-separate valid assignment says otherwise. A pull request, project membership,
-or MIT license grant alone does not transfer copyright to the organization.
-Preserve applicable author and license notices.
+Human and AI-assisted contributions follow the same standard. Read
+[If Using AI](IF-USING-AI.md) for the verification checklist.
 
-## Third-party material
+## Branches and releases
 
-Identify copied/adapted code and its source revision, retain its complete
-license, and update `THIRD_PARTY_NOTICES.md`. Do not change an upstream
-copyright holder to RSDW Modding Community. Flag uncertain provenance before
-submission. Do not submit game or engine content without the required rights.
+- `main`: stable source and normal documentation.
+- `experimental`: integration work and its dedicated website area.
+- `pre-release`: an assembled candidate and matching guides awaiting promotion.
 
-## Release checks
+Follow [documentation channels](docs/DOCUMENTATION-CHANNELS.md). Maintainers
+publish verified runtime ZIPs; source archives and small binary patches are not
+complete installations. Keep existing release tags and downloads intact.
 
-Keep the build version, plugin manifests, Windows resources and release tag
-consistent. Current releases use numeric versions such as `0.8.1.0`; older
-`m`/`e` suffixes remain supported for historical versions. The branch and release
-status identify the channel; do not invent a suffix for a current build.
+Before publishing, check versions, required files, hashes and license contents
+in the actual ZIP. Use the supported build launcher or
+`build/package-licenses.ps1 -FinalizeBuild`, then run
+`build/test-package-licenses.ps1` for packaging changes.
 
-Use the supported build launcher, or finalize a direct internal build with
-`build/package-licenses.ps1 -FinalizeBuild`. Check the licenses inside the
-actual ZIPs before uploading. Run the packaging smoke test:
+## License and privacy
 
-```powershell
-powershell.exe -NoProfile -File build/test-package-licenses.ps1
-```
+New original contributions are licensed under this repository's MIT License
+unless agreed otherwise before acceptance. Contributors retain copyright;
+submitting code does not transfer ownership or relicense earlier work.
 
-See `LICENSING.md` for scope and `docs/NEXUS-LICENSING.txt` for matching mod-page
-wording. Existing public archives must be checked independently.
+Include only material you have rights to contribute. Keep third-party attribution
+and complete licenses. Identify adapted material
+and update `THIRD_PARTY_NOTICES.md`. See [license scope](LICENSING.md).
 
-## Documentation channels
-
-New experimental feature guides belong under `docs/experimental/`, with a visible
-experimental notice and a `promote_to` frontmatter path. Register them in
-`build/docs-experimental-nav.json`. Keep the normal guides aligned with main.
-
-When promoting a feature, merge its instructions into that normal destination,
-update navigation/defaults/walkthroughs and remove the duplicate experimental
-entry. Preserve historical changelogs and existing diagnostic anchors. See
-[the complete channel and promotion procedure](docs/DOCUMENTATION-CHANNELS.md).
+Keep personal instructions in ignored `AGENTS.local.md`. Do not commit private
+settings, credentials, saves, logs, caches, attachments or generated build data.

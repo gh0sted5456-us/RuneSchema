@@ -26,7 +26,9 @@
 #include "Core/GroundSurface.h"
 #include "Core/NearbyPlacement.h"
 #include "Core/BuildingPropOwnership.h"
-namespace PS {class NativeInventoryMarks;class InventoryMarkRelay;class WorkSlice;}
+#include "Core/HelpyActivity.h"
+#include <chrono>
+namespace PS {class NativeInventoryMarks;class InventoryMarkRelay;class WorkSlice;class PlayerAttributeEffect;}
 
 namespace RC::Unreal {
     class AActor;
@@ -275,19 +277,14 @@ namespace DragonWilds {
 
         struct PlayerAdjustmentState {
             PS::WeakObjectHandle Pawn;
+            PS::WeakObjectHandle Controller;
             RC::Unreal::FVector BaseScale{1.0, 1.0, 1.0};
             RC::Unreal::FVector DesiredScale{1.0, 1.0, 1.0};
             bool HasDesiredScale = false;
             bool ScaleCorrectionReported = false;
-            double BaseMaxHealth = 0.0;
-            bool HasBaseHealth = false;
-            RC::Unreal::UObject* StaminaAttributes = nullptr;
-            RC::Unreal::FArrayProperty* StaminaValuesProperty = nullptr;
-            RC::Unreal::UObject* MaxStaminaAttribute = nullptr;
-            int32_t MaxStaminaIndex = -1;
-            double BaseMaxStamina = 0.0;
-            bool HasBaseStamina = false;
             PlayerAttributeBaseline HealthAttribute;
+            PlayerAttributeBaseline StaminaAttribute;
+            std::unordered_map<RC::Unreal::UObject*, std::shared_ptr<PS::PlayerAttributeEffect>> NativeAttributeEffects;
             PlayerAttributeBaseline DamageAttribute;
             PlayerAttributeBaseline DefenseAttribute;
             PlayerAttributeBaseline RunSpeedAttribute;
@@ -391,6 +388,11 @@ namespace DragonWilds {
         std::vector<OwnedJsonDocument> m_nameplateDocuments;
         std::unordered_map<std::string,nlohmann::json> m_nameplateDefinitions;
         RC::Unreal::UWorld* m_readyWorld = nullptr;
+        PS::WeakObjectHandle m_helpyInputController;
+        PS::HelpyActivity::InputCapture m_helpyInputCapture;
+        std::chrono::steady_clock::time_point m_nextHelpyInputAttempt{};
+        std::string m_helpyInputError;
+        void UpdateHelpyInputCapture(bool enabled);
         std::unique_ptr<PS::NativeInventoryMarks> m_inventoryMarks;
         std::unique_ptr<PS::InventoryMarkRelay> m_markRelay;
         PS::WeakObjectHandle m_validatedWorld;

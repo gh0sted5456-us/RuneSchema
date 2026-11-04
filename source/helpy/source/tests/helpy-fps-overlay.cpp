@@ -25,5 +25,27 @@ int main(){
     overlay.Update(module,game,feed,theme,true);Check(!IsWindowVisible(window));
     overlay.Update(module,game,feed,theme,true,"Game 60 FPS");Check(IsWindowVisible(window));
     overlay.Update(module,game,feed,theme,false,"Game 60 FPS");Check(!IsWindowVisible(window));
+    overlay.Update(module,game,feed,theme,true,"X 123456   Y -234567   Z 890",{},PS::HelpyDiagnosticOverlay::Mode::Coordinates);
+    RECT client{};GetClientRect(game,&client);POINT corner{client.right,client.bottom};ClientToScreen(game,&corner);GetWindowRect(window,&bounds);
+    Check(IsWindowVisible(window)&&bounds.right<=corner.x&&corner.x-bounds.right<30&&bounds.bottom<=corner.y&&corner.y-bounds.bottom<30);
+    Check(SendMessageW(window,WM_NCHITTEST,0,0)==HTTRANSPARENT);
+    const auto oneRowHeight=bounds.bottom-bounds.top;
+    overlay.Update(module,game,feed,theme,true,"X 123456   Y -234567   Z 890   |   Pitch -12.5   Yaw 90.0",{},PS::HelpyDiagnosticOverlay::Mode::Coordinates);
+    GetWindowRect(window,&bounds);Check(bounds.bottom-bounds.top==oneRowHeight&&bounds.right-bounds.left>=500&&corner.x-bounds.right<30&&corner.y-bounds.bottom<30);
+    Check(SendMessageW(window,WM_NCHITTEST,0,0)==HTTRANSPARENT);
+    MoveWindow(game,50,60,650,450,TRUE);overlay.Update(module,game,feed,theme,true,"X 123457   Y -234567   Z 890   |   Pitch -12.5   Yaw 90.0",{},PS::HelpyDiagnosticOverlay::Mode::Coordinates);
+    GetClientRect(game,&client);corner={client.right,client.bottom};ClientToScreen(game,&corner);GetWindowRect(window,&bounds);Check(corner.x-bounds.right<30&&corner.y-bounds.bottom<30);
+    PS::HelpyHudLayout::Settings hud;hud.Custom=true;hud.Minimap=true;overlay.Update(module,game,feed,theme,true,"X 123457   Y -234567   Z 890   |   Pitch -12.5   Yaw 90.0",{},PS::HelpyDiagnosticOverlay::Mode::Coordinates,hud);GetWindowRect(window,&bounds);const auto map=PS::HelpyHudLayout::Map(float(client.right),float(client.bottom),hud);POINT origin{};ClientToScreen(game,&origin);Check(bounds.right-bounds.left==LONG(map.W)&&bounds.left==origin.x+LONG(map.X)&&bounds.top>=origin.y+LONG(map.Y+map.H));
+    overlay.Update(module,game,feed,theme,true,"Registering game content",{},PS::HelpyDiagnosticOverlay::Mode::Startup);GetWindowRect(window,&bounds);
+    POINT center{client.right/2,client.bottom/2};ClientToScreen(game,&center);Check(std::abs((bounds.left+bounds.right)/2-center.x)<3&&std::abs((bounds.top+bounds.bottom)/2-center.y)<3);
+    Check(SendMessageW(window,WM_NCHITTEST,0,0)==HTTRANSPARENT);
+    const auto startup=PS::LoadingIndicator::FitStartup(float(client.right),float(client.bottom),1);
+    Check(bounds.right-bounds.left>360&&bounds.bottom-bounds.top>270);
+    Check(bounds.top+startup.LogoY<center.y&&startup.WheelY-startup.WheelRadius>startup.LogoY+startup.RuneSize*.5f);
+    overlay.StartupLogos(CopyIcon(LoadIconW(nullptr,IDI_APPLICATION)),CopyIcon(LoadIconW(nullptr,IDI_APPLICATION)),3.2f,CopyIcon(LoadIconW(nullptr,IDI_APPLICATION)));
+    RedrawWindow(window,nullptr,nullptr,RDW_INVALIDATE|RDW_UPDATENOW);
+    const auto handles=GetGuiResources(GetCurrentProcess(),GR_GDIOBJECTS);
+    for(int frame=0;frame<120;++frame)RedrawWindow(window,nullptr,nullptr,RDW_INVALIDATE|RDW_UPDATENOW);
+    Check(GetGuiResources(GetCurrentProcess(),GR_GDIOBJECTS)<=handles+1);
     overlay.Close();DestroyWindow(game);
 }

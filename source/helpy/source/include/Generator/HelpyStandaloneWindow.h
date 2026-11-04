@@ -53,11 +53,13 @@ private:
     bool OwnsWindow(HWND window)const;
     bool SyncWorkspacePanel(size_t index);
     void DestroyWorkspacePanel(size_t index);
+    void RememberPlacement(HWND window);
 
     HelpyTrayIcon::Icon m_tray;
     HelpyGameOverlay m_gameOverlay;
     HelpyCompositionSurface m_composition;
     HelpyNativeOverlayClient m_nativeOverlay;
+    bool m_desktopWindow=false;
     std::chrono::steady_clock::time_point m_nextOverlayGame{};
     HINSTANCE m_module{};HWND m_hwnd{},m_gameWindow{};std::atomic<DWORD> m_threadId{0};
     std::atomic<HWND> m_publishedWindow=nullptr;

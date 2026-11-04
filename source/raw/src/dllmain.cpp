@@ -1,4 +1,5 @@
 #include "Runtime/BuildingPolicy/Bridge.h"
+#include "Runtime/HelpyModMenu.h"
 #include "Core/ProcessExitFuture.h"
 #include "Utility/StructuredDiagnostics.h"
 #include "Utility/StructuredDiagnosticB3D.h"
@@ -329,6 +330,7 @@ public:
         {
             const auto pluginRoot=std::filesystem::path(PS::HostServices::WorkingDirectory())/"Mods"/"RuneSchema"/"plugins";
             m_pluginHost.Load(pluginRoot);
+            m_pluginHost.StartDesktop();
             for(const auto& message:m_pluginHost.Diagnostics())
                 PS::Log<LogLevel::Normal>(TEXT("Plugin host: {}\n"),PS::ToWideSafe(message.c_str()));
             for(const auto& connection:m_pluginHost.Connections())
@@ -518,7 +520,7 @@ public:
             ImGui::Checkbox("Save RuneSchema quest progress", &settings.persistence.quests);
             ImGui::TextWrapped("On by default. Off leaves quest definitions available to other loaders but blocks RuneSchema quest actions because native quest progress is save-backed.");
             ImGui::SeparatorText("World save cleanup");
-            ImGui::TextWrapped("A verified backup is required before building cleanup in either mode. The legacy backupBeforePrune setting cannot disable this protection.");
+                ImGui::TextWrapped("World cleanup runs independently of optional world backups. Enable world recovery in Helpy to archive the original payload in AppData before repair.");
             ImGui::SeparatorText("Default baseline recovery");
             ImGui::Checkbox("Enable baseline recovery (restart required)", &settings.defaultRecovery.enabled);
             ImGui::TextWrapped("Off by default. When enabled, RuneSchema fills only missing or invalid selected fields after live-registry orphan pruning. Healthy live values and later progress always win.");
@@ -830,6 +832,7 @@ public:
 
     void InstallPackageDiscovery(RC::StringViewType modName,RC::LuaMadeSimple::Lua& lua) {
         if(m_startupFailed.load(std::memory_order_acquire)||m_packageDiscoveryBootstrap.empty())return;
+        if(PS::ModFolderLayout::EqualsInsensitive(RC::to_string(modName),"RuneSchema"))try{PS::HelpyModMenu::Install(PS::HostServices::ModDirectory(),lua);}catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[RuneSchema][MOD-MENU][INACTIVE] {}\n"),PS::ToWideSafe(error.what()));}
         try {lua.execute_string(m_packageDiscoveryBootstrap);}
         catch(const std::exception& error) {
             PS::Log<LogLevel::Warning>(STR("[UE4SS-PACKAGES][DISCOVERY][DEFERRED] {}: {}. Native discovery retained.\n"),

@@ -68,6 +68,13 @@ int main(int argc,char** argv)try{
     Need(seeded.at("helpyHotkey")=="F2"&&seeded.at("archiveLogs")==false
         &&seeded.at("persistence").at("allowCorruptCharacterEntry")==false);
     Need(seeded.at("advancedLogging")==true&&seeded.at("autoUpdateMappings")==true);
+    const auto hostSaved=save(json{{"/helpyAuthority/allowPinAccess",true},{"/helpyAuthority/accessPin","Private-test-48219"},
+        {"/helpyAuthority/allowClientItemGrants",true},{"/helpyAuthority/allowClientTeleport",true},
+        {"/helpyAuthority/permittedPlayerGuids",json::array({"0123456789abcdef0123456789abcdef"})}},ConfigFiles::Read(file));
+    Need(hostSaved.at("Ok")==true&&hostSaved.at("RestartRequired")==true);
+    const auto hostRestart=DecodeSettings(DecodeIniDocument(ConfigFiles::Read(file)).dump()).helpyAuthority;
+    Need(hostRestart.allowPinAccess&&hostRestart.accessPin=="Private-test-48219"&&hostRestart.allowClientItemGrants&&hostRestart.allowClientTeleport
+        &&hostRestart.permittedPlayerGuids==std::vector<std::string>{"0123456789abcdef0123456789abcdef"});
     auto explicitBlanket=seeded;explicitBlanket["persistence"]["blanketCleanup"]=true;
     ConfigFiles::Write(file,EncodeIniDocument(explicitBlanket));
     const auto seededText=ConfigFiles::Read(file);Need(RuneSchemaSettingsEditor::PrepareModMenuFields(root).at("Ok")==true&&ConfigFiles::Read(file)==seededText);

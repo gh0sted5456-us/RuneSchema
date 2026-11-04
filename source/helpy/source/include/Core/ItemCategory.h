@@ -30,7 +30,11 @@ inline std::string Classify(const std::string& path,const std::string& name,cons
     if(tagged({"item.buildingresource","item.resource","itemfilter.material"}))return "Resources";
     if(tagged({"item.building","item.buildable","item.placeable"}))return "Building";
     if(c.find("magicammodata")!=c.npos)return "Runes";
-    if(c.find("wearableequipmentdata")!=c.npos)return "Armor";
+    if(c.find("wearableequipmentdata")!=c.npos||c.find("armourdata")!=c.npos||c.find("armordata")!=c.npos)return "Armor";
+    if(c.find("tooldata")!=c.npos)return "Tools";
+    if(c.find("weapondata")!=c.npos||c.find("weaponequipmentdata")!=c.npos)return "Weapons";
+    if(c.find("ammodata")!=c.npos)return "Ammo";
+    if(c.find("resourcedata")!=c.npos)return "Resources";
     if(c.find("consumable")!=c.npos)return "Consumables";
     if(c.find("buildingpiecedata")!=c.npos)return "Building";
     // Unloaded references have no tags: use whole words from the asset leaf, never a mod's parent folder.
@@ -41,7 +45,7 @@ inline std::string Classify(const std::string& path,const std::string& name,cons
     if(any({"quest","questitem"}))return "Quest";
     if(any({"pickaxe","hatchet","fishingrod","hammer","shovel","sickle","tool","tools"}))return "Tools";
     if(any({"armor","armour","helmet","helm","chestplate","cuirass","gauntlet","glove","gloves","boots","greaves","shield","cape"}))return "Armor";
-    if(any({"weapon","weapons","sword","dagger","mace","spear","halberd","bow","shortbow","longbow","crossbow","staff","wand","pistol","musket","battleaxe"}))return "Weapons";
+    if(any({"weapon","weapons","sword","greatsword","scimitar","rapier","dagger","mace","maul","spear","halberd","bow","shortbow","longbow","crossbow","staff","wand","pistol","musket","battleaxe","greataxe","flail","sling"}))return "Weapons";
     if(any({"rune","runes"}))return "Runes";
     if(any({"ammo","ammunition","arrow","arrows","bolt","bolts","bullet","bullets","shot"}))return "Ammo";
     if(any({"consumable","food","potion","drink","elixir","brew","ration","cooked","meal"}))return "Consumables";
@@ -51,7 +55,8 @@ inline std::string Classify(const std::string& path,const std::string& name,cons
 }
 inline std::string Text(const nlohmann::json& row,const char* key){const auto it=row.find(key);return it!=row.end()&&it->is_string()?it->get<std::string>():std::string{};}
 inline std::string Resolve(const nlohmann::json& row){
-    const auto category=Classify(Text(row,"Path"),Text(row,"Name"),Text(row,"InternalName"),Text(row,"Tags"),Text(row,"Class"));
+    const auto manual=Text(row,"HelpyCategory");if(!manual.empty()&&manual!="All")for(const auto* known:Categories)if(manual==known)return manual;
+    const auto category=Classify(Text(row,"Path"),Text(row,"Name"),Text(row,"InternalName"),Text(row,"Tags"),Text(row,"Class")+" "+Text(row,"Type"));
     if(!category.empty())return category;
     const auto previous=Text(row,"Category");for(const auto* known:Categories)if(previous==known&&previous!="All")return previous;
     return "Misc";

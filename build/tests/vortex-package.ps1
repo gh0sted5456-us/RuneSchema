@@ -9,6 +9,8 @@ function Put([string]$relative,[string]$value='fixture'){$path=Join-Path $payloa
 try{
     Put 'dlls/main.dll';Put 'plugins/RuneSchema.Helpy/dll/RuneSchema.Helpy.dll'
     Put 'plugins/RuneSchema.Helpy/dll/Helpy.exe' 'optional desktop fixture'
+    Put 'plugins/RuneSchema.Helpy/dll/SDL3.dll' 'controller runtime fixture'
+    Put 'plugins/RuneSchema.HUD/plugin.json' '{"Id":"RuneSchema.HUD"}';Put 'plugins/RuneSchema.HUD/dll/RuneSchema.HUD.dll' 'shared HUD fixture'
     Put 'plugins/RSNetworking/plugin.json' '{}';Put 'plugins/RuneSchema.RegistryBridge/plugin.json' '{}'
     foreach($extension in @('pak','ucas','utoc')){Put "plugins/RSNetworking/paks/Networking/Networking_P.$extension";Put "plugins/RuneSchema.RegistryBridge/paks/RegistryBridge/RegistryBridge_P.$extension"}
     Put 'plugins/RSNetworking/paks/RegistryBridge/RegistryBridge_P.pak' 'retired partial duplicate'
@@ -22,6 +24,7 @@ try{
             $binary=if($platform -eq 'GamePass'){'WinGDK'}else{'Win64'}
             $copies=@($instructions|Where-Object {$_.type -eq 'copy'})
             Need (@($copies|Where-Object {$_.source -eq 'RuneSchema/dlls/main.dll' -and $_.destination -eq "RSDragonwilds/Binaries/$binary/ue4ss/Mods/RuneSchema/dlls/main.dll"}).Count -eq 1) 'Core DLL destination differs'
+            Need (@($copies|Where-Object {$_.source -eq 'RuneSchema/plugins/RuneSchema.HUD/dll/RuneSchema.HUD.dll' -and $_.destination -eq "RSDragonwilds/Binaries/$binary/ue4ss/Mods/RuneSchema/plugins/RuneSchema.HUD/dll/RuneSchema.HUD.dll"}).Count -eq 1) 'Shared HUD must remain in its runtime plugin folder'
             foreach($copy in $copies){Need ($null -ne $zip.GetEntry($copy.source)) 'Override references absent source';Need (!$copy.destination.Contains('..') -and !$copy.destination.StartsWith('/')) 'Unsafe destination'}
             Need (@($copies|Where-Object {$_.destination.StartsWith('RSDragonwilds/Content/Paks/~mods/')}).Count -eq 1) 'Only the explanatory note belongs in ordinary PAK mods'
             Need (@($copies|Where-Object {$_.source -like '*plugins/RSNetworking/paks/RegistryBridge/*'}).Count -eq 0) 'Retired duplicate must not be packaged'

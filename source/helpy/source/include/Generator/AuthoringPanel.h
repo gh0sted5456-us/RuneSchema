@@ -1,4 +1,5 @@
 #pragma once
+#include "Generator/HelpyTextInput.h"
 #include "Generator/AuthoringClient.h"
 #include "Generator/AuthoringForms.h"
 #include "Generator/AuthoringViews.h"
@@ -49,7 +50,7 @@ inline bool Button(const char* label,const char* operation,const Json& args=Json
 #endif
     if(clicked)AuthoringClient::Submit(operation,args);return clicked;
 }
-inline void Editor(const char* label,char* text,size_t size,ImVec2 dimensions){ImGui::TextUnformatted(label);const auto id=std::string("##")+label;ImGui::InputTextMultiline(id.c_str(),text,size,dimensions);}
+inline void Editor(const char* label,char* text,size_t size,ImVec2 dimensions){ImGui::TextUnformatted(label);const auto id=std::string("##")+label;HelpyTextInput::InputTextMultiline(id.c_str(),text,size,dimensions);}
 template<class F>inline void Dispatch(const char* op,F arguments){try{AuthoringClient::Submit(op,arguments());}catch(const std::exception& error){AuthoringClient::Error=error.what();}}
 inline const std::string& CachedJson(const Json& value,const char* id){
     struct Cached {uint64_t Revision=~uint64_t{};std::string Text;};
@@ -59,7 +60,7 @@ inline const std::string& CachedJson(const Json& value,const char* id){
     return cached.Text;
 }
 inline void TextJson(const Json& value,const char* id,float height=190){
-    const auto& text=CachedJson(value,id);ImGui::BeginChild(id,ImVec2(0,height),true,ImGuiWindowFlags_HorizontalScrollbar);ImGui::TextUnformatted(text.c_str());ImGui::EndChild();
+    const auto& text=CachedJson(value,id);HelpyImGuiTheme::BeginPanel(id,ImVec2(0,height),true,ImGuiWindowFlags_HorizontalScrollbar);ImGui::TextUnformatted(text.c_str());PS::HelpyImGuiTheme::EndPanel();
 }
 inline void ApplyResult(){
     const auto& snap=AuthoringClient::Snapshot;const auto receipt=snap.value("RequestId",uint64_t{});if(!receipt||Applied==receipt)return;Applied=receipt;
@@ -80,8 +81,8 @@ inline void ApplyResult(){
 }
 inline void DraftEditor(const char* loader,bool schema=false,const char* kind="Starter"){
     ImGui::SeparatorText(schema?"Schema / draft":"Review draft");
-    ImGui::InputTextMultiline("##authoring-draft",Draft,sizeof(Draft),ImVec2(-1,180));
-    ImGui::InputText("Export name",ExportName,sizeof(ExportName));
+    HelpyTextInput::InputTextMultiline("##authoring-draft",Draft,sizeof(Draft),ImVec2(-1,180));
+    HelpyTextInput::InputText("Export name",ExportName,sizeof(ExportName));
     if(UiButton("Export reviewed JSONC"))AuthoringClient::Submit("ExportDocument",{{"Loader",loader},{"Mode",Mode},{"Kind",schema?"Report":kind},{"Name",ExportName},{"Jsonc",true},{"Document",Parse(Draft)}});
     ImGui::SameLine();if(UiButton("Copy draft"))ImGui::SetClipboardText(Draft);
     ImGui::TextDisabled("Exports create files for review. They do not install or activate a mod.");
@@ -98,28 +99,28 @@ inline void Content(){
     const bool focused=std::string(Loader)=="players"||std::string(Loader)=="nameplates";
     if(focused){ImGui::RadioButton("Search existing",&Builder,0);ImGui::SameLine();ImGui::RadioButton("Create new",&Builder,1);}
     if(focused&&Builder==1){
-        ImGui::InputText("Rule / definition Id",Id,sizeof(Id));if(std::string(Loader)=="players"){ImGui::InputText("Player name (* for everyone)",Player,sizeof(Player));ImGui::InputText("Nameplate definition (optional)",Definition,sizeof(Definition));}
+        HelpyTextInput::InputText("Rule / definition Id",Id,sizeof(Id));if(std::string(Loader)=="players"){HelpyTextInput::InputText("Player name (* for everyone)",Player,sizeof(Player));HelpyTextInput::InputText("Nameplate definition (optional)",Definition,sizeof(Definition));}
         ImGui::TextWrapped(std::string(Loader)=="nameplates"?"Edit Mode, Icon, Scale, Distance, audience, States, Events, SkillXP and timeout below.":"Edit health, stamina, scale, movement, capacity, attributes, appearance and nameplate overrides below.");
         // Parse only on demand so incomplete text never interrupts the form.
         auto controls=std::string(Loader)=="players"?AuthoringForms::Player(Json::object()):AuthoringForms::Nameplate(Json::object());
         Editor("Advanced fields JSONC",Fields,sizeof(Fields),ImVec2(-1,150));
         if(UiButton("Build create-new preview")){auto fields=Parse(Fields);if(!fields.is_object())throw std::runtime_error("Advanced fields must be an object");fields.merge_patch(controls);AuthoringClient::Submit(std::string(Loader)=="players"?"PlayerBuild":"NameplateBuild",{{"Id",Id},{"Player",Player},{"Definition",Definition},{"Fields",fields}});}
     }else{
-        const bool enter=ImGui::InputTextWithHint("##authoring-search","Search loaded or authored records...",Query,sizeof(Query),ImGuiInputTextFlags_EnterReturnsTrue);ImGui::SameLine();
+        const bool enter=HelpyTextInput::InputTextWithHint("##authoring-search","Search loaded or authored records...",Query,sizeof(Query),ImGuiInputTextFlags_EnterReturnsTrue);ImGui::SameLine();
         if(UiButton("Search")||enter)AuthoringClient::Submit("AssetSearch",{{"Loader",Loader},{"Query",Query}});
         HelpyImGuiTheme::Toggle("Read captured values",&ReadValues);ImGui::SameLine();Button("Export search results","ExportCaptured",{{"Kind","AssetSearch"}});
         const auto& found=AuthoringClient::Result("AssetSearch");
         if(found.contains("AssetMatches")&&found["AssetMatches"].is_array()){
-            ImGui::BeginChild("##authoring-matches",ImVec2(0,145),true);int i=0;
+            HelpyImGuiTheme::BeginPanel("##authoring-matches",ImVec2(0,145),true);int i=0;
             for(const auto& row:found["AssetMatches"]){const auto key=row.value("Key",row.value("Path",std::string{}));ImGui::PushID(i++);if(ImGui::Selectable(row.value("Name",row.value("Label",key)).c_str(),Entry.value("Key",std::string{})==key)){Entry=row;AuthoringClient::Submit("AssetCapture",{{"Loader",Loader},{"Entry",row},{"ReadValues",ReadValues}});}
 #if defined(HELPY_PREVIEW)
                 HelpyPreviewHooks::AuthoringButtons["Asset:"+key]=HelpyPreviewHooks::LastRect();
 #endif
-                ImGui::PopID();}ImGui::EndChild();
+                ImGui::PopID();}PS::HelpyImGuiTheme::EndPanel();
         }
         constexpr const char* formats[]{"Basic starter","Patch","Clone","Field reference"};ImGui::SetNextItemWidth(200);
         if(ImGui::BeginCombo("Format",formats[std::clamp(Mode,0,3)])){for(int i=0;i<4;++i){const bool allowed=capability&&(i!=1||capability->value("Patch",false))&&(i!=2||capability->value("Clone",false));ImGui::BeginDisabled(!allowed);if(ImGui::Selectable(formats[i],Mode==i))Mode=i;ImGui::EndDisabled();}ImGui::EndCombo();}
-        ImGui::InputText("Mod name",Mod,sizeof(Mod));ImGui::InputText("New name",Name,sizeof(Name));ImGui::InputText("Persistence Id (clone)",Id,sizeof(Id));
+        HelpyTextInput::InputText("Mod name",Mod,sizeof(Mod));HelpyTextInput::InputText("New name",Name,sizeof(Name));HelpyTextInput::InputText("Persistence Id (clone)",Id,sizeof(Id));
         if(UiButton("Generate Id")){constexpr char alphabet[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";std::random_device random;for(int i=0;i<21;++i)Id[i]=alphabet[random()&63];Id[21]=alphabet[(random()&3)<<4];Id[22]=0;}
         const auto& captured=AuthoringClient::Result("AssetCapture");
         if(captured.contains("AvailableFields")&&ImGui::CollapsingHeader("Available fields"))TextJson(captured["AvailableFields"],"##available-fields",120);
@@ -152,7 +153,7 @@ inline void Presets(){
     Guide("Presets");PresetFilter.Draw("Filter presets");Button("Refresh presets","PresetsList",{{"Extended",Extended}});const auto& rows=AuthoringClient::Result("PresetsList");
     if(rows.contains("Documents"))for(const auto& preset:rows["Documents"])if(PresetFilter.PassFilter((preset.value("Name",std::string{})+" "+preset.value("Description",std::string{})).c_str())&&ImGui::Selectable(preset.at("Name").get_ref<const std::string&>().c_str()))Copy(Preset,sizeof(Preset),preset.dump(2));
     if(rows.contains("Errors"))for(const auto& error:rows["Errors"])ImGui::TextWrapped("%s",error.get_ref<const std::string&>().c_str());
-    ImGui::Checkbox("Allow deeper capture (up to 16)",&Extended);ImGui::InputText("Selected object (optional)",ObjectPath,sizeof(ObjectPath));
+    ImGui::Checkbox("Allow deeper capture (up to 16)",&Extended);HelpyTextInput::InputText("Selected object (optional)",ObjectPath,sizeof(ObjectPath));
     Editor("Preset JSONC",Preset,sizeof(Preset),ImVec2(-1,220));
     if(UiButton("Run selected preset"))AuthoringClient::Submit("Preset",{{"Document",Parse(Preset)},{"Extended",Extended},{"SelectedObject",ObjectPath}});
     ImGui::SameLine();if(UiButton("Save preset"))AuthoringClient::Submit("PresetSave",{{"Document",Parse(Preset)},{"Extended",Extended}});
@@ -170,24 +171,24 @@ inline void Traces(){
         Editor("Profile JSONC",Profile,sizeof(Profile),ImVec2(-1,150));
         if(UiButton("Load profile"))AuthoringClient::Submit("TraceProfileLoad",{{"Document",Parse(Profile)}});ImGui::SameLine();if(UiButton("Save profile"))AuthoringClient::Submit("TraceProfileSave",{{"Document",Parse(Profile)}});
     }
-    ImGui::InputText("Find live target",Query,sizeof(Query));ImGui::SliderInt("Target search limit",&Limit,1,500);Button("Search target instances","TraceBrowse",{{"Query",Query},{"Limit",Limit}});
+    HelpyTextInput::InputText("Find live target",Query,sizeof(Query));ImGui::SliderInt("Target search limit",&Limit,1,500);Button("Search target instances","TraceBrowse",{{"Query",Query},{"Limit",Limit}});
     const auto& matches=AuthoringClient::Result("TraceBrowse");if(matches.contains("TraceMatches"))for(const auto& row:matches["TraceMatches"]){const auto path=row.get<std::string>();if(ImGui::Selectable(path.c_str(),path==ObjectPath)){Copy(ObjectPath,sizeof(ObjectPath),path);AuthoringClient::Submit("TraceSelect",{{"Path",path}});}}
-    if(ImGui::InputText("Selected live object",ObjectPath,sizeof(ObjectPath)))ProfileTarget=false;Button("Clear trace target","TraceTargetClear");
+    if(HelpyTextInput::InputText("Selected live object",ObjectPath,sizeof(ObjectPath)))ProfileTarget=false;Button("Clear trace target","TraceTargetClear");
     ImGui::BeginDisabled(HelpyEnvironment::Server());Button("Pick crosshair target in 3 seconds","TraceTarget",{{"RangeCm",Range}});ImGui::EndDisabled();
     ImGui::SliderFloat("Target range (cm)",&Range,100,50000,"%.0f");
     if(ImGui::CollapsingHeader("Trace setup")){try{auto options=Parse(Trace);if(AuthoringViews::TraceControls(options))Copy(Trace,sizeof(Trace),options.dump(2));}catch(const std::exception& error){ImGui::TextWrapped("%s",error.what());}}
     Editor("Trace options JSONC",Trace,sizeof(Trace),ImVec2(-1,160));
     if(UiButton("Start trace"))AuthoringClient::Submit("PlayerTraceStart",{{"Options",Parse(Trace)},{"SelectedObject",ObjectPath},{"UseProfileTarget",ProfileTarget}});
-    ImGui::SameLine();Button("Stop and export trace","PlayerTraceStop");ImGui::InputText("Marker",Marker,sizeof(Marker));Button("Add marker","PlayerTraceMarker",{{"Marker",Marker}});
+    ImGui::SameLine();Button("Stop and export trace","PlayerTraceStop");HelpyTextInput::InputText("Marker",Marker,sizeof(Marker));Button("Add marker","PlayerTraceMarker",{{"Marker",Marker}});
     if(ImGui::CollapsingHeader("Appearance trace")){ImGui::BeginDisabled(HelpyEnvironment::Server());Button("Start appearance trace","TraceStart");ImGui::EndDisabled();ImGui::SameLine();Button("Stop and export appearance trace","TraceStop");}
     if(ImGui::CollapsingHeader("Event rules from captured parameters")){
         const auto& result=AuthoringClient::Result("PlayerTraceStop");
         if(result.contains("Events")&&result["Events"].is_object()&&result["Events"].contains("events")){
-            ImGui::BeginChild("##captured-events",ImVec2(0,140),true);int i=0;
+            HelpyImGuiTheme::BeginPanel("##captured-events",ImVec2(0,140),true);int i=0;
             for(const auto& event:result["Events"]["events"]){ImGui::PushID(i++);
                 ImGui::BeginDisabled(!event.contains("parameters"));
                 if(ImGui::Selectable(event.value("function",std::string("Captured event")).c_str()))AuthoringClient::Submit("EventSuggestions",{{"Event",event}});
-                ImGui::EndDisabled();ImGui::PopID();}ImGui::EndChild();
+                ImGui::EndDisabled();ImGui::PopID();}PS::HelpyImGuiTheme::EndPanel();
         }
         const auto& suggestions=AuthoringClient::Result("EventSuggestions");
         if(suggestions.contains("Suggestions")){
@@ -208,10 +209,10 @@ inline void Inspector(){
     ImGui::BeginDisabled(HelpyEnvironment::Server());Button("Inspect local player","Player",{{"DelaySeconds",Delay}});ImGui::SameLine();Button("Inspect crosshair target","Target",{{"RangeCm",Range},{"DelayCrosshair",DelayCrosshair}});ImGui::EndDisabled();
     ImGui::Checkbox("Delay crosshair capture by 3 seconds",&DelayCrosshair);
     ImGui::SliderInt("Player capture delay",&Delay,0,30);Button("Save player capture preset","PlayerPresetSave",{{"DelaySeconds",Delay}});ImGui::SliderFloat("Crosshair range (cm)",&Range,100,100000,"%.0f");
-    ImGui::InputText("Search loaded objects",Query,sizeof(Query));ImGui::SliderInt("Maximum results",&Limit,1,500);Button("Search objects","Browse",{{"Query",Query},{"Limit",Limit}});
+    HelpyTextInput::InputText("Search loaded objects",Query,sizeof(Query));ImGui::SliderInt("Maximum results",&Limit,1,500);Button("Search objects","Browse",{{"Query",Query},{"Limit",Limit}});
     ObjectFilter.Draw("Filter loaded object results");Button("Export object search results","ExportCaptured",{{"Kind","ObjectSearch"}});
-    const auto& result=AuthoringClient::Result("Browse");if(result.contains("Matches")){ImGui::BeginChild("##object-matches",ImVec2(0,180),true);for(const auto& path:result["Matches"]){const auto text=path.get<std::string>();if(ObjectFilter.PassFilter(text.c_str())&&ImGui::Selectable(text.c_str(),text==ObjectPath)){Copy(ObjectPath,sizeof(ObjectPath),text);AuthoringClient::Submit("Object",{{"Path",text}});}}ImGui::EndChild();}
-    ImGui::InputText("Object path",ObjectPath,sizeof(ObjectPath));Button("Inspect selected object","Object",{{"Path",ObjectPath}});
+    const auto& result=AuthoringClient::Result("Browse");if(result.contains("Matches")){HelpyImGuiTheme::BeginPanel("##object-matches",ImVec2(0,180),true);for(const auto& path:result["Matches"]){const auto text=path.get<std::string>();if(ObjectFilter.PassFilter(text.c_str())&&ImGui::Selectable(text.c_str(),text==ObjectPath)){Copy(ObjectPath,sizeof(ObjectPath),text);AuthoringClient::Submit("Object",{{"Path",text}});}}PS::HelpyImGuiTheme::EndPanel();}
+    HelpyTextInput::InputText("Object path",ObjectPath,sizeof(ObjectPath));Button("Inspect selected object","Object",{{"Path",ObjectPath}});
     if(ImGui::CollapsingHeader("Saved-state reports")){ImGui::BeginDisabled(HelpyEnvironment::Server());Button("Read saved items","SavedItems");ImGui::EndDisabled();ImGui::SameLine();Button("Read live building registry","SavedWorld");}
 }
 inline void Results(){
@@ -241,11 +242,11 @@ inline void Results(){
 inline void SaveInput(){
     Button("Refresh imported saves","Imports");const auto& files=AuthoringClient::Result("Imports");if(files.contains("Folder"))ImGui::TextWrapped("Shared input folder: %s",files["Folder"].get_ref<const std::string&>().c_str());
     if(ImGui::BeginCombo("Imported character",SavePath[0]?SavePath:"Select save")){if(files.contains("Files"))for(const auto& file:files["Files"])if(ImGui::Selectable(file.at("Name").get_ref<const std::string&>().c_str())){Copy(SavePath,sizeof(SavePath),file.at("Path"));CleanupToken.clear();Confirmed=false;}ImGui::EndCombo();}
-    if(ImGui::InputText("Character JSON path",SavePath,sizeof(SavePath))){CleanupToken.clear();Confirmed=false;}
+    if(HelpyTextInput::InputText("Character JSON path",SavePath,sizeof(SavePath))){CleanupToken.clear();Confirmed=false;}
 }
 inline void Npc(){
     ImGui::TextWrapped("Import an offline character's appearance and equipped items. Load its item mods before resolving equipment. Exported NPCs start disabled.");SaveInput();Button("Read save and resolve equipment","NpcPreview",{{"Path",SavePath}});
-    const auto& preview=AuthoringClient::Result("NpcPreview");if(preview.contains("NPC")){TextJson(preview,"##npc-preview",180);ImGui::InputText("NPC Id",Id,sizeof(Id));ImGui::InputFloat3("World position (cm)",Location);ImGui::InputFloat("Yaw",&Yaw);Button("Export disabled NPC","NpcExport",{{"Id",Id},{"Location",{Location[0],Location[1],Location[2]}},{"Yaw",Yaw}});}
+    const auto& preview=AuthoringClient::Result("NpcPreview");if(preview.contains("NPC")){TextJson(preview,"##npc-preview",180);HelpyTextInput::InputText("NPC Id",Id,sizeof(Id));ImGui::InputFloat3("World position (cm)",Location);ImGui::InputFloat("Yaw",&Yaw);Button("Export disabled NPC","NpcExport",{{"Id",Id},{"Location",{Location[0],Location[1],Location[2]}},{"Yaw",Yaw}});}
 }
 inline void Cleanup(){
     ImGui::TextWrapped("Export a cleaned copy of an offline native character JSON save. The original and running world stay untouched. Binary world saves and WGS containers are unsupported.");SaveInput();
@@ -285,7 +286,7 @@ inline void Render(){
 #endif
     }
     if(HelpyEnvironment::Server())ImGui::TextDisabled("Dedicated server: local-player and crosshair captures are unavailable.");
-    if(ImGui::CollapsingHeader("Export options")){ImGui::InputText("Export name (optional, no extension)",ExportName,sizeof(ExportName));HelpyImGuiTheme::Toggle("Export reports as JSONC (otherwise JSON)",&Jsonc);ImGui::TextWrapped("Reports, traces and presets use the existing RuneSchema folders. Existing exports are kept.");}
+    if(ImGui::CollapsingHeader("Export options")){HelpyTextInput::InputText("Export name (optional, no extension)",ExportName,sizeof(ExportName));HelpyImGuiTheme::Toggle("Export reports as JSONC (otherwise JSON)",&Jsonc);ImGui::TextWrapped("Reports, traces and presets use the existing RuneSchema folders. Existing exports are kept.");}
     AuthoringClient::ExportOptions={{"Name",ExportName},{"Jsonc",Jsonc}};
     Button("Refresh authoring","Catalogue");
     ImGui::Separator();ImGui::BeginDisabled(!snap.value("Active",false)||AuthoringClient::Busy());

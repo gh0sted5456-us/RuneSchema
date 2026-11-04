@@ -3,7 +3,7 @@
 namespace PS::HelpyModIconPacks {
 namespace fs=std::filesystem;
 struct Bundle {fs::path File;std::string Owner;std::set<std::string> Groups;};
-inline bool NotifyAutomatic(const HelpyIconPack::Result& result){return result.Imported||result.RecordsImported||result.Warnings;}
+inline bool NotifyAutomatic(const HelpyIconPack::Result& result){return result.Imported||result.RecordsImported||result.MetadataImported||result.Warnings;}
 inline std::map<std::string,std::set<std::string>> Groups(const HelpySourceCache::Snapshot& snapshot){
     std::map<std::string,std::set<std::string>> groups;
     for(const auto& [group,owners]:snapshot.Owners)if(snapshot.SourceKeys.contains(group))for(const auto& owner:owners)groups[owner].insert(group);
@@ -53,7 +53,7 @@ inline HelpyIconPack::Result ImportAll(const fs::path& root,const fs::path& cach
             static std::map<fs::path,std::string> importedFiles;
             if(presentation&&importedFiles[bundle.File]==stamp)continue;
             auto imported=presentation?HelpyIconPack::Import(bundle.File,root,cache,snapshot,budget,progress,HelpyIconPack::ImportPolicy::Presentation,{}, {},"mods/"+bundle.Owner):Import(bundle,root,cache,snapshot,budget,progress);
-            if(presentation)importedFiles[bundle.File]=stamp;result.Imported+=imported.Imported;result.RecordsImported+=imported.RecordsImported;result.Unchanged+=imported.Unchanged;result.Skipped+=imported.Skipped;
+            if(presentation)importedFiles[bundle.File]=stamp;result.Imported+=imported.Imported;result.RecordsImported+=imported.RecordsImported;result.Unchanged+=imported.Unchanged;result.Skipped+=imported.Skipped;result.MetadataImported|=imported.MetadataImported;
             for(const auto& icon:imported.ChangedIcons)if(changed.size()<HelpyIconPack::MaxIcons)changed.insert(icon);
             if(imported.Skipped)++warnings;
         }catch(const std::exception& error){HelpyIconPack::Check(progress);++warnings;if(details.size()<1024)details+=" "+bundle.Owner+"/"+bundle.File.filename().string()+": "+error.what()+";";}

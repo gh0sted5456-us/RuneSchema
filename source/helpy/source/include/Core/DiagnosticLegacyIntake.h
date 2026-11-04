@@ -10,7 +10,7 @@ inline std::string MirrorReference(const LiveLog::Entry& entry) {
 }
 inline bool Eligible(const LiveLog::Entry& entry) noexcept {
     return entry.Severity==LiveLog::Level::Error ||
-           entry.Severity==LiveLog::Level::Warning;
+           entry.Severity==LiveLog::Level::Warning || entry.ReportedCode=="RS-NET-006" || entry.ReportedCode=="RS-NET-007" || entry.ReportedCode=="RS-SAVE-006";
 }
 inline bool HasEmittedCode(const LiveLog::Entry& entry) noexcept {
     return !entry.ReportedCode.empty() && LiveLog::CodeToken(entry.ReportedCode);

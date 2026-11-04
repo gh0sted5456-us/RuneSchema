@@ -32,6 +32,7 @@
 #include "Core/LoadProtectionNotice.h"
 #include "Core/XboxCharacterSaves.h"
 #include "Runtime/Storefront.h"
+#include "Runtime/HelpyPlayerAccess.h"
 #include "Loader/Spawn/GhostMaterials.h"
 #include "Unreal/Engine/UDataTable.hpp"
 #include "Unreal/Hooks.hpp"
@@ -1684,16 +1685,24 @@ namespace DragonWilds {
         if(!ready||ready->HasAnyFunctionFlags(FUNC_Net)||!ReflectedContract::Output(result,ready)||ReflectedContract::Count(ready)!=1||result->GetElementSize()!=1||!result->IsNativeBool())
             throw std::runtime_error("Post-load quest cleanup player-ready contract changed");
         ActorHelper::FunctionCall readinessCall(controller,ready);readinessCall.Invoke();if(!readinessCall.Result<bool>())return;
+        try{PS::HelpyPlayerAccess::Observe(controller);}catch(const std::exception& error){ErrorOnce("helpy-player-authorization",PS::ToWideSafe(error.what()));}
+        if(NotifyWorldCleanup)try{NotifyWorldCleanup(controller);}catch(const std::exception& error){ErrorOnce("world-cleanup-notification",PS::ToWideSafe(error.what()));}
+        const auto notifyCleanup=[&](const std::string& character){
+            const auto notice=PS::LoadProtectionNotice::Peek(character);if(!notice)return;
+            if(notice->Removed){
+                const auto mod=notice->Owners.size()==1&&notice->Owners.begin()->second==notice->Removed?notice->Owners.begin()->first:std::string{};
+                if(!PublishCleanupNotice||!PublishCleanupNotice(controller,notice->Removed,mod))
+                    m_events.Notify(controller,PS::LoadProtectionNotice::Message(*notice),Events::Scope::Participant);
+            }
+            PS::LoadProtectionNotice::Acknowledge(character,notice->Version);
+        };
         if(auto pending=PS::LoadProtectionNotice::SessionBypasses.load(std::memory_order_relaxed);pending&&!PS::Storefront::IsDedicatedServer())try{
             ActorHelper::FunctionCall local(controller,TEXT("/Script/Engine.Controller:IsLocalController"));local.Invoke();
             if(local.Result<bool>()){m_events.Notify(controller,"RuneSchema: fallback entry was used during this game session. Details: RuneSchema.log.",Events::Scope::Participant);
                 PS::LoadProtectionNotice::SessionBypasses.compare_exchange_strong(pending,0,std::memory_order_relaxed);}
         }catch(const std::exception& error){ErrorOnce("save-fallback-notification",PS::ToWideSafe(error.what()));}
         const auto character=DialogueCharacter(controller);
-        if(const auto notice=PS::LoadProtectionNotice::Peek(character)){
-            try{m_events.Notify(controller,PS::LoadProtectionNotice::Message(*notice),Events::Scope::Participant);PS::LoadProtectionNotice::Acknowledge(character,notice->Version);}
-            catch(const std::exception& error){ErrorOnce("save-cleanup-notification",PS::ToWideSafe(error.what()));}
-        }
+        try{notifyCleanup(character);}catch(const std::exception& error){ErrorOnce("save-cleanup-notification",PS::ToWideSafe(error.what()));}
         std::erase_if(m_questPruneAttempts,[](const auto& player){return !player.Get();});
         if(std::any_of(m_questPruneAttempts.begin(),m_questPruneAttempts.end(),[&](const auto& player){return player.Get()==controller;}))return;
         const auto registry=PS::SaveCleanup::ReadRegistry();if(!registry||!registry->CanClean(PS::RegistryEnrollment::IdentityKind::Quest))return;
@@ -1714,7 +1723,7 @@ namespace DragonWilds {
         });
         if(!cleaned.Ready){std::erase_if(m_questPruneAttempts,[&](const auto& player){return player.Get()==controller;});return;}
         if(cleaned.Removed){PS::LoadProtectionNotice::Record(character,cleaned.Removed,0,false);
-            if(const auto notice=PS::LoadProtectionNotice::Peek(character))try{m_events.Notify(controller,PS::LoadProtectionNotice::Message(*notice),Events::Scope::Participant);PS::LoadProtectionNotice::Acknowledge(character,notice->Version);}catch(const std::exception& error){ErrorOnce("save-cleanup-notification",PS::ToWideSafe(error.what()));}}
+            try{notifyCleanup(character);}catch(const std::exception& error){ErrorOnce("save-cleanup-notification",PS::ToWideSafe(error.what()));}}
         if(cleaned.Removed)PS::Log<LogLevel::Normal>(STR("[PERSISTENCE-PRUNER][QUESTS][HYDRATED-PRUNED] owned_orphan_quests={} native quest rows, tracking and owning-client refresh updated. Active/unfinished state does not veto certified orphan removal; persisted save waits for the game's next save.\n"),cleaned.Removed);
     }
 

@@ -90,7 +90,7 @@ template<> struct ToolRequest<SpawnToolTag> {
         Result.erase("GrantResults");Result.erase("SpawnResult");
         Result.erase("CloneResult");Result.erase("CloneSource");Result.erase("CloneAppearance");Result.erase("ItemDetails");
         Result.erase("RecipeExportResult");Result.erase("ItemOverrideExportResult");Result.erase("KitMetadata");Result.erase("NativeContracts");
-        Result.erase("CartValidation");
+        Result.erase("CartValidation");Result.erase("ServerControl");
         Result.erase("RecipeWorkspaceCatalog");Result.erase("RecipeWorkspaceSource");
         Result.erase("JournalCatalog");
         Result.erase("InventorySnapshot");
@@ -138,6 +138,7 @@ template<> struct ToolRequest<SpawnToolTag> {
             if(result.contains("GrantResults"))receipt["GrantResults"]=result["GrantResults"];
             if(result.contains("KitMetadata"))receipt["KitMetadata"]=result["KitMetadata"];
             if(result.contains("NativeContracts"))receipt["NativeContracts"]=result["NativeContracts"];
+            if(result.contains("ServerControl"))receipt["ServerControl"]=result["ServerControl"];
             if(result.contains("SpawnResult"))receipt["SpawnResult"]=result["SpawnResult"];
             if(result.contains("CloneResult"))receipt["CloneResult"]=result["CloneResult"];
             if(result.contains("CloneSource"))receipt["CloneSource"]=result["CloneSource"];
@@ -186,7 +187,7 @@ template<> struct ToolRequest<SpawnToolTag> {
     static void CatalogProgress(const nlohmann::json& snapshot) {
         uint64_t revision=0;{
         std::lock_guard lock(Mutex);
-        for(const auto* key:{"Definitions","Items","Players","PlayerRoles","CatalogReady","_CatalogIndexing","CatalogStatus",
+        for(const auto* key:{"Definitions","Items","Players","PlayerRoles","ServerMods","RemoteAccess","CatalogReady","_CatalogIndexing","CatalogStatus",
                 "RegistryRecords","UnresolvedAssets","MetadataUnavailable","UnclassifiedRecords",
                 "CatalogAI","CatalogResources","CatalogCoverage","CookedVisuals","CatalogIssues",
                 "IndexStage","IndexDone","IndexTotal","IndexHasTotal","IndexFinished","IndexDetail"})
@@ -204,6 +205,7 @@ template<> struct ToolRequest<SpawnToolTag> {
     static bool ReadQuickIfChanged(uint64_t& revision,int category,nlohmann::json& out) {
         if(RemoteReadQuick)return RemoteReadQuick(revision,category,out);
         std::lock_guard lock(Mutex);if(revision==Revision)return false;
+        if(category==-2){out=nlohmann::json::object();for(const auto* key:{"ServerMods","RemoteAccess"})if(QuickCatalogData.contains(key))out[key]=QuickCatalogData[key];revision=Revision;return true;}
         out=Result;
         const auto copy=[&](const char* key){if(QuickCatalogData.contains(key))out[key]=QuickCatalogData[key];};
         if(category==0){copy("Items");copy("CookedVisuals");copy("CatalogIssues");}
@@ -215,8 +217,8 @@ template<> struct ToolRequest<SpawnToolTag> {
                     if((category==1&&(type=="AI"||type=="NPC"))||(category==2&&type=="Resource"))out["Definitions"].push_back(row);
                 }
             }
-        } else for(auto it=QuickCatalogData.begin();it!=QuickCatalogData.end();++it)out[it.key()]=it.value();
-        copy("Players");copy("PlayerRoles");
+        } else if(category!=-2)for(auto it=QuickCatalogData.begin();it!=QuickCatalogData.end();++it)out[it.key()]=it.value();
+        copy("Players");copy("PlayerRoles");copy("ServerMods");copy("RemoteAccess");
         for(const auto* key:{"CatalogReady","_CatalogIndexing","CatalogStatus","RegistryRecords","UnresolvedAssets",
                 "MetadataUnavailable","UnclassifiedRecords","CatalogAI","CatalogResources","CatalogCoverage",
                 "IndexStage","IndexDone","IndexTotal","IndexHasTotal","IndexFinished","IndexDetail"})copy(key);

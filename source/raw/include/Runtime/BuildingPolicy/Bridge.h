@@ -11,6 +11,7 @@
 #include "PlayerPhasing.h"
 #include "AdapterState.h"
 #include "CraftingCosts.h"
+#include "MaterialMenus.h"
 #include "Utility/Logging.h"
 #include <Unreal/Hooks.hpp>
 #include <Unreal/AActor.hpp>
@@ -30,6 +31,7 @@ class Bridge {
  EnemySpawns enemies;
  MaterialCosts materials;
  CraftingCosts crafting;
+ MaterialMenus menus;
  std::unordered_map<UWorld*,std::unique_ptr<PlayerPhasing>> phasing;
  std::unordered_set<std::string> reported;
  bool bound=false,placementBound=false;
@@ -49,6 +51,8 @@ class Bridge {
   SupportTick::SetLogger(logger);
   try{if(!placementBound){Placement::Install(logger);placementBound=true;}DestructionGuard::Install(logger);}catch(...){DestructionGuard::Clear();throw;}
   bound=true;
+  try{materials.InstallNative();}catch(const std::exception& error){Note(std::string("BUILDING_MENU_BIND_FAILED ")+error.what());}
+  try{crafting.InstallNative();}catch(const std::exception& error){Note(std::string("CRAFTING_MENU_BIND_FAILED ")+error.what());}
   Note("NATIVE_CALLBACKS_BOUND version=1");
  }
  void Add(UObject* owner){
@@ -69,6 +73,8 @@ public:
  ~Bridge(){Stop();}
  void Start(){
   if(tick!=Hook::ERROR_ID)return;
+  crafting.ObserveMenu=[this](UObject* controller,UObject* recipe,bool allowed){menus.Crafting(controller,recipe,allowed);};
+  materials.ObserveMenu=[this](UObject* controller,UObject* slot,bool allowed){menus.Building(controller,slot,allowed);};
   try{Placement::Install([this](const std::string& message){Note(message);});placementBound=true;}catch(const std::exception& e){Note(std::string("REGISTER_FAILED ")+e.what());}
   Hook::FCallbackOptions options{};options.OwnerModName=STR("RuneSchema");options.HookName=STR("BuildingPolicyBridge");
   enemies.SetLogger([this](const std::string& message){Note(message);});
@@ -117,8 +123,10 @@ public:
   },options);
   tick=Hook::RegisterEngineTickPostCallback([this](Hook::TCallbackIterationData<void>&,UEngine*,float delta,bool){
    crafting.OnTick();
+   menus.Frame();
    for(auto& [_,state]:phasing)try{state->Input();}catch(const std::exception& e){Note(std::string("PLAYER_PHASE_INPUT_FAILED ")+e.what());}
    elapsed+=delta;if(elapsed<.1f)return;float step=elapsed;elapsed=0;
+   menus.Update([this](const std::string& message){Note(message);});
    try{
     farmElapsed+=step;
     if(!discovered){
@@ -166,7 +174,7 @@ public:
   for(auto id:{begin,tick,event,afterEvent})if(id!=Hook::ERROR_ID)Hook::UnregisterCallback(id);begin=tick=event=afterEvent=Hook::ERROR_ID;
   for(auto& [_,state]:worlds)try{if(state.effects)state.effects->Stop();}catch(...){}
   try{enemies.Stop();ResourceYield::Stop();Farming::Stop();DestructionGuard::Clear();Placement::Clear();SupportTick::Clear();for(auto& [_,state]:overlays)state.overlay.Clear();}catch(...){}
-   crafting.Clear();materials.Clear();phasing.clear();providers.clear();overlays.clear();worlds.clear();harvestFrames.clear();bound=placementBound=discovered=false;elapsed=farmElapsed=0;
+   menus.Clear();crafting.Clear();materials.Clear();phasing.clear();providers.clear();overlays.clear();worlds.clear();harvestFrames.clear();bound=placementBound=discovered=false;elapsed=farmElapsed=0;
  }
 };
 }

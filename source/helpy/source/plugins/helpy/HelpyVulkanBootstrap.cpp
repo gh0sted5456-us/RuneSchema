@@ -15,7 +15,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkNegotiateLoaderLayerInterfaceVersion(VkNegotiat
         const auto file=std::filesystem::path(modulePath).parent_path()/"targets.json";std::error_code error;const auto size=std::filesystem::file_size(file,error);if(error||size>65536)return VK_ERROR_INITIALIZATION_FAILED;
         std::ifstream input(file,std::ios::binary);const auto bindings=nlohmann::json::parse(input);if(!bindings.is_array()||bindings.size()>64)return VK_ERROR_INITIALIZATION_FAILED;
         for(const auto& binding:bindings){const auto game=std::filesystem::u8path(binding.at("Executable").get<std::string>());if(_wcsicmp(game.c_str(),executable)!=0)continue;
-            const auto bridge=std::filesystem::u8path(binding.at("Bridge").get<std::string>());if(!bridge.is_absolute()||bridge.filename()!=L"RuneSchema.Helpy.dll")return VK_ERROR_INITIALIZATION_FAILED;
+            const auto bridge=std::filesystem::u8path(binding.at("Bridge").get<std::string>());if(!bridge.is_absolute()||(bridge.filename()!=L"RuneSchema.HUD.dll"&&bridge.filename()!=L"RuneSchema.Helpy.dll"))return VK_ERROR_INITIALIZATION_FAILED;
             const auto library=LoadLibraryExW(bridge.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);if(!library)return VK_ERROR_INITIALIZATION_FAILED;
             const auto negotiate=reinterpret_cast<PFN_vkNegotiateLoaderLayerInterfaceVersion>(GetProcAddress(library,"vkNegotiateLoaderLayerInterfaceVersion"));if(!negotiate){FreeLibrary(library);return VK_ERROR_INITIALIZATION_FAILED;}const auto result=negotiate(version);if(result!=VK_SUCCESS)FreeLibrary(library);return result;
         }

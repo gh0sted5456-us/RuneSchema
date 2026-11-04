@@ -10,13 +10,12 @@ return function()
         local output = io.open(request .. ".result", "wb")
         if output then output:write(nonce, status, "\n"); output:close() end
     end
-    if type(DumpUSMAP) ~= "function" or type(ExecuteInGameThread) ~= "function" or type(ExecuteWithDelay) ~= "function" then
+    if type(DumpUSMAP) ~= "function" or type(ExecuteInGameThreadWithDelay) ~= "function" then
         finish("unavailable"); return
     end
-    ExecuteWithDelay(15000, function()
-        ExecuteInGameThread(function()
-            local success = pcall(DumpUSMAP, true)
-            finish(success and "ok" or "error")
-        end)
+    local scheduled = pcall(ExecuteInGameThreadWithDelay, 15000, function()
+        local success = pcall(DumpUSMAP, true)
+        finish(success and "ok" or "error")
     end)
+    if not scheduled then finish("unavailable") end
 end

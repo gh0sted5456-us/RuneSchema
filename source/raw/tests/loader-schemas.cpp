@@ -9,6 +9,12 @@
 int RunLoaderSchemas(int argc,char** argv) {
     const auto schemas=PS::JsonSchemaGenerator::LoaderSchemas();
     assert(schemas.size()==22);
+    const auto& ownerEntry=schemas.at("registry").at("properties").at("Entries").at("items");
+    assert(ownerEntry.at("properties").at("Authority").at("properties").contains("OwnerPresentation"));
+    assert(ownerEntry.at("properties").at("Consumer").at("properties").at("Audience").at("enum")==nlohmann::json::array({"World","Owner"}));
+    assert(ownerEntry.at("properties").at("Profile").at("required")==nlohmann::json::array({"Class"}));
+    assert(ownerEntry.at("allOf").size()==3);
+    assert(ownerEntry.at("properties").at("Appearance").at("properties").at("MaxBytes").at("maximum")==4096);
     assert(schemas["registry"]["properties"]["NativeRegistries"]["properties"].size()==24);
     for(const auto& family:PS::NativeDataFamilies::Families)assert(schemas["registry"]["properties"]["NativeRegistries"]["properties"][family.Lane]["items"]["type"]=="string");
     for(const auto* lane:{"Skills","SkillPerks","Enums"})assert(schemas["registry"]["properties"]["NativeRegistries"]["properties"][lane]["$ref"]=="#/definitions/modOwnedCookedPaths");

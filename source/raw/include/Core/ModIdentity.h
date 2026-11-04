@@ -2,8 +2,9 @@
 #include <string>
 #include <sstream>
 #include <stdexcept>
+#include <vector>
 namespace PS::ModIdentity {
-struct Record {std::string Id,Name,Nickname,Author="Unknown Author",Website,Version,Build,NexusModID,NexusFileID,Description,Banner;bool Present=false;std::string DisplayName()const{return Nickname.empty()?Name:Nickname;}};
+struct Record {std::string Id,Name,Nickname,Author="Unknown Author",Website,Version,Build,NexusModID,NexusFileID,Description,Banner;bool Present=false;std::vector<std::string> Tips;std::string DisplayName()const{return Nickname.empty()?Name:Nickname;}};
 inline std::string Trim(std::string value){const auto first=value.find_first_not_of(" \t\r\n");return first==value.npos?std::string{}:value.substr(first,value.find_last_not_of(" \t\r\n")-first+1);}
 inline std::string NexusID(std::string value){
     auto lower=value;for(auto& ch:lower)if(ch>='A'&&ch<='Z')ch+=32;
@@ -17,8 +18,14 @@ inline bool RelativeBanner(const std::string& value){
 }
 inline Record Parse(const std::string& contents,const std::string& folder){
     if(contents.size()>64*1024)throw std::runtime_error("ID.txt exceeds 64 KiB.");Record out;out.Id=folder;out.Name=folder;out.Present=true;
-    auto text=contents;if(text.starts_with("\xef\xbb\xbf"))text.erase(0,3);std::istringstream input(text);std::string line;bool structured=false;
-    while(std::getline(input,line)){line=Trim(line);if(line.empty()||line.starts_with('#')||line.starts_with(';'))continue;const auto split=line.find_first_of(":=");
+    auto text=contents;if(text.starts_with("\xef\xbb\xbf"))text.erase(0,3);std::istringstream input(text);std::string line;bool structured=false,tips=false;
+    while(std::getline(input,line)){line=Trim(line);if(line.empty()||line.starts_with('#')||line.starts_with(';'))continue;
+        if(line.front()=='['&&line.back()==']'){auto section=Trim(line.substr(1,line.size()-2));for(auto& c:section)if(c>='A'&&c<='Z')c+=32;tips=section=="tips";structured=true;continue;}
+        const auto split=line.find_first_of(":=");
+        if(tips){auto value=line;if(split!=line.npos){auto key=Trim(line.substr(0,split));for(auto& c:key)if(c>='A'&&c<='Z')c+=32;if(key=="tip"||key.find_first_not_of("0123456789")==key.npos)value=Trim(line.substr(split+1));}
+            if(value.starts_with("- "))value=Trim(value.substr(2));if(value.empty())continue;
+            if(out.Tips.size()>=32||value.size()>512)throw std::runtime_error("ID.txt tips exceed 32 entries or 512 bytes per tip.");
+            for(unsigned char c:value)if(c<32||c==127)throw std::runtime_error("ID.txt tip contains control characters.");out.Tips.push_back(std::move(value));continue;}
         if(split==line.npos){if(!structured){out.Id=line;out.Name=line;}continue;}structured=true;const auto key=Trim(line.substr(0,split)),value=Trim(line.substr(split+1));
         if(key=="ModID"||key=="ModId")out.Id=value;else if(key=="Name"||key=="ModName")out.Name=value;
         else if(key=="Nickname"||key=="DisplayName")out.Nickname=value;else if(key=="Author"||key=="ModAuthor")out.Author=value;

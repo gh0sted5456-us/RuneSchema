@@ -2,9 +2,14 @@
 #include "HelpyOverlayFrames.h"
 #include <imgui.h>
 #include <xinput.h>
+#include <optional>
 
 extern ImGuiKey ImGui_ImplWin32_KeyEventToImGuiKey(WPARAM,LPARAM);
 namespace PS::HelpyOverlayInput {
+inline ImVec2 ClientPosition(HelpyOverlayFrames::Page& page,ImVec2 panel,ImVec2 client){
+    const auto width=HelpyOverlayFrames::Read(page.ViewportWidth),height=HelpyOverlayFrames::Read(page.ViewportHeight);
+    return {(panel.x+page.Left)*(width>0&&client.x>0?client.x/width:1.f),(panel.y+page.Top)*(height>0&&client.y>0?client.y/height:1.f)};
+}
 inline void Feed(HelpyOverlayFrames::Page& page,HWND game){
     auto& io=ImGui::GetIO();io.AddFocusEvent(true);HelpyOverlayFrames::Input input;
     RECT client{};GetClientRect(game,&client);const auto width=HelpyOverlayFrames::Read(page.ViewportWidth),height=HelpyOverlayFrames::Read(page.ViewportHeight);
@@ -28,5 +33,11 @@ inline void Feed(HelpyOverlayFrames::Page& page,HWND game){
 inline XINPUT_GAMEPAD Pad(HelpyOverlayFrames::Page& page){
     XINPUT_GAMEPAD pad{};const auto before=HelpyOverlayFrames::Read(page.PadSequence);if(before&1)return pad;
     std::memcpy(&pad,page.Pad.data(),sizeof(pad));MemoryBarrier();if(before!=HelpyOverlayFrames::Read(page.PadSequence))pad={};return pad;
+}
+inline std::optional<XINPUT_GAMEPAD> FreshPad(HelpyOverlayFrames::Page& page,uint64_t now=GetTickCount64()){
+    static const HelpyOverlayFrames::Page* previous=nullptr;static LONG sequence=0;static uint64_t changed=0;
+    const auto current=HelpyOverlayFrames::Read(page.PadSequence);if(previous!=&page){previous=&page;sequence=0;changed=0;}
+    if(!current||(current&1))return {};if(current!=sequence){sequence=current;changed=now;}
+    if(now<changed||now-changed>250)return {};return Pad(page);
 }
 }

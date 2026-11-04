@@ -44,5 +44,16 @@ int main()try{
     broken.Expire(now+std::chrono::seconds(31));assert(!broken.Push(route,"p",packet,now+std::chrono::seconds(32)));broken.Remove("p");
     R::Message corrupt{route.Key,"p","broken",1,7,0};Reject([&]{broken.Push(route,"p",R::Packet(corrupt,0),now);});
     server.Reset();assert(server.SavedBytes()==0&&server.PendingBytes()==0);
+    auto authorityRoute=route;authorityRoute.Key="RuneSchema:server-mods";authorityRoute.ClientPublish=false;
+    many.pop_back();manyServer.Configure(many,&authorityRoute);assert(manyServer.Route(authorityRoute.Key)==authorityRoute);
+    Reject([&]{manyServer.Configure({authorityRoute},&authorityRoute);});
+    server.Configure({authorityRoute});server.Publish(authorityRoute.Key,"first",1);server.Subscribe("new-player",authorityRoute.Key,1);
+    auto authorityPackets=server.Drain(4,now);assert(authorityPackets.size()==1&&authorityPackets[0].second.at("sender")=="authority");
+    server.Publish(authorityRoute.Key,"second",2);assert(server.PendingBytes()==6&&server.SavedBytes()==6);
+    Reject([&]{server.Publish(authorityRoute.Key,"stale",2);});
+    R::Message spoof{authorityRoute.Key,"authority","spoof",1,3,R::Crc("spoof")};
+    Reject([&]{server.Receive("new-player",R::Packet(spoof,0),false,now);});
+    server.Remove("new-player");assert(server.SavedBytes()==6&&server.PendingBytes()==0);
+    server.Subscribe("late-player",authorityRoute.Key,1);auto replay=server.Drain(4,now);assert(replay.size()==1&&replay[0].second.at("sequence")==2);
     std::cout<<"Relay registration, ownership, chunking, CRC, replay, policy, late join and cleanup passed\n";
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}

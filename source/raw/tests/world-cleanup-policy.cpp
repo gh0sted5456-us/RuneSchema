@@ -1,5 +1,6 @@
 #include "Core/WorldCleanupPolicy.h"
 #include "Runtime/WorldBuildingSavePreflight.h"
+#include "Runtime/WorldBuildingRegistryValidation.h"
 #include <fstream>
 #include <iostream>
 #include <iterator>
@@ -58,6 +59,11 @@ static void Policies() {
     window.Close();Need(!window.MayWrite(start+std::chrono::seconds(1)),"write allowed after world entry/shutdown");
 }
 static void Transform() {
+    {namespace V=PS::WorldBuildingRegistryValidation;
+        const auto pending=V::Validate({{"vanilla-platform",1}},{1},{{"Dye","dye_station","dye-station",2}},{{1,0}},{{"platform",1}},V::ExpectedMode::ProtectPendingDefinition);
+        Need(P::RemoveUnresolved(World(false),pending).bytes.empty(),"An enabled but pending dye station falsely blocked a world containing other buildings");
+        Need(P::RemoveUnresolved(World(true),pending).bytes.empty(),"An enabled pending station already in the world was incorrectly removed");
+    }
     const auto original=World(true);
     Need(P::Parse(original).pieces.size()==3,"fixture parse failed");
     Need(P::RemoveUnresolved(original,{"vanilla-platform","dye-station"}).bytes.empty(),"enabled content rewritten");
@@ -69,6 +75,16 @@ static void Transform() {
     Need(clean.pieces.size()==2&&clean.pieces[0].links==std::vector<std::uint32_t>{3}
         &&clean.pieces[1].id==3,"platform connections were not retained");
     Need(P::RemoveUnresolved(repair.bytes,{"vanilla-platform"}).bytes.empty(),"second cleanup was not a no-op");
+    {
+        auto rows=Piece(1,"vanilla-platform",{2,3,4});
+        for(const auto& row:{Piece(2,"retired-siege-piece",{1}),Piece(3,"enabled-other-mod",{1}),Piece(4,"retired-siege-piece",{1})})rows.insert(rows.end(),row.begin(),row.end());
+        auto pieces=Chunk("Pces",rows);P::Bytes mixed;U32(mixed,static_cast<std::uint32_t>(pieces.size()));mixed.insert(mixed.end(),pieces.begin(),pieces.end());
+        for(const auto* tag:{"CUST","NOBJ","LATS","LEVL","LVLS","SAVE"})mixed=Chunk(tag,mixed);
+        const auto retired=P::RemoveUnresolved(mixed,{"vanilla-platform","enabled-other-mod"});
+        Need(retired.removedIds==std::vector<std::uint32_t>({2,4}),"removing Siege affected another mod or vanilla");
+        const auto kept=P::Parse(retired.bytes);
+        Need(kept.pieces.size()==2&&kept.pieces[0].id==1&&kept.pieces[1].id==3&&kept.pieces[0].links==std::vector<std::uint32_t>{3},"unrelated buildings or their retained links changed");
+    }
     Reject([&]{P::RemoveUnresolved(original,{});});
     auto malformed=original;P::PutU32(malformed,4,1);Reject([&]{P::RemoveUnresolved(malformed,{"vanilla-platform"});});
     malformed=original;malformed.pop_back();Reject([&]{P::Parse(malformed);});

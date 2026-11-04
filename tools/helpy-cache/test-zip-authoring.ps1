@@ -49,13 +49,13 @@ try {
         }
         $global:LASTEXITCODE=0
     }
-    . $tool -ZipPath $zip -Game 'fixture-game' -Mapping 'fixture.usmap' -Oodle 'fixture.dll' -ModId 'MyMod' -OutputDirectory $cache
+    . $tool -ZipPath $zip -Game 'fixture-game' -Mapping 'fixture.usmap' -Oodle 'fixture.dll' -ModId 'MyMod' -OutputDirectory $cache -BackupRoot (Join-Path $root 'AppData/backups')
     Invoke-CacheZip
     Check (Test-Path -LiteralPath (Join-Path $cache 'offline-helpy.rsmk-cache')) 'Completed output was not published'
-    $backups=@(Get-ChildItem -LiteralPath $root -Directory -Filter 'cache.previous-*');Check ($backups.Count -eq 1) 'Previous output was not backed up'
+    $backups=@(Get-ChildItem -LiteralPath $BackupRoot -Directory -Filter 'cache-*');Check ($backups.Count -eq 1) 'Previous output was not backed up'
     Check ([IO.File]::ReadAllText((Join-Path $backups[0].FullName 'old.txt')) -eq 'preserve me') 'Previous output changed'
     Check ((Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash -eq $original) 'Input ZIP changed'
-    . $tool -ZipPath $zip -ModId 'MyMod' -OutputDirectory $cache
+    . $tool -ZipPath $zip -ModId 'MyMod' -OutputDirectory $cache -BackupRoot (Join-Path $root 'AppData/backups')
     Invoke-CacheZip
     Check (Test-Path -LiteralPath (Join-Path $cache 'offline-helpy.rsmk-cache')) 'Zero-configuration invocation failed'
     [IO.File]::WriteAllBytes($zip,(ZipBytes ($valid+@('Nested/Current.usmap'))))

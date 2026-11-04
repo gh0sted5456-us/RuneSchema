@@ -15,10 +15,10 @@ struct HelpyFramePacing {
     int Fps=60;
     bool Due(Clock::time_point now,bool visible,bool focused,int fps=60){
         if(!visible){Next={};Focused=false;return false;}
-        fps=std::clamp(fps,15,144);
+        fps=std::clamp(fps,1,144);
         const bool reset=Next==Clock::time_point{}||fps!=Fps||focused!=Focused;
         if(!reset&&now<Next)return false;
-        const auto period=std::chrono::nanoseconds(1000000000/(focused?fps:10));
+        const auto period=std::chrono::nanoseconds(1000000000/(focused?fps:std::min(fps,10)));
         Next=reset||now-Next>=period?now+period:Next+period;
         Fps=fps;Focused=focused;return true;
     }

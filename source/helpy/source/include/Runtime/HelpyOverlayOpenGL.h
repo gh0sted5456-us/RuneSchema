@@ -2,8 +2,9 @@
 #include "Runtime/HelpyOverlayGpu.h"
 #include <gl/GL.h>
 #include <GL/glext.h>
+#include <algorithm>
 
-namespace PS::HelpyOverlayGpu {
+namespace PS::HudGpu {
 class ConsumerGL {
     #define HELPY_GL_FUNCTIONS(X) \
         X(PFNGLCREATEMEMORYOBJECTSEXTPROC,CreateMemoryObjectsEXT) X(PFNGLDELETEMEMORYOBJECTSEXTPROC,DeleteMemoryObjectsEXT) \

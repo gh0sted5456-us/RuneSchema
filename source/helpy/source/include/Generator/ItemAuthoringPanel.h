@@ -1,4 +1,5 @@
 #pragma once
+#include "Generator/HelpyTextInput.h"
 #include "Core/ItemAuthoringDraft.h"
 #include "Generator/ItemGridPicker.h"
 #include "Generator/ToolRequest.h"
@@ -63,7 +64,7 @@ inline void RenderDraft(Draft& draft,Mode mode,const Json& catalog,const std::st
     ImGui::BeginDisabled(draft.Pending!=0);
     const int columns=ImGui::GetContentRegionAvail().x>=theme.X(650)?(transmog?3:2):1;
     if(ImGui::BeginTable("item-authoring-flow",columns,ImGuiTableFlags_SizingStretchSame)){
-        ImGui::TableNextColumn();ImGui::BeginChild("source",ImVec2(0,theme.Y(220)),true);
+        ImGui::TableNextColumn();HelpyImGuiTheme::BeginPanel("source",ImVec2(0,theme.Y(220)),true);
         ImGui::SeparatorText("Source item");Card("source-card",draft.Source,"Drop source item here");
 #if defined(HELPY_PREVIEW)
         HelpyPreviewHooks::AuthoringSource=HelpyPreviewHooks::LastRect();
@@ -73,9 +74,9 @@ inline void RenderDraft(Draft& draft,Mode mode,const Json& catalog,const std::st
         ImGui::BeginDisabled(!selected);if(HelpyImGuiTheme::SoftButton("Use selected as source")&&selected)draft.SetSource(*selected);ImGui::EndDisabled();
         if(!draft.Source.empty()&&ImGui::SmallButton("Refresh source values")){draft.Ready=false;draft.InspectWanted=true;draft.Changed();}
         ImGui::TextWrapped("%s",draft.Ready?"Native values loaded. Browsing keeps this source.":draft.Source.empty()?"The source supplies stats and behavior.":"Reading native source values...");
-        ImGui::EndChild();
+        PS::HelpyImGuiTheme::EndPanel();
         if(transmog){
-            ImGui::TableNextColumn();ImGui::BeginChild("appearance",ImVec2(0,theme.Y(220)),true);
+            ImGui::TableNextColumn();HelpyImGuiTheme::BeginPanel("appearance",ImVec2(0,theme.Y(220)),true);
             ImGui::SeparatorText("Appearance item");Card("appearance-card",draft.Appearance,"Drop appearance item here");
 #if defined(HELPY_PREVIEW)
             HelpyPreviewHooks::AuthoringAppearance=HelpyPreviewHooks::LastRect();
@@ -84,21 +85,21 @@ inline void RenderDraft(Draft& draft,Mode mode,const Json& catalog,const std::st
             ImGui::BeginDisabled(!selected);if(HelpyImGuiTheme::SoftButton("Use selected appearance")&&selected){draft.Appearance=*selected;draft.Changed();}ImGui::EndDisabled();
             if(!draft.Appearance.empty()&&ImGui::SmallButton("Clear appearance")){draft.Appearance=Json::object();draft.Changed();}
             ImGui::TextWrapped("Only the look is copied. The game checks that both items are compatible. The icon follows the appearance unless overridden.");
-            ImGui::EndChild();
+            PS::HelpyImGuiTheme::EndPanel();
         }
-        ImGui::TableNextColumn();ImGui::BeginChild("result",ImVec2(0,theme.Y(220)),true);
+        ImGui::TableNextColumn();HelpyImGuiTheme::BeginPanel("result",ImVec2(0,theme.Y(220)),true);
         ImGui::SeparatorText("New item");auto preview=Preview(draft,mode);
         Card("result-card",preview,"Choose a source to begin");
-        ImGui::TextUnformatted("Display name");ImGui::SetNextItemWidth(-1);if(ImGui::InputText("##name",draft.Name,sizeof(draft.Name)))draft.Changed();
-        if(ImGui::CollapsingHeader("Custom inventory icon")){ImGui::SetNextItemWidth(-1);if(ImGui::InputText("##icon",draft.Icon,sizeof(draft.Icon)))draft.Changed();
+        ImGui::TextUnformatted("Display name");ImGui::SetNextItemWidth(-1);if(HelpyTextInput::InputText("##name",draft.Name,sizeof(draft.Name)))draft.Changed();
+        if(ImGui::CollapsingHeader("Custom inventory icon")){ImGui::SetNextItemWidth(-1);if(HelpyTextInput::InputText("##icon",draft.Icon,sizeof(draft.Icon)))draft.Changed();
             if(ImGui::BeginDragDropTarget()){if(auto row=ItemGridPicker::AcceptItemDrop(draft.Error)){const auto icon=row->value("Icon",std::string{});if(icon.empty())draft.Error="This item has no resolved icon.";else{std::snprintf(draft.Icon,sizeof(draft.Icon),"%s",icon.c_str());draft.Changed();}}ImGui::EndDragDropTarget();}}
-        ImGui::EndChild();ImGui::EndTable();
+        PS::HelpyImGuiTheme::EndPanel();ImGui::EndTable();
     }
     if(!transmog){
         ImGui::SeparatorText("Item values (JSONC)");
         ImGui::TextWrapped("Add a native field below, then change its value. Omitted fields inherit the source. Linked stats are exported with their matching /raw definitions.");
-        ImGui::SetNextItemWidth(-1);ImGui::InputTextWithHint("##field-filter","Find a native field...",draft.Filter,sizeof(draft.Filter));
-        if(ImGui::BeginChild("native-fields",ImVec2(0,theme.Y(120)),true)){
+        ImGui::SetNextItemWidth(-1);HelpyTextInput::InputTextWithHint("##field-filter","Find a native field...",draft.Filter,sizeof(draft.Filter));
+        if(HelpyImGuiTheme::BeginPanel("native-fields",ImVec2(0,theme.Y(120)),true)){
             if(draft.Ready&&draft.Inspection.contains("Fields"))for(const auto& field:draft.Inspection["Fields"]){
                 const auto key=field.value("Name",std::string{});std::string hay=key,needle=draft.Filter;
                 for(auto& c:hay)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));for(auto& c:needle)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
@@ -113,18 +114,18 @@ inline void RenderDraft(Draft& draft,Mode mode,const Json& catalog,const std::st
                 }catch(const std::exception& error){draft.Error=error.what();}
                 ImGui::PopID();ImGui::EndDisabled();
             }else ImGui::TextDisabled("Drop a source item to load its editable values.");
-        }ImGui::EndChild();
-        if(ImGui::InputTextMultiline("##values",draft.Editor.data(),draft.Editor.size(),ImVec2(-1,theme.Y(180))))draft.Changed();
+        }PS::HelpyImGuiTheme::EndPanel();
+        if(HelpyTextInput::InputTextMultiline("##values",draft.Editor.data(),draft.Editor.size(),ImVec2(-1,theme.Y(180))))draft.Changed();
         if(ImGui::SmallButton("Format JSONC"))try{const auto text=ParseValues(draft.Editor.data()).dump(2);if(text.size()>=draft.Editor.size())throw std::runtime_error("Formatted values exceed the editor limit.");std::snprintf(draft.Editor.data(),draft.Editor.size(),"%s",text.c_str());}catch(const std::exception& error){draft.Error=error.what();}
     }
     ImGui::SeparatorText("Create or export");
     ImGui::TextUnformatted("PersistenceID");char identity[65]{};std::snprintf(identity,sizeof(identity),"%s",draft.Id.c_str());ImGui::SetNextItemWidth(std::min(theme.X(300),ImGui::GetContentRegionAvail().x));
-    if(ImGui::InputTextWithHint("##clone-persistence-id","Generate or paste a 22-character ID",identity,sizeof(identity))){draft.Changed();draft.Id=identity;}
+    if(HelpyTextInput::InputTextWithHint("##clone-persistence-id","Generate or paste a 22-character ID",identity,sizeof(identity))){draft.Changed();draft.Id=identity;}
     if(ImGui::SmallButton("Generate ID")){draft.Changed();draft.Id=ClonePresentation::NewId(draft.Mod);}ImGui::SameLine();
     ImGui::BeginDisabled(draft.Id.empty());if(ImGui::SmallButton("Copy ID"))ImGui::SetClipboardText(draft.Id.c_str());ImGui::EndDisabled();
     if(!draft.Id.empty()&&!ClonePresentation::ValidId(draft.Id,draft.Mod))ImGui::TextColored(theme.error,"Invalid ID · 22 URL-safe characters, ending A / Q / g / w");
     ImGui::TextDisabled("Keep the ID stable after release. Native registration rejects collisions.");
-    ImGui::TextUnformatted("Mod folder");ImGui::SameLine();ImGui::SetNextItemWidth(theme.X(180));if(ImGui::InputText("##mod",draft.Mod,sizeof(draft.Mod))){draft.Id.clear();draft.Changed();}
+    ImGui::TextUnformatted("Mod folder");ImGui::SameLine();ImGui::SetNextItemWidth(theme.X(180));if(HelpyTextInput::InputText("##mod",draft.Mod,sizeof(draft.Mod))){draft.Id.clear();draft.Changed();}
     const bool eligible=draft.Ready&&(!transmog||!draft.Appearance.empty())&&!SpawnToolRequests::IsWaiting()&&Authoring::SafeModFolder(draft.Mod);
     ImGui::BeginDisabled(!eligible);
     if(HelpyImGuiTheme::SoftButton("Preview /assets JSONC")&&draft.Prepared.empty())try{Submit(draft,Request(draft,mode,player,true));}catch(const std::exception& error){draft.Error=error.what();}
@@ -139,7 +140,7 @@ inline void RenderDraft(Draft& draft,Mode mode,const Json& catalog,const std::st
         for(const auto& [kind,document]:draft.Prepared.at("Documents").items())if(!document.empty()){
             ImGui::PushID(kind.c_str());ImGui::Text("/%s/%s.jsonc",kind.c_str(),draft.Prepared.at("InternalName").get<std::string>().c_str());
             const auto text=Jsonc(document);if(ImGui::SmallButton("Copy JSONC"))ImGui::SetClipboardText(text.c_str());
-            ImGui::BeginChild("document",ImVec2(0,theme.Y(150)),true,ImGuiWindowFlags_HorizontalScrollbar);ImGui::TextUnformatted(text.c_str());ImGui::EndChild();ImGui::PopID();
+            HelpyImGuiTheme::BeginPanel("document",ImVec2(0,theme.Y(150)),true,ImGuiWindowFlags_HorizontalScrollbar);ImGui::TextUnformatted(text.c_str());PS::HelpyImGuiTheme::EndPanel();ImGui::PopID();
         }
     }
     ImGui::TextWrapped("Export saves reusable files without creating or giving an item. Keep all exported folders together in your RuneSchema content mod.");

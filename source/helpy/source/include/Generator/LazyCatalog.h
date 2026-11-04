@@ -3,6 +3,8 @@
 #include "Generator/HelpyRuntimePreferences.h"
 #include "Core/ItemSource.h"
 #include "Core/ItemCategory.h"
+#include "Core/ItemName.h"
+#include "Core/ProcessExitFuture.h"
 #include <algorithm>
 #include <atomic>
 #include <array>
@@ -45,8 +47,9 @@ inline void RecordNativeIcon(const std::string& path,const json& icon){
     if(path.empty()||path.size()>1024||path.front()!='/'||!icon.is_string()||icon.get_ref<const std::string&>().size()>2048)return;
     if(NativeIcons.size()>=512&&!NativeIcons.contains(path))NativeIcons.erase(NativeIcons.begin());
     NativeIcons[path]=icon.get<std::string>();
-    const auto update=[&](json& rows){if(rows.is_array())for(auto& row:rows)if(row.is_object()&&row.value("Path",std::string{})==path)row["Icon"]=icon;};
+    bool changed=false;const auto update=[&](json& rows){if(rows.is_array())for(auto& row:rows)if(row.is_object()&&row.value("Path",std::string{})==path&&(!row.contains("Icon")||row["Icon"]!=icon)){row["Icon"]=icon;changed=true;}};
     update(Windows[0].Rows);update(Windows[0].RefreshRows);for(auto& [query,cache]:Windows[0].Cache)update(cache.Rows);
+    if(changed)Windows[0].RowsRevision=++RowsClock;
 }
 inline uint64_t FirstOpenGeneration=0,FirstOpenPendingGeneration=0,NextRequestId=(uint64_t{1}<<62);
 // The game-thread push callback may only publish this scalar. Catalogue state
@@ -58,10 +61,20 @@ inline constexpr int MaxCachedQueries=16;
 inline constexpr size_t MaxCachedRows=8192,MaxRowsPerQuery=2048;
 inline std::function<bool(json)> RemoteSubmit;
 inline std::function<bool(const json&)> LocalSubmit,IgnoreResponse;
+inline std::function<bool(uint64_t)> LocalWaiting;
 inline std::function<void()> LocalPoll,LocalShutdown;
 inline std::function<void(int,uint64_t)> RemoteCancel;
-inline void ConfigureRemote(std::function<bool(json)> submit,std::function<void(int,uint64_t)> cancel){RemoteSubmit=std::move(submit);RemoteCancel=std::move(cancel);}
-inline void ClearRemote(){if(LocalShutdown)LocalShutdown();LocalSubmit={};LocalPoll={};LocalShutdown={};IgnoreResponse={};RemoteSubmit={};RemoteCancel={};}
+inline std::array<uint64_t,3> PendingCancels{};inline ProcessExitFuture<void> Cancelling;
+inline void DrainCancellations(){PendingCancels.fill(0);if(Cancelling.valid()&&!ProcessExitInProgress.load())try{Cancelling.get();}catch(...){} }
+inline void PumpCancellations(){
+    if(Cancelling.valid()){if(Cancelling.wait_for(std::chrono::milliseconds(0))!=std::future_status::ready)return;try{Cancelling.get();}catch(...){} }
+    if(!RemoteCancel)return;
+    for(size_t i=0;i<PendingCancels.size();++i)if(PendingCancels[i]){const auto generation=std::exchange(PendingCancels[i],0);const auto cancel=RemoteCancel;
+        try{Cancelling=std::async(std::launch::async,[cancel,i,generation]{cancel(int(i),generation);});}catch(...){}return;}
+}
+inline void QueueCancel(int category,uint64_t generation){if(category<0||category>2||!RemoteCancel)return;PendingCancels[size_t(category)]=std::max(PendingCancels[size_t(category)],generation);PumpCancellations();}
+inline void ConfigureRemote(std::function<bool(json)> submit,std::function<void(int,uint64_t)> cancel){DrainCancellations();RemoteSubmit=std::move(submit);RemoteCancel=std::move(cancel);}
+inline void ClearRemote(){DrainCancellations();if(LocalShutdown)LocalShutdown();LocalSubmit={};LocalPoll={};LocalShutdown={};LocalWaiting={};IgnoreResponse={};RemoteSubmit={};RemoteCancel={};}
 
 inline State& For(int category){return Windows[static_cast<size_t>(std::clamp(category,0,2))];}
 inline const char* KeyFor(int category){return category==0?"Items":"Definitions";}
@@ -129,7 +142,7 @@ inline bool Request(int category,const char* mode,const std::string& query,bool 
 inline bool Search(int category,const std::string& query) {
     auto& state=For(category);const auto generation=SpawnToolRequests::CurrentGeneration();
     SaveCache(category);
-    ++state.CancelGeneration;if(RemoteCancel)RemoteCancel(category,state.CancelGeneration);
+    ++state.CancelGeneration;QueueCancel(category,state.CancelGeneration);
     state.Pending=false;state.ActiveRequestId=0;
     if(RestoreCache(category,query,generation)){
         if(state.CheckingChanges)Request(category,BrowseMode(category),query,true,InitialRows,{},3);
@@ -139,21 +152,23 @@ inline bool Search(int category,const std::string& query) {
 }
 inline bool Retry(int category) {
     auto& state=For(category);const auto query=state.Query;
-    ++state.CancelGeneration;if(RemoteCancel)RemoteCancel(category,state.CancelGeneration);
+    ++state.CancelGeneration;QueueCancel(category,state.CancelGeneration);
     state.Pending=false;state.ActiveRequestId=0;
     return Request(category,BrowseMode(category),query,true,InitialRows,{},1);
 }
 inline void CancelLoading(int category){
-    auto& state=For(category);++state.CancelGeneration;if(RemoteCancel)RemoteCancel(category,state.CancelGeneration);
+    auto& state=For(category);++state.CancelGeneration;QueueCancel(category,state.CancelGeneration);
     state.Pending=false;state.ActiveRequestId=0;state.Refreshing=false;state.RefreshRows=json::array();state.RefreshRequired=0;state.PreparingAlphabetical=false;
     state.LastError="Loading cancelled. Search again or retry this list.";
 }
 inline void CheckTimeouts(std::chrono::steady_clock::time_point now=std::chrono::steady_clock::now()) {
+    PumpCancellations();
     if(LocalPoll)LocalPoll();
-    for(auto& state:Windows)if(state.Pending&&now-state.RequestedAt>std::chrono::seconds(15)) {
+    for(auto& state:Windows)if(state.Pending&&now-state.RequestedAt>std::chrono::seconds(15)
+        &&(!LocalWaiting||!LocalWaiting(state.ActiveRequestId))) {
         state.Pending=false;state.ActiveRequestId=0;
         ++state.CancelGeneration;
-        if(RemoteCancel)RemoteCancel(static_cast<int>(&state-Windows.data()),state.CancelGeneration);
+        QueueCancel(static_cast<int>(&state-Windows.data()),state.CancelGeneration);
         state.LastError="The item request timed out. Retry to load this list again.";
     }
 }
@@ -208,10 +223,23 @@ inline void ApplyWindow(const json& window,uint64_t revision) {
     if(reset){if(state.Refreshing)state.RefreshRows=json::array();else state.Rows=json::array();state.RandomSeen.clear();state.StalledWindows=0;}
     auto& destination=state.Refreshing?state.RefreshRows:state.Rows;
     const auto before=destination.size();const auto previousCursor=state.NextCursor;
+    std::unordered_map<std::string,size_t> itemRows;
+    const auto itemKey=[](const json& row){const auto path=row.find("Path");return path!=row.end()&&path->is_string()?HelpyCacheSources::Lower(path->get<std::string>()):std::string{};};
+    if(category==0)for(size_t index=0;index<destination.size();){
+        const auto key=itemKey(destination[index]);if(key.empty()){++index;continue;}
+        const auto [found,inserted]=itemRows.emplace(key,index);
+        if(inserted){++index;continue;}
+        destination[found->second].update(destination[index]);destination.erase(destination.begin()+index);
+    }
     if(window.contains("Rows")&&window["Rows"].is_array())for(const auto& row:window["Rows"]) {
         if(!row.is_object())continue;
         if(randomItems){const auto identity=RandomIdentity(row);if(!identity.empty()&&!state.RandomSeen.insert(identity).second)continue;}
-        auto current=row;if(category==0){ItemCategory::Repair(current);const auto icon=NativeIcons.find(row.value("Path",std::string{}));if(icon!=NativeIcons.end())current["Icon"]=icon->second;}
+        auto current=row;if(category==0){ItemName::Repair(current);ItemCategory::Repair(current);const auto icon=NativeIcons.find(row.value("Path",std::string{}));if(icon!=NativeIcons.end())current["Icon"]=icon->second;}
+        if(category==0){const auto key=itemKey(current);if(!key.empty()){
+            const auto [found,inserted]=itemRows.emplace(key,destination.size());
+            // Source badges and newly discovered fields update one asset row; names never define identity.
+            if(!inserted){destination[found->second]=ItemName::Merge(destination[found->second],current);continue;}
+        }}
         destination.push_back(std::move(current));
     }
     const auto received=destination.size();
@@ -255,7 +283,7 @@ inline void InvalidateSources(bool removed){
     (void)removed;NativeIcons.clear();
     for(size_t i=0;i<Windows.size();++i){auto& state=Windows[i];
         SaveCache(static_cast<int>(i));for(auto& [query,cache]:state.Cache)cache.Stale=true;
-        ++state.CancelGeneration;if(RemoteCancel)RemoteCancel(static_cast<int>(i),state.CancelGeneration);
+        ++state.CancelGeneration;QueueCancel(static_cast<int>(i),state.CancelGeneration);
         state.Pending=false;state.ActiveRequestId=0;state.CheckingChanges=true;
         state.RefreshRows=json::array();state.RefreshRequired=0;state.Refreshing=false;
         if(state.Started||!state.Rows.empty())Request(static_cast<int>(i),BrowseMode(static_cast<int>(i)),state.Query,true,InitialRows,{},3);
@@ -276,7 +304,7 @@ inline void RefreshSourceMetadata(const HelpyCacheSources::Plan& plan,const std:
     // Metadata-only source discovery updates the existing browse in place;
     // only source-restricted result sets need another membership query.
     std::erase_if(state.Cache,[](const auto& pair){return pair.first.starts_with("__helpysource:");});
-    ++state.AppliedRevision;
+    ++state.AppliedRevision;state.RowsRevision=++RowsClock;
     if(state.Query.starts_with("__helpysource:"))Retry(0);
 }
 inline void ResetForGeneration(uint64_t generation){for(auto& state:Windows){if(state.RuntimeGeneration!=generation){NativeIcons.clear();const auto cancel=state.CancelGeneration;state=State{};state.CancelGeneration=cancel;state.RuntimeGeneration=generation;state.RowsRevision=++RowsClock;}}}

@@ -82,8 +82,24 @@ class Server {
     }
 public:
     void Reset(){Peers.clear();Snapshots.clear();Queue.clear();Incoming.Clear();QueuedBytes=SnapshotBytes=0;}
-    void Configure(const std::vector<Channel>& channels){std::map<std::string,Channel> candidate;Require(channels.size()<=MaxChannels,"Too many relay channels");for(const auto& channel:channels){auto [at,inserted]=candidate.emplace(channel.Key,channel);Require(inserted||at->second==channel,"Conflicting relay channel registrations");}if(candidate!=Channels){Reset();Channels=std::move(candidate);}}
+    void Configure(const std::vector<Channel>& channels,const Channel* authoritySnapshot=nullptr){
+        std::map<std::string,Channel> candidate;Require(channels.size()<=MaxChannels,"Too many relay channels");
+        for(const auto& channel:channels){auto [at,inserted]=candidate.emplace(channel.Key,channel);Require(inserted||at->second==channel,"Conflicting relay channel registrations");}
+        // The internal authority lane does not consume a mod's channel allowance.
+        if(authoritySnapshot){Require(!authoritySnapshot->ClientPublish&&authoritySnapshot->Broadcast&&authoritySnapshot->Snapshot,"Invalid authority snapshot policy");Require(candidate.emplace(authoritySnapshot->Key,*authoritySnapshot).second,"Authority snapshot channel is reserved");}
+        if(candidate!=Channels){Reset();Channels=std::move(candidate);}
+    }
     const Channel& Route(const std::string& key)const{const auto at=Channels.find(key);Require(at!=Channels.end(),"Relay channel is not registered by this server");return at->second;}
+    void Publish(const std::string& channel,const std::string& data,int64_t sequence){
+        const auto& route=Route(channel);Require(route.Broadcast&&route.Snapshot&&!data.empty()&&data.size()<=route.Limit&&sequence>0,"Invalid authority snapshot");
+        const auto key="authority/"+channel;const auto old=Snapshots.find(key);
+        Require(old==Snapshots.end()||sequence>old->second->Sequence,"Authority snapshot sequence is stale");
+        const auto prior=old==Snapshots.end()?0:old->second->Data.size();Require(data.size()<=SnapshotBudget-(SnapshotBytes-prior),"Relay snapshot capacity exceeded");
+        auto value=std::make_shared<const Message>(Message{channel,"authority",data,route.Version,sequence,Crc(data)});
+        std::vector<std::pair<std::string,std::shared_ptr<const Message>>> deliveries;
+        for(const auto& [peer,recipient]:Peers)if(recipient.Subscriptions.contains(channel))deliveries.emplace_back(peer,value);
+        Enqueue(deliveries);SnapshotBytes=SnapshotBytes-prior+data.size();Snapshots[key]=std::move(value);
+    }
     void Subscribe(const std::string& peer,const std::string& channel,uint32_t version,bool resync=false){
         const auto& route=Route(channel);Require(version==route.Version,"Relay subscription version mismatch");auto& client=GetPeer(peer);if(client.Subscriptions.contains(channel)&&!resync)return;
         std::vector<std::pair<std::string,std::shared_ptr<const Message>>> replay;for(const auto& [_,value]:Snapshots)if(value->Channel==channel)replay.emplace_back(peer,value);

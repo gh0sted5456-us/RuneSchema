@@ -1,5 +1,7 @@
 #include "Runtime/PluginHost.h"
+#include "Runtime/HelpyModMenu.h"
 #include "Core/HelpyActivity.h"
+#include "Core/PlayerCoordinates.h"
 #include "../../../shared/HelpyDesktopTransport.h"
 #include "Core/MapPresentationCache.h"
 #include "Runtime/PluginCatalog.h"
@@ -65,6 +67,11 @@ int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,ui
     try {
         const auto request=nlohmann::json::parse(requestJson);const auto action=request.value("Action",std::string{});
         nlohmann::json result;
+        if(action=="HudCapabilities")return JsonResponse({{"InputOwnership",true},{"Extensions",true}},response,capacity,size);
+        if(action=="HudExtensions"){
+            if(Storefront::IsDedicatedServer())return JsonResponse({{"Available",false},{"Clients",nlohmann::json::array()}},response,capacity,size);
+            const auto payload=request.at("Payload").dump();return CallService("RuneSchema.Helpy","hud.extensions",payload.c_str(),response,capacity,size);
+        }
         if(action=="HelpyNativeOverlay"){
             if(Storefront::IsDedicatedServer())return JsonResponse({{"Ready",false},{"Error","Dedicated servers use Helpy's desktop window"}},response,capacity,size);
             if(!size)return RS_PLUGIN_INVALID_ARGUMENT;
@@ -73,21 +80,38 @@ int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,ui
         }
         if(action=="HelpyVisibility"){
             if(!request.contains("Visible")||!request.at("Visible").is_boolean())return RS_PLUGIN_INVALID_ARGUMENT;
+            if(request.contains("CaptureInput")&&!request.at("CaptureInput").is_boolean())return RS_PLUGIN_INVALID_ARGUMENT;
             const auto code=JsonResponse({{"Accepted",true}},response,capacity,size);
-            if(code==RS_PLUGIN_OK)HelpyActivity::Visible=request.at("Visible").get<bool>();
+            if(code==RS_PLUGIN_OK){HelpyActivity::CaptureInput=request.value("CaptureInput",false)&&!Storefront::IsDedicatedServer();HelpyActivity::Visible=request.at("Visible").get<bool>();}
+            return code;
+        }
+        if(action=="HudInputCapture"){
+            if(!request.contains("Active")||!request["Active"].is_boolean())return RS_PLUGIN_INVALID_ARGUMENT;
+            const auto code=JsonResponse({{"Accepted",true}},response,capacity,size);
+            if(code==RS_PLUGIN_OK)HelpyActivity::HudCaptureInput=request["Active"].get<bool>()&&!Storefront::IsDedicatedServer();
             return code;
         }
         if(action=="HelpyProfileChanged"){
             const auto code=JsonResponse({{"Accepted",true}},response,capacity,size);if(code==RS_PLUGIN_OK&&SpawnToolRequests::PushUpdate)SpawnToolRequests::PushUpdate("profile",nlohmann::json::object(),0);return code;
         }
         if(action=="DesktopBridgeStatus")result={{"Ready",DesktopBridgeReady.load()}};
+        else if(action=="HelpyModMenuRead")result=HelpyModMenu::Read(request.value("Revision",~uint64_t{}));
+        else if(action=="HelpyModMenuWrite"){
+            if(!size)return RS_PLUGIN_INVALID_ARGUMENT;
+            if(!response||capacity<4096){*size=4096;return RS_PLUGIN_BUFFER_TOO_SMALL;}
+            result=HelpyModMenu::Queue(request.at("Payload"));
+        }
         else if(action=="Environment")result={{"Storefront",Storefront::Name(Storefront::Current())},{"DedicatedServer",Storefront::IsDedicatedServer()},{"GameProcessId",GetCurrentProcessId()},
             {"NativeIconCaptureAvailable",!Storefront::IsDedicatedServer()},
             {"Platform",Storefront::PlatformName(Storefront::CurrentDetection())},
             {"RuneSchemaVersion",BuildInfo::Version},{"GameVersion",ExecutableVersion::Current()},
             {"UE4SS",UE4SSCompatibility::Snapshot()},{"Steam",SteamBuild::Snapshot()},{"UpdateChecksAvailable",true}};
-        else if(action=="StartupStats")result=StartupTrace::Snapshot();
+        else if(action=="StartupStats"){
+            result=StartupTrace::Snapshot();result["FrontendReady"]=GameFrameRate::StartupReady.load();
+            if(!Storefront::IsDedicatedServer()&&!GameFrameRate::StartupReady.load())GameFrameRate::StartupProbe=true;
+        }
         else if(action=="FrameRate")result={{"Available",GameFrameRate::Available()},{"Fps",GameFrameRate::Fps.load()}};
+        else if(action=="LocalCoordinates")result=Storefront::IsDedicatedServer()?nlohmann::json{{"Available",false}}:PlayerCoordinates::Current.Read(SpawnToolRequests::Generation.load());
         else if(action=="NetworkStatus"){
             SpawnToolRequests::RequestPlayerRoles();
             result=NetworkStatus::Current.Snapshot(SpawnToolRequests::Generation.load(),SpawnToolRequests::Available.load(),SpawnToolRequests::Waiting.load());
@@ -142,8 +166,8 @@ int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,ui
         }
         else if(action=="AuthoringSnapshot")result=HelpyAuthoring::Bridge.Snapshot(request.value("Revision",uint64_t{}));
         else if(action=="Read") {
-            SpawnToolRequests::RequestPlayerRoles();
-            const auto prior=request.value("Revision",uint64_t{});const auto category=request.value("Category",-1);std::lock_guard lock(SpawnToolRequests::Mutex);
+            const auto prior=request.value("Revision",uint64_t{});const auto category=request.value("Category",-1);
+            if(category!=-2)SpawnToolRequests::RequestPlayerRoles();std::lock_guard lock(SpawnToolRequests::Mutex);
             result={{"Available",SpawnToolRequests::Available.load()},{"Waiting",SpawnToolRequests::Waiting.load()},
                 {"Generation",SpawnToolRequests::Generation.load()},{"Revision",SpawnToolRequests::Revision},
                 {"Changed",prior!=SpawnToolRequests::Revision}};
@@ -153,7 +177,8 @@ int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,ui
                     if(SpawnToolRequests::QuickCatalogData.contains(key))snapshot[key]=SpawnToolRequests::QuickCatalogData[key];
                     else if(SpawnToolRequests::Result.contains(key))snapshot[key]=SpawnToolRequests::Result[key];
                 };
-                if(category==0){copy("Items");copy("CookedVisuals");copy("CatalogIssues");}
+                if(category==-2){snapshot=nlohmann::json::object();copy("ServerMods");copy("RemoteAccess");}
+                else if(category==0){copy("Items");copy("CookedVisuals");copy("CatalogIssues");}
                 else if(category==1||category==2) {
                     const auto* source=SpawnToolRequests::QuickCatalogData.contains("Definitions")?&SpawnToolRequests::QuickCatalogData:
                         SpawnToolRequests::Result.contains("Definitions")?&SpawnToolRequests::Result:nullptr;
@@ -168,7 +193,7 @@ int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,ui
                     snapshot=SpawnToolRequests::Result;
                     for(auto it=SpawnToolRequests::QuickCatalogData.begin();it!=SpawnToolRequests::QuickCatalogData.end();++it)snapshot[it.key()]=it.value();
                 }
-                for(const auto* key:{"Players","PlayerRoles","CatalogReady","_CatalogIndexing","CatalogStatus","RegistryRecords","UnresolvedAssets",
+                if(category!=-2)for(const auto* key:{"Players","PlayerRoles","ServerMods","RemoteAccess","CatalogReady","_CatalogIndexing","CatalogStatus","RegistryRecords","UnresolvedAssets",
                         "MetadataUnavailable","UnclassifiedRecords","CatalogAI","CatalogResources","CatalogCoverage",
                         "IndexStage","IndexDone","IndexTotal","IndexHasTotal","IndexFinished","IndexDetail"})copy(key);
                 result["Snapshot"]=std::move(snapshot);
@@ -399,10 +424,10 @@ void PluginHost::OnUiInit(){for(auto& plugin:m_state->LoadedPlugins)if(plugin.Ui
         PS::CodedLog<RC::LogLevel::Error>(PS::Diagnostics::Id::PluginUiFailed,TEXT("Plugin {}: UI initialization rejected.\n"),PS::ToWideSafe(plugin.Manifest.Id));}
 }catch(...){m_state->Messages.push_back(plugin.Manifest.Id+": UI initialization threw an exception");
     PS::CodedLog<RC::LogLevel::Error>(PS::Diagnostics::Id::PluginUiFailed,TEXT("Plugin {}: UI initialization threw an exception.\n"),PS::ToWideSafe(plugin.Manifest.Id));}}
-void PluginHost::OnUnrealInit(){
+void PluginHost::StartDesktop(){
     const auto root=HostServices::ModDirectory();
     if(HelpyDesktop::Enabled(root)&&std::any_of(m_state->LoadedPlugins.begin(),m_state->LoadedPlugins.end(),[](const auto& plugin){return plugin.Manifest.Id=="RuneSchema.Helpy";})){
-        try{DesktopBridgeReady=m_state->Desktop.Start(root,[](const nlohmann::json& request){
+        try{if(!DesktopBridgeReady)DesktopBridgeReady=m_state->Desktop.Start(root,[](const nlohmann::json& request){
             if(request.value("Op",std::string{})=="Poll")return nlohmann::json{{"Code",RS_PLUGIN_OK}};
             if(request.value("Op",std::string{})!="Call"||!request.contains("Request")||!request["Request"].is_object())return nlohmann::json{{"Code",RS_PLUGIN_INVALID_ARGUMENT}};
             const auto capacity=request.value("Capacity",uint32_t{});if(capacity>RUNESCHEMA_PLUGIN_MAX_MESSAGE)return nlohmann::json{{"Code",RS_PLUGIN_INVALID_ARGUMENT}};
@@ -412,9 +437,13 @@ void PluginHost::OnUnrealInit(){
             nlohmann::json reply={{"Code",code},{"Size",size}};
             if(code==RS_PLUGIN_OK&&size&&size<=output.size()){if(output[size-1]=='\0')--size;reply["Body"]=nlohmann::json::parse(output.data(),output.data()+size);}
             return reply;
-        },[]{HelpyActivity::Visible=false;});}catch(...){m_state->Desktop.Stop();DesktopBridgeReady=false;}
+        },[]{HelpyActivity::Visible=false;HelpyActivity::CaptureInput=false;});}catch(...){m_state->Desktop.Stop();DesktopBridgeReady=false;}
         if(!DesktopBridgeReady)HostLog(RS_LOG_WARNING,"RuneSchema.Helpy","[RS-UI-002] Helpy game bridge unavailable; the application can still browse its cache offline.");
+        else try{(void)Call("RuneSchema.Core","helpy.desktop.launch","{}");}catch(...){} // Older bridges launch at their normal Unreal-init phase.
     }
+}
+void PluginHost::OnUnrealInit(){
+    StartDesktop();
     for(auto& plugin:m_state->LoadedPlugins){
     size_t packs=0;
     try{packs=PluginCatalog::PakDirectories(plugin.Manifest).size();}
@@ -446,7 +475,7 @@ void PluginHost::OnUnrealInit(){
 }
 void PluginHost::Shutdown() noexcept {
     if(m_state)m_state->Desktop.Stop();DesktopBridgeReady=false;
-    HelpyActivity::Visible=false;HelpySourceCache::Requested=false;HelpySourceCache::Shutdown();
+    HelpyActivity::Visible=false;HelpyActivity::CaptureInput=false;HelpyActivity::HudCaptureInput=false;HelpySourceCache::Requested=false;HelpySourceCache::Shutdown();
     AssetSearch::ShutdownItemCatalog();
     HelpyQueryService::Clear();
     if(!m_state)return;

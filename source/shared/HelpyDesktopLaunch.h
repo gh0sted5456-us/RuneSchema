@@ -17,17 +17,13 @@ inline bool ActivateExisting(const fs::path& root,bool show){
     const auto name=InstanceName(root);const auto instance=OpenMutexW(SYNCHRONIZE,FALSE,name.c_str());if(!instance)return false;CloseHandle(instance);
     if(show){const auto event=OpenEventW(EVENT_MODIFY_STATE,FALSE,(name+L".activate").c_str());if(event){SetEvent(event);CloseHandle(event);}}return true;
 }
-inline fs::path Application(const fs::path& root,const std::string& platform,const fs::path& local){
-    const auto name=HelpyDesktop::PipeName(root);const auto folder=RuneSchemaData::Resolve(local)/RuneSchemaData::RuntimeKey(platform)/"apps"/name.substr(name.find_last_of(L'.')+1);
-    RuneSchemaData::Safe(folder);return folder/"Helpy.exe";
-}
-inline fs::path Stage(const fs::path& root,const std::string& platform,const fs::path& local){
-    const auto source=root/"plugins/RuneSchema.Helpy/dll/Helpy.exe",target=Application(root,platform,local);
-    const auto bytes=ConfigFiles::Read(source,8*1024*1024);if(bytes.empty())throw std::runtime_error("Helpy.exe is empty");
-    if(!fs::exists(target)||ConfigFiles::Read(target,8*1024*1024)!=bytes)ConfigFiles::Write(target,bytes);
-    if(ConfigFiles::Read(target,8*1024*1024)!=bytes)throw std::runtime_error("Helpy application copy did not verify");
-    const auto encoded=root.u8string();const auto binding=target.parent_path()/"runtime.json";const auto text=HelpyDesktop::Json{{"Version",1},{"Root",std::string(encoded.begin(),encoded.end())},{"Platform",platform}}.dump();
-    if(!fs::exists(binding)||ConfigFiles::Read(binding,16384)!=text)ConfigFiles::Write(binding,text);return target;
+inline fs::path Application(const fs::path& root){
+    const auto directory=root/"plugins/RuneSchema.Helpy/dll";RuneSchemaData::Safe(directory);
+    for(const auto* name:{"SDL3.dll","Helpy.exe"}){
+        const auto file=directory/name;RuneSchemaData::Safe(file);
+        if(!fs::is_regular_file(file)||fs::file_size(file)==0||fs::file_size(file)>8*1024*1024)throw std::runtime_error(std::string("Helpy runtime file unavailable: ")+name);
+    }
+    return directory/"Helpy.exe";
 }
 inline bool InGameContext(){
     UINT32 length=0;const auto package=GetCurrentPackageFullName(&length,nullptr);
@@ -61,6 +57,6 @@ inline void FromDesktop(const fs::path& executable,const std::wstring& arguments
 }
 inline void Start(const fs::path& root,const std::string& platform,bool hidden){
     if(ActivateExisting(root,!hidden))return;
-    const auto executable=Stage(root,platform,RuneSchemaData::LocalDirectory());FromDesktop(executable,Arguments(root,platform,hidden));
+    FromDesktop(Application(root),Arguments(root,platform,hidden));
 }
 }

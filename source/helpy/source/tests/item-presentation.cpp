@@ -2,6 +2,9 @@
 #include "Core/ItemBadges.h"
 #include <cassert>
 int main(){
+    assert(PS::ItemPresentation::OriginalName({{"Name","ITEM_colors_of_money_armour_body"},{"DisplayName","Ranger Body (Dyed Black)"}})=="Ranger Body (Dyed Black)");
+    assert(PS::ItemPresentation::OriginalName({{"Name","ITEM_unresolved"},{"Path","/Game/Items/ITEM_RangerBody.ITEM_RangerBody"}})=="Ranger Body");
+    assert(PS::ItemPresentation::OriginalName({{"Name","DA_RangerBody"},{"DisplayName","Ranger Body (Dyed Black)"},{"Path","/Game/Items/DA_RangerBody.DA_RangerBody"}})=="Ranger Body (Dyed Black)");
     using namespace PS::ItemPresentation;
     assert(Name({{"Name","Iron Bar"},{"Path","/Game/Items/ITEM_Iron.ITEM_Iron"}})=="Iron Bar");
     assert(Name({{"Name","  "},{"DisplayName","Iron Bar"}})=="Iron Bar");
@@ -10,6 +13,12 @@ int main(){
     assert(Name({{"Name",Json::object()},{"InternalName","IronBar"}})=="Iron Bar");
     assert(Name({{"Name","Épée"}})=="Épée");
     assert(Name(nullptr)=="Unnamed item");
+    const Json cached={{"Name","RangerBodyBlack"},{"DisplayName","Ranger Body (Dyed Black)"},{"InternalName","armour_ranger_body_black"},{"Path","/Example/ITEM_RangerBody.ITEM_RangerBody"}};
+    assert(Name(cached)=="Ranger Body (Dyed Black)"&&Name(cached,true)=="armour_ranger_body_black");
+    assert(Name({{"Name","Ranger Body"},{"Path","/Example/ITEM_RangerBody.ITEM_RangerBody"}},true)=="ITEM_RangerBody");
+    auto repaired=cached;PS::ItemName::Repair(repaired);assert(repaired["Name"]==cached["DisplayName"]&&repaired["InternalName"]==cached["InternalName"]);
+    const auto renamed=PS::ItemName::Merge(repaired,{{"Name","Ranger Body (Updated)"}});assert(renamed["Name"]=="Ranger Body (Updated)"&&renamed["DisplayName"]==renamed["Name"]);
+    const auto unresolved=PS::ItemName::Merge(renamed,{{"Name","ITEM_unresolved"},{"DisplayName","[Missing String Table Entry]"}});assert(Name(unresolved)=="Ranger Body (Updated)");
     assert(Placeholder({{"Name"," [PH] Unfinished helm"}}));
     assert(Placeholder({{"DisplayName","[ph] Test"}}));
     assert(!Placeholder({{"Name","A [PH] souvenir"}})&&!Placeholder({{"Name","Phantom helm"}}));

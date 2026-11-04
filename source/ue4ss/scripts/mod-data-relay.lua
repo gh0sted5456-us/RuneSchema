@@ -4,6 +4,7 @@ local api = {Status={}}
 local routes, pending, seen, outgoing = {}, {}, {}, {}
 local reserved, queued, sequence, revision = 0, 0, 0, 0
 local endpoint, hooked, receipt_hooked, running, last_scan, last_subscribe = nil, false, false, false, 0, 0
+local timer, generation = nil, 0
 local path = "/RuneSchema/Networking/BPC_RuneSchemaRegistryBridge.BPC_RuneSchemaRegistryBridge_C:ClientRuneSchemaNotification"
 local max_bytes, incoming_budget, outgoing_budget = 1048576, 4194304, 4194304
 local function token(s) return type(s)=="string" and #s>0 and #s<=193 and s:match("^[%w_.:%-]+$")~=nil end
@@ -57,6 +58,7 @@ local function request(action,channel,text)
     revision=revision+1;endpoint:ServerRequestRuneSchemaAction("mod.data",channel,action,text,revision)
 end
 function api.Tick()
+    if not next(routes) then return end
     local now=os.time();for key,a in pairs(pending) do if a.deadline<=now then forget(key) end end
     if endpoint and not endpoint:IsValid() then reset() end
     if not endpoint and now-last_scan>=1 then
@@ -84,19 +86,34 @@ function api.Tick()
 end
 local function schedule()
     if running then return end
-    assert(type(ExecuteWithDelay)=="function" and type(ExecuteInGameThread)=="function","UE4SS scheduling is unavailable")
-    running=true
-    local function step() ExecuteInGameThread(function()
+    assert(type(LoopInGameThreadWithDelay)=="function" and type(CancelDelayedAction)=="function","UE4SS game-thread scheduling is unavailable")
+    generation=generation+1;local current=generation
+    local ok,handle=pcall(LoopInGameThreadWithDelay,250,function()
+        if not running or generation~=current then return end
         local ok,problem=pcall(api.Tick);if not ok then api.LastError=tostring(problem) end
-        ExecuteWithDelay(250,step)
-    end) end
-    ExecuteWithDelay(250,step)
+    end)
+    assert(ok,"UE4SS game-thread scheduling failed: "..tostring(handle))
+    timer=handle;running=true
 end
 function api.Open(channel,version,callback)
     assert(token(channel) and channel:match("^[%w_.%-]+:[%w_.%-]+$") and type(version)=="number" and math.type(version)=="integer" and version>=1 and version<=65535 and type(callback)=="function","invalid relay subscription")
     local count=0;for _ in pairs(routes) do count=count+1 end;assert(routes[channel] or count<256,"too many relay channels")
     assert(not routes[channel] or routes[channel].version==version,"conflicting relay version")
-    routes[channel]={version=version,callback=callback,subscribed=false};schedule();return api
+    local previous=routes[channel];routes[channel]={version=version,callback=callback,subscribed=false}
+    local ok,problem=pcall(schedule);if not ok then routes[channel]=previous;error(problem,0) end;return api
+end
+function api.Close(channel)
+    if not routes[channel] then return false end
+    routes[channel]=nil;api.Status[channel]=nil
+    for key in pairs(pending) do if key:sub(-#channel-1)=="/"..channel then forget(key) end end
+    for key in pairs(seen) do if key:sub(-#channel-1)=="/"..channel then seen[key]=nil end end
+    for i=#outgoing,1,-1 do if outgoing[i].channel==channel then queued=queued-#outgoing[i].data;table.remove(outgoing,i) end end
+    if not next(routes) then
+        running=false;generation=generation+1
+        if timer then pcall(CancelDelayedAction,timer);timer=nil end
+        reset()
+    end
+    return true
 end
 function api.Send(channel,data)
     assert(routes[channel] and type(data)=="string" and #data>0 and #data<=max_bytes and #outgoing<16 and queued+#data<=outgoing_budget,"invalid/oversized relay send")

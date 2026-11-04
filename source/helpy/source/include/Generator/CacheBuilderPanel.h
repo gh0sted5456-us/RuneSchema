@@ -1,4 +1,5 @@
 #pragma once
+#include "Generator/HelpyTextInput.h"
 #include "Generator/HelpyMenu.h"
 #include "Runtime/HelpyModCacheBuilder.h"
 #include "Generator/HelpyImGuiTheme.h"
@@ -42,11 +43,12 @@ inline void Dependencies(){
         auto& setting=HelpyImGuiTheme::Current.autoInstallAuthoringDotNet;
         if(HelpyImGuiTheme::Toggle("Set up authoring .NET automatically when missing",&setting))HelpyImGuiTheme::SaveCurrent();
         ImGui::TextWrapped("Uses an existing .NET 10 SDK first. Otherwise, the builder downloads Microsoft's SDK, verifies its SHA-512 checksum, and installs a private copy under RuneSchema/core/tools in AppData. No system PATH changes. First use also restores the locked archive/asset-reader dependencies.");
-        ImGui::TextWrapped("ZIP and 7z reading, PAK indexing and packaging run in the offline worker. Keep the installation used for reading game assets closed. No code from your input mod is run by this tool.");
+        ImGui::TextWrapped("Installed-mod PAK indexing runs in a separate, lower-priority reader, with the game open or closed. Inputs stay read-only; existing cache remains available until publication. Creation and packaging still require an inactive installation. No code from your input mod is run by this tool.");
     }
 }
 inline void Render(const Json& snapshot,const Json& rows){
     const auto& t=HelpyImGuiTheme::Current;CreationVisible=false;
+    if(HelpyModCacheBuilder::CurrentBatch().Active&&!HelpyModCacheBuilder::Current().Owner.empty()){Owner=HelpyModCacheBuilder::Current().Owner;Folder=HelpyModCacheBuilder::Current().Cache.parent_path();}
     ImGui::TextWrapped("Build an installed mod's cache, or create a ready-to-distribute RuneSchema ZIP from archives and loose loader folders.");
     int wanted=SelectInstalled?0:-1;
 #if defined(HELPY_PREVIEW)
@@ -54,10 +56,11 @@ inline void Render(const Json& snapshot,const Json& rows){
 #endif
     int tab=wanted>=0?wanted:SelectedTab?1:0;constexpr std::array labels{"Installed","Creation"};
     HelpyMenu::Tabs("cache-builder",labels,tab);SelectedTab=tab==1;SelectInstalled=false;
-    const auto available=ImGui::GetContentRegionAvail();const float left=std::max(1.f,(available.x-ImGui::GetStyle().ItemSpacing.x)*.52f);
+    const auto available=ImGui::GetContentRegionAvail();const bool stacked=available.x<t.X(640);
+    const float left=std::max(1.f,stacked?available.x:(available.x-ImGui::GetStyle().ItemSpacing.x)*.52f);
     ImGui::PushStyleColor(ImGuiCol_ChildBg,t.panel);
-    if(ImGui::BeginChild("##cache-builder-input",{left,0},true)){
-        ImGui::BeginDisabled(HelpyModCacheBuilder::Current().Running);
+    if(HelpyImGuiTheme::BeginPanel("##cache-builder-input",{left,stacked?std::max(t.Y(140),available.y*.55f):0},true)){
+        ImGui::BeginDisabled(HelpyModCacheBuilder::Current().Running||HelpyModCacheBuilder::CurrentBatch().Active);
         if(!SelectedTab){
             ImGui::SeparatorText("Installed mod");
             ImGui::SetNextItemWidth(-1);
@@ -77,7 +80,7 @@ inline void Render(const Json& snapshot,const Json& rows){
             if(!Inputs.empty()&&HelpyImGuiTheme::SoftButton("Clear inputs"))Inputs.clear();
             for(size_t i=0;i<Inputs.size();++i){ImGui::PushID(static_cast<int>(i));ImGui::TextWrapped("%s",Inputs[i].string().c_str());if(ImGui::SmallButton("Remove")){Inputs.erase(Inputs.begin()+i);ImGui::PopID();break;}ImGui::PopID();}
             ImGui::SeparatorText("ID.txt");
-            for(const auto* key:Keys){ImGui::TextUnformatted(key==std::string_view("ModID")?"Mod ID / folder name":key);ImGui::SetNextItemWidth(-1);ImGui::PushID(key);ImGui::InputText("##field",Fields[key].data(),Fields[key].size());ImGui::PopID();}
+            for(const auto* key:Keys){ImGui::TextUnformatted(key==std::string_view("ModID")?"Mod ID / folder name":key);ImGui::SetNextItemWidth(-1);ImGui::PushID(key);HelpyTextInput::InputText("##field",Fields[key].data(),Fields[key].size());ImGui::PopID();}
             if(!Fields["Author"][0])ImGui::TextDisabled("Mod ID and Author are required.");
             ImGui::TextUnformatted("Package for");ImGui::SetNextItemWidth(-1);ImGui::Combo("##package-platform",&Platform,"Steam / Epic / Server (Win64)\0Game Pass (WinGDK)\0");
             ImGui::TextWrapped("The new ZIP goes to Downloads with Binaries/ and Content/ roots, ID.txt, the rebuilt cache, and Content/Paks/~mods/runeschema.txt. Original inputs stay untouched. Native UE4SS DLL mods retain their normal ue4ss/Mods path and produce a warning.");
@@ -88,21 +91,29 @@ inline void Render(const Json& snapshot,const Json& rows){
             }ImGui::EndDisabled();
         }
         ImGui::EndDisabled();Dependencies();if(!Notice.empty())ImGui::TextWrapped("%s",Notice.c_str());
-    }ImGui::EndChild();ImGui::SameLine();
-    if(ImGui::BeginChild("##cache-builder-progress",{0,0},true)){
+    }PS::HelpyImGuiTheme::EndPanel();if(!stacked)ImGui::SameLine();
+    if(HelpyImGuiTheme::BeginPanel("##cache-builder-progress",{0,stacked?std::max(t.Y(140),ImGui::GetContentRegionAvail().y):0},true)){
         const auto& job=HelpyModCacheBuilder::Current();ImGui::SeparatorText("Progress & output");
+        const auto& batch=HelpyModCacheBuilder::CurrentBatch();
+        if(batch.Total)ImGui::TextWrapped("Enabled mods: %u total · %u completed · %u failed · %u skipped",batch.Total,batch.Completed,batch.Failed,batch.Skipped);
         if(!job.Owner.empty())ImGui::TextWrapped("%s",job.Owner.c_str());
         ImGui::TextWrapped("%s",job.Stage.c_str());ImGui::ProgressBar(job.Percent/100.f,{-1,0});
-        if(job.Running&&!job.Repair){
-            const bool paused=job.State=="Paused"||job.State=="Pausing";
+        if((job.Running||batch.Active)&&!job.Repair){
+            const bool paused=batch.Paused||job.State=="Paused"||job.State=="Pausing";
             if(HelpyImGuiTheme::SoftButton(paused?"Resume":"Pause"))HelpyModCacheBuilder::Control(paused?"run":"pause");ImGui::SameLine();
             ImGui::BeginDisabled(job.State=="Stopping");if(HelpyImGuiTheme::SoftButton("Stop"))HelpyModCacheBuilder::Control("stop");ImGui::EndDisabled();
             ImGui::TextWrapped("Pause and Stop wait for safe checkpoints. An SDK restore/build or a single asset decode can finish its current step first. Final publication completes as one operation.");
         }
         if(!job.Output.empty()){ImGui::TextUnformatted("Output");ImGui::TextWrapped("%s",job.Output.string().c_str());if(HelpyImGuiTheme::SoftButton("Open output folder"))ShellExecuteW(nullptr,L"open",job.Output.parent_path().c_str(),nullptr,nullptr,SW_SHOWNORMAL);}
         if(!job.Job.empty()&&HelpyImGuiTheme::SoftButton("Open job logs"))ShellExecuteW(nullptr,L"open",job.Job.c_str(),nullptr,nullptr,SW_SHOWNORMAL);
+        if(!job.Job.empty()&&HelpyImGuiTheme::SoftButton("Open previous caches")){const auto backups=job.Job.parent_path()/"backups";if(std::filesystem::is_directory(backups))ShellExecuteW(nullptr,L"open",backups.c_str(),nullptr,nullptr,SW_SHOWNORMAL);else Notice="No previous cache backups have been saved yet.";}
         for(const auto& warning:job.Warnings){ImGui::PushStyleColor(ImGuiCol_Text,t.warning);ImGui::TextWrapped("%s",warning.c_str());ImGui::PopStyleColor();}
-    }ImGui::EndChild();ImGui::PopStyleColor();
+        if(batch.Total&&ImGui::CollapsingHeader("Batch results"))for(const auto& result:batch.Results)ImGui::TextWrapped("%s",result.c_str());
+    }
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::MenuTabs["cache-builder-progress"]=HelpyPreviewHooks::WindowRect();
+#endif
+    PS::HelpyImGuiTheme::EndPanel();ImGui::PopStyleColor();
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::CacheBuilderCreation=SelectedTab;
 #endif

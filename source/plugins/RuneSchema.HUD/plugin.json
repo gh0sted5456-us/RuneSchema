@@ -1,0 +1,10 @@
+{
+  "SchemaVersion": 1,
+  "Id": "RuneSchema.HUD",
+  "Name": "RuneSchema shared HUD",
+  "Version": "0.8.1.0",
+  "BuiltForRuneSchema": "0.8.1.0",
+  "EntryPoint": "RuneSchema.HUD.dll",
+  "Capabilities": ["hud.surface", "hud.input-owner", "hud.extensions"],
+  "MountPaks": false
+}

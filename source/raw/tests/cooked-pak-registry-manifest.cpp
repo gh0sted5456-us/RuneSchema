@@ -249,4 +249,29 @@ int main()
     }
     bool foreign=false;try{Parse(tableDocument({{"Target",tableTarget}}),"OtherOwner","bad.jsonc");}catch(const std::exception&){foreign=true;}assert(foreign);
     Reset();
+    Manifest large;large.Owner="Large";large.Source="large.jsonc";
+    constexpr int count=23000;
+    for(int i=0;i<count;++i){const auto name="R_"+std::to_string(i);const auto path="/Large/Recipes/"+name+"."+name;
+        large.LoaderDefinitions["Recipes"][path]={{"Unlock",false},{"Discovery",{{"AllItems",{"/Large/I.I","/Large/J.J"}}}}};}
+    PublishBatch({large});
+    const auto* retained=&Detail::Manifests[0]->LoaderDefinitions.get_ref<const nlohmann::json::object_t&>();
+    Manifest unrelated;unrelated.Owner="Other";unrelated.Source="items.jsonc";unrelated.AssetLanes.push_back({"Items",{"/Other/I.I"}});
+    PublishBatch({unrelated});
+    assert(retained==&Detail::Manifests[0]->LoaderDefinitions.get_ref<const nlohmann::json::object_t&>());
+    auto owned=Definitions("Recipes");assert(owned.size()==count);
+    Manifest lateManifestConflict;lateManifestConflict.Owner="Large";lateManifestConflict.Source="conflict.jsonc";
+    lateManifestConflict.LoaderDefinitions["Recipes"][owned.front().Path]={{"Unlock",true}};
+    Manifest earlier;earlier.Owner="Early";earlier.Source="early.jsonc";earlier.AssetLanes.push_back({"Items",{"/Early/I.I"}});
+    bool atomic=false;try{PublishBatch({earlier,lateManifestConflict});}catch(const std::runtime_error&){atomic=true;}
+    assert(atomic&&Detail::Manifests.size()==2&&retained==&Detail::Manifests[0]->LoaderDefinitions.get_ref<const nlohmann::json::object_t&>());
+    auto replacement=large;replacement.LoaderDefinitions["Recipes"][owned.front().Path]["Unlock"]=true;
+    PublishBatch({replacement,large}); // Last update to the same owner/source wins.
+    assert(Detail::Manifests.size()==2&&Definitions("Recipes").front().Body.at("Unlock")==false);
+    PublishBatch({replacement});
+    assert(Definitions("Recipes").front().Body.at("Unlock")==true&&owned.front().Body.at("Unlock")==false);
+    Reset();assert(owned.size()==count&&owned.front().Body.at("Unlock")==false);
+    Manifest defaults;defaults.Owner="A";defaults.Source="a";defaults.LoaderDefinitions["Recipes"]["/Shared/R.R"]=nlohmann::json::object();
+    auto explicitDefault=defaults;explicitDefault.Source="b";explicitDefault.LoaderDefinitions["Recipes"]["/Shared/R.R"]["Unlock"]=false;
+    PublishBatch({defaults,explicitDefault});assert(Definitions("Recipes").size()==1);
+    Reset();
 }

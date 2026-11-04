@@ -1,5 +1,6 @@
 #include "Core/HelpyIconPack.h"
 #include "Core/HelpyEnvironment.h"
+#include "Core/ItemCart.h"
 #include "Runtime/HelpyPaths.h"
 #include "Generator/HelpyCachedCatalog.h"
 #include <cassert>
@@ -9,12 +10,16 @@
 using namespace PS;using Json=nlohmann::json;namespace fs=std::filesystem;
 template<class F>void Reject(F action){bool rejected=false;try{action();}catch(...){rejected=true;}assert(rejected);}
 int main(int argc,char** argv){
-    if((argc>=4&&argc<=6)&&std::string_view(argv[1])=="--probe"){
+    if((argc>=4&&argc<=6)&&(std::string_view(argv[1])=="--probe"||std::string_view(argv[1])=="--warm-probe")){
+        const bool warm=std::string_view(argv[1])=="--warm-probe";
         const fs::path cache=argv[2],root=argv[3];HelpyPaths::Configure(root/"plugins"/"RuneSchema.Helpy");HelpyEnvironment::Current=HelpyEnvironment::Kind::GamePass;
         if(argc>=5){std::ifstream input(argc==6?fs::path(argv[5]):cache/"sources.json");HelpySourceCache::AcceptRemote(Json::parse(input));}
-        const auto records=CacheBundleStore::Read(cache,root,HelpySourceCache::Current,CacheBundleStore::Locale(),"items");std::cout<<"References="<<records.size()<<" Cache="<<HelpySourceCache::Directory(false)<<std::endl;
-        unsigned calls=0;LazyCatalog::RemoteSubmit=[&](const Json&){++calls;return false;};HelpyRuntimePreferences::PassiveRefresh=false;HelpyCachedCatalog::Configure();
+        if(!warm){const auto records=CacheBundleStore::Read(cache,root,HelpySourceCache::Current,CacheBundleStore::Locale(),"items");std::cout<<"References="<<records.size()<<" Cache="<<HelpySourceCache::Directory(false)<<std::endl;}
+        unsigned calls=0;LazyCatalog::RemoteSubmit=[&](const Json&){++calls;return false;};PluginRuntimeServices::ExternalDesktop=true;PluginRuntimeServices::GameProcessId=0;HelpyRuntimePreferences::PassiveRefresh=false;HelpyCachedCatalog::Configure();
+        const auto warmStarted=std::chrono::steady_clock::now();
+        if(warm){HelpySourceCache::CachedSourcesAttempted=true;for(int n=0;n<30000;++n){HelpyCachedCatalog::WarmStartup();if(!HelpyCachedCatalog::Warming)break;std::this_thread::sleep_for(std::chrono::milliseconds(1));}}
         const auto started=std::chrono::steady_clock::now();
+        if(warm)std::cout<<Json{{"WarmMilliseconds",std::chrono::duration_cast<std::chrono::milliseconds>(started-warmStarted).count()},{"StillWarming",HelpyCachedCatalog::Warming},{"NativeRequests",calls}}.dump()<<std::endl;
         if(argc>=5)LazyCatalog::Search(0,argv[4]);else LazyCatalog::FirstOpen(SpawnToolRequests::CurrentGeneration());
         long long firstRows=-1;const auto wait=[&](){for(int n=0;n<30000&&LazyCatalog::For(0).Pending;++n){LazyCatalog::CheckTimeouts();if(firstRows<0&&!LazyCatalog::For(0).Rows.empty())firstRows=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-started).count();std::this_thread::sleep_for(std::chrono::milliseconds(1));}};wait();
         const auto& state=LazyCatalog::For(0);std::cout<<Json{{"FirstRowsMilliseconds",firstRows},{"Rows",state.Rows.size()},{"Pending",state.Pending},{"Error",state.LastError},{"NativeRequests",calls},{"SourceReady",HelpySourceCache::Ready()},{"LocalRequest",HelpyCachedCatalog::Pending.has_value()},{"Milliseconds",std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-started).count()},{"Names",state.Rows}}.dump()<<std::endl;
@@ -44,7 +49,26 @@ int main(int argc,char** argv){
     HelpyIconPack::Progress progress;HelpySourceCache::Snapshot unavailable;
     auto active=unavailable;active.Authoritative=true;active.Key="active-sources";active.CatalogKey="active-items";active.SourceKeys={{"example","0123456789abcdef"},{"game","fedcba9876543210"}};active.Owners={{"example",{"published-name"}}};active.DeclaredOwners=active.Owners;
     const auto import=[&](const fs::path& f){progress.Cancel=false;return HelpyIconPack::Import(f,fixture/"renamed runtime",cache,unavailable,1024*1024,progress,HelpyIconPack::ImportPolicy::Presentation);};
+    {const auto nameCache=fixture/"name-upgrade"/"item-icons";HelpyPresentationCache::Group group;group.Owner="mods/example";group.Fingerprint=std::string(64,'a');group.Locale=locale;group.PublishedVersion=2;
+        Json row={{"Kind","items"},{"Owner","mods/example"},{"Path","/Example/Items/RuneScimitar.RuneScimitar"},{"PersistenceID","unchanged-id"},{"Data",{{"Name","ITEM_Rune_Scimitar"},{"Type","MeleeWeaponData"},{"Category","Runes"}}}};
+        group.Records=Json::array({row});const auto commit=[&]{return HelpyPresentationCache::Commit(nameCache,{group},1024*1024,[](const std::string&){return std::vector<char>{};});};commit();
+        row["Data"]["DisplayName"]="Rune Scimitar";group.Records=Json::array({row});assert(commit().Records>0);
+        auto stored=HelpyPresentationCache::Records(nameCache,locale,"items");assert(stored.size()==1&&stored[0]["Data"]["Name"]=="Rune Scimitar"&&stored[0]["Data"]["Category"]=="Weapons"&&stored[0]["PersistenceID"]=="unchanged-id");
+        row["Data"].erase("DisplayName");group.Records=Json::array({row});commit();stored=HelpyPresentationCache::Records(nameCache,locale,"items");assert(stored[0]["Data"]["Name"]=="Rune Scimitar");}
     auto result=import(file);assert(result.Imported==1&&result.RecordsImported==1);
+    {const auto saved=fixture/"cached-labels"/"item-icons",native=saved.parent_path()/"item-catalogues"/"native-items.json";
+        auto reference=row;reference["Data"]["Name"]="ITEM_Ranger_Body_Black";reference["Data"]["InternalName"]="armour_ranger_body_black";
+        HelpyPresentationCache::Group group;group.Owner="mods/published-name";group.Fingerprint=std::string(64,'a');group.Locale=locale;group.Records=Json::array({reference});
+        HelpyPresentationCache::Commit(saved,{group},1024*1024,[](const auto&){return std::vector<char>{};});
+        CacheBundleIO::Publish(CacheBundleStore::Directory(saved,saved.parent_path())/"index.json",Json{{"Version",1},{"Routes",Json::object()}}.dump());
+        auto known=reference.at("Data");known["Path"]=path;known["Name"]="Ranger Body (Dyed Black)";known["SourceKind"]="modded";known["SourceName"]="published-name";known["Icon"]=art;
+        const auto scope=Json::array({"item-browse-v2","older-content-version",Json::array(),locale}).dump();
+        CacheBundleIO::Publish(native,Json{{"Version",1},{"Scope",scope},{"Rows",Json::array({known})}}.dump());PagedItemCatalog::Save(native,scope,{std::make_shared<const Json>(known)});
+        assert(PagedItemCatalog::Current(PagedItemCatalog::File(native)));
+        const auto load=[&](CacheBundleItems::Store& reader){std::optional<Json> page;for(unsigned i=0;i<2000;++i){page=reader.Lookup(saved,fixture,active,locale,"ranger","",28);if(page||!reader.Awaiting())break;std::this_thread::sleep_for(std::chrono::milliseconds(1));}assert(page&&!page->at("Rows").empty());return page->at("Rows")[0];};
+        CacheBundleItems::Store reader;auto first=load(reader);assert(first["Name"]==known["Name"]&&first["InternalName"]=="armour_ranger_body_black"&&first["Path"]==path);
+        // A fresh file-reader instance recovers the same label without a game or a live check.
+        reader.Shutdown();CacheBundleItems::Store reopened;assert(load(reopened)["Name"]==known["Name"]);reopened.Shutdown();}
     const auto records=CacheBundleStore::Read(cache,fixture/"different install",active,locale,"items");assert(records.size()==1&&!records[0]["Data"].at("ObservedCurrent").get<bool>()&&!records[0]["Data"].contains("Grant"));
     auto offlineSources=active;offlineSources.Authoritative=false;offlineSources.Provisional=true;offlineSources.PresentationOnly=true;
     assert(CacheBundleStore::Read(cache,fixture,offlineSources,locale,"items").size()==1);
@@ -61,19 +85,31 @@ int main(int argc,char** argv){
     HelpySourceCache::Current=active;HelpyRuntimePreferences::PassiveRefresh=false;unsigned liveRequests=0;std::vector<Json> nativeQueries;LazyCatalog::RemoteSubmit=[&](const Json& request){++liveRequests;nativeQueries.push_back(request);return true;};
     PluginRuntimeServices::ExternalDesktop=true;PluginRuntimeServices::GameProcessId=0;HelpyRuntimePreferences::CacheFirst=false;HelpyRuntimePreferences::PassiveRefresh=true;
     offlineSources=active;offlineSources.Authoritative=false;offlineSources.Provisional=true;offlineSources.PresentationOnly=true;HelpySourceCache::Current=offlineSources;
-    HelpyCachedCatalog::Configure();LazyCatalog::FirstOpen(0);
+    HelpyCachedCatalog::Configure();HelpySourceCache::CachedSourcesAttempted=true;
+    for(unsigned i=0;i<1000;++i){HelpyCachedCatalog::WarmStartup();if(!HelpyCachedCatalog::Warming)break;std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    assert(!HelpyCachedCatalog::Warming&&liveRequests==0);HelpyCachedCatalog::WarmStartup();assert(!HelpyCachedCatalog::Warming&&liveRequests==0);
+    LazyCatalog::FirstOpen(0);
     for(unsigned i=0;i<1000&&LazyCatalog::For(0).Pending;++i){LazyCatalog::CheckTimeouts();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     assert(liveRequests==0&&LazyCatalog::For(0).Rows.size()==1&&LazyCatalog::For(0).Rows[0]["Name"]=="Cached tea");
+    {ItemCart::Model cart;const auto& cached=LazyCatalog::For(0).Rows[0];assert(cart.Add(cached));cart.SetQuantity(cached.at("Path"),12);
+        const auto kit=ItemCart::KitDocument(cart,"Offline cached cart");assert(ItemCart::KitItems(kit)[0]["Count"]==12&&kit["Items"][0]["Item"]==cached.at("Path")&&liveRequests==0);}
     assert(LazyCatalog::Search(0,"tea"));
     for(unsigned i=0;i<1000&&LazyCatalog::For(0).Pending;++i){LazyCatalog::CheckTimeouts();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     assert(liveRequests==0&&LazyCatalog::For(0).Rows.size()==1&&LazyCatalog::For(0).Rows[0]["Name"]=="Cached tea"&&fs::is_regular_file(HelpyPresentationCache::IconFile(cache,art))&&!LazyCatalog::For(0).CheckingChanges);
+    assert(!HelpyCachedCatalog::Connected()&&!HelpyCachedCatalog::RefreshSearch("tea"));
+    assert(LazyCatalog::Search(0,"uncached anti hunger grenade"));
+    for(unsigned i=0;i<1000&&LazyCatalog::For(0).Pending;++i){LazyCatalog::CheckTimeouts();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    assert(liveRequests==0&&!LazyCatalog::For(0).Pending&&!LazyCatalog::For(0).HasMore&&LazyCatalog::For(0).Rows.empty()&&LazyCatalog::For(0).LastError.empty());
+    assert(LazyCatalog::Search(0,"tea"));
+    for(unsigned i=0;i<1000&&LazyCatalog::For(0).Pending;++i){LazyCatalog::CheckTimeouts();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    assert(liveRequests==0&&LazyCatalog::For(0).Rows.size()==1);
     HelpySourceCache::Current=active;PluginRuntimeServices::ExternalDesktop=false;HelpyRuntimePreferences::CacheFirst=true;HelpyRuntimePreferences::PassiveRefresh=false;
     assert(LazyCatalog::Search(0,"cannon"));
     for(unsigned i=0;i<1000&&nativeQueries.empty();++i){LazyCatalog::CheckTimeouts();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
-    assert(liveRequests==1&&nativeQueries[0]["Mode"]=="Search"&&nativeQueries[0]["Query"]=="cannon"&&!nativeQueries[0].contains("Cursor"));
-    const auto reply=[&](size_t request,bool more){const auto q=nativeQueries.at(request);return Json{{"Category",0},{"Mode","Search"},{"Query","cannon"},{"RequestId",q.at("RequestId")},{"CancelGeneration",q.at("CancelGeneration")},{"RuntimeGeneration",q.at("ClientGeneration")},{"Reset",q.at("Reset")},{"Rows",Json::array({{{"Path","/Example/Items/Cannon"+std::to_string(request)+".Cannon"},{"Name","Mod cannon"}}})},{"NextCursor","S:64"},{"HasMore",more}};};
+    assert(liveRequests==1&&nativeQueries[0]["Mode"]=="Alphabetical"&&nativeQueries[0]["Query"]=="cannon"&&nativeQueries[0]["Cursor"]=="F:0");
+    const auto reply=[&](size_t request,bool more){const auto q=nativeQueries.at(request);return Json{{"Category",0},{"Mode","Alphabetical"},{"Query","cannon"},{"RequestId",q.at("RequestId")},{"CancelGeneration",q.at("CancelGeneration")},{"RuntimeGeneration",q.at("ClientGeneration")},{"Reset",q.at("Reset")},{"Rows",Json::array({{{"Path","/Example/Items/Cannon"+std::to_string(request)+".Cannon"},{"Name","Mod cannon"}}})},{"NextCursor","F:64"},{"HasMore",more}};};
     LazyCatalog::ApplyWindow(reply(0,true),1);
-    assert(nativeQueries.size()==2&&nativeQueries[1]["Mode"]=="Search"&&nativeQueries[1]["Cursor"]=="S:64");
+    assert(nativeQueries.size()==2&&nativeQueries[1]["Mode"]=="Alphabetical"&&nativeQueries[1]["Cursor"]=="F:64");
     LazyCatalog::ApplyWindow(reply(1,false),2);assert(LazyCatalog::For(0).Rows.size()==2&&!LazyCatalog::For(0).Pending);LazyCatalog::ClearRemote();
     // A partial base cache must merge native mod discoveries even when its
     // downloaded index is newer than the already saved native observations.
@@ -89,32 +125,60 @@ int main(int argc,char** argv){
     assert(PagedItemCatalog::Read(PagedItemCatalog::File(native),{},"cannon","",28,true,locale)["Rows"].size()==1);
     const auto savedScope=Json::array({"item-browse-v2","older-game-version",Json::array(),locale}).dump();
     PagedItemCatalog::Save(native,savedScope,{std::make_shared<const Json>(discovered)});
-    const auto paged=lookup(active);assert(paged&&paged->at("Rows").size()==1&&paged->at("NextCursor").get<std::string>().starts_with("P:"));
+    const auto heldIndex=fixture/"published-index-held.json";fs::rename(index,heldIndex);
+    const auto paged=lookup(active);assert(paged&&paged->at("Rows").size()==1&&paged->at("NextCursor").get<std::string>().starts_with("B:"));
     {CacheBundleItems::Store store;std::optional<Json> end;for(unsigned i=0;i<1000;++i){
         end=store.Lookup(cache,fixture,active,locale,"cannon",paged->at("NextCursor"),28);if(end)break;std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }assert(end&&end->at("Rows").empty()&&!end->value("HasMore",true));store.Shutdown();}
+    fs::rename(native,native.wstring()+L".held");const auto pagesOnly=lookup(active);
+    assert(pagesOnly&&pagesOnly->at("Rows").size()==1&&pagesOnly->at("NextCursor").get<std::string>().starts_with("P:"));
+    fs::rename(native.wstring()+L".held",native);fs::rename(heldIndex,index);
     HelpyCachedCatalog::Configure();HelpyRuntimePreferences::PassiveRefresh=true;HelpyCachedCatalog::NextPassive={};
     unsigned warmRequests=0;LazyCatalog::RemoteSubmit=[&](const Json& q){assert(q.at("Mode")=="Alphabetical"&&q.at("Limit")==1);++warmRequests;return true;};
-    LazyCatalog::For(0).CacheHit=false;LazyCatalog::For(0).Pending=false;HelpyCachedCatalog::Pump();
-    assert(warmRequests==1);HelpyCachedCatalog::Pump();assert(warmRequests==1); // Discovery also starts without a cache hit and remains throttled.
+    LazyCatalog::For(0).CacheHit=false;LazyCatalog::For(0).Pending=false;LazyCatalog::For(0).Query.clear();HelpyCachedCatalog::Pump();
+    assert(warmRequests==0); // Startup and ordinary cache hits do not immediately query the game.
+    HelpyCachedCatalog::NextPassive=std::chrono::steady_clock::now()-std::chrono::seconds(1);HelpyCachedCatalog::Pump();
+    assert(warmRequests==1);HelpyCachedCatalog::Pump();assert(warmRequests==1);
     LazyCatalog::ClearRemote();HelpyRuntimePreferences::PassiveRefresh=false;
     LazyCatalog::Windows={};HelpyCachedCatalog::Configure();unsigned restartedQueries=0;LazyCatalog::RemoteSubmit=[&](const Json&){++restartedQueries;return false;};
     assert(LazyCatalog::Search(0,"cannon"));for(unsigned i=0;i<1000&&LazyCatalog::For(0).Pending;++i){LazyCatalog::CheckTimeouts();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
-    assert(restartedQueries==1&&LazyCatalog::For(0).Rows.size()==1&&LazyCatalog::For(0).Rows[0]["Name"]=="Discovered cannon");LazyCatalog::ClearRemote();
-    // A cached hit still checks mounted content, merges new matches, and
-    // never blanks the already visible page. Explicit checks ignore the idle-refresh toggle.
+    assert(restartedQueries==0&&LazyCatalog::For(0).Rows.size()==1&&LazyCatalog::For(0).Rows[0]["Name"]=="Discovered cannon");
+    assert(!LazyCatalog::For(0).CheckingChanges);
+    assert(LazyCatalog::Search(0,"tea"));for(unsigned i=0;i<1000&&LazyCatalog::For(0).Pending;++i){LazyCatalog::CheckTimeouts();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    assert(LazyCatalog::Search(0,"cannon")&&!LazyCatalog::For(0).Pending&&restartedQueries==0);
+    HelpyRuntimePreferences::PassiveRefresh=true;HelpyCachedCatalog::NextPassive=std::chrono::steady_clock::now()+std::chrono::seconds(60);
+    assert(LazyCatalog::Search(0,"cannon"));for(unsigned i=0;i<1000&&LazyCatalog::For(0).Pending;++i){LazyCatalog::CheckTimeouts();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    assert(restartedQueries==0&&!HelpyCachedCatalog::Check&&!LazyCatalog::For(0).CheckingChanges);
+    HelpyCachedCatalog::NextPassive=std::chrono::steady_clock::now()-std::chrono::seconds(1);HelpyCachedCatalog::Pump();assert(HelpyCachedCatalog::Check);
+    HelpyCachedCatalog::PumpCheck();HelpyCachedCatalog::Pump();assert(restartedQueries==1&&LazyCatalog::For(0).Rows.size()==1);
+    LazyCatalog::ClearRemote();HelpyRuntimePreferences::PassiveRefresh=false;HelpyCachedCatalog::ResetChecks();
+    // Background checks leave the displayed page intact until committed cache updates are applied.
     HelpyCachedCatalog::Configure();HelpyCachedCatalog::ResetChecks();std::vector<Json> checks;
     LazyCatalog::RemoteSubmit=[&](const Json& request){checks.push_back(request);return true;};
     auto& state=LazyCatalog::For(0);state.Pending=false;state.Query="cannon";state.Started=true;
     const Json check={{"Query","cannon"},{"ClientGeneration",state.RuntimeGeneration},{"CancelGeneration",state.CancelGeneration}};
     assert(HelpyCachedCatalog::QueueCheck(check));HelpyCachedCatalog::PumpCheck();
-    assert(checks.size()==1&&checks[0]["Cursor"]=="F:0"&&checks[0]["Limit"]==64);
+    assert(checks.size()==1&&checks[0]["Mode"]=="Alphabetical"&&checks[0]["Cursor"]=="F:0"&&checks[0]["Limit"]==64);
     auto extra=discovered;extra["Name"]="Adamant cannon";extra["Path"]="/Example/Items/AdamantCannon.AdamantCannon";
     const auto receipt=[&](bool more){return Json{{"RequestId",checks.back().at("RequestId")},{"RuntimeGeneration",state.RuntimeGeneration},{"Rows",Json::array({extra})},{"HasMore",more},{"NextCursor","F:64"}};};
-    assert(HelpyCachedCatalog::ReceiveCheck(receipt(true))&&state.Rows.size()==2&&state.Rows[0]["Name"]=="Discovered cannon");
+    assert(HelpyCachedCatalog::ReceiveCheck(receipt(true))&&state.Rows.size()==1&&state.Rows[0]["Name"]=="Discovered cannon");
     HelpyCachedCatalog::Check->Next={};HelpyCachedCatalog::PumpCheck();assert(checks.size()==2&&checks.back()["Cursor"]=="F:64");
-    assert(HelpyCachedCatalog::ReceiveCheck(receipt(false))&&!HelpyCachedCatalog::Check&&state.Rows.size()==2);
+    assert(HelpyCachedCatalog::ReceiveCheck(receipt(false))&&!HelpyCachedCatalog::Check&&state.Rows.size()==1);
     assert(!HelpyCachedCatalog::QueueCheck(check)); // Repeated searches use the warm cache without rapid rechecks.
+    {
+        const auto updateIndex=CacheBundleStore::Directory(cache,cache.parent_path())/"index.json";
+        const bool existed=fs::exists(updateIndex);const auto before=existed?CacheBundleIO::Read(updateIndex,1024*1024):std::string{};
+        assert(CacheBundleStore::Commit(cache,cache.parent_path(),active,locale,{CacheBundle::Parse(CacheBundle::FromRow("items",extra))})==1);
+        HelpyCachedCatalog::Files.Invalidate();HelpyCachedCatalog::Warming=true;HelpyCachedCatalog::NextWarm={};
+        for(unsigned i=0;i<2000&&!HelpyCachedCatalog::RefreshAvailable();++i){HelpyCachedCatalog::WarmStartup();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+        assert(HelpyCachedCatalog::RefreshAvailable()&&state.Rows.size()==1);
+        const auto calls=checks.size();PluginRuntimeServices::ExternalDesktop=true;PluginRuntimeServices::GameProcessId=0;
+        assert(HelpyCachedCatalog::RefreshCached());
+        for(unsigned i=0;i<2000&&state.Pending;++i){LazyCatalog::CheckTimeouts();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+        assert(!state.Pending&&state.Rows.size()==2&&checks.size()==calls&&!HelpyCachedCatalog::RefreshAvailable());
+        PluginRuntimeServices::ExternalDesktop=false;
+        if(existed)CacheBundleIO::Publish(updateIndex,before);else fs::remove(updateIndex);
+    }
     assert(HelpyCachedCatalog::RefreshSource("mods/published-name"));HelpyCachedCatalog::PumpCheck();
     ItemCatalogFilter::Query sourceQuery(checks.back().at("Query").get<std::string>());assert(sourceQuery.Provider=="mods/published-name");
     for(int slice=1;slice<=32;++slice){HelpyCachedCatalog::ReceiveCheck(receipt(true));if(HelpyCachedCatalog::Check)HelpyCachedCatalog::Check->Next={};HelpyCachedCatalog::PumpCheck();}
@@ -123,6 +187,36 @@ int main(int argc,char** argv){
     ++state.CancelGeneration;HelpyCachedCatalog::PumpCheck();assert(!HelpyCachedCatalog::Check);
     PluginRuntimeServices::ExternalDesktop=true;PluginRuntimeServices::GameProcessId=0;
     assert(!HelpyCachedCatalog::RefreshSource("mods/published-name"));PluginRuntimeServices::ExternalDesktop=false;LazyCatalog::ClearRemote();
+    // Explicit refresh uses the current filtered query, bypasses warm-query cooldowns,
+    // retains cached hits and does not leave an empty search cycling through live requests.
+    const auto priorGeneration=SpawnToolRequests::Generation.load();SpawnToolRequests::Generation=7;
+    LazyCatalog::Windows={};HelpyCachedCatalog::Configure();HelpyRuntimePreferences::CacheFirst=true;HelpyRuntimePreferences::PassiveRefresh=false;
+    std::vector<Json> manual;LazyCatalog::RemoteSubmit=[&](const Json& request){manual.push_back(request);return true;};
+    const auto query=ItemSource::Query(ItemSource::Kind::Modded,"All","anti hunger grenade","mods/published-name");
+    auto& selected=LazyCatalog::For(0);selected.Query=query;selected.RuntimeGeneration=7;selected.Started=true;selected.HasMore=false;
+    const Json oldGrenade={{"Path","/Example/Items/OldGrenade.OldGrenade"},{"Name","Anti-Hunger Grenade (small)"},{"SourceKind","modded"},{"SourceName","published-name"}};
+    selected.Rows=Json::array({oldGrenade});
+    assert(HelpyCachedCatalog::RefreshSearch(query)&&selected.Pending&&selected.Rows.size()==1&&selected.PopulationStage=="searching-live-items");
+    HelpyCachedCatalog::PumpCheck();assert(manual.size()==1&&manual.back()["Priority"]==1&&manual.back()["Query"]==query&&manual.back()["Cursor"]=="F:0");
+    auto grenade=oldGrenade;grenade["Path"]="/Example/Items/NewGrenade.NewGrenade";grenade["Name"]="Anti-Hunger Grenade (large)";
+    const auto manualReply=[&]{return Json{{"RequestId",manual.back().at("RequestId")},{"RuntimeGeneration",selected.RuntimeGeneration},{"Rows",Json::array({grenade})},{"HasMore",false},{"NextCursor","F:64"}};};
+    assert(HelpyCachedCatalog::ReceiveCheck(manualReply())&&!selected.Pending&&selected.Rows.size()==2&&selected.PopulationStage=="items-ready");
+    assert(HelpyCachedCatalog::RefreshSearch(query));HelpyCachedCatalog::PumpCheck();assert(manual.size()==2); // Manual retries bypass the one-minute automatic cooldown.
+    assert(HelpyCachedCatalog::ReceiveCheck(manualReply())&&selected.Rows.size()==2&&!selected.Pending);
+    const auto beforeRepeat=manual.size();assert(LazyCatalog::Search(0,query)&&!selected.Pending&&selected.Rows.size()==2&&manual.size()==beforeRepeat);
+    selected.Rows=Json::array();selected.HasMore=true;selected.Pending=true;selected.ActiveRequestId=123;
+    assert(HelpyCachedCatalog::RefreshSearch(query)&&selected.Pending&&!selected.HasMore&&selected.ActiveRequestId==0);
+    HelpyCachedCatalog::PumpCheck();auto empty=manualReply();empty["Rows"]=Json::array();
+    assert(HelpyCachedCatalog::ReceiveCheck(empty)&&!selected.Pending&&!selected.HasMore);
+    const auto afterEmpty=manual.size();assert(!LazyCatalog::FillTo(0,20)&&manual.size()==afterEmpty);
+    assert(HelpyCachedCatalog::RefreshSearch(query));HelpyCachedCatalog::PumpCheck();const auto stale=manualReply();
+    ++selected.CancelGeneration;selected.Pending=true;assert(HelpyCachedCatalog::ReceiveCheck(stale)&&selected.Rows.empty()&&selected.Pending);
+    selected.Pending=false;PluginRuntimeServices::ExternalDesktop=true;PluginRuntimeServices::GameProcessId=0;
+    const auto offlineGeneration=selected.CancelGeneration;assert(!HelpyCachedCatalog::RefreshSearch(query)&&selected.CancelGeneration==offlineGeneration&&!selected.Pending);
+    PluginRuntimeServices::ExternalDesktop=false;
+    assert(!HelpyCachedCatalog::RefreshSearch("")&&!HelpyCachedCatalog::RefreshSearch(ItemSource::Query(ItemSource::Kind::Modded,"All","","mods/published-name")));
+    LazyCatalog::RemoteSubmit=[](const Json&){return false;};assert(HelpyCachedCatalog::RefreshSearch(query));HelpyCachedCatalog::PumpCheck();assert(!selected.Pending&&!HelpyCachedCatalog::Check);
+    LazyCatalog::ClearRemote();SpawnToolRequests::Generation=priorGeneration;
     // More than eight file-worker scan slices: the final empty P: page must
     // fall through to live search, while populated cache results stay local.
     std::vector<std::shared_ptr<const Json>> large;
@@ -132,9 +226,9 @@ int main(int argc,char** argv){
     LazyCatalog::RemoteSubmit=[&](const Json& request){misses.push_back(request);return false;};
     assert(LazyCatalog::Search(0,"missing cannon"));
     for(unsigned i=0;i<10000&&LazyCatalog::For(0).Pending;++i){LazyCatalog::CheckTimeouts();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
-    assert(misses.size()==1&&misses[0]["Mode"]=="Search"&&misses[0]["Query"]=="missing cannon"&&!misses[0].contains("Cursor"));
+    assert(misses.size()==1&&misses[0]["Mode"]=="Alphabetical"&&misses[0]["Query"]=="missing cannon"&&misses[0]["Cursor"]=="F:0");
     LazyCatalog::ClearRemote();fs::remove(PagedItemCatalog::File(native));
-    auto disabled=active;disabled.Owners.clear();disabled.DeclaredOwners.clear();assert(CacheBundleStore::Read(cache,fixture,disabled,locale,"items").empty());assert(!lookup(disabled));
+    auto disabled=active;disabled.Owners.clear();disabled.DeclaredOwners.clear();assert(CacheBundleStore::Read(cache,fixture,disabled,locale,"items").empty());const auto hidden=lookup(disabled);assert(!hidden||hidden->at("Rows").empty());
     auto relabelled=active;relabelled.Owners["example"]={"renamed-folder"};relabelled.DeclaredOwners=relabelled.Owners;
     HelpyIconPack::Import(renamed,fixture,cache,unavailable,1024*1024,progress,HelpyIconPack::ImportPolicy::Presentation,{}, {},"mods/renamed-folder");
     assert(CacheBundleStore::Read(cache,fixture,relabelled,locale,"items").size()==1);

@@ -1,9 +1,11 @@
 #pragma once
+#include "Generator/HelpyTextInput.h"
 #include "Generator/SourceBanners.h"
 #include "Generator/PersonalizationPanel.h"
 #include "Core/ItemNameOrder.h"
 #include "Core/ItemCatalogFilter.h"
 #include "Generator/HelpyImGuiTheme.h"
+#include "Generator/HelpyMenu.h"
 #include "Generator/DragFeedback.h"
 #include "Generator/ItemIconCache.h"
 #include "Generator/HelpyIconPacks.h"
@@ -58,9 +60,11 @@ struct State {
     bool ResetScroll=false;
     std::vector<size_t> Matches;
     std::vector<std::string> SelectedPaths;
+    json SelectedRows=json::object();bool MultiSelect=false;
     uint64_t CatalogRevision=0,SelectedRevision=0;
     size_t SelectedIndex=static_cast<size_t>(-1);
     bool GridView=false,ViewInitialized=false,ShowPlaceholders=false;
+    bool InternalNames=false;
     float ResultPaneHeightLogical=-1.0f;
     uint64_t ViewPreferenceRevision=0;
     std::set<std::string> VisibleProgressIcons;
@@ -195,7 +199,7 @@ inline void Rebuild(const json& catalog,State& state,uint64_t revision) {
         const auto& row=items[i];
         if(!row.is_object())continue;
         if(!HelpyImGuiTheme::Current.itemShowPlaceholders&&ItemPresentation::Placeholder(row))continue;
-        if(!ItemSource::Matches(state.SourceFilter,ItemSource::Row(row),state.SourceProvider)||!ItemFamily::Matches(state.FamilyKey,ItemPresentation::OriginalName(row))||!PersonalizationPanel::Matches(row,state.FavoritesOnly,state.PersonalTag))continue;
+        if(!ItemSource::Matches(state.SourceFilter,ItemSource::Row(row),state.SourceProvider)||!ItemFamily::MatchesRow(state.FamilyKey,row)||!PersonalizationPanel::Matches(row,state.FavoritesOnly,state.PersonalTag))continue;
         if(state.ActiveCategory!="All"&&ItemCategory::Resolve(row)!=state.ActiveCategory)continue;
         const auto labels=HelpyPersonalization::SearchText(row);if(labels.empty()){if(query(row))state.Matches.push_back(i);}else{auto searchable=row;searchable["Tags"]=ItemPresentation::Text(row,"Tags")+" "+labels;if(query(searchable))state.Matches.push_back(i);}
     }
@@ -212,7 +216,7 @@ inline bool IsSelected(const State& state,const std::string& path){return std::f
 inline void SyncLegacySelection(State& state,const char* selected) {
     if(state.SelectedPaths.empty()&&selected&&*selected)state.SelectedPaths.push_back(selected);
 }
-inline bool ApplySelection(State& state,const std::string& path,char* selected,size_t selectedCapacity,bool additive,bool allowMulti) {
+inline bool ApplySelection(State& state,const std::string& path,char* selected,size_t selectedCapacity,bool additive,bool allowMulti,const json* row=nullptr,bool updatePrimary=true) {
     if(path.empty()||!selected||path.size()>=selectedCapacity)return false;
     if(!allowMulti)additive=false;
     if(additive) {
@@ -221,20 +225,65 @@ inline bool ApplySelection(State& state,const std::string& path,char* selected,s
     } else {
         state.SelectedPaths.clear();state.SelectedPaths.push_back(path);
     }
+    for(auto it=state.SelectedRows.begin();it!=state.SelectedRows.end();)if(!IsSelected(state,it.key()))it=state.SelectedRows.erase(it);else ++it;
+    if(row&&IsSelected(state,path))state.SelectedRows[path]=*row;
+    if(!updatePrimary){if(state.SelectedPaths.empty()){selected[0]=0;state.SelectedPath.clear();state.SelectedRevision=0;}return true;}
     const std::string primary=IsSelected(state,path)?path:(state.SelectedPaths.empty()?std::string{}:state.SelectedPaths.back());
     std::snprintf(selected,selectedCapacity,"%s",primary.c_str());state.SelectedPath=primary;state.SelectedRevision=0;return true;
+}
+inline size_t SendSelectionToCart(const json& catalog,State& state,char* selected,size_t selectedCapacity){
+    const auto total=state.SelectedPaths.size();size_t added=0;
+    for(auto it=state.SelectedPaths.begin();it!=state.SelectedPaths.end();){const auto& path=*it;const auto* row=Find(catalog,path.c_str());
+        if(!row){const auto cached=state.SelectedRows.find(path);if(cached!=state.SelectedRows.end())row=&*cached;}
+        if(row&&AddToCart(*row)){++added;state.SelectedRows.erase(path);it=state.SelectedPaths.erase(it);}else ++it;
+    }
+    state.SelectedPath=state.SelectedPaths.empty()?std::string{}:state.SelectedPaths.back();state.SelectedRevision=0;
+    if(selected&&selectedCapacity)std::snprintf(selected,selectedCapacity,"%s",state.SelectedPath.c_str());
+    CartStatus="Added "+std::to_string(added)+" of "+std::to_string(total)+" selected items to the cart.";
+    if(added<total)CartStatus+=" Unavailable items or the cart limit prevented the rest; those items remain selected.";
+    return added;
+}
+inline bool SelectionCheck(const ImVec2& at,bool selected){
+    const float side=ImGui::GetFrameHeight();const ImVec2 end(at.x+side,at.y+side);auto* draw=ImGui::GetWindowDrawList();
+    draw->AddRectFilled(at,end,ImGui::GetColorU32(ImGuiCol_FrameBg),3.f);draw->AddRect(at,end,ImGui::GetColorU32(selected?ImGuiCol_CheckMark:ImGuiCol_Border),3.f);
+    if(selected)ImGui::RenderCheckMark(draw,{at.x+side*.22f,at.y+side*.2f},ImGui::GetColorU32(ImGuiCol_CheckMark),side*.6f);
+    return ImGui::IsMouseHoveringRect(at,end);
 }
 inline void LoadViewPreference(State& state) {
     state.ViewInitialized=true;state.GridView=HelpyImGuiTheme::Current.itemGridView;
 }
 inline void SaveViewPreference(bool grid){HelpyImGuiTheme::Current.itemGridView=grid;HelpyImGuiTheme::SaveCurrent();}
-inline void ResetViewPreference(){auto& theme=HelpyImGuiTheme::Current;theme.itemGridView=true;theme.itemPageSize=ItemPaging::DefaultSize;theme.itemGridColumns=ItemBayLayout::DefaultColumns;theme.itemGridRows=ItemBayLayout::DefaultRows;theme.itemGridFitRows=true;theme.itemResultHeight=HelpyImGuiTheme::Theme{}.itemResultHeight;theme.itemCategory="All";HelpyImGuiTheme::SaveCurrent();}
+inline void ResetViewPreference(){auto& theme=HelpyImGuiTheme::Current;theme.itemGridView=true;theme.itemInternalNames=false;theme.itemPageSize=ItemPaging::DefaultSize;theme.itemGridColumns=ItemBayLayout::DefaultColumns;theme.itemGridRows=ItemBayLayout::DefaultRows;theme.itemGridFitRows=true;theme.itemResultHeight=HelpyImGuiTheme::Theme{}.itemResultHeight;theme.itemCategory="All";HelpyImGuiTheme::SaveCurrent();}
 inline void LayoutControls() {
     auto& theme=HelpyImGuiTheme::Current;
-    if(HelpyImGuiTheme::SoftButton("View"))ImGui::OpenPopup("##item-bay-layout");
+    const float side=ImGui::GetFrameHeight();if(HelpyImGuiTheme::SoftButton("##Item Bay settings",{side,side}))ImGui::OpenPopup("##item-bay-layout");
+    const auto a=ImGui::GetItemRectMin(),b=ImGui::GetItemRectMax();const ImVec2 center{(a.x+b.x)*.5f,(a.y+b.y)*.5f};auto* draw=ImGui::GetWindowDrawList();const auto color=ImGui::GetColorU32(theme.text);
+    draw->AddCircle(center,side*.27f,color,16,std::max(1.f,theme.X(1.5f)));draw->AddCircle(center,side*.10f,color,12,std::max(1.f,theme.X(1.5f)));
+    for(int tooth=0;tooth<8;++tooth){const float angle=tooth*6.2831853f/8;const auto x=std::cos(angle),y=std::sin(angle);draw->AddLine({center.x+x*side*.25f,center.y+y*side*.25f},{center.x+x*side*.39f,center.y+y*side*.39f},color,std::max(1.f,theme.X(2.f)));}
+    if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Item Bay settings");
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::ItemBaySettings=HelpyPreviewHooks::LastRect();
+#endif
     static bool dirty=false;
+    const auto area=ImGui::GetMainViewport()->WorkSize;const float popupWidth=std::min(theme.X(350),area.x-theme.X(24));
+    ImGui::SetNextWindowSizeConstraints({popupWidth,0},{popupWidth,std::max(1.f,area.y-theme.Y(24))});
     if(ImGui::BeginPopup("##item-bay-layout")) {
-        ImGui::TextUnformatted("Item view");ImGui::Separator();
+        ImGui::TextUnformatted("Item Bay settings");ImGui::Separator();
+        bool cached=HelpyRuntimePreferences::CacheFirst.load(),passive=HelpyRuntimePreferences::PassiveRefresh.load();
+        bool policyChanged=HelpyImGuiTheme::Toggle("Prefer saved cache",&cached);
+#if defined(HELPY_PREVIEW)
+        HelpyPreviewHooks::ItemCacheFirstSwitch=HelpyPreviewHooks::LastRect();
+#endif
+        if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Use this platform's AppData cache first, including after restarting Helpy. Uncached searches still check the connected game. This is the same saved preference as Quick Settings > Cache.");
+        policyChanged|=HelpyImGuiTheme::Toggle("Passive cache updates",&passive);
+        if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Turn off for manual refreshes of cached searches. Cache misses still check the game. Refresh search checks the current text and filters; Refresh source checks the whole selected mod.");
+        if(policyChanged){HelpyRuntimePreferences::CacheFirst=cached;HelpyRuntimePreferences::PassiveRefresh=passive;dirty=true;auto& list=LazyCatalog::For(0);list.Cache.clear();if(list.Started)LazyCatalog::Retry(0);}
+        ImGui::Separator();
+        if(HelpyImGuiTheme::Toggle("Show internal names",&theme.itemInternalNames))dirty=true;
+#if defined(HELPY_PREVIEW)
+        HelpyPreviewHooks::ItemNamesSwitch=HelpyPreviewHooks::LastRect();
+#endif
+        ImGui::TextWrapped("Off: display names or nicknames. On: exact internal names. Changes apply immediately to loaded items. A missing display name uses a readable fallback until learned; no game query is started by this switch.");
         HelpyImGuiTheme::Toggle("Search as I type",&SearchAsYouType);
         if(ImGui::RadioButton("Grid",theme.itemGridView)){theme.itemGridView=true;dirty=true;}ImGui::SameLine();
         if(ImGui::RadioButton("List",!theme.itemGridView)){theme.itemGridView=false;dirty=true;}
@@ -245,7 +294,11 @@ inline void LayoutControls() {
         if(HelpyImGuiTheme::Toggle("Size grid by rows",&theme.itemGridFitRows))dirty=true;
         if(HelpyImGuiTheme::Toggle("Show [PH] placeholder items",&theme.itemShowPlaceholders))dirty=true;
         if(HelpyImGuiTheme::SoftButton("Reset to 5 x 4")){theme.itemGridColumns=ItemBayLayout::DefaultColumns;theme.itemGridRows=ItemBayLayout::DefaultRows;theme.itemGridFitRows=true;dirty=true;}}
-        if(HelpyImGuiTheme::SoftButton("Reload items")){ItemIconCache::RetryFailed();LazyCatalog::Retry(0);}ImGui::EndPopup();
+        if(HelpyImGuiTheme::SoftButton("Reload items / groupings")){HelpyCachedCatalog::Files.Invalidate();LazyCatalog::For(0).Cache.clear();ItemIconCache::RetryFailed();LazyCatalog::Retry(0);}
+        if(HelpyImGuiTheme::SoftButton("Grouping reference...")){const auto directory=HostServices::ModDirectory()/"plugins/RuneSchema.Helpy/settings";const auto active=directory/"item-groupings.json",example=directory/"item-groupings.example.json";const auto file=std::filesystem::is_regular_file(active)?active:std::filesystem::is_regular_file(example)?example:directory;ShellExecuteW(nullptr,L"open",file.c_str(),nullptr,nullptr,SW_SHOWNORMAL);}
+        ImGui::BeginDisabled(HelpyIconPacks::Busy()||HelpyIconPacks::Building());if(HelpyImGuiTheme::SoftButton("Import taglines..."))HelpyIconPacks::ChooseTaglines(true);if(HelpyImGuiTheme::SoftButton("Export combined taglines..."))HelpyIconPacks::ChooseTaglines(false);ImGui::EndDisabled();
+        if(!HelpyIconPacks::Status.empty())ImGui::TextWrapped("%s",HelpyIconPacks::Status.c_str());
+        if(!HelpyCachedCatalog::Files.GroupingStatus.empty())ImGui::TextWrapped("%s",HelpyCachedCatalog::Files.GroupingStatus.c_str());ImGui::EndPopup();
     }
     if(dirty&&!ImGui::IsAnyItemActive()){HelpyImGuiTheme::SaveCurrent();dirty=false;}
 }
@@ -255,8 +308,12 @@ inline void PageControls(State& state,std::size_t count,bool more,bool pending) 
     if(page.Count)ImGui::TextDisabled("%zu-%zu%s",page.First+1,page.First+page.Count,more?"  (more available)":"");
     else if(pending||more||!LazyCatalog::For(0).Started)ImGui::Dummy({1,ImGui::GetTextLineHeight()});
     else ImGui::TextDisabled("No items");
-    const float controls=theme.X(330.0f);if(ImGui::GetContentRegionAvail().x>controls)ImGui::SameLine(),ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x-controls);
-    ImGui::SetNextItemWidth(theme.X(112.0f));const auto label=std::to_string(state.PageSize)+" / page";
+    const float available=ImGui::GetContentRegionAvail().x;const bool narrow=available<theme.X(240);
+    const char* previous=narrow?"<##Previous":"Previous";const char* next=narrow?">##Next":"Next";
+    const float navigation=ImGui::CalcTextSize(previous,nullptr,true).x+ImGui::CalcTextSize(next,nullptr,true).x+4*ImGui::GetStyle().FramePadding.x+2*ImGui::GetStyle().ItemSpacing.x;
+    const float pageWidth=std::min(theme.X(112),std::max(1.f,available-navigation)),controls=pageWidth+navigation;
+    if(available>controls+theme.X(160))ImGui::SameLine(),ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x-controls);
+    ImGui::SetNextItemWidth(pageWidth);const auto label=std::to_string(state.PageSize)+" / page";
     if(ImGui::BeginCombo("##items-per-page",label.c_str())){
         ImGui::TextDisabled("Items per page");
         for(const int size:{10,20,40,60,100})if(ImGui::Selectable(std::to_string(size).c_str(),state.PageSize==size)){
@@ -267,28 +324,30 @@ inline void PageControls(State& state,std::size_t count,bool more,bool pending) 
         ImGui::EndCombo();
     }
     ImGui::SameLine();ImGui::BeginDisabled(!page.Previous);
-    if(HelpyImGuiTheme::SoftButton("Previous")){--state.PageIndex;state.ResetScroll=true;}ImGui::EndDisabled();
+    if(HelpyImGuiTheme::SoftButton(previous)){--state.PageIndex;state.ResetScroll=true;}ImGui::EndDisabled();
+    if(narrow&&ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))HelpyImGuiTheme::Tooltip("Previous page");
     ImGui::SameLine();ImGui::BeginDisabled(!page.Next||(pending&&page.First+page.Count>=count));
-    if(HelpyImGuiTheme::SoftButton("Next")){++state.PageIndex;state.ResetScroll=true;}ImGui::EndDisabled();
+    if(HelpyImGuiTheme::SoftButton(next)){++state.PageIndex;state.ResetScroll=true;}ImGui::EndDisabled();
+    if(narrow&&ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))HelpyImGuiTheme::Tooltip("Next page");
 }
 // Details are a tooltip, not a second hover target or a sticky selection.
 // Only a source item hovered during this frame may keep them open.
 struct DetailsPopupState {
     json Row;std::string Name,Path;ImVec2 AnchorMin{},AnchorMax{},Min{},Max{},SurfaceMin{},SurfaceSize{};
-    int QueuedFrame=-1;bool Fits=true,Open=false;
+    int QueuedFrame=-1;bool Fits=true,Open=false,InspectNative=true;float Width=0;
     uint64_t Generation=0;
 };
 inline DetailsPopupState DetailsPopup;
-inline void VerboseTooltip(const json& row,const std::string& name,const std::string& path,bool,bool fits) {
+inline void VerboseTooltip(const json& row,const std::string& name,const std::string& path,bool,bool fits,bool inspectNative=true) {
     if(ImGui::IsMouseDown(0)||ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId))return;
     auto& popup=DetailsPopup;
-    if(!popup.Open||popup.Path!=path){popup.Row=row;popup.Name=name;popup.Path=path;popup.AnchorMin=ImGui::GetItemRectMin();popup.AnchorMax=ImGui::GetItemRectMax();popup.Min=popup.Max={};}
+    if(!popup.Open||popup.Path!=path){popup.Row=row;popup.Name=name;popup.Path=path;popup.AnchorMin=ImGui::GetItemRectMin();popup.AnchorMax=ImGui::GetItemRectMax();popup.Min=popup.Max={};popup.Width=0;}
     popup.AnchorMin=ImGui::GetItemRectMin();popup.AnchorMax=ImGui::GetItemRectMax();
-    popup.Row=row;popup.Name=name; // Different saved instances may share one ItemData path.
+    if(popup.Row!=row)popup.Row=row;popup.Name=name; // Different saved instances may share one ItemData path.
     popup.SurfaceMin=DetailsSurfaceMin;popup.SurfaceSize=DetailsSurfaceSize;
-    popup.Fits=fits;popup.Open=true;popup.QueuedFrame=ImGui::GetFrameCount();popup.Generation=SpawnToolRequests::CurrentGeneration();
+    popup.Fits=fits;popup.Open=true;popup.InspectNative=inspectNative;popup.QueuedFrame=ImGui::GetFrameCount();popup.Generation=SpawnToolRequests::CurrentGeneration();
     ImGui::SetKeyOwner(ImGuiKey_MouseWheelY,ImGui::GetItemID(),ImGuiInputFlags_LockThisFrame);
-    ItemDetails::Request(path);
+    if(inspectNative)ItemDetails::Request(path);
 }
 inline void RenderDetailsPopup() {
     auto& popup=DetailsPopup;if(!popup.Open)return;
@@ -297,7 +356,7 @@ inline void RenderDetailsPopup() {
         ||ImGui::IsMouseDown(0)||ImGui::IsMouseDown(1)){popup.Open=false;return;}
     ItemDetails::Poll();const auto& row=popup.Row;const auto* entry=ItemDetails::Find(popup.Path);const auto& native=entry?entry->Native:row;
     const auto& theme=HelpyImGuiTheme::Current;HelpyImGuiTheme::Scope skin(theme);
-    auto title=HelpyPersonalization::Nickname(HelpyPersonalization::ItemKey(row));if(title.empty())title=ItemPresentation::CleanName(ItemPresentation::Text(native,"Name"));if(title.empty())title=popup.Name;
+    auto title=theme.itemInternalNames?ItemPresentation::Name(row,true):HelpyPersonalization::Nickname(HelpyPersonalization::ItemKey(row));if(title.empty())title=ItemPresentation::CleanName(ItemPresentation::Text(native,"Name"));if(title.empty())title=popup.Name;
     const auto category=ItemPresentation::Text(row,"Category");auto description=ItemPresentation::Description(native);if(description.empty())description=ItemPresentation::Description(row);
     auto facts=ItemPresentation::Facts(native);
     if(row.contains("Pointer")){
@@ -313,7 +372,8 @@ inline void RenderDetailsPopup() {
     float labelWidth=0,valueWidth=0;
     for(const auto& fact:facts){labelWidth=std::max(labelWidth,ImGui::CalcTextSize(fact.Label.c_str()).x);valueWidth=std::max(valueWidth,ImGui::CalcTextSize(fact.Value.c_str()).x);}
     const float desired=std::max({theme.X(300),ImGui::CalcTextSize(title.c_str()).x+pad*2,std::min(labelWidth,theme.X(310))+std::min(valueWidth,theme.X(180))+pad*3});
-    const float width=std::min(std::min(desired,theme.X(580)),std::max(1.0f,area.x-pad*2));
+    popup.Width=std::max(popup.Width,std::min(desired,theme.X(580)));
+    const float width=std::min(popup.Width,std::max(1.0f,area.x-pad*2));
     const float content=std::max(1.0f,width-pad*2-ImGui::GetStyle().ScrollbarSize);
     const float labelColumn=std::clamp(labelWidth+gap,content*0.48f,content*0.65f),valueColumn=std::max(1.0f,content-labelColumn-gap);
     const auto heightOf=[](const std::string& text,float wrap){return ImGui::CalcTextSize(text.c_str(),nullptr,false,wrap).y;};
@@ -325,9 +385,12 @@ inline void RenderDetailsPopup() {
     if(!entry||!entry->Error.empty())height+=ImGui::GetTextLineHeightWithSpacing()*2;
     if(theme.verboseTooltips)height+=heightOf(popup.Path,content)+gap*2;
     height+=theme.Y(20);height=std::min(height,std::max(1.0f,area.y-pad*2));
-    float x=popup.AnchorMax.x+gap;if(x+width>origin.x+area.x-pad)x=popup.AnchorMin.x-gap-width;
+    const auto pointer=ImGui::GetIO().MousePos;
+    const bool mouse=ImGui::IsMousePosValid()&&ImGui::IsMouseHoveringRect(popup.AnchorMin,popup.AnchorMax,false);
+    const auto anchorMin=mouse?pointer:popup.AnchorMin,anchorMax=mouse?ImVec2(pointer.x+theme.X(12),pointer.y+theme.Y(12)):popup.AnchorMax;
+    float x=anchorMax.x+gap;if(x+width>origin.x+area.x-pad)x=anchorMin.x-gap-width;
     x=std::clamp(x,origin.x+pad,std::max(origin.x+pad,origin.x+area.x-pad-width));
-    const float y=std::clamp(popup.AnchorMin.y,origin.y+pad,std::max(origin.y+pad,origin.y+area.y-pad-height));
+    const float y=std::clamp(anchorMin.y+gap,origin.y+pad,std::max(origin.y+pad,origin.y+area.y-pad-height));
     ImGui::SetNextWindowPos({x,y});ImGui::SetNextWindowSize({width,height});ImGui::SetNextWindowBgAlpha(0.98f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,{pad,pad});
     if(ImGui::Begin("##helpy-item-details",nullptr,ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoFocusOnAppearing|ImGuiWindowFlags_NoNav|ImGuiWindowFlags_NoInputs)){
@@ -349,7 +412,7 @@ inline void RenderDetailsPopup() {
             ImGui::TableSetupColumn("Property",ImGuiTableColumnFlags_WidthFixed,labelColumn);ImGui::TableSetupColumn("Value",ImGuiTableColumnFlags_WidthFixed,valueColumn);
             for(const auto& fact:facts){ImGui::TableNextRow();ImGui::TableNextColumn();ImGui::PushStyleColor(ImGuiCol_Text,theme.textDisabled);ImGui::PushTextWrapPos(0);ImGui::TextWrapped("%s",fact.Label.c_str());ImGui::PopTextWrapPos();ImGui::PopStyleColor();ImGui::TableNextColumn();ImGui::PushTextWrapPos(0);ImGui::TextWrapped("%s",fact.Value.c_str());ImGui::PopTextWrapPos();}ImGui::EndTable();}}
         if(popup.Path.empty())HelpyImGuiTheme::DetailsTextUnformatted("Saved identity is unresolved. Load its source content to retrieve native stats; no item path is guessed.");
-        else if(!entry)HelpyImGuiTheme::DetailsText("%s",SpawnToolRequests::IsAvailable()?"Loading native details...":"Load a world for native details.");else if(!entry->Error.empty())HelpyImGuiTheme::DetailsTextUnformatted(entry->Error.c_str());
+        else if(!entry)HelpyImGuiTheme::DetailsText("%s",!popup.InspectNative?"Right-click and choose Show item details to inspect this item.":SpawnToolRequests::IsAvailable()?"Loading native details...":"Load a world for native details.");else if(!entry->Error.empty())HelpyImGuiTheme::DetailsTextUnformatted(entry->Error.c_str());
         if(theme.verboseTooltips){ImGui::Separator();HelpyImGuiTheme::DetailsTextUnformatted(popup.Path.c_str());}
         if(!popup.Fits)HelpyImGuiTheme::DetailsTextUnformatted("Item path exceeds the supported field size.");ImGui::PopTextWrapPos();
 #if defined(HELPY_PREVIEW)
@@ -362,13 +425,16 @@ inline void InspectActions(const json& row){
     if(ImGui::MenuItem("Show item details"))PinDetails(row);
 }
 inline void ContextMenu(const json& catalog,const json& row,const std::string& path,const std::string& name,char* selected,size_t selectedCapacity,State& state,Result& out,bool allowMulti,bool persistCart,bool allowGive=true) {
-    if(!ImGui::BeginPopupContextItem("##item-actions"))return;
+    if(!HelpyMenu::BeginContextItem("##item-actions"))return;
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::ItemActionsPath=path;
+#endif
     const size_t selectedCount=state.SelectedPaths.size();const bool multi=selectedCount>1&&IsSelected(state,path);
     ImGui::TextUnformatted(name.c_str());
     const auto origin=ItemSource::Row(row);ImGui::TextDisabled("Source: %s%s%s",ItemSource::Label(origin.Group),origin.Name.empty()?"":" / ",origin.Name.c_str());
     if(multi)ImGui::TextDisabled("Actions apply to all %zu selected items.",selectedCount);ImGui::Separator();
     InspectActions(row);
-    const auto family=ItemFamily::Key(ItemPresentation::OriginalName(row));
+    const auto family=ItemFamily::RowKey(row);
     if(ImGui::MenuItem("View family",nullptr,false,!family.empty())){state.PendingFamilyKey=family;state.PendingFamilyProvider.clear();}
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::ViewFamily=HelpyPreviewHooks::LastRect();
@@ -379,7 +445,7 @@ inline void ContextMenu(const json& catalog,const json& row,const std::string& p
     HelpyPreviewHooks::ViewModFamily=HelpyPreviewHooks::LastRect();
 #endif
     if(ImGui::MenuItem(multi?"Add selected to cart":"Add to cart",nullptr,false,!SharedCart.Delivery())) {
-        if(persistCart){if(multi){for(const auto& target:state.SelectedPaths)if(const auto* item=Find(catalog,target.c_str()))AddToCart(*item);}else AddToCart(row);}
+        if(persistCart){if(multi)SendSelectionToCart(catalog,state,selected,selectedCapacity);else AddToCart(row);}
     }
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::AddCart=HelpyPreviewHooks::LastRect();
@@ -462,7 +528,10 @@ inline void PlacardTitle(const std::string& name,const ImVec2& min,const ImVec2&
 inline void DrawPlacard(const json& row,const ImVec2& min,const ImVec2& max,bool selected=false,bool hovered=false,float footerLeftInset=0) {
     const auto& theme=HelpyImGuiTheme::Current;auto* draw=ImGui::GetWindowDrawList();
     const auto path=ItemPresentation::Text(row,"Path");const auto* details=ItemDetails::Find(path);
-    const auto name=ItemPresentation::Name(row);
+    const auto name=ItemPresentation::Name(row,HelpyImGuiTheme::Current.itemInternalNames);
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::ItemLabels[path]=name;
+#endif
     const auto icon=IconForRow(row);
     const float width=max.x-min.x,height=max.y-min.y;const bool compact=height<theme.Y(96);
     const float footer=compact?0:std::min(theme.Y(42),height*0.42f);
@@ -515,7 +584,7 @@ inline void DrawLoadingSpinner(const HelpyImGuiTheme::Theme& theme,const char* l
     const ImVec2 center((a.x+b.x)*.5f,(a.y+b.y)*.5f);
     const auto& loading=LazyCatalog::For(0);
     HelpyLoadingIndicator::Draw(center,radius,theme,label,"Stage: "+loading.PopulationStage+"\n"+loading.Coverage+"\nItems received: "+std::to_string(loading.Rows.size())+"\nRecords checked: "+std::to_string(loading.PopulationDone)+(loading.PopulationTotal?" / "+std::to_string(loading.PopulationTotal):" (total not known yet)")+"\nChecking local cache before requesting missing data from the runtime.");
-    const auto restore=ImGui::GetCursorScreenPos();ImGui::SetCursorScreenPos({center.x-radius,center.y-radius});ImGui::InvisibleButton("##loading-actions",{radius*2,radius*2});
+    const auto restore=ImGui::GetCursorScreenPos();ImGui::SetCursorScreenPos({center.x-radius,center.y-radius});ImGui::InvisibleButton("##loading-actions",{radius*2,radius*2},ImGuiButtonFlags_EnableNav);
     if(ImGui::BeginPopupContextItem("##loading-menu")){
         if(ImGui::MenuItem("Cancel loading"))LazyCatalog::CancelLoading(0);
         if(ImGui::MenuItem("Retry this search"))LazyCatalog::Retry(0);ImGui::EndPopup();
@@ -559,27 +628,58 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
     const auto providerPreference=ContentSource::Valid(HelpyImGuiTheme::Current.itemSource)?HelpyImGuiTheme::Current.itemSource:std::string{};
     if(!localCatalog&&(state.SourceFilter!=sourcePreference||state.SourceProvider!=providerPreference)){state.SourceFilter=sourcePreference;state.SourceProvider=providerPreference;state.CatalogRevision=0;state.Matches.clear();state.PageIndex=0;state.ResetScroll=true;LazyCatalog::Search(0,BackendQuery(state));}
     const auto& theme=HelpyImGuiTheme::Current;if(!localCatalog&&state.ActiveCategory!=theme.itemCategory){state.ActiveCategory=theme.itemCategory;state.Matches.clear();state.CatalogRevision=0;state.PageIndex=0;state.ResetScroll=true;}
-    if(state.ShowPlaceholders!=theme.itemShowPlaceholders){state.ShowPlaceholders=theme.itemShowPlaceholders;state.PageIndex=0;state.ResetScroll=true;Rebuild(catalog,state,revision);}
+    if(state.ShowPlaceholders!=theme.itemShowPlaceholders||state.InternalNames!=theme.itemInternalNames){state.ShowPlaceholders=theme.itemShowPlaceholders;state.InternalNames=theme.itemInternalNames;state.PageIndex=0;state.ResetScroll=true;Rebuild(catalog,state,revision);}
     if(state.PageSize!=theme.itemPageSize){state.PageIndex=ItemPaging::Resize(state.PageIndex,state.PageSize,theme.itemPageSize);state.PageSize=ItemPaging::Size(theme.itemPageSize);state.ResetScroll=true;}
     if(state.CatalogRevision!=revision)Rebuild(catalog,state,revision);out.MatchCount=state.Matches.size();
     const float spacing=ImGui::GetStyle().ItemSpacing.x;
     const float width=ImGui::GetContentRegionAvail().x;
+    const bool compact=showControls&&quickActions&&ImGui::GetContentRegionAvail().y<theme.Y(300);
     if(showControls){
     const float categoryWidth=theme.X(width<theme.X(600)?105:142),sourceWidth=theme.X(width<theme.X(600)?100:132);
-    const float controls=categoryWidth+sourceWidth+ImGui::CalcTextSize("Search").x+ImGui::CalcTextSize("View").x+ImGui::CalcTextSize("Refresh source").x+ImGui::GetStyle().FramePadding.x*6+spacing*5;
-    ImGui::SetNextItemWidth(std::max(theme.X(90.0f),width-controls));
-    const bool enterSubmitted=ImGui::InputTextWithHint("##Search items","Search items...",filter,filterCapacity,ImGuiInputTextFlags_EnterReturnsTrue);
+    const float controls=categoryWidth+sourceWidth+ImGui::CalcTextSize("Search").x+ImGui::GetFrameHeight()+ImGui::CalcTextSize("Refresh source").x+ImGui::CalcTextSize("Refresh search").x+ImGui::GetStyle().FramePadding.x*8+spacing*6;
+    ImGui::SetNextItemWidth(std::max(theme.X(90.0f),width-(compact?theme.X(140):controls)));
+    const bool enterSubmitted=HelpyTextInput::InputTextWithHint("##Search items","Search items...",filter,filterCapacity,ImGuiInputTextFlags_EnterReturnsTrue);
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::BaySearchFocus={ImGui::GetItemID(),ImGui::GetCurrentWindow()->ID};
+#endif
     ImGui::SameLine();const bool searchSubmitted=HelpyImGuiTheme::SoftButton("Search");
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::ItemSearchButton=HelpyPreviewHooks::LastRect();
 #endif
-    if(state.SearchInput!=filter){state.SearchInput=filter;state.SearchDue=ImGui::GetTime()+0.4;}
+    if(state.SearchInput!=filter){state.SearchInput=filter;state.SearchDue=ImGui::GetTime()+(HelpyRuntimePreferences::CacheFirst.load()?0.1:0.4);}
     if(!SearchAsYouType)state.SearchDue=0;
     if(enterSubmitted||searchSubmitted||(state.SearchDue>0&&ImGui::GetTime()>=state.SearchDue)){
         state.SearchDue=0;state.Query=filter;state.PageIndex=0;state.ResetScroll=true;
         LazyCatalog::Search(0,BackendQuery(state));state.Matches.clear();state.CatalogRevision=0;
     }
+    const bool refreshing=HelpyCachedCatalog::Check&&HelpyCachedCatalog::Check->Interactive;
+    const bool cachedUpdate=!localCatalog&&state.Query==filter&&HelpyCachedCatalog::RefreshAvailable()&&BackendQuery(state)==LazyCatalog::For(0).Query;
+    const auto refreshWidth=ImGui::CalcTextSize("Refresh search").x+2*ImGui::GetStyle().FramePadding.x;
+    if(ImGui::GetItemRectMax().x+spacing+refreshWidth<=ImGui::GetWindowPos().x+ImGui::GetWindowContentRegionMax().x)ImGui::SameLine();
+    ImGui::BeginDisabled(localCatalog||(!cachedUpdate&&(!HelpyCachedCatalog::Connected()||(!*filter&&state.FamilyKey.empty())))||refreshing);
+    if(cachedUpdate){auto green=HelpyImGuiTheme::Current.success;green.w=.3f;ImGui::PushStyleColor(ImGuiCol_Button,green);green.w=.5f;ImGui::PushStyleColor(ImGuiCol_ButtonHovered,green);ImGui::PushStyleColor(ImGuiCol_Border,HelpyImGuiTheme::Current.success);}
+    if(HelpyImGuiTheme::SoftButton(refreshing?"Refreshing...":"Refresh search")){
+        const bool changed=state.Query!=filter;state.SearchDue=0;state.SearchInput=filter;state.Query=filter;
+        if(changed){state.PageIndex=0;state.ResetScroll=true;state.Matches.clear();state.CatalogRevision=0;}
+        if(cachedUpdate){state.PageIndex=0;state.ResetScroll=true;state.Matches.clear();state.CatalogRevision=0;HelpyCachedCatalog::RefreshCached();}else HelpyCachedCatalog::RefreshSearch(BackendQuery(state));
+    }if(cachedUpdate)ImGui::PopStyleColor(3);ImGui::EndDisabled();
+    if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))HelpyImGuiTheme::Tooltip(cachedUpdate?"Updated cached results are ready. Click to apply them to this page. Your current results stay in place until you refresh.":"Check uncached mounted items for the text currently entered, with the selected category, source and family filters. Keeps cached results and saves discoveries for later searches. Requires the mod to be enabled and mounted in a connected game.\n%s",HelpyCachedCatalog::CheckStatus.c_str());
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::RefreshSearch=HelpyPreviewHooks::LastRect();
+#endif
     const auto inlineControl=[&](float next){if(ImGui::GetItemRectMax().x+spacing+next<=ImGui::GetWindowPos().x+ImGui::GetWindowContentRegionMax().x)ImGui::SameLine();};
+    bool filtersVisible=!compact;
+    if(compact){
+        if(ImGui::GetItemRectMax().x+spacing+ImGui::CalcTextSize("Options").x+2*ImGui::GetStyle().FramePadding.x<=ImGui::GetWindowPos().x+ImGui::GetWindowContentRegionMax().x)ImGui::SameLine();
+        if(HelpyImGuiTheme::SoftButton("Options"))ImGui::OpenPopup("##item-bay-options");
+#if defined(HELPY_PREVIEW)
+        HelpyPreviewHooks::ItemOptions=HelpyPreviewHooks::LastRect();
+#endif
+        const auto area=ImGui::GetMainViewport()->WorkSize;const float popupWidth=std::min(theme.X(380),area.x-theme.X(24));
+        ImGui::SetNextWindowSizeConstraints({popupWidth,0},{popupWidth,std::max(1.f,area.y-theme.Y(24))});
+        filtersVisible=ImGui::BeginPopup("##item-bay-options",ImGuiWindowFlags_AlwaysAutoResize);
+    }
+    if(filtersVisible){
     inlineControl(categoryWidth);ImGui::SetNextItemWidth(categoryWidth);
     if(ImGui::BeginCombo("##item-category",state.ActiveCategory=="All"?"All categories":state.ActiveCategory.c_str())){
         for(const char* category:ItemCategory::Categories)if(ImGui::Selectable(category,state.ActiveCategory==category)){
@@ -618,7 +718,7 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
     HelpyPreviewHooks::SourceFilter=HelpyPreviewHooks::LastRect();
 #endif
     inlineControl(theme.X(110));
-    ImGui::BeginDisabled(localCatalog||!state.SourceProvider.starts_with("mods/")||HelpyCachedCatalog::Check.has_value());
+    ImGui::BeginDisabled(localCatalog||!HelpyCachedCatalog::Connected()||!state.SourceProvider.starts_with("mods/")||HelpyCachedCatalog::Check.has_value());
     if(ImGui::SmallButton(HelpyCachedCatalog::Check?"Checking source...":"Refresh source")){
         if(!HelpyCachedCatalog::RefreshSource(state.SourceProvider))HelpyCachedCatalog::CheckStatus="Select an enabled mod source and open its game to refresh. Existing cache is retained.";
     }ImGui::EndDisabled();
@@ -626,9 +726,9 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::RefreshSource=HelpyPreviewHooks::LastRect();
 #endif
-    inlineControl(theme.X(96));LayoutControls();state.GridView=theme.itemGridView;
+    inlineControl(ImGui::GetFrameHeight());LayoutControls();state.GridView=theme.itemGridView;
     if(PersonalizationPanel::Filters(state.FavoritesOnly,state.PersonalTag)){state.CatalogRevision=0;state.Matches.clear();state.PageIndex=0;state.ResetScroll=true;}
-    PopulationProgress(LazyCatalog::For(0),state.VisibleProgressIcons,true);
+    if(compact&&allowMulti)HelpyImGuiTheme::Toggle("Select multiple",&state.MultiSelect);
     if(!state.FamilyKey.empty()){
         auto label=state.FamilyKey;std::replace(label.begin(),label.end(),'_',' ');for(size_t i=0;i<label.size();++i)if(i==0||label[i-1]==' ')label[i]=static_cast<char>(std::toupper(static_cast<unsigned char>(label[i])));
         if(ImGui::BeginTable("##family-filter",2,ImGuiTableFlags_SizingStretchProp)){
@@ -639,6 +739,9 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
             ImGui::EndTable();
         }
     }
+    }
+    if(compact&&filtersVisible)ImGui::EndPopup();
+    PopulationProgress(LazyCatalog::For(0),state.VisibleProgressIcons,true);
     }
     if(!localCatalog&&LazyCatalog::For(0).Started&&LazyCatalog::For(0).Query!=BackendQuery(state)){LazyCatalog::Search(0,BackendQuery(state));state.Matches.clear();state.CatalogRevision=0;}
     const auto& lazy=localCatalog?*localCatalog:LazyCatalog::For(0);
@@ -654,8 +757,16 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
     const int wanted=(state.PageIndex+1)*state.PageSize;
     if(!localCatalog)LazyCatalog::FillTo(0,static_cast<int>(lazy.Rows.size())+std::max(0,wanted-static_cast<int>(state.Matches.size())));
     if(state.ProgressPage!=state.PageIndex){state.ProgressPage=state.PageIndex;state.VisibleProgressIcons.clear();}
+    if(quickActions&&allowMulti&&!compact){
+        HelpyImGuiTheme::Toggle("Select multiple",&state.MultiSelect);
+        if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Toggle cards with a mouse click or controller confirm. Ctrl+click also changes individual selections. Click a card's check box to add or remove it.");
+        if(ImGui::GetContentRegionAvail().x>theme.X(340))ImGui::SameLine();
+        if(ImGui::SmallButton("Select page"))for(size_t i=0;i<page.Count&&state.SelectedPaths.size()<ItemCart::Model::Limit;++i){const auto index=state.Matches[page.First+i];const auto& row=catalog.at("Items").at(index);const auto path=ItemPresentation::Text(row,"Path");if(!IsSelected(state,path))ApplySelection(state,path,selected,selectedCapacity,true,true,&row,false);}
+        ImGui::SameLine();if(ImGui::SmallButton("Clear selection")){state.SelectedPaths.clear();state.SelectedRows=json::object();state.SelectedPath.clear();selected[0]=0;state.SelectedRevision=0;out.Changed=true;}
+    }
     const float availableLogical=ImGui::GetContentRegionAvail().y/std::max(0.01f,theme.Scale()*theme.density);
-    const float maxPane=std::max(96.0f,availableLogical-(fillSpace?56.0f:quickActions?ItemPaging::CartHeight(SharedCart.Entries().size(),theme.advancedMode)+80.0f:100.0f));
+    const float selectionHeight=quickActions&&allowMulti?ImGui::GetFrameHeightWithSpacing()/std::max(.01f,theme.Scale()*theme.density):0.f;
+    const float maxPane=std::max(1.0f,availableLogical-selectionHeight-(fillSpace?56.0f:quickActions?ItemPaging::CartHeight(SharedCart.Entries().size(),theme.advancedMode)+80.0f:100.0f));
     const float gapLogical=ImGui::GetStyle().ItemSpacing.y/std::max(0.01f,theme.Scale()*theme.density);
     const float desiredPane=fillSpace?maxPane:state.GridView&&theme.itemGridFitRows
         ?ItemBayLayout::RowsHeight(theme.itemGridRows,theme.gridCardHeight,gapLogical,theme.contentPaddingY)+2.0f
@@ -672,6 +783,8 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
         if(const auto* payload=ImGui::AcceptDragDropPayload("RS_CART_PATH"))if(payload->DataSize>0 && payload->DataSize<=4097 && static_cast<const char*>(payload->Data)[payload->DataSize-1]=='\0')RemoveFromCart(static_cast<const char*>(payload->Data));
         ImGui::EndDragDropTarget();
     }
+    bool focusCart=false;
+    const auto leaveRows=[&](bool lastRow){const auto& nav=*ImGui::GetCurrentContext();if(lastRow&&quickActions&&allowMulti&&!state.SelectedPaths.empty()&&!SharedCart.Delivery()&&ImGui::IsItemFocused()&&nav.NavMoveSubmitted&&nav.NavMoveDir==ImGuiDir_Down){ImGui::NavMoveRequestCancel();focusCart=true;}};
     const bool populationWait=lazy.LastError.empty()&&(state.CatalogRevision!=revision||!lazy.Started||lazy.Pending||lazy.PreparingAlphabetical||lazy.HasMore)&&state.Matches.empty();
     if(populationWait){if(localCatalog)ImGui::TextDisabled("Checking the cached matching items…");else{const auto progress=ItemPopulation::Describe(lazy.PopulationStage,false,lazy.PopulationDone,{},lazy.CheckingChanges,lazy.PopulationTotal);DrawLoadingSpinner(theme,progress.Label.c_str());}}
     else if(catalog.contains("Items")&&catalog["Items"].is_array()) {
@@ -683,11 +796,21 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
                 const int visibleFirst=clipper.DisplayStart,visibleLast=clipper.DisplayEnd;
                 for(int rowIndex=visibleFirst;rowIndex<visibleLast;++rowIndex) {
                     const auto index=state.Matches[page.First+static_cast<size_t>(rowIndex)];if(index>=items.size())continue;
-                    const auto& row=items[index];const auto path=row.value("Path",std::string{}),name=ItemPresentation::Name(row),iconPath=IconForRow(row);const bool fits=path.size()<selectedCapacity,selectedThis=IsSelected(state,path);
+                    const auto& row=items[index];const auto path=row.value("Path",std::string{}),name=ItemPresentation::Name(row,theme.itemInternalNames),iconPath=IconForRow(row);const bool fits=path.size()<selectedCapacity,selectedThis=IsSelected(state,path);
+#if defined(HELPY_PREVIEW)
+                    HelpyPreviewHooks::ItemLabels[path]=name;
+#endif
                     ImGui::PushID(rowIndex);ImGui::PushID(path.c_str());const float rowWidth=ImGui::GetContentRegionAvail().x;ImGui::BeginDisabled(!fits);const auto rowPos=ImGui::GetCursorScreenPos();
-                    if(ImGui::Selectable("##item",selectedThis,0,ImVec2(rowWidth,itemHeight))&&fits){if(ApplySelection(state,path,selected,selectedCapacity,ImGui::GetIO().KeyShift,allowMulti)){out.Changed=true;}}
+                    const bool clicked=ImGui::Selectable("##item",selectedThis,0,ImVec2(rowWidth,itemHeight));
+                    leaveRows(rowIndex==total-1);
+                    if(fits&&ImGui::IsItemFocused()&&ImGui::IsKeyPressed(ImGuiKey_GamepadFaceLeft,false))ImGui::OpenPopup("##item-actions");
+#if defined(HELPY_PREVIEW)
+                    HelpyPreviewHooks::ItemFocus[path]={ImGui::GetItemID(),ImGui::GetCurrentWindow()->ID};
+#endif
+                    const bool check=quickActions&&allowMulti&&SelectionCheck({rowPos.x+theme.X(4),rowPos.y+(itemHeight-ImGui::GetFrameHeight())*.5f},selectedThis);
+                    if(clicked&&fits){const bool additive=ImGui::GetIO().KeyCtrl||ImGui::GetIO().KeyShift||state.MultiSelect||check;if(ApplySelection(state,path,selected,selectedCapacity,additive,allowMulti,&row,!(quickActions&&allowMulti&&additive))){out.Changed=true;}}
                     if(fits)DragItem(row);
-                    ImGui::EndDisabled();const float pad=theme.X(4.0f);const ImVec2 iconMin(rowPos.x+pad,rowPos.y+(itemHeight-iconSize)*0.5f),iconMax(iconMin.x+iconSize,iconMin.y+iconSize);
+                    ImGui::EndDisabled();const float pad=theme.X(4.0f);const ImVec2 iconMin(rowPos.x+pad+(quickActions&&allowMulti?ImGui::GetFrameHeight()+pad:0.f),rowPos.y+(itemHeight-iconSize)*0.5f),iconMax(iconMin.x+iconSize,iconMin.y+iconSize);
                     if(!iconPath.empty())HelpyIconTrace::Event("render-row",iconPath,"name='"+name+"' row="+std::to_string(rowIndex));
                     if(iconPath.empty()||!ItemIconCache::Draw(iconPath,iconMin,iconMax,true))DrawPlaceholder(iconMin,iconMax,theme);
                     if(!iconPath.empty()&&ImGui::IsRectVisible(iconMin,iconMax))visibleIcons.insert(iconPath);
@@ -698,7 +821,7 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
                     ImGui::GetWindowDrawList()->AddText(ImVec2(textX,rowPos.y+(itemHeight-ImGui::GetTextLineHeight())*0.5f),ImGui::GetColorU32(fits?(ItemBadges::Masterwork(row)?theme.accentHover:theme.text):theme.textDisabled),label.c_str());
                     if(powerWidth>0)DrawItemBadges(row,ImVec2(rowPos.x+rowWidth-badgeWidth,rowPos.y+(itemHeight-ImGui::GetTextLineHeight())*0.5f),ImVec2(rowPos.x+rowWidth-sourceWidth,rowPos.y+itemHeight),theme);
                     DrawSourceBadge(row,{rowPos.x+rowWidth-theme.X(3),rowPos.y+(itemHeight-theme.Y(20))*.5f},theme.X(112),theme.Y(20));
-                    ContextMenu(catalog,row,path,name,selected,selectedCapacity,state,out,allowMulti,true,quickActions);if(HelpyImGuiTheme::TooltipReady(std::string("item:")+path+":"+std::to_string(rowIndex),ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)))VerboseTooltip(row,name,path,allowMulti,fits);
+                    ContextMenu(catalog,row,path,name,selected,selectedCapacity,state,out,allowMulti,true,quickActions);if(HelpyImGuiTheme::TooltipReady(std::string("item:")+path+":"+std::to_string(rowIndex),ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)))VerboseTooltip(row,name,path,allowMulti,fits,!(quickActions&&allowMulti&&(state.MultiSelect||state.SelectedPaths.size()>1||ImGui::GetIO().KeyCtrl||ImGui::GetIO().KeyShift||check)));
                     ImGui::PopID();ImGui::PopID();
                 }
             }
@@ -706,7 +829,7 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
             const float spacing=ImGui::GetStyle().ItemSpacing.x,minCardWidth=theme.X(theme.gridMinCardWidth),avail=std::max(1.0f,ImGui::GetContentRegionAvail().x-theme.X(2.0f));
             const int columns=ItemBayLayout::Columns(avail,minCardWidth,spacing,theme.itemGridColumns);
             const float fittedHeight=(ImGui::GetContentRegionAvail().y-ImGui::GetStyle().ItemSpacing.y*(theme.itemGridRows-1))/std::max(1,theme.itemGridRows);
-            const float cardWidth=std::max(1.0f,(avail-spacing*(columns-1))/columns),cardHeight=!uniformCards&&theme.itemGridFitRows?std::clamp(fittedHeight,theme.Y(72.0f),theme.Y(theme.gridCardHeight)):theme.Y(theme.gridCardHeight),
+            const float cardWidth=std::max(1.0f,(avail-spacing*(columns-1))/columns),cardHeight=!uniformCards&&theme.itemGridFitRows?std::clamp(fittedHeight,std::min(theme.Y(112.0f),theme.Y(theme.gridCardHeight)),theme.Y(theme.gridCardHeight)):theme.Y(theme.gridCardHeight),
                 iconSize=std::max(1.0f,std::min({theme.Y(theme.gridIconSize),cardWidth-theme.X(14.0f),cardHeight-theme.Y(44.0f)})),gridRowHeight=cardHeight+ImGui::GetStyle().ItemSpacing.y;
             const int gridRows=(total+columns-1)/columns;ImGuiListClipper clipper;clipper.Begin(gridRows,gridRowHeight);
             while(clipper.Step()) {
@@ -714,13 +837,19 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
                 for(int gridRow=visibleFirstRow;gridRow<visibleLastRow;++gridRow) {
                     for(int col=0;col<columns;++col) {
                         const int rowIndex=gridRow*columns+col;if(rowIndex>=total)break;const auto index=state.Matches[page.First+static_cast<size_t>(rowIndex)];if(index>=items.size())continue;
-                        const auto& row=items[index];const auto path=row.value("Path",std::string{}),name=ItemPresentation::Name(row),iconPath=IconForRow(row);const bool fits=path.size()<selectedCapacity,selectedThis=IsSelected(state,path);
+                        const auto& row=items[index];const auto path=row.value("Path",std::string{}),name=ItemPresentation::Name(row,theme.itemInternalNames),iconPath=IconForRow(row);const bool fits=path.size()<selectedCapacity,selectedThis=IsSelected(state,path);
                         if(!iconPath.empty())visibleIcons.insert(iconPath);
                         ImGui::PushID(rowIndex);ImGui::PushID(path.c_str());const auto cardMin=ImGui::GetCursorScreenPos();ImGui::BeginDisabled(!fits);const bool clicked=ImGui::InvisibleButton("##card",ImVec2(cardWidth,cardHeight),ImGuiButtonFlags_EnableNav);ImGui::EndDisabled();const auto cardMax=ImVec2(cardMin.x+cardWidth,cardMin.y+cardHeight);auto* draw=ImGui::GetWindowDrawList();
-                        DrawPlacard(row,cardMin,cardMax,selectedThis,ImGui::IsItemHovered()||ImGui::IsItemFocused());
-                        if(clicked&&fits){if(ApplySelection(state,path,selected,selectedCapacity,ImGui::GetIO().KeyShift,allowMulti)){out.Changed=true;}}
+                        leaveRows(gridRow==gridRows-1);
+                        if(fits&&ImGui::IsItemFocused()&&ImGui::IsKeyPressed(ImGuiKey_GamepadFaceLeft,false))ImGui::OpenPopup("##item-actions");
+#if defined(HELPY_PREVIEW)
+                        HelpyPreviewHooks::ItemFocus[path]={ImGui::GetItemID(),ImGui::GetCurrentWindow()->ID};
+#endif
+                        DrawPlacard(row,cardMin,cardMax,selectedThis,ImGui::IsItemHovered()||ImGui::IsItemFocused(),quickActions&&allowMulti?ImGui::GetFrameHeight()+theme.X(12):0.f);
+                        const bool check=quickActions&&allowMulti&&SelectionCheck({cardMin.x+theme.X(6),cardMax.y-theme.Y(42)+std::max(0.f,(theme.Y(42)-ImGui::GetFrameHeight())*.5f)},selectedThis);
+                        if(clicked&&fits){const bool additive=ImGui::GetIO().KeyCtrl||ImGui::GetIO().KeyShift||state.MultiSelect||check;if(ApplySelection(state,path,selected,selectedCapacity,additive,allowMulti,&row,!(quickActions&&allowMulti&&additive))){out.Changed=true;}}
                         if(fits)DragItem(row);
-                        ContextMenu(catalog,row,path,name,selected,selectedCapacity,state,out,allowMulti,true,quickActions);if(HelpyImGuiTheme::TooltipReady(std::string("item:")+path+":"+std::to_string(rowIndex),ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)))VerboseTooltip(row,name,path,allowMulti,fits);
+                        ContextMenu(catalog,row,path,name,selected,selectedCapacity,state,out,allowMulti,true,quickActions);if(HelpyImGuiTheme::TooltipReady(std::string("item:")+path+":"+std::to_string(rowIndex),ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)))VerboseTooltip(row,name,path,allowMulti,fits,!(quickActions&&allowMulti&&(state.MultiSelect||state.SelectedPaths.size()>1||ImGui::GetIO().KeyCtrl||ImGui::GetIO().KeyShift||check)));
                         ImGui::PopID();ImGui::PopID();if(col<columns-1&&rowIndex+1<total)ImGui::SameLine();
                     }
                 }
@@ -737,6 +866,18 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
     ImGui::PopID();
     }
     PageControls(state,state.Matches.size(),lazy.HasMore&&lazy.LastError.empty(),lazy.Pending||populationWait);
+    if(quickActions&&allowMulti){
+        ImGui::BeginDisabled(state.SelectedPaths.empty()||SharedCart.Delivery()!=0);
+        const auto label="Send to cart ("+std::to_string(state.SelectedPaths.size())+")";
+        // The scrolled grid's last row can lie below the fixed footer in ImGui's scoring coordinates.
+        if(focusCart)HelpyControllerInput::FocusNext();
+        if(ImGui::Button(label.c_str(),{ImGui::GetContentRegionAvail().x,0}))SendSelectionToCart(catalog,state,selected,selectedCapacity);
+#if defined(HELPY_PREVIEW)
+        HelpyPreviewHooks::BaySendToCart=HelpyPreviewHooks::LastRect();
+        HelpyPreviewHooks::BaySendFocus={ImGui::GetItemID(),ImGui::GetCurrentWindow()->ID};
+#endif
+        ImGui::EndDisabled();
+    }
     if(lazy.LastError.empty()&&state.Matches.empty()&&!populationWait&&lazy.Started){
         ImGui::TextDisabled("No matching items in the loaded runtime window.");
 #if defined(HELPY_PREVIEW)
@@ -748,7 +889,7 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
         if(catalog.contains("Items")&&catalog["Items"].is_array()){const auto& items=catalog["Items"];for(size_t i=0;i<items.size();++i)if(items[i].value("Path",std::string{})==selected){state.SelectedIndex=i;break;}}
     }
     if(catalog.contains("Items")&&catalog["Items"].is_array()&&state.SelectedIndex<catalog["Items"].size())out.SelectedRow=&catalog["Items"][state.SelectedIndex];
-    out.SelectedTitle=out.SelectedRow?ItemPresentation::Name(*out.SelectedRow):selected;out.SelectedPaths=state.SelectedPaths;out.SelectedCount=state.SelectedPaths.size();
+    out.SelectedTitle=out.SelectedRow?ItemPresentation::Name(*out.SelectedRow,theme.itemInternalNames):selected;out.SelectedPaths=state.SelectedPaths;out.SelectedCount=state.SelectedPaths.size();
     if(!quickActions&&out.SelectedCount>1)ImGui::TextDisabled("%zu selected",out.SelectedCount);
     else if(!quickActions)ImGui::TextWrapped("Selected: %s",out.SelectedTitle.empty()?"None":out.SelectedTitle.c_str());
     if(!quickActions&&allowMulti&&theme.advancedMode)ImGui::TextDisabled("Shift+click to select multiple items.");ImGui::PopID();return out;
@@ -756,7 +897,7 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
 struct SharedBay {
     State Picker;
     char Filter[257]{},Selected[1025]{};
-    json Catalog=json::object();uint64_t Generation=0;
+    json Catalog=json::object();uint64_t Generation=0,SnapshotRevision=~uint64_t{},RowsRevision=~uint64_t{},Revision=0;
     json DetailsRow=json::object();bool DetailsExpanded=true,DetailsOpenRequested=false,Expanded=false;
 };
 inline SharedBay Bay;
@@ -765,23 +906,23 @@ inline bool DetachedBay=false,RenderingDetachedBay=false;
 inline std::function<void(const Result&)> ItemAction;
 inline void SelectShared(const std::string& path){
     if(path.size()>=sizeof(Bay.Selected))return;
-    const auto generation=SpawnToolRequests::CurrentGeneration();if(Bay.Generation!=generation){Bay.Generation=generation;Bay.Catalog=json::object();Bay.DetailsRow=json::object();}
-    std::snprintf(Bay.Selected,sizeof(Bay.Selected),"%s",path.c_str());Bay.Picker.SelectedPaths={path};Bay.Picker.SelectedPath=path;Bay.Picker.SelectedRevision=0;
+    const auto generation=SpawnToolRequests::CurrentGeneration();if(Bay.Generation!=generation){Bay.Generation=generation;Bay.Catalog=json::object();Bay.DetailsRow=json::object();Bay.Selected[0]=0;Bay.Picker.SelectedPaths.clear();Bay.Picker.SelectedRows=json::object();Bay.Picker.SelectedPath.clear();}
+    std::snprintf(Bay.Selected,sizeof(Bay.Selected),"%s",path.c_str());Bay.Picker.SelectedPaths={path};Bay.Picker.SelectedRows=json::object();Bay.Picker.SelectedPath=path;Bay.Picker.SelectedRevision=0;
 }
 inline void PinDetails(const json& row){
     const auto path=ItemPresentation::Text(row,"Path");if(path.empty()||path.size()>=sizeof(Bay.Selected))return;
-    SelectShared(path);Bay.DetailsRow=row;Bay.DetailsExpanded=true;Bay.DetailsOpenRequested=true;ItemDetails::Request(path);
+    SelectShared(path);Bay.Picker.SelectedRows[path]=row;Bay.DetailsRow=row;Bay.DetailsExpanded=true;Bay.DetailsOpenRequested=true;ItemDetails::Request(path);
 }
 inline void RenderSelectedDetails(){
     if(Bay.DetailsOpenRequested){ImGui::SetNextItemOpen(true);Bay.DetailsOpenRequested=false;}
     Bay.DetailsExpanded=ImGui::CollapsingHeader("Selected item details",ImGuiTreeNodeFlags_DefaultOpen);
     if(!Bay.DetailsExpanded)return;
     if(!*Bay.Selected){ImGui::TextDisabled("Select an item to inspect its description and stats.");return;}
-    ItemDetails::Request(Bay.Selected);const auto* details=ItemDetails::Find(Bay.Selected);
+    if(!Bay.Picker.MultiSelect&&Bay.Picker.SelectedPaths.size()<2)ItemDetails::Request(Bay.Selected);const auto* details=ItemDetails::Find(Bay.Selected);
     const auto& row=Bay.DetailsRow;const auto& native=details?details->Native:row;
-    if(ImGui::BeginChild("##bay-selected-details",{0,0},false)){
+    if(HelpyImGuiTheme::BeginPanel("##bay-selected-details",{0,0},false)){
         SourceBanners::DetailsBackground(row);
-        auto name=HelpyPersonalization::Nickname(HelpyPersonalization::ItemKey(row));if(name.empty())name=ItemPresentation::CleanName(ItemPresentation::Text(native,"Name"));if(name.empty())name=ItemPresentation::Name(row);
+        auto name=HelpyImGuiTheme::Current.itemInternalNames?ItemPresentation::Name(row,true):HelpyPersonalization::Nickname(HelpyPersonalization::ItemKey(row));if(name.empty())name=ItemPresentation::CleanName(ItemPresentation::Text(native,"Name"));if(name.empty())name=ItemPresentation::Name(row);
         const auto a=ImGui::GetCursorScreenPos();const float size=HelpyImGuiTheme::Current.Y(36);
         ItemIconCache::Draw(IconForRow(row),a,{a.x+size,a.y+size},true);ImGui::Dummy({size,size});ImGui::SameLine();ImGui::TextWrapped("%s",name.c_str());
         if(!HelpyPersonalization::Nickname(HelpyPersonalization::ItemKey(row)).empty())ImGui::TextDisabled("{%s}",ItemPresentation::OriginalName(row).c_str());
@@ -803,16 +944,21 @@ inline void RenderSelectedDetails(){
         }
         if(!details)ImGui::TextDisabled("Reading native details...");else if(!details->Error.empty())ImGui::TextWrapped("%s",details->Error.c_str());
         if(ImGui::SmallButton("Reload details"))ItemDetails::Reload(Bay.Selected);ImGui::SameLine();if(ImGui::SmallButton("Copy item path"))ImGui::SetClipboardText(Bay.Selected);
-    }ImGui::EndChild();
+    }PS::HelpyImGuiTheme::EndPanel();
 }
 inline Result RenderShared(const json& catalog,uint64_t revision,bool fillSpace=true){
     const auto sameRow=[&](float width){if(ImGui::GetItemRectMax().x+ImGui::GetStyle().ItemSpacing.x+width<=ImGui::GetWindowPos().x+ImGui::GetWindowContentRegionMax().x)ImGui::SameLine();};
-    const auto generation=SpawnToolRequests::CurrentGeneration();if(Bay.Generation!=generation){Bay.Generation=generation;Bay.Catalog=json::object();Bay.DetailsRow=json::object();Bay.Selected[0]=0;Bay.Picker.SelectedPaths.clear();Bay.Picker.SelectedPath.clear();}
-    const auto previous=Bay.Catalog.value("Items",json::array());Bay.Catalog=catalog;
-    if(!Bay.Catalog.contains("Items")&&!previous.empty())Bay.Catalog["Items"]=previous;
+    const auto generation=SpawnToolRequests::CurrentGeneration();if(Bay.Generation!=generation){Bay.Generation=generation;Bay.Catalog=json::object();Bay.SnapshotRevision=Bay.RowsRevision=~uint64_t{};Bay.DetailsRow=json::object();Bay.Selected[0]=0;Bay.Picker.SelectedPaths.clear();Bay.Picker.SelectedRows=json::object();Bay.Picker.SelectedPath.clear();}
     // Spawn pages request definition windows; the bay still owns the same item
     // window as Item Service, rather than treating resource definitions as items.
-    LazyCatalog::Overlay(Bay.Catalog,0);
+    const auto rowsRevision=LazyCatalog::For(0).RowsRevision;
+    if(Bay.SnapshotRevision!=revision||Bay.RowsRevision!=rowsRevision){
+        auto previous=Bay.Catalog.contains("Items")?std::move(Bay.Catalog["Items"]):json::array();Bay.Catalog=catalog;
+        if(!Bay.Catalog.contains("Items")&&!previous.empty())Bay.Catalog["Items"]=std::move(previous);
+        LazyCatalog::Overlay(Bay.Catalog,0);Bay.SnapshotRevision=revision;
+        if(Bay.RowsRevision!=rowsRevision||!Bay.Catalog.contains("_CatalogRowsRevision"))++Bay.Revision;
+        Bay.RowsRevision=rowsRevision;
+    }
     if(!RenderingDetachedBay){
         if(DetachedBay){ImGui::TextDisabled("Item Bay is in its separate window.");ImGui::SameLine();if(ImGui::SmallButton("Dock back"))DetachedBay=false;}
         else if(!DockedBay&&!HelpyImGuiTheme::NativePresentation&&ImGui::SmallButton("Detach Item Bay"))DetachedBay=true;
@@ -827,11 +973,11 @@ inline Result RenderShared(const json& catalog,uint64_t revision,bool fillSpace=
     sameRow(HelpyImGuiTheme::Current.X(100));IconCacheControl(catalog.value("_CatalogIndexing",false));
     const float available=ImGui::GetContentRegionAvail().y;const auto& theme=HelpyImGuiTheme::Current;
     const float splitter=theme.Y(8)+ImGui::GetStyle().ItemSpacing.y;
-    const float browse=Bay.Expanded?std::max(1.f,available):ItemBayLayout::PaneHeight(Bay.DetailsExpanded?available*theme.itemBayBrowseRatio:available-ImGui::GetFrameHeightWithSpacing()-splitter,std::max(1.0f,available-theme.Y(45)-splitter),theme.Y(100));
+    const float browse=Bay.Expanded?std::max(1.f,available):available<theme.Y(380)?std::max(1.f,available-ImGui::GetFrameHeightWithSpacing()-splitter):ItemBayLayout::PaneHeight(Bay.DetailsExpanded?available*theme.itemBayBrowseRatio:available-ImGui::GetFrameHeightWithSpacing()-splitter,std::max(1.0f,available-theme.Y(45)-splitter),theme.Y(100));
     Result result;
-    if(ImGui::BeginChild("##bay-browse-with-details",{0,browse},false))
-        result=Render("shared-item-bay",Bay.Catalog,Bay.Filter,sizeof(Bay.Filter),Bay.Selected,sizeof(Bay.Selected),Bay.Picker,revision,true,true,fillSpace,true);
-    ImGui::EndChild();
+    if(HelpyImGuiTheme::BeginPanel("##bay-browse-with-details",{0,browse},false))
+        result=Render("shared-item-bay",Bay.Catalog,Bay.Filter,sizeof(Bay.Filter),Bay.Selected,sizeof(Bay.Selected),Bay.Picker,Bay.Revision,true,true,fillSpace,true);
+    PS::HelpyImGuiTheme::EndPanel();
     if(!Bay.Expanded)ResizeDivider("item-bay-details",true,HelpyImGuiTheme::Current.itemBayBrowseRatio,.25f,.90f,1.0f/std::max(1.0f,available));
     if(const auto* selected=Find(Bay.Catalog,Bay.Selected))Bay.DetailsRow=*selected;
     else if(ItemPresentation::Text(Bay.DetailsRow,"Path")!=Bay.Selected)Bay.DetailsRow={{"Path",Bay.Selected}};

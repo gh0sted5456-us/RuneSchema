@@ -13,11 +13,22 @@ function Write-RepairProgress([string]$State,[string]$Stage,[int]$Percent) {
     $data=@{State=$State;Stage=$Stage;Percent=$Percent;Warnings=@()} | ConvertTo-Json -Compress
     [IO.File]::WriteAllText($ProgressFile,$data,[Text.UTF8Encoding]::new($false))
 }
+function Read-RepairControl {
+    for($attempt=0;$attempt -lt 5;$attempt++){
+        try {
+            $stream=[IO.File]::Open($ControlFile,'Open','Read',([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
+            try {if($stream.Length -gt 4096){throw 'Oversized repair control.'};$reader=[IO.StreamReader]::new($stream);try{$text=$reader.ReadToEnd()}finally{$reader.Dispose()}}finally{$stream.Dispose()}
+            return $text | ConvertFrom-Json -ErrorAction Stop
+        }catch{if($attempt -eq 4){throw};Start-Sleep -Milliseconds 20}
+    }
+}
 function Test-RepairControl {
     if(!$ControlFile -or !(Test-Path -LiteralPath $ControlFile)){return}
-    $control=Get-Content -LiteralPath $ControlFile -Raw | ConvertFrom-Json
+    $control=Read-RepairControl
     if($control.Action -eq 'stop'){throw 'Repair cancelled before file replacement.'}
-    if($control.OwnerPid -and !(Get-Process -Id $control.OwnerPid -ErrorAction SilentlyContinue)){throw 'Helpy exited; repair cancelled.'}
+    if(!$script:HotfixHandedOff -and $control.OwnerPid -and !(Get-Process -Id $control.OwnerPid -ErrorAction SilentlyContinue)){
+        if(!$script:HotfixWaiting -or (Read-RepairControl).Action -ne 'apply-hotfix'){throw 'Helpy exited; repair cancelled.'}
+    }
 }
 function Assert-RepairPath([string]$Path) {
     for($item=[IO.Path]::GetFullPath($Path);$item;$item=[IO.Path]::GetDirectoryName($item)) {
@@ -80,7 +91,7 @@ function Read-RepairLogs([string]$Root) {
         } catch {Write-RepairLine ('  Log unavailable: '+$_.Exception.Message)}
     }
 }
-function Get-RepairEntries([string]$Archive,[string]$Platform,[string]$Stage) {
+function Get-RepairEntries([string]$Archive,[string]$Platform,[string]$Stage,[switch]$Partial) {
     $zip=[IO.Compression.ZipFile]::OpenRead($Archive)
     try {
         if($zip.Entries.Count -gt 20000){throw 'Repair archive has too many entries.'}
@@ -90,25 +101,32 @@ function Get-RepairEntries([string]$Archive,[string]$Platform,[string]$Stage) {
             if($name.EndsWith('/')){continue}
             if($all.ContainsKey($name)){throw 'Duplicate repair archive path.'};$all[$name]=$entry
         }
-        $roots=@($all.Keys | Where-Object {$_ -match '(^|/)RuneSchema/dlls/main\.dll$' -or $_ -eq 'dlls/main.dll'} | ForEach-Object {$_ -replace 'dlls/main\.dll$',''})
+        if($Partial){$roots=@($all.Keys | Where-Object {$_ -eq 'RuneSchema/hotfix.json'} | ForEach-Object {'RuneSchema/'})}
+        else{$roots=@($all.Keys | Where-Object {$_ -match '(^|/)RuneSchema/dlls/main\.dll$' -or $_ -eq 'dlls/main.dll'} | ForEach-Object {$_ -replace 'dlls/main\.dll$',''})}
         if($roots.Count -gt 1){$roots=@($roots | Where-Object {$_ -match ('Binaries/'+$Platform+'/')})}
         if($roots.Count -ne 1){throw 'The package does not have one unambiguous RuneSchema base.'};$prefix=$roots[0]
+        $plugins=@($script:RepairPlugins)
+        if($Partial -or $all.ContainsKey($prefix+'plugins/RuneSchema.HUD/plugin.json')){$plugins+='RuneSchema.HUD'}
         $result=@();[long]$expanded=0
         foreach($name in @($all.Keys | Sort-Object)){
             if(!$name.StartsWith($prefix,[StringComparison]::OrdinalIgnoreCase)){continue};$relative=$name.Substring($prefix.Length)
             $allowed=$relative -eq 'dlls/main.dll' -or $relative -eq 'modmenu.json' -or $relative.StartsWith('scripts/',[StringComparison]::OrdinalIgnoreCase)
-            foreach($plugin in $script:RepairPlugins){if($relative.StartsWith('plugins/'+$plugin+'/',[StringComparison]::OrdinalIgnoreCase)){$allowed=$true}}
+            foreach($plugin in $plugins){if($relative.StartsWith('plugins/'+$plugin+'/',[StringComparison]::OrdinalIgnoreCase)){$allowed=$true}}
             if(!$allowed -or $relative -match '(^|/)(settings|mods|cache|logs|profiles|saves|backups)(/|$)' -or $relative -match '\.(ini|log|pdb|bak)$'){continue}
             $entry=$all[$name];$expanded+=$entry.Length;if($entry.Length -gt 536870912 -or $expanded -gt 1073741824 -or $result.Count -ge 4096){throw 'Repair payload exceeds its expansion limit.'}
             $target=Join-Path $Stage $relative;[IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($target)) | Out-Null
             [IO.Compression.ZipFileExtensions]::ExtractToFile($entry,$target,$false)
             $result+=@{Relative=$relative;Stage=$target;Hash=(Get-RepairHash $target)}
         }
-        foreach($required in @('dlls/main.dll')+@($script:RepairPlugins | ForEach-Object {'plugins/'+$_+'/plugin.json'})) {
+        if(!$Partial){foreach($required in @('dlls/main.dll')+@($plugins | ForEach-Object {'plugins/'+$_+'/plugin.json'})) {
             if($required -notin $result.Relative){throw "Required base file missing from package: $required"}
         }
         if(!@($result | Where-Object {$_.Relative -match '^plugins/RuneSchema\.Helpy/(dll/)?RuneSchema\.Helpy\.dll$'}).Count){throw 'Required Helpy bridge DLL missing from package.'}
-        foreach($plugin in $script:RepairPlugins){
+        $helpy=Get-Content -LiteralPath (Join-Path $Stage 'plugins/RuneSchema.Helpy/plugin.json') -Raw | ConvertFrom-Json
+        if($helpy.PSObject.Properties['NativeHudPlugin'] -and $helpy.NativeHudPlugin -and ($helpy.NativeHudPlugin -ne 'RuneSchema.HUD' -or 'RuneSchema.HUD' -notin $plugins)){throw 'Required shared HUD plugin is missing from this Helpy package.'}
+        if('RuneSchema.HUD' -in $plugins -and 'plugins/RuneSchema.HUD/dll/RuneSchema.HUD.dll' -notin $result.Relative){throw 'Required shared HUD DLL is missing from the package.'}}
+        foreach($plugin in $plugins){
+            if($Partial -and ('plugins/'+$plugin+'/plugin.json') -notin $result.Relative){continue}
             $manifest=Get-Content -LiteralPath (Join-Path $Stage ('plugins/'+$plugin+'/plugin.json')) -Raw | ConvertFrom-Json
             if($manifest.Id -ne $plugin){throw 'Bundled plugin identity does not match its folder.'}
         }
@@ -122,30 +140,93 @@ function Get-RepairEntries([string]$Archive,[string]$Platform,[string]$Stage) {
 function Install-RepairFile([string]$Stage,[string]$Target) {
     if(Test-Path -LiteralPath $Target){[IO.File]::Replace($Stage,$Target,[NullString]::Value)}else{[IO.File]::Move($Stage,$Target)}
 }
+function Read-HotfixManifest([string]$Archive,[string]$Tag,[string]$Version,[string]$Platform,$Entries) {
+    $zip=[IO.Compression.ZipFile]::OpenRead($Archive)
+    try {
+        $manifests=@($zip.Entries | Where-Object {$_.FullName.Replace('\','/') -ceq 'RuneSchema/hotfix.json'})
+        if($manifests.Count -ne 1 -or $manifests[0].Length -gt 65536){throw 'Missing or oversized hotfix manifest.'};$entry=$manifests[0]
+        $reader=[IO.StreamReader]::new($entry.Open());try{$manifest=$reader.ReadToEnd() | ConvertFrom-Json}finally{$reader.Dispose()}
+    }finally{$zip.Dispose()}
+    if($manifest.Format -ne 1 -or $manifest.Version -cne $Tag -or $manifest.Platform -cne $Platform -or $Version -cnotin @($manifest.FromVersions)){throw 'The hotfix does not target this installed version and platform.'}
+    $files=@($manifest.Files);if(!$files.Count -or $files.Count -ne @($Entries).Count -or $files.Count -gt 4096){throw 'The hotfix manifest must list every affected base file exactly once.'}
+    $seen=@{};foreach($file in $files){
+        $name=[string]$file.Path
+        if($seen.ContainsKey($name) -or $file.SHA256 -notmatch '^[a-fA-F0-9]{64}$' -or !($file.PSObject.Properties['BeforeSHA256'])){throw 'Invalid hotfix file declaration.'};$seen[$name]=$true
+        $matchedEntries=@($Entries | Where-Object {$_.Relative -ceq $name});if($matchedEntries.Count -ne 1 -or $matchedEntries[0].Hash -ne $file.SHA256){throw 'A hotfix file is missing, protected, or has the wrong checksum.'}
+        if([string]$file.BeforeSHA256 -ne '' -and $file.BeforeSHA256 -notmatch '^[a-fA-F0-9]{64}$'){throw 'Invalid original-file checksum in hotfix manifest.'}
+        $matchedEntries[0].ExpectedBefore=[string]$file.BeforeSHA256
+    }
+}
+function Wait-HotfixApply([string]$Root) {
+    $control=Read-RepairControl
+    $owner=Get-Process -Id ([int]$control.OwnerPid) -ErrorAction Stop
+    $exe=Join-Path $Root 'plugins/RuneSchema.Helpy/dll/Helpy.exe';Assert-RepairPath $exe
+    if(![string]::Equals($owner.MainModule.FileName,$exe,[StringComparison]::OrdinalIgnoreCase)){throw 'Apply a hotfix from Helpy in the installation being updated.'}
+    $owner.Handle | Out-Null
+    $script:HotfixWaiting=$true
+    Write-RepairProgress 'AwaitingExit' 'Verified hotfix ready. Apply and restart Helpy to replace these files.' 75
+    $deadline=[DateTime]::UtcNow.AddMinutes(15)
+    while([DateTime]::UtcNow -lt $deadline){
+        Test-RepairControl;$control=Read-RepairControl
+        if($control.Action -eq 'apply-hotfix'){
+            $script:HotfixHandedOff=$true
+            if(!$owner.WaitForExit(30000)){throw 'Helpy did not exit; no files were changed.'}
+            $script:RestartRoot=$Root;Assert-RepairClosed $Root;return
+        }
+        Start-Sleep -Milliseconds 200
+    }
+    throw 'Hotfix application timed out; no files were changed.'
+}
+function Write-HotfixReceipt($InputData) {
+    $path=[IO.Path]::GetFullPath([string]$InputData.HotfixReceipt);Assert-RepairPath $path
+    if([IO.Path]::GetFileName($path) -cne 'hotfix-applied.json'){throw 'Invalid hotfix receipt path.'}
+    [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($path)) | Out-Null
+    $temporary=$path+'.'+[Guid]::NewGuid().ToString('N')
+    @{Root=[string]$InputData.Root;Identity=[string]$InputData.HotfixIdentity;Version=[string]$InputData.Hotfix.tag_name} | ConvertTo-Json | Set-Content -LiteralPath $temporary -Encoding UTF8
+    Install-RepairFile $temporary $path
+}
 function Invoke-RuneSchemaRepair($InputData) {
+    $script:HotfixHandedOff=$false;$script:HotfixWaiting=$false;$script:RestartRoot=$null
     $root=[IO.Path]::GetFullPath([string]$InputData.Root);Assert-RepairPath $root
     if([IO.Path]::GetFileName($root) -ne 'RuneSchema' -or [IO.Path]::GetFileName([IO.Path]::GetDirectoryName($root)) -ne 'Mods' -or [IO.Path]::GetFileName([IO.Path]::GetDirectoryName([IO.Path]::GetDirectoryName($root))) -ne 'ue4ss'){throw 'Select a RuneSchema installation inside ue4ss/Mods.'}
     $version=[string]$InputData.Version
     $main=Join-Path $root 'dlls/main.dll'
-    if(Test-Path -LiteralPath $main){$reported=[Diagnostics.FileVersionInfo]::GetVersionInfo($main).ProductVersion;if($reported -match '^\d+\.\d+\.\d+\.\d+[a-z]?$'){$version=$reported}}
-    if($version -notmatch '^\d+\.\d+\.\d+\.\d+[a-z]?$'){throw 'Cannot determine the installed RuneSchema version. No files changed.'}
+    $versionPattern='^\d+\.\d+\.\d+\.\d+([a-z]|-?hf)?$'
+    if(Test-Path -LiteralPath $main){$reported=[Diagnostics.FileVersionInfo]::GetVersionInfo($main).ProductVersion;if($reported -match $versionPattern){$version=$reported}}
+    if($version -notmatch $versionPattern){throw 'Cannot determine the installed RuneSchema version. No files changed.'}
     Write-RepairLine "RuneSchema repair: $root ($version)";Write-RepairProgress 'Running' 'Checking logs and runtime' 1
     Assert-RepairClosed $root;Read-RepairLogs $root;Test-RepairControl
+    $hotfix=$InputData.PSObject.Properties['Hotfix'] -and $null -ne $InputData.Hotfix
+    if($hotfix){
+        $tag=[string]$InputData.Hotfix.tag_name
+        if($tag -cnotmatch '^(v|RuneSchema-)?\d+\.\d+\.\d+\.\d+(-?[hH][fF])$'){throw 'A hotfix release tag must end in hf.'}
+        $release=Get-RepairRelease $tag
+        if($release.draft -or $release.id -ne $InputData.Hotfix.id -or $release.tag_name -cne $tag){throw 'The hotfix release changed. Check for updates again.'}
+        $platform=if($root -match '(?i)[\\/]WinGDK[\\/]'){'WinGDK'}else{'Win64'}
+        $assets=@($release.assets | Where-Object {$_.name -ceq ('RuneSchema-'+$tag+'-'+$platform+'-hotfix.zip')})
+        $expected=@($InputData.Hotfix.assets | Where-Object {$_.name -ceq ('RuneSchema-'+$tag+'-'+$platform+'-hotfix.zip')})
+        if($assets.Count -ne 1 -or $expected.Count -ne 1 -or $assets[0].id -ne $expected[0].id -or $assets[0].digest -cne $expected[0].digest){throw 'The hotfix asset changed. Check for updates again.'}
+        $identity='hotfix:'+$release.id+':'+$assets[0].id+':'+$assets[0].digest
+        if($identity -cne $InputData.HotfixIdentity){throw 'Hotfix notification identity does not match its release asset.'}
+    }else{
     $release=Get-RepairRelease $version
     if($release.draft -or ($release.tag_name -replace '^v','') -ne $version){throw 'The release does not match this installation.'}
-    $assets=@($release.assets | Where-Object {$_.name -match ('^RuneSchema[-.]'+[regex]::Escape($version)+'\.zip$')})
+    $assets=@($release.assets | Where-Object {$_.name -match ('^RuneSchema[-.]'+[regex]::Escape($version)+'\.zip$')})}
     if($assets.Count -ne 1){throw 'This release has no unambiguous full RuneSchema repair ZIP.'}
     $archive=Join-Path $script:Job 'package.zip';Save-RepairPackage $assets[0] $archive
     $platform=if($root -match '(?i)[\\/]WinGDK[\\/]'){'WinGDK'}else{'Win64'}
-    $entries=@(Get-RepairEntries $archive $platform (Join-Path $script:Job 'stage'));$changed=@();$count=0
+    $entries=@(Get-RepairEntries $archive $platform (Join-Path $script:Job 'stage') -Partial:$hotfix);$changed=@();$count=0
+    if($hotfix){Read-HotfixManifest $archive $tag $version $platform $entries}
     foreach($entry in $entries){
         Test-RepairControl;$target=Join-Path $root $entry.Relative;Assert-RepairPath $target;$entry.Target=$target;$entry.Existed=Test-Path -LiteralPath $target -PathType Leaf
         $entry.Before=if($entry.Existed){Get-RepairHash $target}else{''}
+        if($hotfix -and $entry.Before -ne $entry.Hash -and $entry.Before -ne $entry.ExpectedBefore){throw ('Hotfix does not match the installed file: '+$entry.Relative)}
         if($entry.Before -eq $entry.Hash){Write-RepairLine ('OK      '+$entry.Relative)}else{Write-RepairLine ('REPAIR  '+$entry.Relative);$changed+=$entry}
         $count++;Write-RepairProgress 'Running' 'Scanning base files' ([int](40+30*$count/$entries.Count))
     }
     Write-RepairLine ("Scanned $($entries.Count) base files; $($changed.Count) need repair.")
-    if(!$changed.Count){Write-RepairProgress 'Succeeded' 'All base files are valid' 100;return}
+    if(!$changed.Count){if($hotfix){Write-HotfixReceipt $InputData};Write-RepairProgress 'Succeeded' 'All base files are valid' 100;return}
+    if($hotfix){Wait-HotfixApply $root}
     Test-RepairControl;Assert-RepairClosed $root
     $applied=@()
     try {
@@ -159,6 +240,7 @@ function Invoke-RuneSchemaRepair($InputData) {
     }
         Test-RepairControl;Assert-RepairClosed $root
         foreach($entry in $changed){
+            Assert-RepairClosed $root
             Assert-RepairPath $entry.Target
             if((Test-Path -LiteralPath $entry.Target) -ne $entry.Existed){throw 'Base file state changed during repair.'}
             if($entry.Existed -and (Get-RepairHash $entry.Target) -ne $entry.Before){throw 'Base file changed during repair.'}
@@ -168,15 +250,19 @@ function Invoke-RuneSchemaRepair($InputData) {
         }
     } catch {
         $reason=$_.Exception.Message;[array]::Reverse($applied)
-        foreach($entry in $applied){try{if($entry.Existed){$restore=$entry.Target+'.rollback-'+[Guid]::NewGuid().ToString('N');[IO.File]::Copy($entry.Backup,$restore);Install-RepairFile $restore $entry.Target}else{[IO.File]::Delete($entry.Target)};Write-RepairLine ('RESTORED '+$entry.Relative)}catch{Write-RepairLine ('ROLLBACK NEEDS ATTENTION: '+$entry.Target+'; backup: '+$entry.Backup)}}
+        foreach($entry in $applied){try{if($entry.Existed){$restore=$entry.Target+'.rollback-'+[Guid]::NewGuid().ToString('N');[IO.File]::Copy($entry.Backup,$restore);Install-RepairFile $restore $entry.Target;if((Get-RepairHash $entry.Target) -ne $entry.Before){throw 'Rollback verification failed.'}}else{[IO.File]::Delete($entry.Target)};Write-RepairLine ('RESTORED '+$entry.Relative)}catch{Write-RepairLine ('ROLLBACK NEEDS ATTENTION: '+$entry.Target+'; backup: '+$entry.Backup)}}
         throw $reason
     } finally {foreach($entry in $changed){if($entry.Pending -and [IO.File]::Exists($entry.Pending)){[IO.File]::Delete($entry.Pending)}}}
     $entries | Select-Object Relative,Hash,Before | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath (Join-Path $script:Job 'receipt.json') -Encoding UTF8
     Write-RepairLine ('Repair complete. Previous files retained in '+(Join-Path $script:Job 'backup'))
-    Write-RepairProgress 'Succeeded' ('Repaired '+$changed.Count+' base files') 100
+    if($hotfix){Write-HotfixReceipt $InputData}
+    Write-RepairProgress 'Succeeded' ('Updated '+$changed.Count+' base files') 100
 }
 if($MyInvocation.InvocationName -ne '.') {
     $script:Job=[IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($Request));$script:Console=Join-Path $script:Job 'console.log'
-    try {Invoke-RuneSchemaRepair (Get-Content -LiteralPath $Request -Raw | ConvertFrom-Json);exit 0}
-    catch {Write-RepairLine ('ERROR: '+$_.Exception.Message);Write-RepairProgress 'Failed' $_.Exception.Message 0;exit 1}
+    $code=0
+    try {Invoke-RuneSchemaRepair (Get-Content -LiteralPath $Request -Raw | ConvertFrom-Json)}
+    catch {Write-RepairLine ('ERROR: '+$_.Exception.Message);Write-RepairProgress 'Failed' $_.Exception.Message 0;$code=1}
+    finally {if($script:RestartRoot){try{Start-Process -FilePath (Join-Path $script:RestartRoot 'plugins/RuneSchema.Helpy/dll/Helpy.exe') -WorkingDirectory $script:RestartRoot -WindowStyle Hidden | Out-Null}catch{Write-RepairLine ('Please reopen Helpy: '+$_.Exception.Message)}}}
+    exit $code
 }

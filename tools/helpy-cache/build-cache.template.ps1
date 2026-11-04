@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([Parameter(Position=0)][string]$ZipPath,[string]$ModDirectory,[string]$Game,[string]$Mapping,[string]$Oodle,[string]$ModId,[string]$OutputDirectory,[string]$ProgressFile,[string]$ControlFile,[switch]$InstallDotNet,[string]$CreationRequest,[string]$PackagePath,[string]$Platform='Win64')
+param([Parameter(Position=0)][string]$ZipPath,[string]$ModDirectory,[string]$Game,[string]$Mapping,[string]$Oodle,[string]$ModId,[string]$OutputDirectory,[string]$ProgressFile,[string]$ControlFile,[switch]$InstallDotNet,[string]$CreationRequest,[string]$PackagePath,[string]$Platform='Win64',[string]$BackupRoot,[switch]$AllowRunningGame,[switch]$BaseGame)
 $ErrorActionPreference='Stop'
 Add-Type -AssemblyName System.IO.Compression,System.IO.Compression.FileSystem
 
@@ -33,6 +33,23 @@ function Assert-CachePath([string]$Path,[string]$Parent) {
         $next=[IO.Path]::GetDirectoryName($at);if($next -eq $at){break};$at=$next
     }
     return $resolved
+}
+function Get-CacheTreeManifest([string]$Folder) {
+    $root=[IO.Path]::GetFullPath($Folder).TrimEnd('\');$prefix=$root+'\';$null=Assert-CachePath $root ([IO.Path]::GetDirectoryName($root))
+    $entries=[Collections.Generic.List[IO.FileSystemInfo]]::new();$pending=[Collections.Generic.Stack[string]]::new();$pending.Push($root)
+    while($pending.Count){foreach($entry in Get-ChildItem -LiteralPath $pending.Pop() -Force){
+        $null=Assert-CachePath $entry.FullName $root;$entries.Add($entry)
+        if($entries.Count -gt 16384){throw 'Previous cache has too many entries to back up safely.'}
+        if($entry.PSIsContainer){$pending.Push($entry.FullName)}
+    }}
+    foreach($entry in $entries | Sort-Object FullName){
+        $null=Assert-CachePath $entry.FullName $root
+        if(!$entry.PSIsContainer){
+            $hash=(Get-FileHash -LiteralPath $entry.FullName -Algorithm SHA256).Hash;$after=Get-Item -LiteralPath $entry.FullName
+            if($after.Length -ne $entry.Length -or $after.LastWriteTimeUtc -ne $entry.LastWriteTimeUtc){throw 'Previous cache changed during verification.'}
+            [pscustomobject]@{Path=$entry.FullName.Substring($prefix.Length);Bytes=$entry.Length;SHA256=$hash}
+        }
+    }
 }
 function Get-CacheArchivePlan($Archive) {
     if($Archive.Entries.Count -gt 16384){throw 'ZIP contains too many entries (limit 16384).'}
@@ -81,6 +98,8 @@ function Invoke-CacheZip {
     $env:DOTNET_CLI_TELEMETRY_OPTOUT='1'
     $env:DOTNET_GENERATE_ASPNET_CERTIFICATE='false';$env:MSBUILDDISABLENODEREUSE='1';$env:DOTNET_CLI_DO_NOT_USE_MSBUILD_SERVER='1'
     if($ModDirectory -and $ZipPath){throw 'Choose a mod directory or a ZIP, not both.'}
+    if($AllowRunningGame -and (!$ModDirectory -or $CreationRequest)){throw 'Running-game capture requires an installed mod directory.'}
+    if($BaseGame -and (!$ModDirectory -or !$OutputDirectory -or $CreationRequest)){throw 'Base-game capture requires an installed directory and an AppData output folder.'}
     if($CreationRequest){
         if($ModDirectory -or $ZipPath -or !$PackagePath){throw 'Creation needs its request and a new output ZIP.'}
         if((Get-Item -LiteralPath $CreationRequest).Length -gt 65536){throw 'Creation request exceeds 64 KiB.'}
@@ -103,8 +122,9 @@ function Invoke-CacheZip {
     $output=if($OutputDirectory){[IO.Path]::GetFullPath($OutputDirectory)}else{Join-Path $inputRoot 'cache'}
     $parent=[IO.Path]::GetDirectoryName($output);if(!$parent -or [IO.Path]::GetPathRoot($output) -eq $output){throw 'Choose a cache output folder, not a drive root.'}
     $null=Assert-CachePath $output $parent
+    if($AllowRunningGame -and !$BaseGame -and $output -ine [IO.Path]::GetFullPath((Join-Path $mod 'cache'))){throw 'Running-game capture can only publish the selected mod cache folder.'}
     $token=[Guid]::NewGuid().ToString('N');$tempParent=[IO.Path]::GetTempPath();$stage=Join-Path $tempParent ('RuneSchema.Cache.'+$token)
-    $publish=Join-Path $parent ('.RuneSchema.Cache.'+$token);$backup=$null
+    $publish=Join-Path $parent ('.RuneSchema.Cache.'+$token);$backup=$null;$swap=$null
     $null=Assert-CachePath $stage $tempParent;$null=Assert-CachePath $publish $parent
     try {
         Write-Host 'RuneSchema mod cache builder' -ForegroundColor Yellow
@@ -149,8 +169,16 @@ function Invoke-CacheZip {
         }
         $built=Join-Path $stage 'result';$arguments=@('--folder',$mod,'--mod-root',$mod,'--mod-id',$ModId,'--output',$built,'--input-root',$inputRoot,'--progress')
         if($ControlFile){$arguments+=@('--control-file',$ControlFile)}
+        if($AllowRunningGame){if($CreationRequest){throw 'Running-game mode is only for installed-mod cache capture.'};$arguments+='--allow-running-game'}
+        if($BaseGame){$arguments+='--base-game'}
         $previousBundle=Join-Path $output 'offline-helpy.rsmk-cache'
         if(Test-Path -LiteralPath $previousBundle -PathType Leaf){New-Item -ItemType Directory -Path $built | Out-Null;Copy-Item -LiteralPath $previousBundle -Destination $built}
+        $preservedMetadata=@{};$metadataSource=if($CreationRequest){Join-Path $mod 'cache'}else{$output}
+        foreach($name in @('taglines.json','tips.json')){
+            $file=Join-Path $metadataSource $name;$null=Assert-CachePath $file $metadataSource
+            $preservedMetadata[$name]=if(Test-Path -LiteralPath $file -PathType Leaf){(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash}else{''}
+            if($preservedMetadata[$name]){New-Item -ItemType Directory -Path $built -Force | Out-Null;Copy-Item -LiteralPath $file -Destination $built}
+        }
         $providedMapping=$Mapping;if(!$providedMapping -and $plan.Mapping){$providedMapping=Join-Path $stage 'provided.usmap'}
         foreach($entry in @(@('--game',$Game),@('--mapping',$providedMapping),@('--oodle',$Oodle))){if($entry[1]){$arguments+=@($entry[0],$entry[1].Trim('"'))}}
         Show-CacheProgress 'Finding game files and preparing offline mappings automatically' 35
@@ -164,18 +192,31 @@ function Invoke-CacheZip {
         Check-CacheControl
         if($LASTEXITCODE){throw 'Cooked cache build failed; current cache retained. See build.log for details.'}
         if(!(Test-Path -LiteralPath (Join-Path $built 'offline-helpy.rsmk-cache'))){throw 'Builder did not produce a cache bundle.'}
+        foreach($name in $preservedMetadata.Keys){$file=Join-Path $metadataSource $name;$now=if(Test-Path -LiteralPath $file -PathType Leaf){(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash}else{''};if($now -cne $preservedMetadata[$name]){throw 'Cache metadata changed during the build; previous cache retained. Retry after editing.'}}
         Show-CacheProgress 'Publishing the completed cache folder' 95
         if($ModDirectory -and !(Test-Path -LiteralPath $mod -PathType Container)){throw 'Mod folder was removed; cache was not published.'}
         New-Item -ItemType Directory -Path $parent -Force | Out-Null;New-Item -ItemType Directory -Path $publish | Out-Null
         Copy-Item -LiteralPath (Join-Path $built 'offline-helpy.rsmk-cache'),(Join-Path $built 'offline-helpy-report.json') -Destination $publish
+        foreach($name in @('taglines.json','tips.json')){if(Test-Path -LiteralPath (Join-Path $built $name) -PathType Leaf){Copy-Item -LiteralPath (Join-Path $built $name) -Destination $publish}}
         if(Test-Path -LiteralPath (Join-Path $built 'mod.png')){Copy-Item -LiteralPath (Join-Path $built 'mod.png') -Destination $publish}
         if(Test-Path -LiteralPath $output){
             if(!(Test-Path -LiteralPath $output -PathType Container)){throw 'Cache output is an existing file.'}
-            $backup=$output+'.previous-'+$token;$null=Assert-CachePath $output $parent;$null=Assert-CachePath $backup $parent
-            Move-Item -LiteralPath $output -Destination $backup
+            $backupBase=if($BackupRoot){[IO.Path]::GetFullPath($BackupRoot)}else{Join-Path $env:LOCALAPPDATA 'RSDragonwilds/RuneSchema/core/tools/cache-builder/backups'}
+            $null=Assert-CachePath $backupBase ([IO.Path]::GetDirectoryName($backupBase))
+            $outside=if($ModDirectory){$mod}else{$output}
+            if(($backupBase.TrimEnd('\')+'\').StartsWith(([IO.Path]::GetFullPath($outside).TrimEnd('\')+'\'),[StringComparison]::OrdinalIgnoreCase)){throw 'Previous caches must be backed up outside the mod/output folder.'}
+            $backup=Join-Path $backupBase ('cache-'+$token);$null=Assert-CachePath $backup $backupBase
+            $manifest=@(Get-CacheTreeManifest $output);$expected=ConvertTo-Json -InputObject $manifest -Compress
+            New-Item -ItemType Directory -Path $backupBase -Force | Out-Null;Copy-Item -LiteralPath $output -Destination $backup -Recurse
+            if((ConvertTo-Json -InputObject @(Get-CacheTreeManifest $backup) -Compress) -cne $expected -or (ConvertTo-Json -InputObject @(Get-CacheTreeManifest $output) -Compress) -cne $expected){throw 'Previous-cache backup verification failed; current cache retained.'}
+            [IO.File]::WriteAllText(($backup+'.json'),(@{Original=$output;Files=$manifest}|ConvertTo-Json -Depth 5),[Text.UTF8Encoding]::new($false))
+            $swap=$output+'.swap-'+$token;$null=Assert-CachePath $swap $parent;Move-Item -LiteralPath $output -Destination $swap
         }
-        try {$null=Assert-CachePath $publish $parent;$null=Assert-CachePath $output $parent;Move-Item -LiteralPath $publish -Destination $output}
-        catch {if($backup -and !(Test-Path -LiteralPath $output)){$null=Assert-CachePath $backup $parent;Move-Item -LiteralPath $backup -Destination $output};throw}
+        try {
+            if($swap -and (ConvertTo-Json -InputObject @(Get-CacheTreeManifest $swap) -Compress) -cne $expected){throw 'Previous cache changed before publication.'}
+            $null=Assert-CachePath $publish $parent;$null=Assert-CachePath $output $parent;Move-Item -LiteralPath $publish -Destination $output
+        }catch {if($swap -and !(Test-Path -LiteralPath $output)){$null=Assert-CachePath $swap $parent;Move-Item -LiteralPath $swap -Destination $output};throw}
+        if($swap){$null=Assert-CachePath $swap $parent;Remove-Item -LiteralPath $swap -Recurse -Force}
         if($CreationRequest){
             $preparedCache=Join-Path $mod 'cache';$null=Assert-CachePath $preparedCache $stage
             if(Test-Path -LiteralPath $preparedCache){Remove-Item -LiteralPath $preparedCache -Recurse -Force}

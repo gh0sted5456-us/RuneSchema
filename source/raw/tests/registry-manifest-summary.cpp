@@ -36,4 +36,10 @@ int main()
     check(Compatibility(extras,exact,true,true,{{"items","includes-client-extras"}},lanes,true)=="verified");
     check(Compatibility(extras,exact,true,true,{{"items","includes-client-extras"}},lanes,false)=="different");
     check(Compatibility(session,exact,true,true,lanes,lanes,true)=="different");
+    auto baseline=nlohmann::json::parse(local);baseline["counts"]={{"entries",2},{"modEntries",2}};
+    auto profiles=baseline;profiles["entries"].push_back({{"owner","Bard"},{"key","Bard:profile"},{"kind","LocalProfile"},{"profile",{{"Class","/Game/Bard/BPC_Profile.BPC_Profile_C"}}}});
+    profiles["counts"]["entries"]=3;profiles["counts"]["modEntries"]=3;
+    check(Owners(profiles.dump())==Owners(baseline.dump()));
+    check(NetworkSnapshot(profiles.dump())==baseline.dump());
+    check(NetworkSnapshot(local)==local);
 }

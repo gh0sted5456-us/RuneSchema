@@ -66,6 +66,7 @@ namespace PS::RegistryManifestSummary {
         {
             if (!entry.is_object())
                 throw std::runtime_error("Registry owner summary found a malformed entry");
+            if(entry.value("kind",std::string{})=="LocalProfile")continue;
             auto owner = entry.value("owner", std::string{});
             if (owner.empty())
             {
@@ -84,6 +85,26 @@ namespace PS::RegistryManifestSummary {
         for (const auto& [owner, entries] : grouped)
             result.emplace(owner, "fnv1a64:" + Fingerprint(entries.dump()));
         return result;
+    }
+
+    inline std::string NetworkSnapshot(const std::string& snapshot)
+    {
+        if(snapshot.empty())return snapshot;
+        auto manifest=nlohmann::json::parse(snapshot);
+        auto& entries=manifest.at("entries");const auto before=entries.size();
+        std::erase_if(entries.get_ref<nlohmann::json::array_t&>(),[](const auto& entry){return entry.value("kind",std::string{})=="LocalProfile";});
+        const auto removed=before-entries.size();
+        if(!removed)return snapshot;
+        if(manifest.contains("counts")){
+            auto& counts=manifest["counts"];
+            if(counts.contains("entries"))counts["entries"]=entries.size();
+            if(counts.contains("modEntries")){
+                const auto mods=counts["modEntries"].get<size_t>();
+                if(mods<removed)throw std::runtime_error("Local profile registry counts are inconsistent");
+                counts["modEntries"]=mods-removed;
+            }
+        }
+        return manifest.dump();
     }
 
     inline std::string Difference(const Fingerprints& local,
