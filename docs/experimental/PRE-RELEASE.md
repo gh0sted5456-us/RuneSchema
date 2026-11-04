@@ -9,8 +9,10 @@ promote_to: RELEASE-0.8.1.0.md
     Stable RuneSchema remains **0.8.0.3**. The changes below belong to the
     **0.8.1.0 prerelease** and have not been promoted to the stable guides.
 
-[Download 0.8.1.0](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0/RuneSchema-0.8.1.0.zip){ .md-button .md-button--primary }
-[Installation](INSTALLATION.md){ .md-button }
+<div class="rs-actions">
+  <a class="md-button md-button--primary" href="https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0/RuneSchema-0.8.1.0.zip">Download 0.8.1.0</a>
+  <a class="md-button" href="../INSTALLATION/">Installation</a>
+</div>
 
 The download is the maintainer's complete ZIP, published unchanged with a
 versioned filename. It includes Helpy and all bundled plugins. Install UE4SS
