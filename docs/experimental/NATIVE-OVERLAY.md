@@ -9,12 +9,30 @@ promote_to: NATIVE-OVERLAY.md
 
 # Helpy native overlay adapters
 
+The matching candidate uses [RuneSchema.HUD](SHARED-HUD.md) as its shared native
+renderer and input owner. Helpy keeps its standalone UI process and becomes a
+client of that plugin. Install both matching plugins when updating.
+
 Helpy draws its normal UI in its own process. The game-side bridge only composites
 the current shared texture and forwards captured input. Game actions keep using
 the existing RuneSchema service contract. **Game overlay** and **Native in-game
 presentation** default to enabled for new settings. Existing saved choices stay
 in use. Disable **Game overlay** in Settings/Quick settings for a regular window.
-The system tray opens desktop mode for settings and Windows file dialogs.
+The tray's **Open Helpy** respects the selected presentation mode. Choose
+**Open as a separate window** explicitly when you want a desktop window.
+
+An open native panel stays assigned to its connected runtime and game PID.
+Switching to another application temporarily hides the panel and releases input;
+returning to the bound game resumes it. An explicit Hide/close cancels that
+request, so returning to the game does not reopen a panel you closed. A temporary
+bridge disconnect retains the request while the assigned runtime reconnects.
+The renderer window must belong to that connected process before attachment.
+
+Opening the panel acquires interactive input ownership even when its bounds match
+the previous passive HUD. Hiding it releases that ownership before passive HUD
+drawing resumes. Startup prepares the renderer without reserving a hidden panel.
+The Helpy FPS limit saves as it changes; FPS, overlay size, interface scale and
+opacity reload from the selected settings file between launches.
 
 | Renderer | Native integration | Requirements |
 | --- | --- | --- |
@@ -55,6 +73,11 @@ not register a system/user layer.
 
 - Three shared textures avoid overwriting a frame still used by the game.
   Producer/consumer ownership uses atomic slot reservations and completion fences.
+  Replacing a passive HUD surface with the interactive panel can briefly wait for
+  the previous GPU work. The app retries the same replacement surface at 50 ms
+  intervals without blocking the game or treating that wait as an attachment
+  failure. A wait beyond five seconds reports a stalled attachment and releases
+  input capture; no textures are freed while their consumer still uses them.
 - Native presentation uses no CPU frame readback, PNG encoding or JSON frame
   transport. JSON is used for preparation and visibility/session changes.
 - Hidden native hooks pass through. App rendering and controller state reads
@@ -79,11 +102,18 @@ not register a system/user layer.
   produce bounded entries in RuneSchema.log.
 - DX11/DX12 accept 8-bit and 10-bit SDR back buffers. Display-encoded UI pixels
   use UNORM target views so an sRGB view cannot brighten the theme again.
-- Opening failures show their reason and a usable desktop window. The first
+- Opening failures show their reason and retain overlay mode. Retry the shortcut
+  or explicitly choose a separate window from the tray. The first
   displayed frame produces one status update per opening; attachment alone is
   not reported as successful presentation. No per-frame status requests are used.
 - The game receives neutral XInput state while the panel captures input. Cursor
   clipping/recentering is suspended only for the attached foreground game.
+- Interactive HUD input belongs to Helpy: keyboard, mouse buttons/wheel, raw
+  mouse/controller batches and controller navigation are withheld from the game.
+  Raw batches are drained before reporting no events, preventing queued actions
+  from replaying when the HUD closes. Held keyboard/mouse controls are released
+  when capture begins; game movement and look use the existing controller guard.
+  Notification-only cards leave gameplay input available.
 - Focus loss, a full input queue, or a heartbeat older than 1.5 seconds releases
   capture. The desktop app owns its normal close/tray/exit behavior.
 - Resize, swap-chain destruction, game shutdown and app replacement release
@@ -93,6 +123,10 @@ not register a system/user layer.
   not an accumulation per opening.
 
 ## Verification and limits
+
+See [controller navigation](CONTROLLER-NAVIGATION.md) for Xbox, DualShock and
+Nintendo device support, automatic/manual glyphs, text entry and controller map
+controls. The bundled SDL controller runtime is required beside the application.
 
 Isolated hardware tests on an NVIDIA RTX 5080 verify native pixels, premultiplied
 transparency, bounds, shared fences and hidden pass-through for DX11, DX12,

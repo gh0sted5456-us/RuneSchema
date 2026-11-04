@@ -17,8 +17,8 @@ New to the framework? Start with [what RuneSchema is, what its files do, and
 how to make an add-on](../MOD-HOSTS-AND-GETTING-STARTED.md).
 
 Using Vortex? See [installer layouts and triplet troubleshooting](VORTEX-INSTALLATION.md).
-The [optional standalone Helpy app](HELPY-STANDALONE.md) is a local development
-candidate; the normal release continues to include the DLL desktop window.
+The [standalone Helpy app](HELPY-STANDALONE.md) and its matching game bridge are
+included in this experimental package. Keep them with the matching core DLL.
 
 ## Before installation
 
@@ -31,18 +31,18 @@ You need:
 
 Close the game before replacing RuneSchema, UE4SS, or any PAK files.
 
-Choose the [0.8.0.3 release package](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.0.3/RuneSchema-0.8.0.3.zip)
-and read its [defaults and verification](../RELEASE-0.8.0.3.md).
+Use the complete [0.8.1.0 prerelease ZIP](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0/RuneSchema-0.8.1.0.zip).
+Read its [candidate notes and limits](PRE-RELEASE.md) before testing.
 There is one `RuneSchema-<version>.zip` per release, with the registry and
 networking bridges and Helpy included. No separate Core or Universal choice is
-needed. Older `e`/`m` suffixes are historical. The published 0.8.0.3 download
-includes the earlier 0.8.0.1b source-only fixes. Check
-[downloads and source updates](../CURRENT-RELEASE.md) before choosing.
+needed. Older `e`/`m` suffixes are historical. For the current stable package,
+use [stable downloads](../CURRENT-RELEASE.md).
 
 The cleaned runtime ZIP contains no generated mapping or loose UI artwork.
 Mappings build/reuse the platform AppData cache; optional pictures can be
 downloaded from Helpy. Preserve existing settings when updating. The supplied
-defaults enable automatic Helpy opening and detailed logging; both are adjustable.
+defaults start Helpy in the system tray. Its shortcut opens or hides the panel;
+startup and logging preferences are adjustable in Settings.
 
 ## RuneSchema folder location
 

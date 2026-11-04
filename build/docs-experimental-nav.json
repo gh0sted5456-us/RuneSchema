@@ -3,7 +3,10 @@
     "Overview": "experimental/index.md"
   },
   {
-    "Install and platforms": [
+    "Pre-release & pending changelog": "experimental/PRE-RELEASE.md"
+  },
+  {
+    "Install & compatibility": [
       {
         "Install or update": "experimental/INSTALLATION.md"
       },
@@ -11,31 +14,87 @@
         "Vortex": "experimental/VORTEX-INSTALLATION.md"
       },
       {
-        "Compatibility": "experimental/COMPATIBILITY.md"
+        "Platforms, Wine & Proton": "experimental/COMPATIBILITY.md"
       }
     ]
   },
   {
-    "Helpy": [
+    "Helpy & controllers": [
       {
-        "Desktop and settings": "experimental/HELPY-STANDALONE.md"
+        "Desktop, overlay & settings": "experimental/HELPY-STANDALONE.md"
       },
       {
-        "Native overlay and controllers": "experimental/NATIVE-OVERLAY.md"
+        "Native overlay": "experimental/NATIVE-OVERLAY.md"
       },
       {
-        "Authoring, cache and repair": "experimental/AUTHORING-AND-REPAIR.md"
+        "Controller navigation": "experimental/CONTROLLER-NAVIGATION.md"
       },
       {
-        "Bug reports": "experimental/HELPY-BUG-REPORTS.md"
+        "Mod Menu 2 & HUD layout": "experimental/MOD-MENU-2-AND-HUD.md"
+      },
+      {
+        "Save recovery": "experimental/SAVE-RECOVERY.md"
+      },
+      {
+        "Resource & UE4SS diagnostics": "experimental/PERFORMANCE-DIAGNOSTICS.md"
+      },
+      {
+        "Notifications & hotfixes": "experimental/NOTIFICATIONS-AND-HOTFIXES.md"
+      },
+      {
+        "Report a bug": "experimental/HELPY-BUG-REPORTS.md"
+      }
+    ]
+  },
+  {
+    "Mods, caches & tools": [
+      {
+        "Metadata & loader controls": "experimental/MOD-METADATA-AND-CONTROLS.md"
+      },
+      {
+        "Authoring & repair": "experimental/AUTHORING-AND-REPAIR.md"
       },
       {
         "Cache bundles": "experimental/CACHE-BUNDLES.md"
+      },
+      {
+        "Offline cache authoring": "experimental/modders/offline-helpy-cache.md"
       }
     ]
   },
   {
-    "Registries and world policies": [
+    "Servers & worlds": [
+      {
+        "Compare server mods": "experimental/SERVER-MOD-LIST.md"
+      },
+      {
+        "Connect with a PIN": "experimental/SERVER-ACCESS.md"
+      },
+      {
+        "Server control & admin": "experimental/SERVER-CONTROL.md"
+      },
+      {
+        "World policies": "experimental/BUILDING-WORLD-POLICIES.md"
+      }
+    ]
+  },
+  {
+    "Mod author APIs": [
+      {
+        "Shared HUD": "experimental/SHARED-HUD.md"
+      },
+      {
+        "Local mod profiles": "experimental/LOCAL-MOD-PROFILES.md"
+      },
+      {
+        "Multiplayer appearance": "experimental/CHARACTER-APPEARANCE.md"
+      },
+      {
+        "Consumed-item interfaces": "experimental/CONSUMED-OWNER-PRESENTATION.md"
+      },
+      {
+        "Lua scheduling": "experimental/LUA-SCHEDULING.md"
+      },
       {
         "Cooked declarations": "experimental/COOKED-PAK-REGISTRY-MANIFEST.md"
       },
@@ -47,19 +106,20 @@
       },
       {
         "Raw table reference": "experimental/reference/loaders/raw.md"
-      },
-      {
-        "World policies": "experimental/BUILDING-WORLD-POLICIES.md"
-      },
-      {
-        "Skills investigation": "experimental/SKILL-REGISTRY.md"
       }
     ]
   },
   {
-    "Offline cache authoring": "experimental/modders/offline-helpy-cache.md"
-  },
-  {
-    "0.8.1.0 changelog": "experimental/CHANGELOG-0.8.1.0.md"
+    "Investigations & history": [
+      {
+        "Companion saves": "experimental/COMPANION-SAVES.md"
+      },
+      {
+        "Skills": "experimental/SKILL-REGISTRY.md"
+      },
+      {
+        "0.8.1.0 development history": "experimental/CHANGELOG-0.8.1.0.md"
+      }
+    ]
   }
 ]

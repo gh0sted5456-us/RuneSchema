@@ -3,435 +3,213 @@ channel: experimental
 promote_to: HELPY-STANDALONE.md
 ---
 
-!!! info "Experimental · 0.8.1.0"
-    This guide describes the experimental branch. For the current public package, see
-    [stable downloads](../CURRENT-RELEASE.md). [Experimental overview](index.md).
+!!! info "Pre-release · 0.8.1.0"
+    See [candidate status](PRE-RELEASE.md) for downloads and remaining live checks.
 
 # Helpy desktop app
 
-Helpy's interface now lives in **Helpy.exe**, in its own Windows process.
-`RuneSchema.Helpy.dll` stays in Dragonwilds as the small game bridge. Menus and
-the application window stay in the EXE; the optional native compositor draws
-its shared GPU frames inside the game. RuneSchema's core runs the validated
-game operations behind that bridge.
+Helpy runs as `Helpy.exe` from
+`RuneSchema/plugins/RuneSchema.Helpy/dll/`, beside its bridge and `SDL3.dll`.
+AppData holds settings, caches, profiles and logs. Keep all components from one
+matching runtime package.
 
-This is part of the 0.8.1.0 experimental build. Keep its matching core, bridge
-and executable together; the complete runtime package includes all three.
-An independent app archive is also available for replacing a matching EXE.
+## Cache updates and notifications
+
+| Action | Where |
+| --- | --- |
+| Build caches for enabled mods sequentially | **Home → Build enabled mod caches**, or **Mods → Cache enabled mods** |
+| Pause, resume or stop a build | The Tools progress view |
+| Review cache changes and job results | **Notifications**, below Report a bug |
+| Resync vanilla files after a game update | The **i Game cache update** action on Players |
+| Switch display/internal item names immediately | Item Bay's settings cog |
+
+The read-only PAK builder works with the assigned game open or closed. Existing
+cached items and pictures remain available while it builds; completed results
+are imported into platform AppData. Disabled or removed sources are excluded.
+ID.txt versions and local tracking fingerprints can prompt cache updates.
+
+Cached searches run separately from the interface. New live results are learned
+for later searches. A readable name replaces an internal key; unresolved metadata
+does not downgrade it. A cache without display text needs corrected metadata.
+
+Use checks, **Ctrl+click**, or **Select multiple** with a controller, then
+**Send to cart**. Adding items clears that selection. Drag/drop and right-click
+remain available. Different asset paths may legitimately share a display name.
+
+## Mods and UE4SS inventory
+
+Mods, Settings, Tools and Server Settings use category/content panes with
+independent scrolling. In Mods, choose **RuneSchema mods**, **Server comparison**
+or **UE4SS mods**. Apply staged order changes for the next launch.
+
+UE4SS entries use cards; **Compact** switches to a table. **Manage external UE4SS
+mods** opts into editing `mods.txt` and backed-up `enabled.txt` overrides.
+**RuneSchema loaders** changes only a mod's nested `ue4ss/status.txt`: `0` disables
+that loader, `1` or no file enables it. The parent's PAK/JSON content is separate.
+These actions do not unload running scripts.
+
+Versions come from optional ID.txt, mod.json or Mod Menu metadata. Missing
+versions are labelled **Unversioned** and excluded from host-alignment totals.
+Configured state and observed loader health are separate. See
+[metadata and controls](MOD-METADATA-AND-CONTROLS.md).
 
 ## Startup and the system tray
 
-Settings uses two panels: choose a category on the left and edit its controls
-on the right. **Helpy** contains startup, shortcuts, performance and cache
-preferences; **RuneSchema** contains the core configuration editor. Your
-existing settings files and saved preferences remain in use.
+1. Install the complete package and launch Dragonwilds. Helpy normally starts
+   in the tray; use **Open window at startup** to show it immediately.
+2. Press **F2** while the assigned game has focus, or open the RuneSchema tray icon.
+3. Use **Home → Quick settings** or **Settings → Helpy** to change preferences.
 
-The category column stays visible. Short tabs across the right panel group
-related controls, and each tab scrolls independently. **Helpy** has **Display**,
-**Startup**, **Cache**, **Performance**, and **Saves** tabs. Home's **Quick settings**
-opens the same controls, so changes apply in either place. Preference switches
-apply immediately unless labelled for the next launch. Checkboxes select rows
-or confirm an action; circular radio buttons choose one alternative.
+Display, Startup, Cache, Performance and Saves tabs share the same controls in
+both locations. Changes apply immediately unless marked for the next launch.
+The top-left RuneSchema logo returns to the splash page. The navigation bar can
+collapse or remain pinned.
 
-The same tab styling is used in Players, World, Utilities, Journal and
-Diagnostics. Smaller windows wrap the tabs instead of truncating their names.
-Only the visible content group is evaluated; browsing display or performance
-preferences does not read character/world launch choices.
+**Close to system tray** makes X/Alt+F4 hide the window. Use **Exit Helpy** to quit.
+The tray tooltip identifies the runtime. Windows controls whether its icon is
+visible or under the overflow arrow. If the tray is unavailable, Helpy uses the
+taskbar instead.
 
-This layout follows [Microsoft's settings guidance](https://learn.microsoft.com/en-us/windows/apps/design/app-settings/guidelines-for-app-settings)
-and [NN/g's tab guidance](https://www.nngroup.com/articles/tabs-used-right/):
-related groups, concise labels, an obvious active state, and shallow nesting.
-RuneSchema's minimal menu inside UE4SS is unchanged.
+The supplied release settings enable **Exit Helpy when the game closes**. This
+follows an attached game/server process; temporary bridge disconnects do not
+request an exit. Turn it off to keep Helpy available offline after playing.
+Leftover-process reports are still under investigation; see [known limits](PRE-RELEASE.md#known-limits).
 
-1. Install `main.dll`, `RuneSchema.Helpy.dll` and `Helpy.exe` from the same build.
-   The packaged app belongs beside the bridge in
-   `RuneSchema/plugins/RuneSchema.Helpy/dll/`. The running copy is staged into
-   `%LOCALAPPDATA%/RSDragonwilds/RuneSchema/<platform>/apps/<installation>/`.
-2. When the plugin is enabled, **Start Helpy with Dragonwilds** defaults to on.
-   The default **Start in system tray** mode opens no application window.
-3. Press the configured Helpy shortcut while its game has focus, or click the
-   RuneSchema icon in the Windows notification area beside the clock.
-4. In **Home > Quick settings**, select **Open window at startup** to show the
-   app immediately instead. Startup preferences apply next launch.
-
-Windows controls which notification icons appear directly beside the clock
-and which appear under its overflow arrow. The app respects that choice.
-Right-click the tray icon for **Open Helpy** or **Exit Helpy**. Its tooltip
-identifies Steam, Game Pass, Epic or Server. Explorer restarting restores the
-icon without restarting the app. These controls use the
-[Windows notification-area API](https://learn.microsoft.com/en-us/windows/win32/shell/notification-area).
-
-**Close to system tray** is enabled by default. X or Alt+F4 then hides the
-window while keeping its process available; the minimize button also returns
-to the tray. Uncheck it to make X exit. **Exit Helpy** in Quick Settings or the
-tray always quits. If Windows cannot create the tray icon, Helpy retains a
-minimized taskbar window so it remains reachable.
-
-Plugin settings are stored in `settings/settings.jsonc`:
-
-| Setting | Default | Effect |
-| --- | --- | --- |
-| `enabled` | `true` | Enable the game's bridge/plugin. |
-| `startWithGame` | `true` | Launch the app with its game. |
-| `openOnGameStart` | `false` | Show a window instead of starting in the tray. |
-| `minimizeOnClose` | `true` | Return X/Alt+F4 to the tray instead of exiting. |
-
-The retired `standaloneDesktop` label is ignored; there is one UI host.
-Disabling the game plugin does not prevent manually browsing the app offline.
-Headless servers retain bridge functionality without attempting to show a UI
-on a non-interactive Windows desktop.
+The executable stays in its installed runtime folder. The desktop shortcut
+points there and identifies the installation. Game auto-launch uses Explorer's
+desktop environment instead of inheriting a Steam/Xbox session. AppData is not
+an executable installation directory.
 
 ## Use it with the game closed
 
-Double-click `Helpy.exe` to open its assigned installation. Browse saved item
-names/pictures, manage profiles and caches, edit settings, change next-launch
-mod order and import mod ZIPs. Existing validation, expected-content checks and
-backups apply. Enabled installed add-ons determine offline mod-cache visibility.
-After changing add-ons elsewhere, use **Mods > Refresh** to reconcile it. Right-click a missing-folder row for **Remove missing entry**, or use **Remove all missing entries**. These stage load-order list changes; choose **Apply for next launch** to save them. Installed folders are retained, and a folder that reappears before applying requires a refresh.
+Open the runtime's `Helpy.exe` or its desktop shortcut. Saved names, pictures,
+filters and carts work offline. Settings, next-launch mod order, imports and
+cache tools remain available. Use **Mods → Refresh** after changing files elsewhere.
 
-Uncached native discovery, live appearance rendering, item delivery and
-teleporting need the connected game and retain their native validation.
-A saved reference never proves gameplay availability. The bridge does not
-transfer cooked assets or make an absent mod usable.
+Missing-folder rows can be removed from the load-order list without deleting
+installed folders. Item delivery, teleportation, uncached native discovery and
+live character previews require a connected game. Cached data does not install
+missing mods or establish that an item can be spawned.
+
+## Player coordinates in game
+
+Enable **Quick Settings → Display → Game HUD → Show player coordinates in game**.
+The horizontal readout shows **X/Y/Z**, then **Pitch/Yaw** in Unreal's order.
+It defaults to the bottom-right, uses game world units and updates twice per second.
+Missing/stale character data hides it. It is passive and takes no game input.
+
+Use [HUD settings](MOD-MENU-2-AND-HUD.md) to position supported HUDs. Minimap
+zoom, player-follow lock and position lock are separate saved controls.
+
+## Startup loading indicator
+
+**Show game startup indicator** displays the alternating Dragonwilds/RuneSchema
+logos, native spinning wheel, startup stage and optional mod tips. It needs a
+usable game window and bridge. It follows startup checkpoints, not the intro
+video's end; the unsuccessful post-intro timing change is excluded.
+
+The indicator closes when registration and menu/world handoff are ready.
+It shows activity without inventing a percentage, respects reduced motion and
+takes no input. Its saved HUD placement is retained; startup data is read once
+per second independently of animation. It also works when Helpy uses a regular
+standalone window.
 
 ## Use Helpy over the game
 
-Open **Settings > Helpy > Display > Window & overlay** (also available in Home's
-**Quick settings**) and set the **Game overlay** switch:
+Enable **Settings → Helpy → Display → Window & overlay → Game overlay** and
+**Native in-game presentation**. F2 opens/hides the panel in the assigned game;
+**Hide** returns input. Mouse, keyboard and controller input are captured while
+an interactive HUD is open.
 
-- **Disabled - regular window:** normal desktop behavior.
-- **Enabled - game overlay:** a transparent panel fitted to the attached game.
+Native presentation supports exclusive fullscreen. Its supported DX11, DX12,
+OpenGL and Vulkan paths have separate readiness checks. Adjust panel size,
+interface scale and background opacity in Display. Resize keeps the overlay
+request; it does not permanently switch to a desktop window.
 
-Use **Native in-game presentation** to keep Dragonwilds foreground while Helpy
-renders the panel in its own process. The bridge composites shared GPU textures
-into the game's DX11, DX12, OpenGL or Vulkan frame and routes captured input to
-Helpy. Your normal Helpy shortcut opens/hides it; **Hide** returns input to the
-game. Opening the native panel does not activate Helpy's desktop window.
-
-Choose the panel size, interface scale and background opacity in the same section.
-Native and DirectComposition panels keep text and controls opaque while the
-background stays translucent. Panel size applies on the next opening; scale and
-opacity update immediately. Native
-mode keeps secondary panels inside the game surface. Open Helpy from its system
-tray icon to use desktop windows and authoring file dialogs.
-
-Vulkan needs **Overlay appearance & Vulkan > Vulkan startup adapter > Enable Vulkan startup adapter for this
-runtime**, followed by a game restart. This opt-in registers a small per-user
-selector; only enrolled game executables load the full bridge. Remove the
-runtime's enrollment with the same button. A separate Steam/Game Pass install
-keeps its own bridge path. Neither this option nor renderer detection changes
-the game's chosen graphics API.
-
-Disable native presentation for the regular desktop overlay. That path uses
-DirectComposition and a flip-model surface where available, with a legacy
-fallback. It fits the attached game while visible, checks geometry at most four
-times per second, and releases its topmost state when another app takes focus.
-It is useful in borderless/windowed games, including OpenGL and Vulkan. Exclusive
-fullscreen should use native presentation; desktop windows can require a focus
-or display transition.
-
-Native frames use three shared textures and GPU fences; they are not copied
-through CPU image buffers or the JSON bridge. Hidden panels stop UI rendering.
-Prepared graphics hooks pass through without drawing, input capture, scene scans
-or recurring service requests. A stalled app heartbeat or full input queue
-releases capture. DX12 presentation verifies the queue through back-buffer
-transitions rather than guessing among active queues.
-
-The current native adapters target SDR and a shared GPU between game and Helpy.
-HDR, separate Vulkan graphics/present queue families and mismatched adapters
-produce an explicit status instead of using an unverified path. Driver-specific
-interop extensions are required for OpenGL and Vulkan. See the
-[adapter notes](NATIVE-OVERLAY.md) for tests and remaining live acceptance work.
+Vulkan requires this runtime's **Vulkan startup adapter** enrollment and a game
+restart. It does not change the game's graphics API. Desktop presentation is an
+option for windowed/borderless games; disable Game overlay for a regular window.
+See [native overlay setup and limits](NATIVE-OVERLAY.md).
 
 ### Controllers and offline access
 
-**Controller navigation** offers Automatic, Mouse & keyboard and Controller
-modes. Automatic mode follows the latest input. XInput controllers use the normal
-UI navigation: directional controls select, A/Cross confirms, B/Circle backs out
-of a popup or hides the panel, and shoulder buttons switch sections. Item cards,
-cart rows, search buttons and inventory cards participate in keyboard/controller
-navigation. Controller mode adds a footer with button glyphs.
-
-Choose Xbox, PlayStation or generic glyphs. XInput does not identify a physical
-PlayStation model; use Steam Input/an XInput driver and choose PlayStation glyphs.
-Text entry and Windows file dialogs still use normal desktop input. Device
-discovery runs on startup/device changes; state reads run only while Helpy renders.
-
-On its first normal launch, Helpy creates **RuneSchema Helpy (Steam)**, **RuneSchema
-Helpy (Game Pass)**, **RuneSchema Helpy (Epic Games)** or **RuneSchema Helpy (Server)**
-on the user's Windows desktop. Steam, Epic and server shortcuts point to that
-installation's `plugins/RuneSchema.Helpy/dll/Helpy.exe`. Game Pass uses its hosted
-AppData executable with the runtime folder passed explicitly: launching another
-EXE inside its Windows package can activate Gaming Services instead. Each shortcut
-keeps its runtime binding, so caches and tools work offline. Existing
-shortcuts are preserved. Removing a shortcut does not cause it to be recreated on
-every launch; smoke tests and authoring worker jobs do not create desktop links.
-
-Click the RuneSchema logo at the top of the navigation rail to return to the
-welcome splash. Settings drafts, item carts and caches remain intact; **Enter**
-returns to Home.
+Xbox, PlayStation and Nintendo navigation/glyphs support menus, Item Bay, map
+controls and text entry. A manual glyph override and alternate shortcut are
+available. Driver/connection differences and Windows/Steam Guide handling still
+need hardware testing. See [controller controls](CONTROLLER-NAVIGATION.md).
 
 ## Quick Start readiness
 
-Select **Quick Launch**, choose a native character and world, and save the
-launch options before restarting Dragonwilds. Normal mode does not enter a
-world automatically. The visible launch status in Quick settings reports why
-automatic loading is waiting or could not arm.
-
-The startup fallback checks at most twice per second for a ready local menu,
-including a menu that existed before RuneSchema's map callback was registered.
-The three-minute frontend deadline starts when Quick Start arms. Character and
-world names must resolve before selection changes. Once native loading is
-requested, it is not replayed. Hold Shift in the game to use normal startup;
-Shift presses in unrelated background applications do not cancel it.
-
-Unsupported native signatures, conflicting standalone QuickLoad installs,
-ambiguous saves and unavailable contracts still leave the normal menu usable.
-Quick Start does not bypass those checks or change the separate Save Bypass
-setting. Live startup testing is required for each supported game build.
+Choose **Quick Launch**, select the native character/world and **Save launch
+options**, then restart. Hold Shift in the game to use normal startup.
+Standalone QuickLoad conflicts, ambiguous saves and unsupported contracts leave
+the normal menu available. Status in Quick settings explains why automatic entry
+is waiting. Quick Start is separate from Save Bypass.
 
 ## Server access with a world PIN
 
-This is an **opt-in experimental** alternative to the existing host allowlists.
-Install matching RuneSchema, Registry Bridge and networking components on the
-host and client. Keep the actual gameplay content installed on both sides.
+A server's local Helpy or its owner's client can save player authorization,
+authorize all connected players, or enable automatic authorization. Saved grants
+record the server-observed character, account name and platform. Native Admin
+is a separate tab and permission.
 
-For the host:
+Alternatively, a host can enable PIN access and its permitted item/teleport
+actions. A client joins the world, opens **Settings → Server access**, submits
+the PIN and waits for **Client-server authority bridged**. The server validates
+and executes requests for that character. Quantity, identity and ground checks
+remain enforced; an accepted request is not a confirmed delivery.
 
-1. Open **Settings > Server access > Host configuration (this installation)**.
-2. Enable **Allow pin access** and enter an 8–64 character PIN without spaces.
-   Prefer a long, unique code and share it only with intended players.
-3. Enable **Allow client item grants**, **Allow client teleport**, or both.
-   Set the maximum item count per request.
-4. Choose **Save host settings**, then restart the host/server normally.
-
-The equivalent settings in the host's `settings/settings.ini` are:
-
-```ini
-[helpyAuthority]
-allowPinAccess = true
-accessPin = "replace-with-your-private-world-code"
-allowClientItemGrants = true
-allowClientTeleport = true
-maximumItemCount = 100
-```
-
-The PIN is stored in the host's private configuration file, not encrypted by
-RuneSchema. Do not distribute that configured file or include it in a public
-mod ZIP/support report. PIN authentication uses the existing game connection;
-this feature does not add a separate encrypted transport.
-
-For a player:
-
-1. Join the world with your character.
-2. Open **Settings > Server access**, enter the host's PIN, and select
-   **Connect to server**. Check the server's response.
-3. Use the ordinary item cart for your own character, or the map's teleport
-   action for a selected position. The server validates and executes the request.
-4. Select **Disconnect** to revoke this access. Reconnect after changing
-   character/world, restarting the host, rotating its PIN or an hour of inactivity.
-
-The client clears the entered PIN after submission and does not persist it.
-Item delivery also requires verified item network IDs for that connection:
-either matching audited item lists or a verified authority-order proof. An
-unrelated extra registry lane does not reject delivery. Teleport permission
-does not relax the separate building-placement identity guard.
-Five failed attempts temporarily block that peer for one minute. A shared
-failed-attempt budget also protects reconnects; disconnecting does not clear
-failed authentication attempts. Sessions are
-bounded and tied to native character/world identities. A PIN does not authorize
-other-player targeting, building placement, actor spawning or server settings.
-
-**Accepted** means the server queued the command. Helpy waits for a correlated
-result before calling a delivery confirmed. A missing result times out after
-60 seconds without retrying the operation. If it is unconfirmed, inspect the
-inventory or current position before making another request.
-
-Remote delivery/teleportation still needs live authenticated production
-acceptance testing. Keep it disabled on a public server until you have checked
-your matching build and intended content in a test world.
+Keep host settings private. PIN sessions are temporary; saved player grants
+persist independently. See [access setup](SERVER-ACCESS.md) and
+[server controls](SERVER-CONTROL.md) for revocation, persistence and role details.
 
 ## Registry notification preferences
 
-Under **Settings > Diagnostics**, routine registry activity is quiet by default.
-Handshake progress, completion and nonblocking content differences remain in
-the diagnostic history and logs. Enable **Show routine registry synchronization
-notices** to also display them as toasts. Actual blocked placements, unrelated
-warnings and errors remain eligible for notifications; no validation is bypassed.
+Routine registry synchronization is quiet by default but remains in history/logs.
+Enable **Show routine registry synchronization notices** under Diagnostics for
+toasts. Warnings and blocked operations retain their own notification behavior.
 
-For an advanced shortcut:
-
-```text
-Helpy.exe --runtime-root "D:\Game\RSDragonwilds\Binaries\WinGDK\ue4ss\Mods\RuneSchema" --platform gamepass
-```
-
-Both game launches and opening the packaged `Helpy.exe` ask Windows Explorer
-to launch that AppData copy. Helpy therefore
-runs outside the game's Windows package and inherits the desktop environment instead of
-keeping the Xbox or Steam game session alive. Its `runtime.json` binds it to
-the original installation; a new game session reconnects to the existing app.
-Copying and launch work happen once on a startup worker, with no recurring
-file polling. Exit Helpy before replacing a running app with a newer build.
-
-Platforms: `steam`, `gamepass`, `epic`, `server`. Game auto-launch supplies its
-platform; specify it for ambiguous custom paths. Each installation gets one app
-instance and its own local bridge, so Steam and Game Pass can run separately.
+Cleanup notices use plain language: **Removed X records from uninstalled mod: X**,
+or **Removed X records** when ownership is unknown. Notifications supports clearing
+all entries. Matching-version hotfix releases can be reviewed and applied with
+the game closed; see [notifications and hotfixes](NOTIFICATIONS-AND-HOTFIXES.md).
 
 ## Optional Game Pass game log
 
-Open **Diagnostics > Evidence > Options**, then find **Game Pass game log**.
-Hover **(?)** for the instructions and current limits. **Save logging shortcut…**
-creates a Windows shortcut to your assigned Game Pass installation with
-`-log` and `-ABSLOG` arguments. Close Dragonwilds normally, then use that
-shortcut for the next launch. **Copy launch command** provides the same
-arguments as a PowerShell command.
+Under **Diagnostics → Evidence → Options → Game Pass game log**, save a logging
+shortcut or copy the launch command. Restart through that shortcut to request
+`-log` and `-ABSLOG`. Shipping builds may still suppress native logging.
 
-The intended output is
-`%LOCALAPPDATA%/RSDragonwilds/RuneSchema/gamepass/diagnostics/RSDragonwilds.log`.
-Helpy automatically reads that file in the Game and EOS streams when it exists,
-keeping it separate from a simultaneous Steam session. Existing native logs
-remain available as a fallback. Saving the shortcut does not change Xbox's
-normal launch settings, restart the current game or enable verbose polling.
-
-The shortcut requests native logging; it does not guarantee that a game build
-will produce a file. Shipping builds can disable logging at build time.
-See [Epic's argument reference](https://dev.epicgames.com/documentation/en-us/unreal-engine/unreal-engine-command-line-arguments-reference)
-and [Microsoft's GDK launch guide](https://learn.microsoft.com/en-us/gaming/gdk/docs/tools/tools-pc/launching-on-pc).
+The default target is the runtime's AppData diagnostics folder. Game and EOS
+streams read it when available. **Keep logs in UE4SS (next launch)** changes
+RuneSchema/Helpy log locations; recreate older game logging shortcuts afterward.
+The toggle does not change other launchers' command lines.
 
 ## Responsiveness and background work
 
-**Diagnostics > Evidence > Options > Log folder** includes **Keep logs in UE4SS
-(next launch)**. This saves `logsInUE4SS` in that installation's `settings.ini`.
-Restart both Dragonwilds and Helpy to write `RuneSchema.log`, `RSDiagLog.jsonl`
-and `Helpy-Desktop.log` beside `UE4SS.log`; RuneSchema session archives use
-`ue4ss/logs/`. Existing logs stay where they are. Disabling the option restores
-the usual locations on the next launch. No background copying or extra polling
-is added. Cache storage remains in platform AppData.
+The default UI limit is **60 FPS**, adjustable from **15–144**. Hidden windows do
+not render; unfocused windows use a lower rate. Windows' animation preference
+controls transitions. Cache reads, searches, notifications and game requests use
+bounded background work rather than blocking input.
 
-Game Pass logging shortcuts created after changing the option use the selected
-folder for `RSDragonwilds.log`. Recreate older shortcuts. Native logs from other
-launchers require `-ABSLOG="<absolute ue4ss path>/RSDragonwilds.log"`; the toggle
-does not change those launchers' command lines. EOS shares the native game log.
-
-The pipe is local to the same Windows user, rejects remote clients and validates
-the server PID/install directory. Messages contain bounded JSON, not native
-pointers. The app waits on an update notification instead of issuing an empty
-read every 200 ms. It coalesces activity for 40 ms and drains bounded FIFO batches
-(up to 16 events and roughly 1 MiB, allowing one larger validated event).
-Small health checks and a fallback for older bridges remain. Waiting never
-holds the request lock, so explicit item/teleport requests can proceed.
-
-Read-only calls try a real reply buffer first, avoiding the routine size-probe
-round trip. Mutations reserve their required buffer and are never replayed after
-an unknown outcome. Response buffers are reused. Reconnection clears stale
-live state while cached browsing remains available.
-
-Visible cached pictures are read together on the file worker and installed in
-small, time-bounded UI batches without waiting for native discovery. Already
-resident pictures are reused immediately. Missing pictures use at most four
-queued bridge requests; the game still captures one uncached icon at a time
-within its existing work budget. Successful requests do not impose a 100 ms
-pause before queuing the next icon. Newly captured pictures stay in the runtime
-cache for later searches and launches.
-
-Cached searches prioritize matching name prefixes, then wrap through the
-remaining records so alternate names are still considered. Family matching
-also recognizes native armour identifiers such as `Armour T5 Head Splitbark`.
-Existing cached family rows stay browsable while bounded live checks continue.
-If a saved catalogue has an outdated or missing disk index, its first fallback
-read rebuilds that index on the file worker for later searches and launches.
-The original catalogue and source ownership checks are preserved.
-
-The UI defaults to **60 FPS**, adjustable from **15 to 144** in Quick Settings.
-Existing explicit limits remain respected. Unfocused windows use 10 FPS; tray
-windows do not render. The application's presentation pacing is independent of
-game refresh requests and the game's own frame limit.
-
-Page bodies ease into view over 160 ms, with the background and navigation
-staying in place. Home tile exits take 200 ms; navigation remains responsive.
-Sidebar rows have rounded hover feedback and a clear active-page marker.
-Windows' **Animation effects** preference disables these transitions; Helpy
-reads that preference at startup and when Windows reports a settings change.
-It does not poll the setting each frame.
-
-The frame limiter keeps a steady deadline after a slightly late frame instead
-of adding that delay to every later frame. Focused windows use a
-[high-resolution waitable timer](https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-createwaitabletimerexw)
-when available, with the existing message wait as a fallback. Waiting yields
-the UI thread and wakes for input; it does not busy-wait or call `timeBeginPeriod`.
-Hidden windows keep their existing no-render behavior.
-
-The application, taskbar, Alt-Tab and system tray use the RuneSchema logo,
-embedded at ten sizes from 16 to 256 pixels. It is available offline and needs
-no downloaded artwork. Windows identifies the executable as **RuneSchema Helpy**.
-
-Item Cart retains the latest delivery outcomes for reordering, without keeping
-unrelated catalogue or snapshot fields from acknowledgments. Completed request
-queues remain bounded and consumed acknowledgments are removed. Renderer
-shutdown drains pending icon reads and frees item, map, preview and wiki texture
-records before destroying their ImGui context. Cached files stay available for
-the next launch.
-
-Quick Settings includes **Exit Helpy when the game closes**, saved as
-`"exitWithGame": true` in the Helpy plugin's `settings/settings.jsonc`.
-It is off by default and applies immediately. When enabled, Helpy exits fully
-after its attached game or dedicated server process ends, even if closing the
-window normally sends it to the tray. Temporary bridge disconnects do not
-close it. Starting Helpy offline still works; the setting follows a process
-only after attachment. Windows' process-exit event shares the existing desktop
-wait, without adding game queries or a polling worker.
-
-A completed imported-cache search with no matches now falls through to the
-bounded mounted-item search. An older base-game cache cannot hide a newer mod
-item simply because its imported index finished first. Results found live are
-queued for the existing learned cache; ordinary cache hits remain available
-immediately.
-
-By default the app keeps its own rotating 2 MiB log at
-`%LOCALAPPDATA%/RSDragonwilds/RuneSchema/<platform>/diagnostics/Helpy-Desktop.log`.
-It retains one previous log and never writes into the game's log. Runtime
-Details can show the installed Vortex icon as a mod manager, not a runtime.
+Caches and profiles stay in per-runtime AppData. By default, Helpy's diagnostic
+folder keeps a rotating 2 MiB desktop log and one previous file. Overlay status
+changes use RuneSchema.log: [RS-OVL-001/002/003](../ERROR-CODES.md#rs-ovl-002).
 
 ## Repair RuneSchema
 
-With the assigned game or dedicated server closed, open **Tools > Utilities >
-Repair** and press **Repair**. The console shows recent RuneSchema/UE4SS warning
-lines as context, then reports each bundled base file as valid or needing repair.
-Log text never selects files or runs commands.
+Close the assigned game/server. In Helpy, open
+**Tools → Utilities → Repair** and press **Repair**. The console checks required
+base files against the exact installed version's verified GitHub release ZIP.
+Missing/changed base files are replaced; user mods, settings, saves, caches and
+UE4SS are outside its scope.
 
-Helpy downloads the full GitHub release ZIP matching the installed core version
-and verifies GitHub's SHA-256 digest before using it. It checks `dlls/main.dll`,
-bundled Lua loaders, `modmenu.json` and files shipped in RuneSchema.Helpy, RuneSchema.RegistryBridge,
-RuneSchema.QuestItems and RSNetworking. Missing or changed base files are replaced
-in full; already valid files are left alone. User mods, settings, saves, caches
-and other plugins are outside this repair scope. UE4SS itself is not replaced.
-
-Previous files and a repair receipt stay in the job folder under
-`%LOCALAPPDATA%/RSDragonwilds/RuneSchema/core/tools/cache-builder/`.
-**Open repair report & backups** opens that folder. Failed replacement attempts
-roll back earlier writes; any rollback problem is reported with its backup path.
-The console retains a bounded tail in the interface and its full file on disk.
-An active repair uses the existing explicit worker; there is no recurring scan.
-
-Repair refuses loaded/locked files, redirected paths, ambiguous packages and
-unverified downloads. If this exact version has no published release package,
-the console explains that and leaves the installation untouched. It does not
-downgrade an experimental build to the latest stable release. Run repair locally
-on the server if a network installation is missing its main DLL.
+Repair keeps previous files and a receipt in the AppData tool job folder.
+Failed writes roll back; any rollback problem includes its backup path. Locked
+files or unavailable/unverified packages leave the installation unchanged.
 
 ## Validation boundary
 
-The migration requires matching application and runtime components. Native
-item/map gameplay and representative game-FPS/server-jitter measurements remain
-separate release checks. GUI services from third-party plugins are not a general
-RPC API; the built-in tools and native inventory-mark service retain their
-specific adapters. Desktop `Version` and registry JSON `SchemaVersion` labels
-are informational; shapes, owners, budgets, storage formats and ABI contracts
-still receive validation.
-
-Native overlay readiness and failures are recorded in **RuneSchema.log** as
-`RS-OVL-001` (a visible frame was presented), `RS-OVL-002` (presentation could
-not open), and `RS-OVL-003` (bridge ready/attached). They are logged on state
-changes rather than per frame and are not duplicated into UE4SS.log. See the
-[diagnostic reference](../ERROR-CODES.md#rs-ovl-002) for checks. A ready bridge
-alone does not confirm that a frame is visible.
+Use matching core, bridge, application and plugin files. The UI and cached
+metadata do not bypass server authority or native gameplay checks. Test results
+and remaining platform/hardware limits are listed in [candidate status](PRE-RELEASE.md).

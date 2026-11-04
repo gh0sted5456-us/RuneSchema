@@ -9,21 +9,9 @@ promote_to: HELPY-BUG-REPORTS.md
 
 # Bug reports in Helpy
 
-Choose **Report a bug** from navigation or Home. Fill in a title, category,
-what happened, steps to reproduce and expected behavior. Extra details or a
-manually pasted log excerpt are optional. No world needs to be loaded.
+Choose **Report a bug** from navigation or Home to open
+[RuneSchema's Nexus Bugs page](https://www.nexusmods.com/runescapedragonwilds/mods/570?tab=bugs)
+in your browser. Sign in to Nexus and write your report there.
 
-1. Review **Preview the exact report**. Optional runtime details contain only
-   platform and RuneSchema, Helpy, game and UE4SS version strings.
-2. Choose **Copy bug report**. It copies the complete form as plain text,
-   including title and category; long reports are never packed into a URL.
-3. Choose **Submit to Nexus Page**, beside the Nexus icon. It opens
-   [RuneSchema's bugs page](https://www.nexusmods.com/runescapedragonwilds/mods/570?tab=bugs).
-4. Sign in with your Nexus account, create a bug report, paste the copied text,
-   review it, and submit on Nexus.
-
-Helpy does not post the report, sign in for you or attach files. Logs, saves,
-usernames, account IDs, mod lists and filesystem paths are not collected
-automatically. Review anything you type or paste before publishing. Drafts stay
-while navigating within the same Helpy session. Automated tests use a private
-clipboard/browser substitute and do not submit external reports.
+Helpy no longer collects a report form or submits report data. If the browser
+cannot open, it shows the destination so you can visit it manually.
