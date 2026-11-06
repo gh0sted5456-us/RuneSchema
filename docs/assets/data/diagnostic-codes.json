@@ -1722,6 +1722,18 @@
       "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
+      "code": "RS-CMD-001",
+      "severity": "warning",
+      "title": "Mod console command unavailable",
+      "producer": "include/Runtime/ModConsoleCommands.h",
+      "legacyCollision": false,
+      "namespace": "structured",
+      "category": "Mod console",
+      "anchor": "rs-cmd-001",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-cmd-001",
+      "troubleshooting": "Run this command only as the local gameplay host. Check the enabled owning mod, ConsoleCommands declaration and existing component handler; remote requests are not forwarded."
+    },
+    {
       "code": "RS-CORE-001",
       "severity": "error",
       "title": "RuneSchema startup aborted",

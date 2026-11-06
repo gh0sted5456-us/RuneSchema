@@ -20,6 +20,11 @@ separately; preserve your settings, mods and saves when updating.
 
 ## Unpublished development follow-up
 
+The [cooked host console](MOD-CONSOLE.md) now has an isolated saved-world
+acceptance test: an enabled mod's existing component receives a guarded local
+host command, and undeclared commands are rejected. Remote-client testing is
+pending. This source follow-up is not included in the published ZIP.
+
 The [runtime folder restructure](RUNTIME-LAYOUT.md) separates core plugins under
 `dlls/plugins` from Helpy under `Helpy`. It is a separate local candidate and is
 not included in the published download above. The same local follow-up adds a

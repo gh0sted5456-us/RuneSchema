@@ -24,6 +24,7 @@ namespace PS::CookedPakRegistryManifest {
     };
 
     struct Manifest {
+        struct ConsoleCommand {std::string Owner,Id,Class;};
         std::string Owner;
         std::string Source;
         std::vector<Lane> AssetLanes;
@@ -33,6 +34,7 @@ namespace PS::CookedPakRegistryManifest {
         std::vector<std::string> MeleeAttackClasses;
         std::vector<std::string> RangedAttackClasses;
         std::vector<std::string> WorldComponents; // Mod-owned nonreplicated GameState components.
+        std::vector<ConsoleCommand> ConsoleCommands;
         std::vector<std::string> CacheAssets; // Exact original artwork declarations; never native gameplay registration.
         std::uint64_t Fingerprint = 0;
     };
@@ -124,11 +126,11 @@ namespace PS::CookedPakRegistryManifest {
         const auto native = document.value("NativeRegistries",nlohmann::json::object());
         if (!native.is_object())
             throw std::runtime_error("NativeRegistries must be an object");
-        static constexpr std::array<const char*, 17> Allowed{{
+        static constexpr std::array<const char*, 18> Allowed{{
             "Items", "Recipes", "Quests", "CombatSpells", "UtilitySpells",
             "Journals", "Lore",
             "EquipmentEffects", "WearableMeshData", "MeleeAttackClasses",
-            "RangedAttackClasses", "WorldComponents", "CacheAssets", "Skills", "SkillPerks", "Enums", "Buildings"}};
+            "RangedAttackClasses", "WorldComponents", "ConsoleCommands", "CacheAssets", "Skills", "SkillPerks", "Enums", "Buildings"}};
         for (const auto& [key, unused] : native.items())
         {
             (void)unused;
@@ -186,6 +188,21 @@ namespace PS::CookedPakRegistryManifest {
         for(const auto& path:result.WorldComponents)
             if(!Detail::OwnedObjectPath(path,owner)||!path.ends_with("_C"))
                 throw std::runtime_error("NativeRegistries.WorldComponents requires mod-owned cooked component class paths ending in _C");
+        if(native.contains("ConsoleCommands")){
+            const auto& declarations=native.at("ConsoleCommands");std::set<std::string> ids;
+            if(!declarations.is_array()||declarations.size()>256)throw std::runtime_error("ConsoleCommands requires at most 256 declarations");
+            for(const auto& entry:declarations){
+                if(!entry.is_object()||entry.size()!=3||!entry.contains("Version")||!entry.at("Version").is_number_integer()||entry.at("Version")!=1
+                    ||!entry.contains("Id")||!entry.at("Id").is_string()||!entry.contains("Class")||!entry.at("Class").is_string())
+                    throw std::runtime_error("ConsoleCommands requires only Version: 1, Id and Class");
+                const auto id=entry.at("Id").get<std::string>(),path=entry.at("Class").get<std::string>();
+                if(id.empty()||id.size()>96||id=="."||id==".."||!std::all_of(id.begin(),id.end(),[](unsigned char c){return (c>='a'&&c<='z')||(c>='A'&&c<='Z')||(c>='0'&&c<='9')||c=='_'||c=='-'||c=='.';})
+                    ||!ids.insert(Detail::Fold(id)).second||!Detail::OwnedObjectPath(path,owner)||!path.ends_with("_C"))
+                    throw std::runtime_error("ConsoleCommands requires unique token IDs and mod-owned component class paths ending in _C");
+                result.ConsoleCommands.push_back({owner,id,path});
+                if(++total>16384)throw std::runtime_error("Cooked registry exceeds the 16384-reference document limit");
+            }
+        }
         result.CacheAssets = Detail::ReadPaths(native,"CacheAssets",total);
         for(const auto& path:result.CacheAssets){
             const auto dot=path.find('.',path.find_last_of('/')+1);
@@ -273,6 +290,7 @@ namespace PS::CookedPakRegistryManifest {
         for (const auto& path : result.RangedAttackClasses) Detail::Hash(hash, path);
         Detail::Hash(hash,"CacheAssets");for(const auto& path:result.CacheAssets)Detail::Hash(hash,path);
         if(!result.WorldComponents.empty()){Detail::Hash(hash,"WorldComponents");for(const auto& path:result.WorldComponents)Detail::Hash(hash,path);}
+        if(!result.ConsoleCommands.empty()){Detail::Hash(hash,"ConsoleCommands");for(const auto& command:result.ConsoleCommands){Detail::Hash(hash,command.Id);Detail::Hash(hash,command.Class);}}
         Detail::Hash(hash,result.LoaderDefinitions.dump());
         if(!result.SchemaPaths.empty()){Detail::Hash(hash,"SchemaReferences");for(const auto& path:result.SchemaPaths)Detail::Hash(hash,path);}
         result.Fingerprint = hash;
@@ -298,6 +316,12 @@ namespace PS::CookedPakRegistryManifest {
         std::vector<std::pair<std::string,std::string>> result;
         for(const auto& manifest:Detail::Manifests)for(const auto& path:manifest->WorldComponents)
             result.emplace_back(manifest->Owner,path);
+        return result;
+    }
+
+    inline std::vector<Manifest::ConsoleCommand> ConsoleCommandDefinitions(){
+        std::scoped_lock lock(Detail::Mutex);std::vector<Manifest::ConsoleCommand> result;
+        for(const auto& manifest:Detail::Manifests)result.insert(result.end(),manifest->ConsoleCommands.begin(),manifest->ConsoleCommands.end());
         return result;
     }
 

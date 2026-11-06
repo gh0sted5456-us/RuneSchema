@@ -47,6 +47,24 @@ int main()
     auto duplicateWorld=worldOnly;duplicateWorld["NativeRegistries"]["WorldComponents"].push_back(component);bool badWorld=false;
     try{Parse(duplicateWorld,"ExampleMod","registry/world.jsonc");}catch(const std::runtime_error&){badWorld=true;}assert(badWorld);
 
+    const nlohmann::json commands={{"NativeRegistries",{{"ConsoleCommands",nlohmann::json::array({{{"Version",1},{"Id","Weather"},{"Class",component}}})}}}};
+    const auto command=Parse(commands,"ExampleMod","registry/commands.jsonc");
+    assert(command&&command->ConsoleCommands.size()==1&&command->ConsoleCommands[0].Owner=="ExampleMod");
+    auto withCommand=document;withCommand["NativeRegistries"]["ConsoleCommands"]=commands["NativeRegistries"]["ConsoleCommands"];
+    assert(Parse(withCommand,"ExampleMod","registry/commands.jsonc")->Fingerprint!=published.Fingerprint);
+    auto noCommands=document;noCommands["NativeRegistries"]["ConsoleCommands"]=nlohmann::json::array();
+    assert(Parse(noCommands,"ExampleMod","registry/commands.jsonc")->Fingerprint==published.Fingerprint);
+    for(const auto& invalid:nlohmann::json::array({
+        {{"Version",2},{"Id","Weather"},{"Class",component}},{{"Version",1},{"Id","bad:id"},{"Class",component}},
+        {{"Version",1},{"Id","Weather"},{"Class","/Game/Mods/Other/BP.BP_C"}},
+        {{"Version",1},{"Id","Weather"},{"Class",component},{"Owner","Other"}},
+        {{"Version",1},{"Id","Weather"},{"Class","/Game/Mods/ExampleMod/BP.BP"}}})){
+        auto bad=commands;bad["NativeRegistries"]["ConsoleCommands"][0]=invalid;bool rejected=false;
+        try{Parse(bad,"ExampleMod","registry/commands.jsonc");}catch(const std::runtime_error&){rejected=true;}assert(rejected);
+    }
+    auto duplicateCommand=commands;duplicateCommand["NativeRegistries"]["ConsoleCommands"].push_back({{"Version",1},{"Id","weather"},{"Class",component}});
+    bool rejectedCommand=false;try{Parse(duplicateCommand,"ExampleMod","registry/commands.jsonc");}catch(const std::runtime_error&){rejectedCommand=true;}assert(rejectedCommand);
+
     auto artwork=document;artwork["NativeRegistries"]["CacheAssets"]={"/Example/Icons/T_Original.T_Original"};
     const auto loose=Parse(artwork,"ExampleMod","registry/example.jsonc");
     const auto cooked=Parse(artwork,"ExampleMod","pak:/Example.RSREG_Test");

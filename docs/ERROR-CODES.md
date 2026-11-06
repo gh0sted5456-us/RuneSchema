@@ -4,7 +4,7 @@ Find a code from your log to see what happened and what to try next. Use the mes
 
 Open Helpy's **Diagnostics** for an overview, grouped issues and Live Log. You can copy an entry or follow its reference link here. The viewer leaves the original logs unchanged; recent activity includes normal messages, while notifications focus on warnings and errors.
 
-This page contains **98 legacy reference entries**, **225 structured diagnostic entries** and **19 bridge reason codes**. RS-JRN-001, RS-JRN-002 and RS-SPAWN-001 each have an older and a structured meaning. Follow the link from your message, or check its source and namespace to choose the matching entry. Links between the two meanings are included.
+This page contains **98 legacy reference entries**, **226 structured diagnostic entries** and **19 bridge reason codes**. RS-JRN-001, RS-JRN-002 and RS-SPAWN-001 each have an older and a structured meaning. Follow the link from your message, or check its source and namespace to choose the matching entry. Links between the two meanings are included.
 
 Structured reports in `RSDiagLog.jsonl` include their source, context and outcome. Not every operation emits every code. `Unknown` means the cause has not been identified; use the severity in the actual message. `Partial` means some changes may have occurred, and `Deferred` points to later or restart handling. `Skipped` or `Blocked` can describe one step while the rest of the mod continues.
 
@@ -32,6 +32,7 @@ This shared reference covers stable and [experimental builds](experimental/index
 | [RS-CAT](#legacy-family-rs-cat) | Items |
 | [RS-CFG](#legacy-family-rs-cfg) | Configuration |
 | [RS-CHEST](#legacy-family-rs-chest) | Storage |
+| [RS-CMD](#structured-family-rs-cmd) | Mod console |
 | [RS-CORE](#structured-family-rs-core) | Runtime |
 | [RS-CRS](#structured-family-rs-crs) | Courses |
 | [RS-DL](#legacy-family-rs-dl) | Downloads |
@@ -3635,6 +3636,28 @@ Start with the original message and the listed mod, file, target or property. Th
 Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
 
 [Direct link to structured RS-BP-011](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-bp-011)
+
+</section>
+
+## Mod console — structured RS-CMD {#structured-family-rs-cmd}
+
+<section class="rs-code-card" data-rs-code="RS-CMD-001" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+### RS-CMD-001: Mod console command unavailable {#rs-cmd-001}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Mod console command unavailable. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Area:** Mod console · **Producer:** `include/Runtime/ModConsoleCommands.h`
+
+**What to check**
+
+Run this command only as the local gameplay host. Check the enabled owning mod, ConsoleCommands declaration and existing component handler; remote requests are not forwarded.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-CMD-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-cmd-001)
 
 </section>
 

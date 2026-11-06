@@ -118,6 +118,12 @@
       },
       {
         "Raw table reference": "experimental/reference/loaders/raw.md"
+      },
+      {
+        "Cooked host console (in development)": "experimental/MOD-CONSOLE.md"
+      },
+      {
+        "Mod-local services (in development)": "experimental/MOD-LOCAL-SERVICES.md"
       }
     ]
   },

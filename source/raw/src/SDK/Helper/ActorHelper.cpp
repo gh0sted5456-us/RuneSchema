@@ -456,6 +456,37 @@ namespace DragonWilds::ActorHelper {
         std::memcpy(Out,property->ContainerPtrToValuePtr<void>(m_params.data()),Size);
     }
 
+    FunctionCall& FunctionCall::InitializeOutput(const CharType* Name)
+    {
+        auto* property=m_function->FindProperty(FName(Name,FNAME_Find));
+        if(!ReflectedContract::Fits(property,m_function->GetParmsSize())||!property->HasAllPropertyFlags(CPF_Parm|CPF_OutParm)
+            ||property->HasAnyPropertyFlags(CPF_ReturnParm|CPF_ReferenceParm|CPF_ConstParm)
+            ||std::find(m_initialized.begin(),m_initialized.end(),property)!=m_initialized.end())
+            throw std::runtime_error("Output parameter is unavailable or already initialized");
+        m_initialized.push_back(property);property->InitializeValue_InContainer(m_params.data());return *this;
+    }
+    bool FunctionCall::BooleanOutput(const CharType* Name)
+    {
+        auto* property=CastField<FBoolProperty>(m_function->FindProperty(FName(Name,FNAME_Find)));
+        if(!property||std::find(m_initialized.begin(),m_initialized.end(),property)==m_initialized.end())
+            throw std::runtime_error("Boolean output was not initialized");
+        return property->GetPropertyValueInContainer(m_params.data());
+    }
+    std::string FunctionCall::StringOutput(const CharType* Name,size_t MaximumBytes)
+    {
+        auto* property=CastField<FStrProperty>(m_function->FindProperty(FName(Name,FNAME_Find)));
+        if(!property||property->GetElementSize()!=sizeof(FString)||std::find(m_initialized.begin(),m_initialized.end(),property)==m_initialized.end())
+            throw std::runtime_error("String output was not initialized");
+        // Copy characters while the reflected frame owns the FString allocation.
+        const auto& chars=property->ContainerPtrToValuePtr<FString>(m_params.data())->GetCharArray();
+        if(chars.Num()==0)return {};
+        if(chars.Num()<0||static_cast<size_t>(chars.Num())>MaximumBytes+1||!chars.GetData()||chars[chars.Num()-1]!=0)
+            throw std::runtime_error("String output exceeds its limit or is invalid");
+        const auto value=RC::to_string(StringType(chars.GetData(),chars.Num()-1));
+        if(value.size()>MaximumBytes||value.find('\0')!=value.npos)throw std::runtime_error("String output exceeds its UTF-8 limit or contains NUL");
+        return value;
+    }
+
     FunctionCall& FunctionCall::FirstNumericArg(double Value)
     {
         for (auto* property = m_function->GetPropertyLink(); property;

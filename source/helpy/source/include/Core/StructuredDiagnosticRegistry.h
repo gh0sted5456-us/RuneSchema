@@ -4,7 +4,7 @@
 #include <string_view>
 namespace PS::StructuredDiagnosticRegistry {
 struct Entry { std::string_view Code, TypicalSeverity, Description, ProducerSite; bool LegacyCollision; };
-inline constexpr std::array<Entry,225> All{{
+inline constexpr std::array<Entry,226> All{{
     {"RS-ASSET-001","Error","Asset target remained unresolved","src/Loader/DragonWildsAssetModLoader.cpp",false},
     {"RS-ASSET-002","Warning","Asset definition has invalid root","src/Loader/DragonWildsAssetModLoader.cpp",false},
     {"RS-ASSET-003","Warning","Asset property modification rejected","src/Loader/DragonWildsAssetModLoader.cpp",false},
@@ -42,6 +42,7 @@ inline constexpr std::array<Entry,225> All{{
     {"RS-BP-009","Error","Blueprint modification failed","src/Loader/DragonWildsBlueprintModLoader.cpp",false},
     {"RS-BP-010","Warning","Blueprint component template unavailable","src/Loader/DragonWildsBlueprintModLoader.cpp",false},
     {"RS-BP-011","Warning","Blueprint component definition invalid","src/Loader/DragonWildsBlueprintModLoader.cpp",false},
+    {"RS-CMD-001","Warning","Mod console command unavailable","include/Runtime/ModConsoleCommands.h",false},
     {"RS-CORE-001","Error","RuneSchema startup aborted","src/Loader/DragonWildsMainLoader.cpp",false},
     {"RS-CORE-002","Error","GameInstance vtable unavailable","src/Loader/DragonWildsMainLoader.cpp",false},
     {"RS-CORE-003","Error","GameInstance initialization hook unavailable","src/Loader/DragonWildsMainLoader.cpp",false},

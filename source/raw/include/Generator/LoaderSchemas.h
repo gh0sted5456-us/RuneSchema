@@ -890,6 +890,11 @@ inline nlohmann::json LoaderSchemas() {
         nativeRegistries["properties"][lane]={{"type","array"},{"maxItems",4096},{"uniqueItems",true},{"items",{{"anyOf",{nativePath,schemaPath}}}}};
     for(const auto* lane:{"MeleeAttackClasses","RangedAttackClasses","WorldComponents"})nativeRegistries["properties"][lane]["items"]=nativePath;
     nativeRegistries["properties"]["WorldComponents"]={{"type","array"},{"maxItems",4096},{"uniqueItems",true},{"items",{{"type","string"},{"maxLength",1024},{"pattern","^/[^\\r\\n\\t]+\\.[^/]+_C$"}}},{"description","Mod-owned, nonreplicated cooked ActorComponent classes enrolled once per local gameplay GameState."}};
+    nativeRegistries["properties"]["ConsoleCommands"]={{"type","array"},{"maxItems",256},{"items",{
+        {"type","object"},{"additionalProperties",false},{"required",{"Version","Id","Class"}},{"properties",{
+            {"Version",{{"const",1}}},{"Id",{{"type","string"},{"minLength",1},{"maxLength",96},{"pattern","^[A-Za-z0-9_.-]+$"},{"not",{{"enum",{".",".."}}}}}},
+            {"Class",{{"type","string"},{"maxLength",1024},{"pattern","^/[^\\r\\n\\t]+\\.[^/]+_C$"}}}}}}},
+        {"description","Mod-owned host-only local console handlers on existing GameState components. Runtime validates unique IDs, class ownership and the four-pin local Blueprint signature."}};
     result["registry"]["definitions"]["modOwnedCookedPaths"]={{"type","array"},{"maxItems",4096},{"uniqueItems",true},
         {"items",{{"type","string"},{"maxLength",1024},{"pattern","^/(?!Script/|Engine/)[A-Za-z0-9_.-]+/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"},{"not",{{"pattern","\\.\\."}}}}},
         {"description","Runtime requires the owning /Owner/ or /Game/Mods/Owner/ namespace and rejects case-insensitive duplicates. Strings only; no Source:Schema or arbitrary property writes."}};
