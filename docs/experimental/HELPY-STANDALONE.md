@@ -3,13 +3,17 @@ channel: experimental
 promote_to: HELPY-STANDALONE.md
 ---
 
+!!! info "Folder layout during testing"
+    The [new runtime layout](RUNTIME-LAYOUT.md) is an unpublished development candidate. The published 0.8.1.0 ZIP keeps Helpy under `plugins/RuneSchema.Helpy/dll` and HUD under `plugins/RuneSchema.HUD`. Both layouts remain supported.
+
+
 !!! info "Pre-release · 0.8.1.0"
     See [candidate status](PRE-RELEASE.md) for downloads and remaining live checks.
 
 # Helpy desktop app
 
 Helpy runs as `Helpy.exe` from
-`RuneSchema/plugins/RuneSchema.Helpy/dll/`, beside its bridge and `SDL3.dll`.
+`RuneSchema/Helpy/`, beside its bridge and `SDL3.dll`.
 AppData holds settings, caches, profiles and logs. Keep all components from one
 matching runtime package.
 
@@ -52,6 +56,23 @@ Versions come from optional ID.txt, mod.json or Mod Menu metadata. Missing
 versions are labelled **Unversioned** and excluded from host-alignment totals.
 Configured state and observed loader health are separate. See
 [metadata and controls](MOD-METADATA-AND-CONTROLS.md).
+
+### Selected mod licenses (in development)
+
+Select a RuneSchema or UE4SS mod card to give it a gold border. Open **License**
+at the bottom of the internal navigation to read its bundled notices. Compact
+UE4SS rows can also be selected. Selection does not enable a mod or change its order.
+
+Helpy reads common `LICENSE`/`LICENCE`, `COPYING`, `NOTICE`, terms and conditions
+files, including `conditions.license` and `license-jonesing4space.txt`. It also
+checks the mod's immediate `licenses`, `licences` and `legal` folders. Each notice
+is shown separately and can be copied; **Refresh license** reloads local changes.
+Files load in the background, without a connected game or a network request.
+
+**Open mod page** uses the author link from `ID.txt` or supported metadata. If a
+local notice is missing, check the permissions or license on that page. Helpy
+does not scrape Nexus Mods/CurseForge or infer a license from a download link.
+
 
 ## Startup and the system tray
 
@@ -184,6 +205,21 @@ The default target is the runtime's AppData diagnostics folder. Game and EOS
 streams read it when available. **Keep logs in UE4SS (next launch)** changes
 RuneSchema/Helpy log locations; recreate older game logging shortcuts afterward.
 The toggle does not change other launchers' command lines.
+
+## Direct delivery and player marks
+
+Right-click **Give** can be used with a populated cart. It waits for an existing
+background validation request, then submits the direct selection once without
+consuming or changing the cart. A queued request is canceled if its recipient
+disconnects or the world changes. An unconfirmed delivery is never retried
+automatically; check the recipient's inventory before submitting again.
+
+Character marks stay saved locally while an owned-player networking bridge is
+unavailable. RuneSchema warns once and retries with a delay up to 30 seconds;
+it reports recovery when forwarding resumes. Host and client need compatible
+RuneSchema networking components for synchronization. A request that was sent
+but not acknowledged still reports a separate failure. Mark synchronization
+does not require an administrative item-delivery PIN.
 
 ## Responsiveness and background work
 

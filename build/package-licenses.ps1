@@ -88,9 +88,12 @@ function Install-LicenseBundle([string]$Payload) {
     }
     # Preserve every bundled plugin's exact notices before consolidating them.
     # Removing Helpy's licenses first used to lose plugin-only notices.
-    $pluginDirectory = Join-Path $Payload 'plugins'
+    $pluginFolders=@()
+    foreach($relative in @('plugins','dlls/plugins','Helpy/plugins')){$directory=Join-Path $Payload $relative;if(Test-Path -LiteralPath $directory -PathType Container){$pluginFolders+=@(Get-ChildItem -LiteralPath $directory -Directory)}}
+    if(Test-Path -LiteralPath (Join-Path $Payload 'Helpy/plugin.json')){$pluginFolders+=Get-Item -LiteralPath (Join-Path $Payload 'Helpy')}
+    $pluginDirectory = $Payload
     if (Test-Path -LiteralPath $pluginDirectory -PathType Container) {
-        foreach ($plugin in Get-ChildItem -LiteralPath $pluginDirectory -Directory) {
+        foreach ($plugin in $pluginFolders) {
             $pluginNotices = @(Get-ChildItem -LiteralPath $plugin.FullName -File | Where-Object {
                 $_.Name -in @('LICENSE', 'AUTHORS.md', 'LICENSING.md', 'CONTRIBUTING.md', 'THIRD_PARTY_NOTICES.md')
             })
@@ -324,7 +327,7 @@ try {
         $dist = Join-Path $RepositoryRoot 'dist'
         $packages = @(
             @{ Name = "RuneSchema-$version"; Payload = 'RuneSchema' },
-            @{ Name = "RuneSchema.Helpy-$version"; Payload = 'RuneSchema.Helpy' }
+            @{ Name = "RuneSchema.Helpy-$version"; Payload = 'RuneSchema' }
         )
         Collect-DependencyNotices
         $count = 0
@@ -332,9 +335,11 @@ try {
             $archive = Join-Path $dist ($package.Name + '.zip')
             if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) { continue }
             $payload = Join-Path (Join-Path $dist $package.Name) $package.Payload
+            $legacyHelpy=$false
+            if(-not(Test-Path -LiteralPath $payload) -and $package.Name.StartsWith('RuneSchema.Helpy-')){$payload=Join-Path (Join-Path $dist $package.Name) 'RuneSchema.Helpy';$legacyHelpy=$true}
             # Full releases extract directly to RuneSchema, matching the
             # installation guide and verified public package layout.
-            Write-LicensedArchive $payload $archive ($package.Payload -ne 'RuneSchema')
+            Write-LicensedArchive $payload $archive $legacyHelpy
             $count++
         }
         if ($count -eq 0) { throw 'No current RuneSchema or Helpy build archive was found to finalize.' }

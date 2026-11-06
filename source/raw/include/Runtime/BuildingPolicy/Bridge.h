@@ -8,6 +8,7 @@
 #include "Farming.h"
 #include "ResourceYield.h"
 #include "EnemySpawns.h"
+#include "AIPassivity.h"
 #include "PlayerPhasing.h"
 #include "AdapterState.h"
 #include "CraftingCosts.h"
@@ -29,6 +30,7 @@ class Bridge {
  struct HarvestFrame {UObject* owner;UFunction* function;void* frame;float original;};
  std::vector<HarvestFrame> harvestFrames;
  EnemySpawns enemies;
+ AIPassivity aiPassivity;
  MaterialCosts materials;
  CraftingCosts crafting;
  MaterialMenus menus;
@@ -78,7 +80,8 @@ public:
   try{Placement::Install([this](const std::string& message){Note(message);});placementBound=true;}catch(const std::exception& e){Note(std::string("REGISTER_FAILED ")+e.what());}
   Hook::FCallbackOptions options{};options.OwnerModName=STR("RuneSchema");options.HookName=STR("BuildingPolicyBridge");
   enemies.SetLogger([this](const std::string& message){Note(message);});
-  begin=Hook::RegisterBeginPlayPostCallback([this](Hook::TCallbackIterationData<void>&,AActor* owner){try{Add(owner);enemies.Begin(owner);}catch(const std::exception& e){Note(std::string("REGISTER_FAILED ")+e.what());}},options);
+  aiPassivity.SetLogger([this](const std::string& message){Note(message);});
+  begin=Hook::RegisterBeginPlayPostCallback([this](Hook::TCallbackIterationData<void>&,AActor* owner){try{Add(owner);enemies.Begin(owner);aiPassivity.Begin(owner);}catch(const std::exception& e){Note(std::string("REGISTER_FAILED ")+e.what());}},options);
   event=Hook::RegisterProcessEventPreCallback([this](Hook::TCallbackIterationData<void>& callback,UObject* object,UFunction* fn,void* params){
    if(!object||!fn)return;
    static const FName beginName(L"ReceiveBeginPlay",FNAME_Add),harvestName(L"Server_TryHarvestPlot",FNAME_Add),spawnName(L"Server_SpawnBuilding",FNAME_Add);
@@ -115,9 +118,13 @@ public:
    if(!function)return;
    static const FName beginName(L"ReceiveBeginPlay",FNAME_Add),spawnName(L"Server_SpawnBuilding",FNAME_Add),tryName(L"TrySpawnPieceAtLocation",FNAME_Add),hoverName(L"OnPieceHovered",FNAME_Add),selectedName(L"OnPieceSelected",FNAME_Add);
    const auto name=function->GetFName();
+   static const FName passiveName(L"IsAiPassive",FNAME_Add);
+   static const FName effectAdded(L"OnGameplayEffectAdded",FNAME_Add),effectRemoved(L"OnGameplayEffectRemoved",FNAME_Add);
+   if(name==effectAdded||name==effectRemoved)try{aiPassivity.EffectEvent(owner,function,frame);}catch(const std::exception& e){Note(std::string("AI_EFFECT_EVENT_FAILED ")+e.what());}
+   if(name==passiveName)try{aiPassivity.After(owner,function,frame);}catch(const std::exception& e){Note(std::string("AI_PASSIVITY_GETTER_FAILED ")+e.what());}
    if(CraftingCosts::Matches(name))crafting.After(owner,function,frame);
    if(name==spawnName||name==tryName||name==hoverName||name==selectedName)materials.After(owner,function,frame);
-   if(name==beginName)try{enemies.Begin(owner);}catch(const std::exception& e){Note(std::string("ENEMY_SPAWN_POLICY_FAILED ")+e.what());}
+   if(name==beginName)try{enemies.Begin(owner);aiPassivity.Begin(owner);}catch(const std::exception& e){Note(std::string("ENEMY_SPAWN_POLICY_FAILED ")+e.what());}
    if(harvestFrames.empty())return;
    for(size_t i=harvestFrames.size();i;--i){auto saved=harvestFrames[i-1];if(saved.owner==owner&&saved.function==function&&saved.frame==frame){*Field(function,L"YieldMultiplier")->ContainerPtrToValuePtr<float>(frame)=saved.original;harvestFrames.erase(harvestFrames.begin()+i-1);break;}}
   },options);
@@ -167,12 +174,14 @@ public:
     }
     if(farmElapsed>=1.f){farmElapsed=0;if(Farming::Installed()&&!authorityWorlds.empty()){std::vector<UObject*> list;UObjectGlobals::FindAllOf(L"FarmingSubsystem",list);for(auto* subsystem:list)if(Live(subsystem)&&authorityWorlds.contains(subsystem->GetWorld()))Farming::Update(subsystem);}}
     enemies.Update();
+    try{aiPassivity.Update(authorityWorlds,step);}catch(const std::exception& e){Note(std::string("AI_PASSIVITY_UPDATE_FAILED ")+e.what());}
    }catch(const std::exception& e){Note(std::string("TICK_FAILED ")+e.what());}
   },options);
  }
  void Stop()noexcept{
   for(auto id:{begin,tick,event,afterEvent})if(id!=Hook::ERROR_ID)Hook::UnregisterCallback(id);begin=tick=event=afterEvent=Hook::ERROR_ID;
   for(auto& [_,state]:worlds)try{if(state.effects)state.effects->Stop();}catch(...){}
+  aiPassivity.Stop();
   try{enemies.Stop();ResourceYield::Stop();Farming::Stop();DestructionGuard::Clear();Placement::Clear();SupportTick::Clear();for(auto& [_,state]:overlays)state.overlay.Clear();}catch(...){}
    menus.Clear();crafting.Clear();materials.Clear();phasing.clear();providers.clear();overlays.clear();worlds.clear();harvestFrames.clear();bound=placementBound=discovered=false;elapsed=farmElapsed=0;
  }

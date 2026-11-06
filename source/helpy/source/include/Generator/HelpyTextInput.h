@@ -24,7 +24,7 @@ inline bool Keyboard(char* buffer,size_t capacity,ImGuiInputTextFlags flags,ImGu
     const bool active=ImGui::IsItemActive(),focused=ImGui::IsItemFocused();
     if(ClosedFor==id&&!active)ClosedFor=0;
     const bool request=!(flags&ImGuiInputTextFlags_ReadOnly)&&capacity>0&&capacity<=65536&&
-        ((active&&g.NavInputSource==ImGuiInputSource_Gamepad&&ClosedFor!=id)||(focused&&ImGui::IsKeyPressed(ImGuiKey_GamepadFaceUp,false)));
+        ((active&&g.ActiveIdSource==ImGuiInputSource_Gamepad&&ClosedFor!=id)||(focused&&ImGui::IsKeyPressed(ImGuiKey_GamepadFaceUp,false)));
     ImGui::PushID(id);
     if(request&&Owner!=id){Clear();Owner=id;Draft.assign(buffer,std::min(std::strlen(buffer),capacity-1));Shift=Symbols=false;ImGui::OpenPopup("Controller keyboard");}
     bool committed=false,restore=false;

@@ -10,24 +10,24 @@ $root=[IO.Path]::GetFullPath((Resolve-Path -LiteralPath $RuneSchemaRoot).Path).T
 $output=[IO.Path]::GetFullPath($OutputPath)
 if($output.StartsWith($root+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)){throw 'Output must be outside the framework input'}
 if(Test-Path -LiteralPath $output){throw 'Output archive already exists'}
-if(!(Test-Path -LiteralPath (Join-Path $root 'dlls/main.dll') -PathType Leaf) -or !(Test-Path -LiteralPath (Join-Path $root 'plugins') -PathType Container)){throw 'Use a clean full-framework release payload'}
+if(!(Test-Path -LiteralPath (Join-Path $root 'dlls/main.dll') -PathType Leaf) -or !((Test-Path -LiteralPath (Join-Path $root 'plugins') -PathType Container) -or (Test-Path -LiteralPath (Join-Path $root 'dlls/plugins') -PathType Container))){throw 'Use a clean full-framework release payload'}
 $files=New-Object 'System.Collections.Generic.List[object]'
 $queue=New-Object 'System.Collections.Generic.Stack[string]';$queue.Push($root)
 $names=New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
 $triplets=@{}
-$canonical=Test-Path -LiteralPath (Join-Path $root 'plugins/RuneSchema.RegistryBridge/paks/RegistryBridge') -PathType Container
+$canonical=(Test-Path -LiteralPath (Join-Path $root 'plugins/RuneSchema.RegistryBridge/paks/RegistryBridge') -PathType Container) -or (Test-Path -LiteralPath (Join-Path $root 'dlls/plugins/RuneSchema.RegistryBridge/paks/RegistryBridge') -PathType Container)
 while($queue.Count){
     $directory=$queue.Pop()
     if((Get-Item -LiteralPath $directory -Force).Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Reparse directories are not release inputs'}
     foreach($item in Get-ChildItem -LiteralPath $directory -Force){
         if($item.Attributes -band [IO.FileAttributes]::ReparsePoint){throw "Reparse entry is not a release input: $($item.Name)"}
         $relative=$item.FullName.Substring($root.Length+1).Replace('\','/')
-        if($canonical -and ($relative -ieq 'plugins/RSNetworking/paks/RegistryBridge' -or $relative.StartsWith('plugins/RSNetworking/paks/RegistryBridge/',[StringComparison]::OrdinalIgnoreCase))){continue}
+        if($canonical -and ($relative -match '^(?i:(dlls/)?plugins/RSNetworking/paks/RegistryBridge)(/|$)')){continue}
         if($item.PSIsContainer){$queue.Push($item.FullName);continue}
         if($relative -match '^(?i:cache|profiles|backups)/' -or $item.Extension -in @('.log','.dmp','.sav','.jsonl') -or $relative.StartsWith('mods/',[StringComparison]::OrdinalIgnoreCase)){throw "Use a clean release payload; runtime/user file found: $relative"}
         if($item.Name -eq '__folder_managed_by_vortex'){continue}
         if(!$names.Add($relative)){throw "Case-colliding release path: $relative"}
-        if($relative -match '^(?i:plugins)/.+/(?i:paks)/.+\.(?i:pak|ucas|utoc)$'){
+        if($relative -match '^(?i:plugins|dlls/plugins|Helpy/plugins)/.+/(?i:paks)/.+\.(?i:pak|ucas|utoc)$'){
             $key=$relative.Substring(0,$relative.LastIndexOf('.')).ToLowerInvariant()
             $bit=switch($item.Extension.ToLowerInvariant()){'.pak'{1};'.ucas'{2};'.utoc'{4}}
             $triplets[$key]=([int]$triplets[$key] -bor $bit)
@@ -36,7 +36,7 @@ while($queue.Count){
     }
 }
 foreach($key in $triplets.Keys){if($triplets[$key] -ne 7){throw "Incomplete release container: $key"}}
-if($canonical -and !($triplets.Keys | Where-Object {$_ -like 'plugins/runeschema.registrybridge/paks/registrybridge/*'})){throw 'Canonical shared registry container is missing'}
+if($canonical -and !($triplets.Keys | Where-Object {$_ -match '^(dlls/)?plugins/runeschema[.]registrybridge/paks/registrybridge/'})){throw 'Canonical shared registry container is missing'}
 $binary=if($Platform -eq 'GamePass'){'WinGDK'}else{'Win64'}
 $destination="RSDragonwilds/Binaries/$binary/ue4ss/Mods/RuneSchema"
 $instructions=New-Object 'System.Collections.Generic.List[object]'

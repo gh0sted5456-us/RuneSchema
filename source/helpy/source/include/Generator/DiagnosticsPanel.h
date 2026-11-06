@@ -402,6 +402,9 @@ inline float IssueRowHeight(const HelpyImGuiTheme::Theme& theme){
 inline void DrawIssueRow(DiagnosticCenterModel::Store& store,const DiagnosticCenterModel::Group& group,
                          const HelpyImGuiTheme::Theme& theme,bool selected,
                          std::size_t related=0,bool* expanded=nullptr,bool nested=false){
+#if defined(HELPY_PREVIEW)
+    ++HelpyPreviewHooks::DiagnosticRowsDrawn;
+#endif
     ImGui::PushID(static_cast<int>(group.Id));
     const float height=IssueRowHeight(theme);
     const float width=std::max(1.0f,ImGui::GetContentRegionAvail().x);
@@ -929,6 +932,11 @@ inline void DrawIssues(DiagnosticCenterModel::Store& store,const HelpyImGuiTheme
     if(filtered.empty())ImGui::TextDisabled("No issues match these filters. Use Reset filters to show all reported errors and warnings.");
     const auto selectedIndex=DiagnosticIssueNavigation::SelectedRowIndex(display,SelectedGroup);
     const float rowHeight=IssueRowHeight(theme)+theme.Y(6.0f)+ImGui::GetStyle().ItemSpacing.y*2;
+    const auto drawVisible=[&]{
+        ImGuiListClipper clipper;clipper.Begin(static_cast<int>(display.size()),rowHeight);
+        while(clipper.Step())for(int index=clipper.DisplayStart;index<clipper.DisplayEnd;++index)
+            drawRow(display[static_cast<std::size_t>(index)]);
+    };
     if(narrow){
         if(DetailOnly&&store.FindGroup(SelectedGroup)){
             if(ImGui::SmallButton("Back to issues"))DetailOnly=false;
@@ -944,7 +952,7 @@ inline void DrawIssues(DiagnosticCenterModel::Store& store,const HelpyImGuiTheme
                     ImGui::SetScrollY(static_cast<float>(selectedIndex)*rowHeight);
                     RevealSelectedInList=false;
                 }
-                for(const auto& row:display)drawRow(row);
+                drawVisible();
             }EndPaddedChild();ImGui::PopStyleColor();
         }
         return;
@@ -970,9 +978,7 @@ inline void DrawIssues(DiagnosticCenterModel::Store& store,const HelpyImGuiTheme
             ImGui::SetScrollY(static_cast<float>(selectedIndex)*rowHeight);
             RevealSelectedInList=false;
         }
-        ImGuiListClipper clipper;clipper.Begin(static_cast<int>(display.size()),rowHeight);
-        while(clipper.Step())for(int index=clipper.DisplayStart;index<clipper.DisplayEnd;++index)
-            drawRow(display[static_cast<std::size_t>(index)]);
+        drawVisible();
     }EndPaddedChild();ImGui::PopStyleColor();
     ImGui::SameLine(0,0);
     ImGui::InvisibleButton("##diagnostic-divider",ImVec2(splitter,paneHeight));

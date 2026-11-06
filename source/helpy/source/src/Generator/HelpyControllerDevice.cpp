@@ -41,12 +41,12 @@ XINPUT_GAMEPAD Sample(SDL_Gamepad* device){
 }
 Touchpad SampleTouch(SDL_Gamepad* device){
     Touchpad touch;touch.Clicked=SDL_GetGamepadButton(device,SDL_GAMEPAD_BUTTON_TOUCHPAD);
-    float pressure=0;
-    if(SDL_GetNumGamepadTouchpads(device)>0&&SDL_GetGamepadTouchpadFinger(device,0,0,&touch.Down,&touch.X,&touch.Y,&pressure)){
-        if(!std::isfinite(touch.X)||!std::isfinite(touch.Y))touch.Down=false;
-        touch.X=std::clamp(touch.X,0.f,1.f);touch.Y=std::clamp(touch.Y,0.f,1.f);
-    }
-    return touch;
+    if(SDL_GetNumGamepadTouchpads(device)>0)for(int finger=0;finger<std::min(2,SDL_GetNumGamepadTouchpadFingers(device,0));++finger){
+        bool down=false;float x=0,y=0,pressure=0;
+        if(SDL_GetGamepadTouchpadFinger(device,0,finger,&down,&x,&y,&pressure)&&down&&std::isfinite(x)&&std::isfinite(y)){
+            if(!touch.Fingers){touch.X=std::clamp(x,0.f,1.f);touch.Y=std::clamp(y,0.f,1.f);}++touch.Fingers;touch.Down=true;
+        }
+    }return touch;
 }
 }
 Reading Read(bool refresh){
@@ -68,7 +68,7 @@ Reading Read(bool refresh){
         }
         SDL_UpdateGamepads();Reading chosen;
         for(auto& device:Devices){if(!SDL_GamepadConnected(device.Pad.get())){Refresh=true;continue;}const auto pad=Sample(device.Pad.get());const bool guide=SDL_GetGamepadButton(device.Pad.get(),SDL_GAMEPAD_BUTTON_GUIDE);
-            const auto touch=SampleTouch(device.Pad.get());const bool touchActive=(touch.Clicked&&!device.PreviousTouch.Clicked)||(touch.Down&&(!device.PreviousTouch.Down||touch.X!=device.PreviousTouch.X||touch.Y!=device.PreviousTouch.Y));
+            const auto touch=SampleTouch(device.Pad.get());const bool touchActive=(touch.Fingers!=device.PreviousTouch.Fingers)||(touch.Clicked&&!device.PreviousTouch.Clicked)||(touch.Down&&(!device.PreviousTouch.Down||touch.X!=device.PreviousTouch.X||touch.Y!=device.PreviousTouch.Y));
             if(device.Id==Selected)chosen={true,pad,device.Glyphs,guide,device.Id,touch};
             if(touchActive||(guide&&!device.PreviousGuide)||(Active(pad)&&std::memcmp(&pad,&device.Previous,sizeof(pad))!=0)){Selected=device.Id;chosen={true,pad,device.Glyphs,guide,device.Id,touch};}
             device.Previous=pad;device.PreviousGuide=guide;device.PreviousTouch=touch;

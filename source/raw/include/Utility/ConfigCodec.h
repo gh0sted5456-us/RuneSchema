@@ -1,6 +1,7 @@
 #pragma once
 #include "Utility/Config.h"
 #include "Core/HelpyShortcut.h"
+#include "../../../shared/InputBindings.h"
 #include "Core/HelpyRemoteAccess.h"
 #include "glaze/glaze.hpp"
 #include <stdexcept>
@@ -34,8 +35,8 @@ namespace PS {
             if(!HelpyPlayerAuthorization::Valid(player))throw std::runtime_error("Invalid saved Helpy player authorization");
         if(candidate.helpyAuthority.allowPinAccess&&!HelpyRemoteAccess::Sessions::ValidPin(candidate.helpyAuthority.accessPin))
             throw std::runtime_error("Helpy server PIN must contain 8-64 printable characters without spaces");
-        const auto* shortcut=HelpyShortcut::Find(candidate.helpyHotkey);
-        candidate.helpyHotkey=shortcut?std::string(shortcut->Name):"F2";
+        try{candidate.helpyHotkey=InputBindings::Text(InputBindings::Parse(candidate.helpyHotkey));}
+        catch(const std::exception&){candidate.helpyHotkey="F2";}
         auto& launch=candidate.quickLaunch;
         if(!source.contains(nlohmann::json::json_pointer("/quickLaunch/mode")))
             launch.mode=launch.enabled?"quickLaunch":"lessRestrictive";
@@ -54,6 +55,6 @@ namespace PS {
         return std::string{
             "// RuneSchema settings. Edit with the game closed, then restart.\n"
             "// Advanced logging controls detail; advanced runtime unlocks authoring and diagnostics.\n"
-            "// Plugin-owned settings live below plugins/<PluginId>/settings/.\n"}+text+"\n";
+            "// Plugin-owned settings live below dlls/plugins/<PluginId>/settings/ or Helpy/settings/.\n"}+text+"\n";
     }
 }

@@ -53,6 +53,7 @@ int32_t RS_PLUGIN_CALL HostCall(const char*,const char* service,const char* inpu
         reply={{"Ok",true},{"Document",SettingsDoc},{"Editable",{{"/advancedLogging",false},{"/persistence/allowCorruptCharacterEntry",false}}},
             {"ExpectedContents","fixture-contents"},{"Status","Saved for next launch"}};
     }
+    else if(action=="QuickLoadRead"||action=="AdditionalLoggingRead")reply={{"Ok",true},{"Document",{{"Mode","lessRestrictive"},{"CharacterName",""},{"WorldName",""}}},{"ExpectedContents",std::string(10000,'x')},{"Characters",json::array()},{"Worlds",json::array()}};
     else if(action=="CrashDumpRead"){
         ++CrashOptionReads;reply={{"Ok",true},{"FullMemoryDump",false},{"EnableDumping",true},{"ExpectedContents",std::string(10000,'x')}};
     }
@@ -217,6 +218,9 @@ int main(){
         assert(PS::RuneSchemaSettingsPanel::Remote({{"Action","HelpyNativeOverlay"},{"Payload",{{"Action",action}}}},reply)&&reply.at("Ready")==true&&reply.at("Api")=="D3D12");
         assert(HostCalls["HelpyNativeOverlay"]==before+1&&GuardedCalls["HelpyNativeOverlay"]==before+1);
     }
+    for(const auto* action:{"QuickLoadRead","AdditionalLoggingRead"}){json reply;const auto before=HostCalls[action],writes=SettingsWrites;
+        assert(CallCore(&state,{{"Action",action}},reply)&&reply.at("Ok")==true&&reply.at("ExpectedContents").get<std::string>().size()==10000);
+        assert(HostCalls[action]==before+2&&SettingsWrites==writes);}
     {json reply;assert(CallCore(&state,{{"Action","CrashDumpRead"}},reply)&&reply.at("ExpectedContents").get<std::string>().size()==10000&&CrashOptionReads==2);}
     {json reply;const auto before=HostCalls["HelpyModMenuRead"];assert(CallCore(&state,{{"Action","HelpyModMenuRead"}},reply)&&reply.at("Available")==true&&reply.at("Snapshot").at("Padding").get<std::string>().size()==32000);assert(HostCalls["HelpyModMenuRead"]==before+2);}
     for(const auto* action:{"List","Activate","Deactivate"}){json reply;const auto before=HostCalls["HudExtensions"];assert(CallCore(&state,{{"Action","HudExtensions"},{"Payload",{{"Action",action}}}},reply)&&reply.at("Accepted")==true);assert(HostCalls["HudExtensions"]==before+1);}
@@ -477,6 +481,36 @@ int main(){
     state.ToolsWaiting=false;Cart::PollCartDelivery();const auto once=LastSubmission;
     assert(once["Action"]=="GiveItems"&&once["Player"]=="/Player/Single"&&Cart::CartBatch.Pending());
     Cart::PollCartDelivery();assert(LastSubmission==once);Cart::CartBatch.Stop();Cart::PollCartDelivery();PS::ItemGridPicker::ClearSharedCart();Cart::CartNeedsReview=false;
+    // Right-click Give waits behind cart validation and never delivers or edits the staged cart.
+    {
+        namespace C=PS::SpawnToolsPanel;auto& cart=PS::ItemGridPicker::SharedCart;
+        C::ClearDirectGive();C::CartGeneration=PS::SpawnToolRequests::CurrentGeneration();
+        C::UiSnapshot={{"Players",json::array({{{"Path","/Player/Single"},{"Name","Single"}}})}};
+        C::CartCheckPending=0;C::KitPending=0;C::CartCheckNext=std::chrono::steady_clock::now()+std::chrono::hours(1);
+        cart.Clear();assert(cart.Add({{"Path","/Game/Items/Staged.Staged"},{"Name","Staged"},{"MaxStackSize",50}}));cart.SelectAll();const auto original=cart.Payload();const auto selected=cart.Selection();
+        const json direct=json::array({{{"Item","/Game/Items/Direct.Direct"},{"Count",20}}});
+        LastSubmission=json::object();state.ToolsWaiting=true;
+        assert(C::GiveDirectItems(direct,"/Player/Single"));const auto directId=C::DirectGiveId;
+        assert(!C::GiveDirectItems(direct,"/Player/Single")&&C::DirectGiveId==directId);
+        C::PollCartDelivery();C::PollCartDelivery();assert(LastSubmission.empty()&&!C::DirectGiveSubmitted);
+        state.ToolsWaiting=false;C::PollCartDelivery();flushCatalog();
+        assert(LastSubmission["Action"]=="GiveItems"&&LastSubmission["_RequestId"]==directId&&LastSubmission["Items"]==direct&&LastSubmission["Player"]=="/Player/Single");
+        const auto once=LastSubmission;C::PollCartDelivery();assert(LastSubmission==once&&C::DirectGiveSubmitted);
+        state.Completed[directId]={{"Status","Direct items confirmed"},{"GrantResults",json::array({{{"Item","/Game/Items/Direct.Direct"},{"Count",20},{"State","Confirmed"}}})}};
+        state.ToolsWaiting=false;C::PollCartDelivery();C::PollCartDelivery();flushCatalog();
+        assert(!C::DirectGiveId&&LastSubmission==once&&cart.Payload()==original&&cart.Selection()==selected&&!cart.Delivery());
+        const auto remembered=PS::HelpyImGuiTheme::Current.quickSendPlayerGuid;
+        C::UiSnapshot["Players"][0]["Guid"]="quick-send-test-guid";PS::HelpyImGuiTheme::Current.quickSendPlayerGuid="quick-send-test-guid";
+        C::OpenQuickSend({{"Path","/Game/Items/Only.Only"},{"Name","Only this item"}});assert(C::QuickSend.Player=="/Player/Single"&&C::QuickSend.Quantity==1);
+        C::QuickSend.Quantity=7;assert(C::SubmitQuickSend());assert(C::DirectGiveRequest["Items"].size()==1&&C::DirectGiveRequest["Items"][0]["Item"]=="/Game/Items/Only.Only"&&C::DirectGiveRequest["Items"][0]["Count"]==7&&cart.Payload()==original);C::ClearDirectGive();
+        C::UiSnapshot["Players"][0]["Guid"]="another-guid";assert(!C::SubmitQuickSend()&&!C::DirectGiveId);C::OpenQuickSend({{"Path","/Game/Items/Only.Only"}});assert(C::QuickSend.Player.empty()&&!C::SubmitQuickSend());
+        C::UiSnapshot["Players"][0]["Guid"]="quick-send-test-guid";C::OpenQuickSend({{"Path","/Game/Items/Only.Only"}});C::QuickSend.Generation--;assert(!C::SubmitQuickSend()&&!C::DirectGiveId&&cart.Payload()==original);C::QuickSend={};PS::HelpyImGuiTheme::Current.quickSendPlayerGuid=remembered;
+        // A disconnected recipient must never be silently replaced by a different player.
+        state.ToolsWaiting=true;assert(C::GiveDirectItems(direct,"/Player/Single"));C::UiSnapshot["Players"]=json::array();LastSubmission=json::object();C::PollCartDelivery();assert(!C::DirectGiveId&&LastSubmission.empty());
+        C::UiSnapshot={{"Players",json::array({{{"Path","/Player/Single"},{"Name","Single"}}})}};
+        assert(C::GiveDirectItems(direct,"/Player/Single"));++HostGeneration;syncHost();C::PollCartDelivery();assert(!C::DirectGiveId&&LastSubmission.value("Action",std::string{})!="GiveItems"&&cart.Payload()==original);
+        state.ToolsWaiting=false;cart.Clear();C::CartCheckNext={};
+    }
     {json reply;const auto calls=HostCalls["Read"];assert(CallCore(&state,{{"Action","Read"},{"Revision",HostRevision}},reply));assert(HostCalls["Read"]==calls+1);}
     ThrowHost=true;json ignored;assert(!CallCore(&state,{{"Action","Read"}},ignored));
     {namespace A=PS::AuthoringClient;A::Clear();bool busy=true;

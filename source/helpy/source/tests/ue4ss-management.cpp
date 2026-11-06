@@ -20,6 +20,13 @@ int main(){
         const auto packages=PS::UE4SSPackages::Discover(root/"mods/Owner","Owner");Check(packages.size()==1&&!packages[0].Enabled);Check(PS::UE4SSPackages::Manifest(root/"mods",packages).find("\tlua\n")==std::string::npos);
         Check(PS::ConfigFiles::Read(root/"mods/Owner/paks/data.pak")=="unchanged PAK"&&PS::ConfigFiles::Read(root/"mods/runeschema.txt")=="Owner : 1\n");
         write(root/"mods/Owner/ue4ss/status.txt","1\n");Check(find(M::Snapshot(root),"Child")["ConfiguredEnabled"]==true);
+        const auto owner=root/"mods/Owner",metadata=root/"mods/MetadataOnly";
+        Check(PS::UE4SSPackages::HudRoots(owner,"Owner").size()==2);
+        write(owner/"ue4ss/status.txt","0");Check(PS::UE4SSPackages::HudRoots(owner,"Owner").empty());
+        write(metadata/"ue4ss/hud.json","{}");Check(PS::UE4SSPackages::Discover(metadata,"MetadataOnly").empty());
+        const auto roots=PS::UE4SSPackages::HudRoots(metadata,"MetadataOnly");Check(roots.size()==1&&roots[0]==metadata/"ue4ss");
+        Check(PS::UE4SSPackages::Discover(metadata,"MetadataOnly").empty());
+        write(metadata/"ue4ss/status.txt","0");Check(PS::UE4SSPackages::HudRoots(metadata,"MetadataOnly").empty());
         Check(M::SetFlag("Example: 1\nExample : 1 # duplicate\n","Example",false)=="Example: 0\nExample : 0 # duplicate\n");
         Check(M::SetFlag("\xef\xbb\xbf" "Example: 1\r\n","Example",false)=="\xef\xbb\xbf" "Example: 0\r\n");
     }catch(...){fs::remove_all(fixture);throw;}fs::remove_all(fixture);

@@ -1,0 +1,117 @@
+{
+  "id": "HelpyEditorExample",
+  "name": "Character Editor Example",
+  "version": "1.0.0",
+  "description": "External Lua example: edit settings and share templates. Does not modify characters.",
+  "runsOn": "yours",
+  "config": {
+    "file": "config.txt",
+    "format": "keyvalue"
+  },
+  "settings": [
+    {
+      "key": "Enabled",
+      "type": "toggle",
+      "label": "Preview changes",
+      "default": true
+    },
+    {
+      "key": "Height",
+      "type": "slider",
+      "label": "Height",
+      "min": 0.5,
+      "max": 1.5,
+      "step": 0.01,
+      "decimals": 2,
+      "default": 1
+    },
+    {
+      "key": "Build",
+      "type": "slider",
+      "label": "Build",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "decimals": 2,
+      "default": 0.5
+    },
+    {
+      "key": "Style",
+      "type": "choice",
+      "label": "Body style",
+      "options": [
+        "Balanced",
+        "Athletic",
+        "Soft",
+        "Angular"
+      ],
+      "default": "Balanced"
+    }
+  ],
+  "--Helpy": {
+    "schema": 1,
+    "layout": "character",
+    "tabs": [
+      {
+        "name": "Shape",
+        "keys": [
+          "Enabled",
+          "Height",
+          "Build",
+          "Hip",
+          "Style"
+        ]
+      },
+      {
+        "name": "Colors",
+        "keys": [
+          "SkinColor",
+          "AccentColor"
+        ]
+      }
+    ],
+    "controls": {
+      "Build": "dial",
+      "Style": "radial"
+    },
+    "settings": [
+      {
+        "key": "Hip",
+        "type": "dial",
+        "label": "Hip width",
+        "min": 0,
+        "max": 1,
+        "step": 0.01,
+        "decimals": 2,
+        "default": 0.5
+      },
+      {
+        "key": "SkinColor",
+        "type": "color",
+        "label": "Skin color",
+        "default": "#DDB49A"
+      },
+      {
+        "key": "AccentColor",
+        "type": "color",
+        "label": "Accent color",
+        "alpha": true,
+        "default": "#BFA35AFF"
+      }
+    ],
+    "templates": {
+      "id": "appearance",
+      "version": 1,
+      "keys": [
+        "Enabled",
+        "Height",
+        "Build",
+        "Hip",
+        "Style",
+        "SkinColor",
+        "AccentColor"
+      ],
+      "contextVariable": "HelpyEditorExample.target"
+    }
+  }
+}

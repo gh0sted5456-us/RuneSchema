@@ -13,6 +13,23 @@ Development history follows. Earlier local-testing/publication holds describe
 those stages; use the [current candidate notes](PRE-RELEASE.md) for downloads,
 installation and remaining limits.
 
+- Keep controller focus inside control borders with a translucent gold highlight, including selectables, item cards and scaled panels. Back cancels or navigates up without hiding Helpy at the root; the Home/Guide shortcut retains overlay visibility control.
+
+- Keep centered popups at their requested width across frames and resizing; preserve caller size limits. Keep physical text input working after controller use by checking the active field’s input source. Let the controller's centered map selector pan in all four directions at overview zoom, with map-edge bounds and corrected hints. Reserve a visible item row in embedded Creation/Recipe bays instead of letting toolbars collapse the results.
+- Add mod-owned save declarations through ID.txt or cache/savefiles.json, resolved-path review and verified manual AppData backups. Preserve declarations during cache rebuilds. Mod formats and source saves remain mod-owned.
+
+- Fix Quick Launch and Additional Logging reads failing when their settings replies exceed the small transport buffer. Retry only these read operations with a bounded larger reply; retain single-execution mutation handling. Stop reporting a generic read failure as proof of a mismatched core.
+
+- Simplify Item Bay's search/filter toolbar, consolidate view/cache controls, and add searchable grouped mod sources with reusable provider lists. Use the same picker in inventory, gear and Character Studio; preserve search text and cart contents when clearing filters.
+- Refine Mod Menu 2 dials/radials with smooth vector rendering and precise sliders. Add validated RGB/RGBA controls, an explicit template-import action, and a separate runnable external Lua editor example with a portable template. Preserve legacy schemas, callbacks, config formats, authority and stale-target checks.
+
+- Move Mod Menu 2 into **Mods → Mod Menu 2**, beside **Management**. Preserve activation gates, direct shortcuts, editor/controller controls and its License pane. Retain existing navigation ordering while dropping the old main entry. Reuse plugin availability within each refresh instead of repeating its metadata service call. Let the two-pane mod pages own scrolling so controller entry does not stop at an extra outer scroll pane.
+- Move the optional Lua ModActor loader's initial dispatch onto UE4SS delayed game-thread actions. Keep load-map hooks active when scheduling is unavailable; avoid an async fallback. Audit notes: [UE4SS maintenance](COMPATIBILITY.md#ue4ss-scheduling-and-api-audit).
+
+- Add Item Bay **Send to player…**: a single-item quantity/player popup, remembered recipient identity, and direct delivery independent of staged cart contents. Keep current-world, connected-player and delivery guards.
+
+- Rework controller navigation: triggers change main sections, bumpers switch contained panels, and the right stick provides a cursor with press-to-click/drag. Add saved cursor controls and clear Always on / Auto detect / Disabled modes. Keep Item Bay quantity adjustment and map pan/zoom accessible without a keyboard. Physical controller and live overlay acceptance remain pending.
+
 - Add registered [multiplayer character appearance](CHARACTER-APPEARANCE.md), server-derived actor/GUID binding, deduplicated committed snapshots, late-join/resync delivery and an optional cooked consumer. The matching RSNetworking trio carries the reliable Actor-reference callback; provider rendering and local profile storage stay mod-owned. Real provider multiplayer acceptance remains pending.
 
 - Add key-gated Mod Menu 2 with Helpy presentation, legacy settings/config callbacks, direct shortcut and optional character-editor tabs/preview transport. Skip its backend beside an enabled or already-loaded external Mod Menu. Preserve Maxxfilth's MIT notice.
@@ -320,3 +337,23 @@ live acceptance pass; the feature is opt-in in this experimental build.
 The experimental branch contains the source and versioned build configuration.
 It does not update an installed game, retag a stable release or replace stable
 download assets by itself.
+
+## Local controller and editor development
+
+These changes are local candidates and are not in the published download.
+
+- Contain controller focus within active sections. Confirm enters; Back returns to the parent. Bumpers switch the nearest tabs and triggers switch workspaces.
+- Add stationary one-finger tap-to-click for DualSense and DualShock 4, preserving swipe movement, physical click/drag and two-finger right-click.
+- Add the isolated `"--Helpy"` schema namespace, circular numeric controls, radial choices and reviewed import/export of mod-declared settings templates.
+- Report invalid optional plugin DLLs through Helpy instead of leaving a Windows loader dialog blocking startup.
+
+## Local Advanced Tooling refinement
+
+These changes are unpublished local candidates.
+
+- Present the optional developer plugin as **Tools → Advanced Tooling**, with
+  themed capability cards, shorter notices and a Compatibility report tab.
+- Coalesce player/nameplate file changes by the containing folder within a
+  queued reload batch. Those loaders already reload the whole folder; other
+  loaders retain separate file jobs. This targets auto-reload work during play,
+  not the game's measured boot time.

@@ -97,6 +97,7 @@ using namespace DragonWilds::SpawnRuntime;
 #include "SDK/Helper/JournalPresentation.h"
 #include "SDK/Helper/PlayerInventoryPresentation.h"
 #include "Loader/NativeUnlockEquipContracts.h"
+#include "Loader/NativeDeveloperContracts.h"
 #include "Core/ItemCart.h"
 #include "Loader/EventIdentity.h"
 #include "Loader/PlayerGhost.h"

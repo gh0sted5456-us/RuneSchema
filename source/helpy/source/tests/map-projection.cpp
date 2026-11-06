@@ -58,6 +58,13 @@ int main(){
         Viewport view{dimensions.X,dimensions.Y,1,1,{0.5,0.5}};view.Clamp();
         for(const auto uv:std::array{Point{0.5,0.5},Point{0.45,0.52},Point{0.55,0.48}}){const auto pixel=view.ToPixel(uv),back=view.ToUV(pixel);
             assert(std::abs(back.X-uv.X)<1e-9&&std::abs(back.Y-uv.Y)<1e-9);}
+        for(const auto zoom:std::array{view.FitZoom(),1.0,3.0})for(const auto delta:std::array{Point{12,0},Point{-12,0},Point{0,12},Point{0,-12},Point{12,-12}}){
+            auto controller=view;controller.Zoom=zoom;controller.ControllerPan=true;controller.Clamp();const auto before=controller.Center;controller.Pan(delta);const auto after=controller.Center;
+            assert(delta.X==0?after.X==before.X:(after.X-before.X)*delta.X<0);
+            assert(delta.Y==0?after.Y==before.Y:(after.Y-before.Y)*delta.Y<0);
+            controller.Clamp();assert(controller.Center.X==after.X&&controller.Center.Y==after.Y);
+            controller.Pan({1e9,-1e9});assert(controller.Center.X==0&&controller.Center.Y==1);
+        }
         const auto span=view.Span();assert(std::abs(dimensions.X/span.X-dimensions.Y/span.Y)<1e-6); // No texture stretching.
         const Point mouse{dimensions.X*.55,dimensions.Y*.45};const auto anchor=view.ToUV(mouse);
         view.ZoomAt(8,mouse);const auto anchored=view.ToUV(mouse);

@@ -123,3 +123,18 @@ an account-wide or historical play-time tracker.
 - [RS-LUA-002: attributed log activity](../ERROR-CODES.md#rs-lua-002)
 - [RS-LUA-003: slow-work timing overlap](../ERROR-CODES.md#rs-lua-003)
 - [RS-PLAY-001: break reminder](../ERROR-CODES.md#rs-play-001)
+
+## Local hardening checks
+
+These changes are in the local test candidate, outside the published 0.8.1.0 ZIP.
+
+- Atomic module imports stage the complete destination array and commit without
+  another allocation. A failed staged write leaves the destination unchanged.
+- Successful dry runs report [RS-IMP-013](../ERROR-CODES.md#rs-imp-013); they apply
+  no changes. [RS-IMP-014](../ERROR-CODES.md#rs-imp-014) identifies application
+  failures and states whether a non-atomic batch may retain earlier writes.
+- Modal dialogs stay reachable after viewport resizing. Standalone Helpy creates
+  its own window with per-monitor DPI awareness.
+
+Failure injection, concurrent diagnostic emission and isolated desktop tests cover
+these contracts. Real-game importer and mixed-DPI visual acceptance remain pending.

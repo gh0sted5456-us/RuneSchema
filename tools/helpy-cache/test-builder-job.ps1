@@ -9,6 +9,7 @@ try{
     foreach($extension in @('.pak','.utoc','.ucas')){[IO.File]::WriteAllText((Join-Path $mod ('fixture'+$extension)),'unchanged input')}
     $cache=Join-Path $mod 'cache';New-Item -ItemType Directory -Path $cache | Out-Null;[IO.File]::WriteAllText((Join-Path $cache 'old.txt'),'original cache')
     [IO.File]::WriteAllText((Join-Path $cache 'taglines.json'),'{"Rules":[]}');[IO.File]::WriteAllText((Join-Path $cache 'tips.json'),'{"Tips":["A tip"]}')
+    [IO.File]::WriteAllText((Join-Path $cache 'savefiles.json'),'{"SchemaVersion":1,"Files":[]}')
     $script:ExpectedMod=$mod;$script:FailBuild=$false;$script:ExpectRunning=$false;$script:ExpectBase=$false
     function dotnet {
         if($args[0] -eq '--list-sdks'){'10.0.401 [fixture]';return}
@@ -28,6 +29,7 @@ try{
     Check ([IO.File]::ReadAllText((Join-Path $cache 'offline-helpy.rsmk-cache')) -eq 'new cache') 'Installed cache was not published'
     Check ([IO.File]::ReadAllText((Join-Path $cache 'tips.json')) -eq '{"Tips":["A tip"]}') 'Cache refresh lost authored tips'
     Check ([IO.File]::ReadAllText((Join-Path $cache 'taglines.json')) -eq '{"Rules":[]}') 'Cache refresh lost grouping rules'
+    Check ([IO.File]::ReadAllText((Join-Path $cache 'savefiles.json')) -eq '{"SchemaVersion":1,"Files":[]}') 'Cache refresh lost save declarations'
     $backup=Get-ChildItem -LiteralPath $backups -Directory -Filter 'cache-*'
     Check ($backup.Count -eq 1 -and [IO.File]::ReadAllText((Join-Path $backup[0].FullName 'old.txt')) -eq 'original cache') 'Original cache was not retained'
     Check (@(Get-ChildItem -LiteralPath $mod -Directory -Filter 'cache.*-*').Count -eq 0) 'Old cache was left in the mod folder'

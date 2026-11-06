@@ -10,7 +10,8 @@ inline void Render(const std::function<void()>& renderAccess){
     constexpr std::array categories{"Settings","Players","RuneSchema access"};
     HelpyMenu::Categories("server-control",categories,Category);
     const auto& theme=HelpyImGuiTheme::Current;auto surface=theme.panel;surface.w=std::max(.94f,surface.w);ImGui::PushStyleColor(ImGuiCol_ChildBg,surface);
-    if(HelpyImGuiTheme::BeginPanel("##server-control-details",{0,0},true)){
+    ImGui::PushID(Category);
+    if(HelpyImGuiTheme::BeginPanel("##server-control-details",{0,0},true,0,true)){
         if(Category==0){
             DedicatedServerPanel::Render();
             if(!HelpyEnvironment::Server()&&HelpyImGuiTheme::SoftButton("View connected players & roles"))Category=1;
@@ -18,6 +19,6 @@ inline void Render(const std::function<void()>& renderAccess){
         else if(Category==1)ServerPlayersPanel::Render();
         else if(renderAccess)renderAccess();
     }
-    HelpyImGuiTheme::EndPanel();ImGui::PopStyleColor();
+    HelpyImGuiTheme::EndPanel();ImGui::PopID();ImGui::PopStyleColor();
 }
 }

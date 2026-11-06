@@ -1,3 +1,4 @@
+#include "RuntimePaths.h"
 #include "Runtime/RuneSchemaPluginApi.h"
 #include "Core/HelpyBranding.h"
 #include "Core/RsmkResources.h"
@@ -48,8 +49,8 @@ int Run(int argc,char** argv){
     BridgeStartup=argc==3&&std::string(argv[2])=="--bridge-only";auto library=std::filesystem::absolute(argv[1]);const bool app=argc==3&&!BridgeStartup;
     if(app||BridgeStartup){
         const auto root=std::filesystem::temp_directory_path()/("HelpyClose-"+std::to_string(GetCurrentProcessId()));Check(std::filesystem::create_directory(root));fixture.Root=root;
-        const auto plugin=fixture.Root/"RuneSchema.Helpy";std::filesystem::create_directories(plugin/"dll");std::filesystem::create_directories(plugin/"settings");
-        if(BridgeStartup)std::filesystem::copy_file(library,plugin/"dll/RuneSchema.Helpy.dll");PS::HelpyPaths::Configure(plugin);library=plugin/"dll/RuneSchema.Helpy.dll";
+        const auto plugin=fixture.Root/(BridgeStartup?"Helpy":"RuneSchema.Helpy");std::filesystem::create_directories(plugin/"dll");std::filesystem::create_directories(plugin/"settings");
+        const auto binary=BridgeStartup?plugin/"Helpy.dll":plugin/"dll/RuneSchema.Helpy.dll";if(BridgeStartup)std::filesystem::copy_file(library,binary);PS::HelpyPaths::Configure(plugin);library=binary;
         std::filesystem::copy_file(std::filesystem::path(HELPY_PLUGIN_PACKAGE_ROOT)/"plugin.json",plugin/"plugin.json");
         std::ofstream(plugin/"settings/settings.jsonc")<<nlohmann::json{{"enabled",true},{"startWithGame",false},{"standaloneDesktop",false},{"minimizeOnClose",!exitOnClose}}.dump();
     }
@@ -86,7 +87,7 @@ int Run(int argc,char** argv){
     Check(!Services.contains("helpy.vision.status"));
     // Mirror the real host's post-initialize manifest gate. Loading the DLL
     // alone does not prove the host will keep it or start its F2 window.
-    auto manifest=library.parent_path().parent_path()/"plugin.json";
+    auto manifest=PS::RuntimePaths::HelpyFromBinary(library)/"plugin.json";
     if(!std::filesystem::exists(manifest))manifest=std::filesystem::path(HELPY_PLUGIN_PACKAGE_ROOT)/"plugin.json";
     std::ifstream manifestFile(manifest);Check(manifestFile.good());
     const auto declaration=nlohmann::json::parse(manifestFile);
@@ -126,6 +127,7 @@ int Run(int argc,char** argv){
                 if(pid==GetCurrentProcessId()&&std::wstring(caption)==PS::HelpyBranding::WindowTitle){own=window;break;}
             }
             Check(own);
+            if(ExternalDesktop)Check(GetAwarenessFromDpiAwarenessContext(GetWindowDpiAwarenessContext(own))==DPI_AWARENESS_PER_MONITOR_AWARE);
             if(StartInTray){const auto status=Services.at("helpy.desktop.status");char output[256]{};uint32_t bytes=0;Check(status.Call(status.Context,"{}",output,sizeof(output),&bytes)==RS_PLUGIN_OK);const bool tray=nlohmann::json::parse(output).value("TrayReady",false);Check(tray?!IsWindowVisible(own):IsIconic(own));SendMessageW(own,WM_COMMAND,PS::HelpyTrayIcon::Open,0);}
             Check(IsWindowVisible(own));
             wchar_t title[128]{};GetWindowTextW(own,title,128);Check(std::wstring(title)==PS::HelpyBranding::WindowTitle);

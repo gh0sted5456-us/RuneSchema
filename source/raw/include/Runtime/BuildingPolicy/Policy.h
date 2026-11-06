@@ -1,5 +1,6 @@
 #pragma once
 #include "Reflection.h"
+#include "Core/AIPassivityPolicy.h"
 #include <algorithm>
 #include <cmath>
 #include <optional>
@@ -12,6 +13,12 @@ inline void Check(UFunction* fn,const wchar_t* name,const wchar_t* type,int size
  auto* p=Field(fn,name);
  if(!p->HasAnyPropertyFlags(CPF_Parm)||p->GetClass().GetName()!=type||p->GetSize()!=size)
   throw std::runtime_error("Building policy parameter contract differs: "+RC::to_string(name));
+}
+inline void CheckParameters(UFunction* fn,int expected){
+ int count=0;for(auto* p:TFieldRange<FProperty>(fn,EFieldIterationFlags::Default))if(p->HasAnyPropertyFlags(CPF_Parm)){
+  ++count;if(p->GetOffset_Internal()<0||p->GetSize()<=0||p->GetOffset_Internal()+p->GetSize()>fn->GetParmsSize())throw std::runtime_error("Policy parameter exceeds its native frame");
+ }
+ if(count!=expected||!Field(fn,L"ReturnValue")->HasAnyPropertyFlags(CPF_ReturnParm))throw std::runtime_error("Policy callback parameter contract differs");
 }
 inline void CheckPosition(UFunction* fn){
  Check(fn,L"Position",L"StructProperty",sizeof(Vec3));
@@ -44,6 +51,22 @@ inline bool Register(UObject* object){
  }
  for(auto* name:{L"RuneSchemaFarmProtection",L"RuneSchemaFarmHarvestMultiplier",L"RuneSchemaResourceRespawnMultiplier",L"RuneSchemaResourceYieldMultiplier",L"RuneSchemaPlayerCarryWeight",L"RuneSchemaPlayerVitality",L"RuneSchemaEnemySpawnMultiplier"})if(auto* fn=object->GetFunctionByNameInChain(name)){
   CheckPosition(fn);Check(fn,L"ReturnValue",L"DoubleProperty",8);
+ }
+ if(auto* fn=object->GetFunctionByNameInChain(L"RuneSchemaAIPassivity")){
+  CheckPosition(fn);Check(fn,L"ReturnValue",L"IntProperty",4);
+  int count=0;for(auto* p:TFieldRange<FProperty>(fn,EFieldIterationFlags::Default))if(p->HasAnyPropertyFlags(CPF_Parm))++count;
+  if(count!=2||!Field(fn,L"ReturnValue")->HasAnyPropertyFlags(CPF_ReturnParm))throw std::runtime_error("AI passivity requires Position and one int32 return value");
+ }
+ auto* aiCount=object->GetFunctionByNameInChain(L"RuneSchemaAIEffectCount");
+ auto* aiData=object->GetFunctionByNameInChain(L"RuneSchemaAIEffectData");
+ auto* aiInstigator=object->GetFunctionByNameInChain(L"RuneSchemaAIEffectInstigator");
+ auto* aiSource=object->GetFunctionByNameInChain(L"RuneSchemaAIEffectSource");
+ if(aiCount||aiData||aiInstigator||aiSource){
+  if(!aiCount||!aiData||!aiInstigator||!aiSource)throw std::runtime_error("AI effect providers require Count, Data, Instigator and Source callbacks");
+  Check(aiCount,L"ReturnValue",L"IntProperty",4);CheckParameters(aiCount,1);
+  for(auto* fn:{aiData,aiInstigator,aiSource}){CheckPosition(fn);Check(fn,L"Index",L"IntProperty",4);CheckParameters(fn,3);}
+  auto* result=CastField<FClassProperty>(Field(aiData,L"ReturnValue"));if(!result||result->GetSize()!=sizeof(UObject*))throw std::runtime_error("AI effect class return differs");
+  for(auto* fn:{aiInstigator,aiSource})Check(fn,L"ReturnValue",L"ObjectProperty",sizeof(UObject*));
  }
  auto* count=object->GetFunctionByNameInChain(L"RuneSchemaPlayerEffectCount");
  auto* data=object->GetFunctionByNameInChain(L"RuneSchemaPlayerEffectData");

@@ -1,3 +1,6 @@
+#include "Generator/ControllerSettingsPanel.h"
+#include "RuntimePaths.h"
+#include "Generator/HelpyBindingActions.h"
 #pragma once
 #include "Generator/HelpyTextInput.h"
 #include "Generator/HelpyImGuiTheme.h"
@@ -90,13 +93,14 @@ inline void CachePreferences(){
 inline int QuickSection=0;
 inline std::function<void()> ModMenuSettings;
 inline void QuickSettings(){
-    HelpyFeatureSettings::Load();constexpr std::array allLabels{"Display","Startup","Cache","Performance","Saves","HUD","Mod Menu 2"};
-    const auto labels=std::span(allLabels).first(HelpyFeatureSettings::Key?7:6);
+    HelpyFeatureSettings::Load();constexpr std::array allLabels{"Display","Startup","Cache","Performance","Saves","HUD","Controllers","Mod Menu 2"};
+    const auto labels=std::span(allLabels).first(HelpyFeatureSettings::Key&&ModMenuSettings?8:7);
     HelpyMenu::Tabs("helpy-settings",labels,QuickSection);
     const bool body=HelpyMenu::BeginBody("Quick settings body",QuickSection);
     if(body){
     if(QuickSection==5)HelpyHudPanel::Render();
-    if(QuickSection==6&&ModMenuSettings)ModMenuSettings();
+    if(QuickSection==6)ControllerSettingsPanel::Render([]{QuickSection=1;});
+    if(QuickSection==7&&ModMenuSettings)ModMenuSettings();
     const auto hint=[](const std::string& text){if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)){
         PS::HelpyImGuiTheme::Tooltip("%s",text.c_str());}};
     if((QuickSection==1||QuickSection==4)&&!Loaded&&Status.empty())Load();
@@ -122,7 +126,7 @@ inline void QuickSettings(){
         if(checkedRoot!=root){checkedRoot=root;try{enrolled=HelpyVulkanSetup::Enrolled(directory,HelpyVulkanSetup::GameExecutable(root));message.clear();}catch(const std::exception& error){message=error.what();}}
         ImGui::TextWrapped("Opt in for this runtime, then restart Dragonwilds. A small per-user Vulkan selector loads the bridge only for enrolled game executables. Other renderers use their own adapter.");
         if(HelpyImGuiTheme::SoftButton(enrolled?"Remove Vulkan startup adapter for this runtime":"Enable Vulkan startup adapter for this runtime"))try{
-            const auto game=HelpyVulkanSetup::GameExecutable(root);HelpyVulkanSetup::Configure(directory,game,HelpyPaths::PluginRoot().parent_path()/"RuneSchema.HUD/dll/RuneSchema.HUD.dll",HelpyPaths::PluginRoot()/"dll/RuneSchema.Helpy.Vulkan.dll",!enrolled);enrolled=!enrolled;message=enrolled?"Enabled for the next game launch.":"Removed for this runtime. Restart the game to unload its active adapter.";
+            const auto game=HelpyVulkanSetup::GameExecutable(root);HelpyVulkanSetup::Configure(directory,game,RuntimePaths::Plugin(root,"RuneSchema.HUD")/"dll/RuneSchema.HUD.dll",RuntimePaths::HelpyBinary(root,"RuneSchema.Helpy.Vulkan.dll"),!enrolled);enrolled=!enrolled;message=enrolled?"Enabled for the next game launch.":"Removed for this runtime. Restart the game to unload its active adapter.";
         }catch(const std::exception& error){message=error.what();}
         if(!message.empty())ImGui::TextWrapped("%s",message.c_str());ImGui::TreePop();
     }
@@ -155,16 +159,7 @@ inline void QuickSettings(){
     if(HelpyImGuiTheme::Toggle("Show game startup indicator",&theme.showStartupProgress))HelpyImGuiTheme::SaveCurrent();
     hint("Alternates the Dragonwilds and RuneSchema logos with a centered loading bar during startup. Uses actual RuneSchema stages and stops once the game reaches its menu/world and registration has completed. Unknown remaining work uses an animated bar instead of an invented percentage. Requires Start Helpy with Dragonwilds.");
     ImGui::EndDisabled();
-    if(ImGui::TreeNode("Controller navigation")){
-        ImGui::TextUnformatted("Input mode");ImGui::SetNextItemWidth(-1);bool inputChanged=ImGui::Combo("##input-mode",&theme.inputMode,"Automatic\0Mouse & keyboard\0Controller\0");
-        hint("Automatic follows your latest input. Controller mode keeps the navigation hints visible. Device discovery runs on device changes; state reads run only while Helpy renders.");
-        ImGui::TextUnformatted("Controller glyphs");ImGui::SetNextItemWidth(-1);inputChanged|=ImGui::Combo("##controller-glyphs",&theme.controllerGlyphs,"Automatic (device labels)\0Xbox\0PlayStation\0Generic\0Nintendo\0");
-        hint("Xbox, DualShock/DualSense and supported Nintendo controllers use the same navigation. Automatic follows the device button labels; choose a manual layout when a mapper hides its identity.");
-        inputChanged|=HelpyImGuiTheme::Toggle("PlayStation touchpad pointer",&theme.controllerTouchpad);
-        hint("Slide one finger to move Helpy's pointer; press the touchpad to click or drag. Active only while Helpy has focus. Requires a controller connection that exposes its touchpad to SDL; some Steam Input mappings hide it.");
-        ImGui::TextWrapped("%s",HelpyControllerDevice::Status().c_str());
-        if(inputChanged)HelpyImGuiTheme::SaveCurrent();ImGui::TreePop();
-    }
+
     }
     if(QuickSection==1){
     ImGui::SeparatorText("Startup & shortcuts");
@@ -180,36 +175,19 @@ inline void QuickSettings(){
         hint("Applies immediately. Helpy exits fully when its attached game or dedicated server process ends. A temporary bridge disconnect does not close it; starting Helpy offline still works. Off by default.\n"+HelpySettings::Message());}
     bool minimize=HelpySettings::CloseToTaskbar();if(HelpyImGuiTheme::Toggle("Close to system tray",&minimize))HelpySettings::SetBool("minimizeOnClose",minimize);
     hint("X and Alt+F4 return Helpy to the system tray when enabled, or exit it when disabled. Applies immediately.\n"+HelpySettings::Message());
-    ImGui::TextUnformatted("Helpy shortcut");
-    static std::string hotkeyStatus;
-    const bool editable=Loaded&&Snapshot.at("Editable").contains("/helpyHotkey")&&Patch().empty();
-    ImGui::BeginDisabled(!editable);
-    const auto current=HelpySettings::HotkeyName();
-    const float resetWidth=ImGui::CalcTextSize("Reset to F2").x+ImGui::GetStyle().FramePadding.x*2;
-    ImGui::SetNextItemWidth(std::max(HelpyImGuiTheme::Current.X(55),ImGui::GetContentRegionAvail().x-resetWidth-ImGui::GetStyle().ItemSpacing.x));
-    if(ImGui::BeginCombo("##helpy-hotkey",current.c_str())){
-        for(const auto& binding:HelpyShortcut::Choices){
-            const bool selected=binding.Name==current;
-            if(ImGui::Selectable(binding.Name.data(),selected)&&!selected){SaveQuick("/helpyHotkey",std::string(binding.Name));hotkeyStatus=QuickToggleError?Status:"Saved. Shortcut active immediately.";}
-            if(selected)ImGui::SetItemDefaultFocus();
-        }ImGui::EndCombo();
-    }
-    hint("Choose one key to open or close Helpy. Saved to [RuneSchema] helpyHotkey in settings.ini and applied immediately. Pick a key that does not conflict with your game or other mods; single-key bindings only.");
-    ImGui::SameLine();ImGui::BeginDisabled(current=="F2");
-    if(HelpyImGuiTheme::SoftButton("Reset to F2")){SaveQuick("/helpyHotkey","F2");hotkeyStatus=QuickToggleError?Status:"Saved. Shortcut active immediately.";}
-    ImGui::EndDisabled();ImGui::EndDisabled();
-    if(!editable){ImGui::TextDisabled("Shortcut unavailable. Hover for details.");hint(Loaded&&!Patch().empty()?"Finish or discard the Settings draft before changing this shortcut.":"Update RuneSchema and Helpy together, then reload RuneSchema settings.");}
-    if(!hotkeyStatus.empty())ImGui::TextWrapped("%s",hotkeyStatus.c_str());
     auto& controllerTheme=HelpyImGuiTheme::Current;
-    ImGui::TextUnformatted("Controller shortcut");ImGui::SetNextItemWidth(-1);
-    bool controllerChanged=ImGui::Combo("##controller-shortcut",&controllerTheme.controllerShortcut,"Disabled\0Xbox / PS / Home button\0View + Menu\0");
-    hint("An alternate to your keyboard shortcut. Works while your assigned game or Helpy has focus, including when Helpy is in its tray. View + Menu is Share + Options on PlayStation or Minus + Plus on Nintendo. Held buttons do not repeatedly open and close it.");
-    ImGui::BeginDisabled(controllerTheme.controllerShortcut!=1||HelpyEnvironment::Server());
+    auto keyboard=HelpyBindingActions::Keyboard(),controller=HelpyBindingActions::Controller();
+    if(HelpyBindingPicker::Edit("helpy","Helpy shortcut",keyboard,controller,HelpyBindingActions::Check("helpy"),"F2","Guide")){
+        controllerTheme.helpyKeyboardBinding=keyboard;controllerTheme.controllerBinding=controller;HelpySettings::ApplyHotkey(keyboard);HelpyImGuiTheme::SaveCurrent();
+    }
+    hint("Keyboard and controller combinations work while your game or Helpy has focus. Saved locally and available without a connected game.");
+    bool controllerChanged=false;
+    ImGui::BeginDisabled(!(InputBindings::ParsePad(HelpyBindingActions::Controller())&InputBindings::Guide)||HelpyEnvironment::Server());
     controllerChanged|=HelpyImGuiTheme::Toggle("Reserve Guide button in game",&controllerTheme.reserveControllerGuide);
     ImGui::EndDisabled();
     hint("Requests exclusive Guide input from Windows GameInput while Dragonwilds has focus. Released when Helpy exits or its five-second bridge lease expires. Steam can read controllers independently; this cannot guarantee a global Guide-button lock.");
     if(controllerChanged)HelpyImGuiTheme::SaveCurrent();
-    if(controllerTheme.controllerShortcut==1){
+    if(InputBindings::ParsePad(HelpyBindingActions::Controller())&InputBindings::Guide){
         ImGui::TextWrapped("If Steam or Game Bar also opens, disable its Guide-button action or choose the View + Menu shortcut. Helpy does not change their settings.");
         if(!HelpyImGuiTheme::ControllerShortcutStatus.empty())ImGui::TextWrapped("%s",HelpyImGuiTheme::ControllerShortcutStatus.c_str());
     }
@@ -239,20 +217,13 @@ inline void QuickSettings(){
         HelpyPreviewHooks::AuthoringButtons["Game FPS overlay"]=HelpyPreviewHooks::LastRect();
 #endif
         hint("A small counter over the game in windowed/borderless mode. Hiding it stops its timing requests and drawing. Helpy's window can stay closed.");
-        ImGui::SetNextItemWidth(HelpyImGuiTheme::Current.X(150));
-        if(ImGui::BeginCombo("FPS shortcut",theme.fpsHotkey.c_str())){
-            for(const auto& binding:HelpyShortcut::Choices){
-                ImGui::BeginDisabled(binding.Key==HelpySettings::Hotkey.load());
-                if(ImGui::Selectable(binding.Name.data(),binding.Name==theme.fpsHotkey)){theme.fpsHotkey=binding.Name;save=true;}
-                ImGui::EndDisabled();
-            }ImGui::EndCombo();
-        }
-        hint("Toggle the in-game counter while Dragonwilds or Helpy has focus. F10 by default. Choose a different key from Helpy's own shortcut; function keys avoid typing conflicts.");
-        if(const auto* binding=HelpyShortcut::Find(theme.fpsHotkey);binding&&binding->Key==HelpySettings::Hotkey.load())ImGui::TextWrapped("Choose a different FPS shortcut from Helpy's own key.");
+        save|=HelpyBindingPicker::Edit("fps","FPS shortcut",theme.fpsHotkey,theme.fpsControllerBinding,HelpyBindingActions::Check("fps"),"F10","None");
+        hint("Toggle the counter while your game or Helpy has focus. F10 by default.");
         ImGui::SetNextItemWidth(HelpyImGuiTheme::Current.X(150));
         save|=ImGui::SliderInt("Helpy FPS limit",&theme.helpyFpsLimit,15,144,"%d",ImGuiSliderFlags_AlwaysClamp);
 #if defined(HELPY_PREVIEW)
         HelpyPreviewHooks::AuthoringButtons["Helpy FPS limit"]=HelpyPreviewHooks::LastRect();
+        HelpyPreviewHooks::MenuFocus["fps-limit"]={ImGui::GetItemID(),ImGui::GetCurrentWindow()->ID};
 #endif
         hint("Limits Helpy rendering only. Default 60, adjustable up to 144; unfocused Helpy is limited to 10 FPS and hidden/minimized windows stop rendering. The game frame-rate limit is unchanged.");
         int interval=theme.fpsRefreshMs<=500?0:theme.fpsRefreshMs<=1000?1:2;
@@ -265,7 +236,7 @@ inline void QuickSettings(){
         ImGui::SeparatorText("Game launch & saves");
         static json quick=json::object();static char character[257]{},world[257]{};static int mode=1;static bool dirty=false,unconfirmed=false;static std::string message;
         static bool saved=false;static int choicePolls=0;static double nextChoicePoll=0,retryRead=0;
-        const auto load=[&](bool discard){json result;if(!Remote||!Remote({{"Action","QuickLoadRead"}},result)||!result.is_object()||!result.value("Ok",false)){message=result.is_object()?result.value("Status",std::string("Quick Launch service unavailable; use a matching core build.")):"Quick Launch service unavailable; use a matching core build.";return;}
+        const auto load=[&](bool discard){json result;if(!Remote||!Remote({{"Action","QuickLoadRead"}},result)||!result.is_object()||!result.value("Ok",false)){message=result.is_object()?result.value("Status",std::string("Launch options could not be read. Check the game connection and retry.")):"Launch options could not be read. Check the game connection and retry.";return;}
             const auto& selectionDoc=result.at("Document");
             if(!selectionDoc.value("Mode",json{}).is_string()||(selectionDoc["Mode"]!="vanilla"&&selectionDoc["Mode"]!="lessRestrictive"&&selectionDoc["Mode"]!="quickLaunch")){message="Loading modes require a matching RuneSchema core build.";unconfirmed=true;return;}
             if(!discard&&!quick.empty()){

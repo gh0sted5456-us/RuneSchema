@@ -106,3 +106,10 @@ KhronosGroup/Vulkan-Headers `v1.3.290` and Khronos OpenGL/EGL declaration header
 Only declarations are vendored; no GPU driver or Vulkan loader is included.
 Their original notices, license texts, source locations and hashes are retained
 under `source/helpy/vendor/vulkan/` and `source/helpy/vendor/khronos/`.
+
+## Dear ImGui
+
+- Bundled version: 1.92.1.
+- Upstream: https://github.com/ocornut/imgui
+- Copyright (c) 2014-2025 Omar Cornut; MIT notice retained in the bundled `source/helpy/vendor/imgui/LICENSE.txt`.
+- Helpy's build adapts navigation focus drawing to stay inside controls and exclude selectable click-spacing from the highlight. Other builds retain the upstream renderer.

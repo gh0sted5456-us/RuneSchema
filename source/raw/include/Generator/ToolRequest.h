@@ -94,7 +94,7 @@ template<> struct ToolRequest<SpawnToolTag> {
         Pending=std::move(request);Waiting=true;
         Result.erase("GrantResults");Result.erase("SpawnResult");
         Result.erase("CloneResult");Result.erase("CloneSource");Result.erase("CloneAppearance");Result.erase("ItemDetails");
-        Result.erase("RecipeExportResult");Result.erase("ItemOverrideExportResult");Result.erase("KitMetadata");Result.erase("NativeContracts");
+        Result.erase("RecipeExportResult");Result.erase("ItemOverrideExportResult");Result.erase("KitMetadata");Result.erase("NativeContracts");Result.erase("DeveloperContracts");
         Result.erase("CartValidation");Result.erase("ServerControl");
         Result.erase("RecipeWorkspaceCatalog");Result.erase("RecipeWorkspaceSource");
         Result.erase("JournalCatalog");

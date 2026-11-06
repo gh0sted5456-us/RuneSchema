@@ -279,9 +279,14 @@ local function checkSetting(raw, idx, seen, restartDefault)
     return s
 end
 
+local function validColor(value, alpha)
+    return type(value)=="string" and #value==(alpha and 9 or 7) and value:match("^#%x+$")~=nil
+end
+
 -- Converts a stored string (or JSON value) into the setting's type. nil = unusable.
 local function coerce(s, v)
     if v == nil then return nil end
+    if s.presentation == "color" then return validColor(v,s.colorAlpha) and v or nil end
     if s.type == "toggle" then
         if type(v) == "boolean" then return v end
         local l = tostring(v):lower()
@@ -520,6 +525,15 @@ local function switchedOff(folder, dir, runeSchema)
         .. "Changes made here are saved, but do nothing until the mod is switched on."
 end
 
+local function templateContext(m)
+    local definition=m.helpy and m.helpy.templates
+    local variable=definition and definition.contextVariable
+    if not variable then return "" end
+    local ok,value=pcall(function()return ModRef:GetSharedVariable(variable)end)
+    if ok and type(value)=="string" and #value>0 and #value<=256 then return value end
+    return nil
+end
+
 local function loadSchema(folderName, dirPath)
     local m = { folder = folderName, dir = dirPath, errors = {}, settings = {}, values = {}, rev = 0, actionN = 0 }
     local path = dirPath:gsub("\\", "/"):gsub("/+$", ""):lower()
@@ -545,16 +559,23 @@ local function loadSchema(folderName, dirPath)
     m.author = type(doc.author) == "string" and doc.author:sub(1, 40) or nil
     m.version = (type(doc.version) == "string" or type(doc.version) == "number") and tostring(doc.version):sub(1, 20) or nil
     m.description = type(doc.description) == "string" and doc.description:sub(1, 300) or nil
-    if type(doc.helpy)=="table" then
-        m.helpy={layout=doc.helpy.layout=="character" and "character" or "settings",tabs={}}
-        if type(doc.helpy.tabs)=="table" then for i,tab in ipairs(doc.helpy.tabs) do
+    local extension=doc["--Helpy"]
+    if extension~=nil then
+        if type(extension)~="table" or extension.schema~=1 then
+            m.errors[#m.errors+1]="Unsupported --Helpy extension schema; legacy settings remain available"
+            extension=nil
+        end
+    elseif type(doc.helpy)=="table" then extension=doc.helpy end
+    if type(extension)=="table" then
+        m.helpy={layout=extension.layout=="character" and "character" or "settings",tabs={}}
+        if type(extension.tabs)=="table" then for i,tab in ipairs(extension.tabs) do
             if i>16 then break end
             if type(tab)=="table" and type(tab.name)=="string" and type(tab.keys)=="table" then
                 local keys={};for n,key in ipairs(tab.keys) do if n>200 then break end;if type(key)=="string" and key:match("^[%w_.%-]+$") then keys[#keys+1]=key end end
                 m.helpy.tabs[#m.helpy.tabs+1]={name=tab.name:sub(1,80),keys=keys}
             end
         end end
-        local p=doc.helpy.preview
+        local p=extension.preview
         if type(p)=="table" and type(p.channelVariable)=="string" and #p.channelVariable<=192 and p.channelVariable:match("^[%w_.%-]+$") then m.helpy.preview={channelVariable=p.channelVariable} end
     end
     local ro = doc.runsOn                                      -- 2.0: the mod's own runsOn word (a setting's wins)
@@ -582,6 +603,45 @@ local function loadSchema(folderName, dirPath)
     elseif text then
         m.errors[#m.errors + 1] = "modmenu.json has no \"settings\" list"
     end
+    -- Only Helpy reads this namespace. The original menu sees valid JSON and ignores it.
+    if type(extension)=="table" and type(extension.settings)=="table" then
+        for _,raw in ipairs(extension.settings) do
+            if #m.settings>=200 then m.errors[#m.errors+1]="Only 200 combined settings are supported";break end
+            local copy={};if type(raw)=="table" then for key,value in pairs(raw) do copy[key]=value end end
+            local widget=copy.type;copy.type=widget=="dial" and "slider" or widget=="radial" and "choice" or widget=="color" and "text" or copy.type
+            local alpha=copy.alpha==true
+            if widget=="color" then
+                if copy.default==nil then copy.default=alpha and "#FFFFFFFF" or "#FFFFFF" end
+                copy.maxLength=alpha and 9 or 7
+            end
+            local setting,why
+            if widget=="color" and ((copy.alpha~=nil and type(copy.alpha)~="boolean") or not validColor(copy.default,alpha)) then why="Color settings require a #RRGGBB default, or #RRGGBBAA with alpha=true"
+            else setting,why=checkSetting(copy,#m.settings+1,seen,m.format=="lua") end
+            if setting then
+                if widget=="dial" or (widget=="radial" and #setting.options<=12) then setting.presentation=widget
+                elseif widget=="radial" then m.errors[#m.errors+1]="Radial choices support at most 12 options; using the standard choice control"
+                elseif widget=="color" then setting.presentation="color";setting.colorAlpha=alpha end
+                m.settings[#m.settings+1]=setting
+            else m.errors[#m.errors+1]=why end
+        end
+    end
+    local byKey={};for _,setting in ipairs(m.settings)do if setting.key then byKey[setting.key]=setting end end
+    if type(extension)=="table" and type(extension.controls)=="table" then
+        for key,widget in pairs(extension.controls)do
+            local setting=byKey[key]
+            if setting and widget=="color" and setting.type=="text" and validColor(setting.default,#setting.default==9) then setting.presentation="color";setting.colorAlpha=#setting.default==9;setting.maxLength=setting.colorAlpha and 9 or 7
+            elseif setting and ((widget=="dial" and setting.type=="slider") or (widget=="radial" and setting.type=="choice" and #setting.options<=12)) then setting.presentation=widget
+            else m.errors[#m.errors+1]="Invalid Helpy presentation for "..tostring(key) end
+        end
+    end
+    if type(extension)=="table" and type(extension.templates)=="table" then
+        local raw=extension.templates;local keys,used={},{};local valid=type(raw.id)=="string" and #raw.id<=80 and raw.id:match("^[%w_.%-]+$") and type(raw.version)=="number" and raw.version>=1 and raw.version<=65535 and raw.version%1==0 and type(raw.keys)=="table" and #raw.keys>=1 and #raw.keys<=200
+        if valid then for _,key in ipairs(raw.keys)do local setting=byKey[key];if type(key)~="string" or used[key] or not setting or setting.type=="key" then valid=false;break end;used[key]=true;keys[#keys+1]=key end end
+        local context=raw.contextVariable
+        if context~=nil and (type(context)~="string" or #context>192 or not context:match("^[%w_.%-]+$")) then valid=false end
+        if valid then m.helpy.templates={id=raw.id,version=raw.version,keys=keys,contextVariable=context}
+        else m.errors[#m.errors+1]="Invalid Helpy template contract; template import/export disabled" end
+    end
     -- 2.0 (C10): a showIf naming no key of this file, or its own row, is dropped: that row always shows
     local keys = {}
     for _, st in ipairs(m.settings) do if st.key then keys[st.key] = true end end
@@ -589,6 +649,7 @@ local function loadSchema(folderName, dirPath)
         if st.showIf and (not keys[st.showIf.key] or st.showIf.key == st.key) then st.showIf = nil end
     end
     loadValues(m)
+    m.templateContext=templateContext(m)
     return m
 end
 
@@ -599,7 +660,7 @@ local function publish()
     local pages=setmetatable({},{__json_array=true})
     for _,m in ipairs(mods) do
         pages[#pages+1]={Id=m.id,Name=m.name,Author=m.author,Version=m.version,Description=m.description,
-            Settings=m.settings,Values=m.values,Errors=m.errors,Off=m.off,RunsOn=m.runsOn,Revision=m.rev,Helpy=m.helpy,PreviewChannel=m.previewChannel}
+            Settings=m.settings,Values=m.values,Errors=m.errors,Off=m.off,RunsOn=m.runsOn,Revision=m.rev,Helpy=m.helpy,PreviewChannel=m.previewChannel,TemplateContext=m.templateContext}
         share("ModMenu.health."..m.id,m.off and "off" or "unknown")
     end
     exchange("publish",{Snapshot={Pages=pages,OpenSequence=openN,OpenId=openId,OpenRow=openRow,Status=lastStatus}})
@@ -639,8 +700,39 @@ local function change(id,key,value,expected,reset,action)
     assert(saveValues(m),"Config changed outside Helpy or could not be saved; original retained")
     m.rev=m.rev+1;publishAll(m)
 end
+local function applyTemplate(c)
+    local previous=assert(modsById[c.Id],"Mod Menu page is unavailable")
+    local m=loadSchema(previous.folder,previous.dir);m.rev=previous.rev;m.actionN=previous.actionN
+    local definition=assert(m.helpy and m.helpy.templates,"This mod has not declared template support")
+    assert(c.TemplateId==definition.id and c.TemplateVersion==definition.version,"Template contract changed; refresh the preview")
+    assert(c.Revision==m.rev,"This page changed; review the template again")
+    local context=templateContext(m);assert(context~=nil and c.Context==context,"Selected character or target changed; review the template again")
+    assert(type(c.Values)=="table" and type(c.Expected)=="table","Invalid template values")
+    local byKey,allowed,plan={},{},{}
+    for _,setting in ipairs(m.settings)do if setting.key then byKey[setting.key]=setting end end
+    for _,key in ipairs(definition.keys)do allowed[key]=true end
+    for key in pairs(c.Values)do assert(allowed[key],"Template contains an undeclared setting")end
+    for key in pairs(c.Expected)do assert(allowed[key],"Template contains an undeclared baseline")end
+    for _,key in ipairs(definition.keys)do
+        local setting=assert(byKey[key],"Template setting is unavailable");assert(not setting.locked,"Template includes a locked setting")
+        local role=setting.runsOn or m.runsOn;assert(hostAuthority or (role~="host" and role~="server"),"The host controls this template setting")
+        assert(c.Expected[key]~=nil and m.values[key]==c.Expected[key],"A setting changed outside Helpy; review the template again")
+        local value=c.Values[key];local valid=false
+        if setting.presentation=="color" then valid=validColor(value,setting.colorAlpha)
+        elseif setting.type=="toggle" then valid=type(value)=="boolean"
+        elseif setting.type=="slider" then valid=type(value)=="number" and value==value and value~=math.huge and value~=-math.huge and value>=setting.min and value<=setting.max
+        elseif setting.type=="choice" then if type(value)=="string" then for _,option in ipairs(setting.options)do if value==option then valid=true;break end end end
+        elseif setting.type=="text" then valid=type(value)=="string" and #value<=setting.maxLength and not value:find("[%z\r\n]") end
+        assert(valid,"Template contains an invalid value for "..key);plan[key]=value
+    end
+    for key,value in pairs(plan)do m.values[key]=value end
+    assert(saveValues(m),"Config changed outside Helpy or could not be saved; original retained")
+    m.rev=m.rev+1;modsById[m.id]=m;for i,current in ipairs(mods)do if current.id==m.id then mods[i]=m;break end end
+    publishAll(m)
+end
 local function command(c)
-    if c.Op=="refresh" then refresh()
+    if c.Op=="template_apply" then applyTemplate(c)
+    elseif c.Op=="refresh" then refresh()
     elseif c.Op=="set" then change(c.Id,c.Key,c.Value,c.Expected)
     elseif c.Op=="reset" then change(c.Id,nil,nil,nil,true)
     elseif c.Op=="button" then change(c.Id,nil,nil,nil,false,c.Action)
@@ -664,6 +756,7 @@ local function tick()
         end;publish() end
     end
     local m=modsById[sent["ModMenu.page"]]
+    if m and m.helpy and m.helpy.templates then local context=templateContext(m);if context~=m.templateContext then m.templateContext=context;publish()end end
     if m and m.helpy and type(m.helpy.preview)=="table" and type(m.helpy.preview.channelVariable)=="string" then
         local name=m.helpy.preview.channelVariable;if #name<=192 then local channel=ModRef:GetSharedVariable(name);if type(channel)=="string" and #channel<=128 and channel~=m.previewChannel then m.previewChannel=channel;publish() end end
     end

@@ -3,6 +3,10 @@ channel: experimental
 promote_to: INSTALLATION.md
 ---
 
+!!! info "Folder layout during testing"
+    The [new runtime layout](RUNTIME-LAYOUT.md) is an unpublished development candidate. The published 0.8.1.0 ZIP keeps Helpy under `plugins/RuneSchema.Helpy/dll` and HUD under `plugins/RuneSchema.HUD`. Both layouts remain supported.
+
+
 !!! info "Experimental · 0.8.1.0"
     This guide describes the experimental branch. For the current public package, see
     [stable downloads](../CURRENT-RELEASE.md). [Experimental overview](index.md).

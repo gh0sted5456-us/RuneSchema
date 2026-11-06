@@ -1,5 +1,6 @@
 #include <algorithm>
 #include "Core/HelpyCacheSources.h"
+#include "Core/AutoReloadScope.h"
 #include "../../../shared/SaveBackupStore.h"
 #include "../../../shared/SaveWorldBackups.h"
 #include "Core/LoadProtectionNotice.h"
@@ -1102,11 +1103,14 @@ namespace DragonWilds {
 
             auto existing = std::find_if(PendingAutoReloads.begin(), PendingAutoReloads.end(),
                 [&](const PendingAutoReload& pendingAutoReload) {
-                    return pendingAutoReload.FilePath == filePath;
+                    return pendingAutoReload.FolderType == folderType
+                        && PS::AutoReloadScope::Key(pendingAutoReload.FilePath,folderType)
+                            == PS::AutoReloadScope::Key(filePath,folderType);
                 });
 
             if (existing != PendingAutoReloads.end())
             {
+                existing->FilePath = filePath;
                 existing->FolderType = folderType;
                 existing->ModName = modName;
             }
@@ -2094,7 +2098,7 @@ namespace DragonWilds {
         std::map<fs::path,std::string> pakOwners;
         const auto pluginRootBegin=pakRoots.size();
         try {
-            for(const auto& plugin:PS::PluginCatalog::Discover(runeSchemaRoot/"plugins")) {
+            for(const auto& plugin:PS::PluginCatalog::DiscoverRuntime(runeSchemaRoot)) {
                 if(!plugin.Enabled)continue;
                 try{for(const auto& package:PS::PluginCatalog::PakDirectories(plugin)){pakRoots.push_back(package);pakOwners[package]=plugin.Id;}}
                 catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[RS-PLUG-009] Plugin '{}' content rejected: {}; independent PAK directories continue.\n"),PS::ToWideSafe(plugin.Id),PS::ToWideSafe(error.what()));}

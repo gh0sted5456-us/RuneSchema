@@ -4,6 +4,7 @@
 #include "Core/ModManager.h"
 #include "Core/RuntimeModPath.h"
 #include <sstream>
+#include "Runtime/PluginCatalog.h"
 
 namespace PS::ModMenuGate {
 using Json=nlohmann::json;namespace fs=std::filesystem;
@@ -17,5 +18,5 @@ inline bool ExternalEnabled(const fs::path& root){
         if(menu&&(fs::exists(entry.path()/"enabled.txt")||flags[ModManager::Order::Fold(folder)]))return true;
     }return false;
 }
-inline std::string Blocked(const fs::path& activeRoot){try{const auto root=RuntimeModPath::Resolve(activeRoot);if(!ModMenu2Key::Present(root))return "Mod Menu 2 is locked; its activation key is absent or invalid.";if(!ModMenu2Settings::Read(root).Enabled)return "Integrated Mod Menu is disabled.";if(ExternalEnabled(root))return "Separate Mod Menu is enabled. Disable or remove it, then restart the game.";return {};}catch(const std::exception& error){return std::string("Mod Menu activation could not be verified: ")+error.what();}}
+inline std::string Blocked(const fs::path& activeRoot){try{const auto root=RuntimeModPath::Resolve(activeRoot);if(!ModMenu2Key::Present(root))return "Mod Menu 2 is locked; its activation key is absent or invalid.";if(!ModMenu2Settings::Read(root).Enabled)return "Integrated Mod Menu is disabled.";bool installed=false;for(const auto& plugin:PluginCatalog::DiscoverRuntime(root))if(plugin.Id=="RuneSchema.ModMenu2"&&plugin.Host=="helpy"&&plugin.Enabled&&!plugin.EntryPoint.empty()&&fs::is_regular_file(plugin.EntryPoint))installed=true;if(!installed)return "Native Mod Menu 2 Helpy plugin is not installed or enabled.";if(ExternalEnabled(root))return "Separate Mod Menu is enabled. Disable or remove it, then restart the game.";return {};}catch(const std::exception& error){return std::string("Mod Menu activation could not be verified: ")+error.what();}}
 }

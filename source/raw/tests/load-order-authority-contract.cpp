@@ -99,7 +99,7 @@ int main(int argc, char** argv) {
     Require(pluginCatalog, "left->second.Position<right->second.Position");
     Require(pluginCatalog, "dependency.first==result[i].Id");
     Require(pluginCatalog, "dependency cycle detected; using preferred plugins.txt order");
-    Require(pluginHost, "manifests=PluginCatalog::Discover(root");
+    Require(pluginHost, "manifests=PluginCatalog::DiscoverRuntime(root");
     Require(pluginHost, "for(const auto& manifest:manifests)");
 
     std::cout << "Load-order authority contract passed.\n";

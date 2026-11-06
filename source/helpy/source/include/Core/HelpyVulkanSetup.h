@@ -37,4 +37,11 @@ inline void Configure(const std::filesystem::path& directory,const std::filesyst
     const DWORD enabled=0;const auto result=entries.empty()?RegDeleteValueW(key,manifest.c_str()):RegSetValueExW(key,manifest.c_str(),0,REG_DWORD,reinterpret_cast<const BYTE*>(&enabled),sizeof(enabled));RegCloseKey(key);
     if(result!=ERROR_SUCCESS&&result!=ERROR_FILE_NOT_FOUND)throw std::runtime_error("Cannot update Helpy's Vulkan startup registration");
 }
+inline bool Refresh(const std::filesystem::path& directory,const std::filesystem::path& game,const std::filesystem::path& bridge,const std::filesystem::path& selector){
+    if(!Enrolled(directory,game))return false;
+    const auto existing=nlohmann::json::parse(ConfigFiles::Read(directory/"targets.json",65536));
+    if(Bind(existing,game,bridge,true)==existing)return false;
+    Configure(directory,game,bridge,selector,true);return true;
+}
+
 }

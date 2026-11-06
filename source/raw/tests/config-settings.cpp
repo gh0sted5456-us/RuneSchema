@@ -65,6 +65,8 @@ int RunConfigSettings() {
     assert(DecodeSettings("{}").helpyHotkey=="F2");
     assert(DecodeSettings(R"({"helpyHotkey":"f5"})").helpyHotkey=="F5");
     assert(DecodeSettings(R"({"helpyHotkey":"X"})").helpyHotkey=="X");
+    assert(DecodeSettings(R"({"helpyHotkey":"ctrl+shift+f2"})").helpyHotkey=="Ctrl+Shift+F2");
+    assert(DecodeSettings(R"({"helpyHotkey":"Alt+F4"})").helpyHotkey=="F2");
     assert(DecodeSettings(R"({"helpyHotkey":"not-a-key"})").helpyHotkey=="F2");
     auto shortcutSettings=DecodeSettings(R"({"helpyHotkey":"PageUp"})");
     assert(DecodeSettings(EncodeSettings(shortcutSettings)).helpyHotkey=="PageUp");

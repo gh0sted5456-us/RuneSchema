@@ -1,3 +1,4 @@
+#include "RuntimePaths.h"
 #pragma once
 #include "HelpyDesktopTransport.h"
 #include "Core/ConfigFiles.h"
@@ -18,7 +19,7 @@ inline bool ActivateExisting(const fs::path& root,bool show){
     if(show){const auto event=OpenEventW(EVENT_MODIFY_STATE,FALSE,(name+L".activate").c_str());if(event){SetEvent(event);CloseHandle(event);}}return true;
 }
 inline fs::path Application(const fs::path& root){
-    const auto directory=root/"plugins/RuneSchema.Helpy/dll";RuneSchemaData::Safe(directory);
+    const auto directory=RuntimePaths::HelpyBinary(root,"Helpy.exe").parent_path();RuneSchemaData::Safe(directory);
     for(const auto* name:{"SDL3.dll","Helpy.exe"}){
         const auto file=directory/name;RuneSchemaData::Safe(file);
         if(!fs::is_regular_file(file)||fs::file_size(file)==0||fs::file_size(file)>8*1024*1024)throw std::runtime_error(std::string("Helpy runtime file unavailable: ")+name);

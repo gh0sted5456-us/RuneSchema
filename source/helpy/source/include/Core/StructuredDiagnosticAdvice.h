@@ -4,7 +4,9 @@
 
 namespace PS::StructuredDiagnosticAdvice {
 struct Entry {std::string_view Code,Check;};
-inline constexpr std::array<Entry,38> Checks{{
+inline constexpr std::array<Entry,40> Checks{{
+    {"RS-IMP-013", "Dry run succeeded without applying changes. Review the planned imports in the original report before turning off $ImpDry."},
+    {"RS-IMP-014", "An import failed during application. An atomic batch leaves the destination unchanged; a non-atomic batch can retain earlier writes. Fix the reported source or allocation problem before retrying."},
     {"RS-BLD-023", "Check the exact cooked BuildingPieceData path, native PersistenceID/InternalName and optional assertions. Keep gameplay in the cooked asset; only AddTo and Unlock are enrollment metadata. World cleanup remains deferred for rejected content; unrelated character lanes can continue."},
     {"RS-ASSET-001", "Check the exact named target and whether its content is mounted or loaded. An unresolved lookup does not, by itself, prove a misspelled path."},
     {"RS-BP-001", "Compare the complete property path with the target Blueprint's current reflected properties and nested structure."},

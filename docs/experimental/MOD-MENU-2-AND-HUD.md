@@ -3,17 +3,37 @@ channel: experimental
 promote_to: MOD-MENU-2-AND-HUD.md
 ---
 
+!!! info "Folder layout during testing"
+    The [new runtime layout](RUNTIME-LAYOUT.md) is an unpublished development candidate. The published 0.8.1.0 ZIP keeps Helpy under `plugins/RuneSchema.Helpy/dll` and HUD under `plugins/RuneSchema.HUD`. Both layouts remain supported.
+
+
 !!! info "Pre-release · 0.8.1.0"
     Use matching core, Helpy and Lua files. Mod Menu 2 is optional/key-gated;
     it is not enabled in the stable package. [Candidate](PRE-RELEASE.md).
 
 # Mod Menu 2 and HUD layout
 
+!!! warning "Unpublished native Helpy plugin"
+    The current local candidate moves session polling and commands into
+    `Helpy/plugins/RuneSchema.ModMenu2/dll/RuneSchema.ModMenu2.dll`. Use its
+    matching manifest, Core and Helpy. This is not in the published ZIP.
+
+The plugin runs in Helpy, using the shared themed controls and input capture.
+Only the narrow Lua/game adapter runs inside Dragonwilds. Removing or disabling
+the plugin hides the feature and prevents its game-side registrations; the
+activation key and separate-Mod-Menu conflict checks still apply. Existing
+`modmenu.json`/`modmenu.txt`, variables and callbacks remain compatible.
+The plugin includes Maxxfilth's original MIT notice as `ModMenu-MIT.txt`.
+
 The activation key unlocks Mod Menu 2; a running game and its Lua adapter are
 still required for live controls. Helpy now reads large menu snapshots without
 treating a small response buffer as an inactive Core. Offline/disconnected
 status is shown separately from key acceptance. Activation changes still need
 a full game restart after disabling the separate Mod Menu.
+
+Open **Mods → Mod Menu 2** for live controls, alongside **Management**. The
+plugin keeps its own mod list and License pane; it has no duplicate main-navigation
+entry. Existing direct shortcuts still open it.
 
 Mod Menu 2 brings compatible mod settings into Helpy's themed two-pane interface.
 Opening it uses the same overlay, cursor and input capture as normal Helpy.
@@ -33,11 +53,11 @@ code while retaining its copyright and permission notice; see the
 1. Disable or remove the separate Maxxfilth Mod Menu through UE4SS, then close
    Dragonwilds. A mod already loaded in the current process needs a restart.
 2. Place the maintainer-provided `modmenu2.key` in
-   `RuneSchema/plugins/RuneSchema.Helpy/`. `RuneSchema/plugins/Helpy/` is also
-   recognized. The key contains the activation hash, a blank line and the
+   `RuneSchema/Helpy/plugins/RuneSchema.ModMenu2/`. `RuneSchema/Helpy/` and
+   the legacy `plugins/RuneSchema.Helpy/` location are also recognized. The key contains the activation hash, a blank line and the
    complete original MIT license. Preserve its text.
 3. Start Dragonwilds with the matching candidate and open Helpy. **Mod Menu 2**
-   appears in navigation after the key is recognized.
+   appears under **Mods** after the key is recognized.
 4. Under **Settings → Helpy → Mod Menu 2**, enable the integration and optionally
    choose its own F-key shortcut. Activation changes require restarting the game;
    changing the shortcut takes effect immediately in an active session.
@@ -70,14 +90,15 @@ unless another diagnostic has measured it. Mod Menu 2 messages go to
 
 ## Optional character-editor presentation
 
-Existing schemas work without any new fields. A mod can add a `helpy` object to
+Existing schemas work without any new fields. A mod can add a `"--Helpy"` object to
 group controls into tabs and request a character-preview column:
 
 ```json
 {
   "id": "ExampleCharacterEditor",
   "name": "Character editor",
-  "helpy": {
+  "--Helpy": {
+    "schema": 1,
     "layout": "character",
     "tabs": [
       { "name": "Appearance", "keys": ["Height", "Build"] },
@@ -89,7 +110,7 @@ group controls into tabs and request a character-preview column:
     { "key": "Height", "type": "slider", "min": 0, "max": 1, "default": 0.5 },
     { "key": "Build", "type": "slider", "min": 0, "max": 1, "default": 0.5 },
     { "key": "Hair", "type": "choice", "options": ["Short", "Long"] },
-    { "key": "Color", "type": "text", "default": "Brown" }
+    { "key": "Color", "type": "text", "default": "#BFA35A" }
   ]
 }
 ```
@@ -112,6 +133,85 @@ or its consumer heartbeat expires. Another active character preview is preserved
 
 This is the extension point for JBBB or another character editor. It does not
 change that mod's models, sliders or persistence implementation by itself.
+
+## Helpy-only controls and shared templates
+
+!!! warning "Local development candidate"
+    These extensions require the matching Core, Helpy plugin and Lua adapter.
+    They are not in the published package. Existing schemas remain compatible.
+
+Use the root JSON namespace `"--Helpy"`, with `"schema": 1`. The original
+Mod Menu reads its ordinary `settings` list and ignores this namespace. It is
+valid JSON, not literal `--` comments. The older `helpy` extension remains accepted.
+
+```json
+"--Helpy": {
+  "schema": 1,
+  "controls": { "Height": "dial", "Hair": "radial", "Color": "color" },
+  "settings": [
+    { "key": "Hip", "type": "dial", "label": "Hip width",
+      "min": 0, "max": 1, "step": 0.01, "default": 0.5 }
+  ],
+  "templates": {
+    "id": "appearance", "version": 1,
+    "keys": ["Height", "Build", "Hair", "Color", "Hip"],
+    "contextVariable": "ExampleCharacterEditor.selectedTarget"
+  }
+}
+```
+
+`controls` changes existing sliders to dials, choices to radial menus, or hex-color
+text fields to color controls. Dials and radial segments use scale-aware vector
+arcs; narrow radial controls fall back to a regular choice picker.
+`settings` adds Helpy-only settings using the same config, variables, callbacks,
+visibility and authority rules. Ordinary and Helpy-only settings share a 200-row
+limit. Radial choices support up to 12 options; larger lists use standard choices.
+Circular numeric controls use the normal pointer/controller editing behavior.
+
+### Color controls
+
+Put new color fields in `--Helpy.settings`, where the original Mod Menu ignores
+them. Existing hex text fields can use `controls: { "Color": "color" }`.
+
+```json
+"settings": [
+  { "key": "SkinColor", "type": "color", "label": "Skin color", "default": "#DDB49A" },
+  { "key": "AccentColor", "type": "color", "label": "Accent color",
+    "alpha": true, "default": "#BFA35AFF" }
+]
+```
+
+Colors use `#RRGGBB`, or `#RRGGBBAA` with `alpha: true`. Pointer and controller
+users can adjust the RGB/RGBA channels; the picker also supports a hue wheel.
+Changes are submitted after editing finishes. Both the UI and Lua adapter validate
+colors, including imported templates. A malformed default cannot be truncated
+into a valid color. Values remain strings in the mod's existing configuration and
+callbacks. Convert byte channels to the material/BP color space in the owning mod.
+
+### Import and share templates
+
+**Import template…** opens the in-app review workflow. Choose a file or paste a
+shared template; browsing a file is optional. **Templates** also exports files or
+copies the current declared values. A shared template carries only declared
+settings, not game pointers, a character GUID or its selected-target token.
+
+**Templates** imports/exports JSON files or the clipboard. Import first shows a
+review of current and incoming values, then requires **Apply template**. Only the
+mod's declared keys are included. Unknown keys, invalid types, out-of-range
+values, incompatible versions and changed targets are rejected. The adapter
+validates every field before one config write, then publishes the existing
+callbacks. A queued action is not reported as applied until the adapter responds.
+
+A character editor should publish a nonempty, stable token for its selected
+character through `contextVariable`, and clear it while switching targets.
+Helpy checks that token and the page revision again when applying. The mod owns
+selection, preview, save handling and networking. No character GUID or target
+token is exported in a shared template.
+
+The portable format is `RuneSchema.ModMenu2.Template`, version `1`, with
+`mod`, `template`, `templateVersion` and `values`; `name` and `modVersion` are
+optional metadata. Its maximum size is 256 KiB. A future web editor can produce
+the same format; no web editor is included in this candidate.
 
 ## Public HUD layout
 
@@ -157,3 +257,22 @@ configuration and shared-variable backend comes from Mod Menu 2.0.2, Copyright
 (c) 2026 Maxxfilth, under MIT. The full notice is retained in
 `licenses/ModMenu-MIT.txt` and packaged notices.
 [Original Mod Menu](https://www.curseforge.com/runescape-dragonwilds/ue4ss-mods/mod-menu).
+
+## Runnable external Lua example
+
+The unpublished candidate includes a separate `HelpyEditorExample-1.0.0.zip`.
+Copy its complete `HelpyEditorExample` folder into `ue4ss/Mods`; it includes
+`enabled.txt` and its root license notice. The source is in
+`docs/examples/HelpyEditorExample`.
+
+Open **Mods → Mod Menu 2 → Character Editor Example**. **Shape** demonstrates
+sliders, dials and radial choices; **Colors** demonstrates RGB/RGBA controls.
+Import `templates/Athletic.json` to review a complete example. The Lua callback
+logs committed settings and reads its local config without executing it.
+
+This is a separate external UE4SS demonstration, not an adapter installed into
+Body Morph. It makes no actor, save or network changes. Replace its callback with
+the owning mod's implementation and publish a stable selected-target token.
+Without RuneSchema, its local defaults/config still load and ordinary Mod Menu
+settings remain compatible. Retain the included original-material and third-party
+notices when packaging it.

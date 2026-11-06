@@ -19,6 +19,13 @@ int main(){
         joined.Text="[RuneSchema] [error] [RS-NET-005] List unavailable";assert(!DiagnosticToastPresentation::Format(joined).WorldMods);}
     using namespace std::chrono;
     using namespace DiagnosticToastPresentation;
+    {DiagnosticToastFeed::Notice multiline;multiline.Text="[RuneSchema] [warning] start";
+     for(int i=0;i<60;++i)multiline.Text+="\nx";
+     const auto original=multiline.Text;const auto display=Format(multiline);
+     assert(std::count(display.Detail.begin(),display.Detail.end(),'\n')<=2&&multiline.Text==original);
+     multiline.BlueprintBatch=true;multiline.BatchCount=4;multiline.BatchAssets={std::string(400,'a'),std::string(400,'b')};
+     const auto batch=Format(multiline);assert(batch.Detail.size()<=164&&batch.Truncated);}
+
     {
         DiagnosticToastFeed::Feed registry;DiagnosticToastFeed::Options options;
         for(const auto* line:{"[RuneSchema] [NETWORK][BUILDINGS-PENDING] Waiting for IDs",

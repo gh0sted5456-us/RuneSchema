@@ -1,3 +1,6 @@
+#include "Runtime/HelpyPluginHost.h"
+#include "Core/HelpyVulkanSetup.h"
+#include "RuntimePaths.h"
 #include "HelpyDesktopTransport.h"
 #include "Core/HelpyGameLifetime.h"
 #include "Core/HelpyFramePacing.h"
@@ -16,8 +19,9 @@
 
 namespace {
 using PS::HelpyDesktop::Json;
-struct Service{RuneSchemaServiceFn Callback{};void* Context{};};
+struct Service{RuneSchemaServiceFn Callback{};void* Context{};std::string Owner;};
 std::mutex ServicesMutex,RpcMutex;std::map<std::string,Service> Services;
+PS::HelpyPluginHost FrontendPlugins;
 PS::HelpyDesktop::Client Bridge;std::atomic<bool> Visible=true,CaptureInput=false;
 uint32_t ConnectedPid=0;
 Json OfflineEnvironment;
@@ -40,10 +44,11 @@ void Deliver(const Json& reply){
     Connection(Bridge.Pid.load());if(reply.value("Reset",false)){Connection(0);Connection(Bridge.Pid.load());}
     if(reply.contains("Events")&&reply["Events"].is_array())for(const auto& event:reply["Events"])Notify("helpy.tools.push",event);
 }
-int32_t RS_PLUGIN_CALL Capability(const char*,const char*){return RS_PLUGIN_OK;}
+int32_t RS_PLUGIN_CALL Capability(const char* plugin,const char* name){return plugin&&name&&PS::PluginCatalog::Token(name)&&(std::string_view(plugin)=="RuneSchema.Helpy"||FrontendPlugins.CanRegister(plugin))?RS_PLUGIN_OK:RS_PLUGIN_INVALID_ARGUMENT;}
 int32_t RS_PLUGIN_CALL Register(const char* plugin,const char* name,RuneSchemaServiceFn callback,void* context){
-    if(!plugin||std::string_view(plugin)!="RuneSchema.Helpy"||!name||!callback)return RS_PLUGIN_INVALID_ARGUMENT;
-    std::lock_guard lock(ServicesMutex);return Services.emplace(name,Service{callback,context}).second?RS_PLUGIN_OK:RS_PLUGIN_DUPLICATE;
+    if(!plugin||(std::string_view(plugin)!="RuneSchema.Helpy"&&!FrontendPlugins.CanRegister(plugin))||!name||!PS::PluginCatalog::Token(name)||!callback)return RS_PLUGIN_INVALID_ARGUMENT;
+    if(std::string_view(name)=="helpy.host"||std::string_view(name)=="runeschema.tools")return RS_PLUGIN_DUPLICATE;
+    std::lock_guard lock(ServicesMutex);return Services.emplace(name,Service{callback,context,plugin}).second?RS_PLUGIN_OK:RS_PLUGIN_DUPLICATE;
 }
 int32_t Reply(const Json& value,char* response,uint32_t capacity,uint32_t* size){
     const auto text=value.dump();if(text.size()+1>RUNESCHEMA_PLUGIN_MAX_MESSAGE)return RS_PLUGIN_FAILED;
@@ -51,9 +56,14 @@ int32_t Reply(const Json& value,char* response,uint32_t capacity,uint32_t* size)
     std::memcpy(response,text.c_str(),*size);return RS_PLUGIN_OK;
 }
 int32_t RS_PLUGIN_CALL Call(const char* caller,const char* service,const char* input,char* response,uint32_t capacity,uint32_t* size){
-    if(!caller||std::string_view(caller)!="RuneSchema.Helpy"||!service||std::string_view(service)!="runeschema.tools"||!input||!size||capacity>RUNESCHEMA_PLUGIN_MAX_MESSAGE||(!response&&capacity))return RS_PLUGIN_INVALID_ARGUMENT;
+    if(!caller||(std::string_view(caller)!="RuneSchema.Helpy"&&!FrontendPlugins.Authorized(caller))||!service||!input||!size||capacity>RUNESCHEMA_PLUGIN_MAX_MESSAGE||(!response&&capacity))return RS_PLUGIN_INVALID_ARGUMENT;
     try{
         if(strnlen_s(input,RUNESCHEMA_PLUGIN_MAX_MESSAGE+1)>RUNESCHEMA_PLUGIN_MAX_MESSAGE)return RS_PLUGIN_INVALID_ARGUMENT;
+        if(std::string_view(service)=="helpy.host")return Reply({{"Process","Helpy"},{"ApiVersion",1}},response,capacity,size);
+        if(std::string_view(service)!="runeschema.tools"){
+            Service local;{std::lock_guard lock(ServicesMutex);const auto found=Services.find(service);if(found==Services.end()){*size=0;return RS_PLUGIN_NOT_FOUND;}local=found->second;}
+            return local.Callback(local.Context,input,response,capacity,size);
+        }
         const auto request=PS::HelpyDesktop::Parse(input);const auto action=request.value("Action",std::string{});
         if(action=="HelpyVisibility"){Visible=request.at("Visible").get<bool>();CaptureInput=request.value("CaptureInput",false);}
         std::lock_guard lock(RpcMutex);Json result;
@@ -97,7 +107,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR,int){
     HMODULE module{};HANDLE singleton{},activate{};void* instance{};RuneSchemaPluginShutdownFn shutdown{};std::jthread worker;bool smoke=false;
     try{
         wchar_t file[32768]{};if(!GetModuleFileNameW(nullptr,file,32768))throw std::runtime_error("Cannot locate Helpy.exe");
-        const auto executable=std::filesystem::path(file);auto root=executable.parent_path().parent_path().parent_path().parent_path();
+        const auto executable=std::filesystem::path(file);auto root=PS::RuntimePaths::ModFromBinary(executable);
         std::string platform;bool startHidden=false,explicitRoot=false;int argc=0;auto argv=CommandLineToArgvW(GetCommandLineW(),&argc);
         if(!argv)throw std::runtime_error("Cannot read desktop arguments");
         for(int i=1;i<argc;++i){const std::wstring_view option=argv[i];
@@ -111,7 +121,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR,int){
         if(!explicitRoot&&std::filesystem::is_regular_file(binding)){const auto value=Json::parse(PS::ConfigFiles::Read(binding,16384));root=std::filesystem::u8path(value.at("Root").get<std::string>());if(platform.empty())platform=value.at("Platform").get<std::string>();}
         root=std::filesystem::weakly_canonical(root);
         AssignedRoot=root;
-        const auto plugin=root/"plugins/RuneSchema.Helpy/dll/RuneSchema.Helpy.dll";
+        const auto plugin=PS::RuntimePaths::HelpyBinary(root,"Helpy.dll");
         if(!std::filesystem::is_regular_file(plugin)||!std::filesystem::is_regular_file(root/"dlls/main.dll"))throw std::runtime_error("Assign Helpy to a complete RuneSchema installation using --runtime-root");
         if(platform.empty()){
             if(root.wstring().find(L"WinGDK")!=std::wstring::npos)platform="gamepass";
@@ -128,6 +138,9 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR,int){
             PS::HelpyDesktopLaunch::Start(root,platform,startHidden);return 0;
         }
         if(PS::HelpyDesktopLaunch::InGameContext())throw std::runtime_error("Helpy still belongs to a game session; exit it and open it from Windows Explorer");
+        try{const auto directory=PS::RuneSchemaData::Directory()/"core/HELPY/vulkan";
+            if(std::filesystem::is_regular_file(directory/"targets.json"))PS::HelpyVulkanSetup::Refresh(directory,PS::HelpyVulkanSetup::GameExecutable(root),PS::RuntimePaths::Plugin(root,"RuneSchema.HUD")/"dll/RuneSchema.HUD.dll",PS::RuntimePaths::HelpyBinary(root,"RuneSchema.Helpy.Vulkan.dll"));
+        }catch(const std::exception& error){Log(RS_LOG_WARNING,"RuneSchema.Helpy",(std::string("[RS-OVL-002] Vulkan startup path refresh failed: ")+error.what()).c_str());}
         const auto local=PS::HelpyDesktopLaunch::InstanceName(root);
         activate=CreateEventW(nullptr,FALSE,FALSE,(local+L".activate").c_str());if(!activate)throw std::runtime_error("Cannot create desktop activation event");
         singleton=CreateMutexW(nullptr,FALSE,local.c_str());
@@ -136,10 +149,11 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR,int){
         if(!smoke)try{PS::HelpyDesktopShortcut::Ensure(installed,platform,PS::RuneSchemaData::PlatformDirectory(platform));}catch(const std::exception& error){Log(RS_LOG_WARNING,"RuneSchema.Helpy",error.what());}
         OfflineEnvironment={{"Storefront",platform=="gamepass"?"Game Pass/WinGDK":"Steam/Epic"},{"Platform",platform=="epic"?"Epic Games":"Steam"},{"DedicatedServer",platform=="server"},{"NativeIconCaptureAvailable",false},{"UpdateChecksAvailable",true},{"DesktopStartHidden",startHidden}};
         Bridge.Connect(root);
-        PS::HelpyPaths::Configure(root/"plugins/RuneSchema.Helpy");
+        PS::HelpyPaths::Configure(PS::RuntimePaths::Helpy(root));
         OfflineEnvironment["RuneSchemaVersion"]=RuneSchemaPlugin_Query()->Version;
         shutdown=RuneSchemaPlugin_Shutdown;
         if(RuneSchemaPlugin_Initialize(&Host,&instance)!=RS_PLUGIN_OK)throw std::runtime_error("Helpy application initialization failed");
+        FrontendPlugins.Load(root,&Host,[](const std::string& id){std::lock_guard lock(ServicesMutex);std::erase_if(Services,[&](const auto& item){return item.second.Owner==id;});});
         const auto unreal=RuneSchemaPlugin_OnUnrealInit;
         if(unreal(instance)!=RS_PLUGIN_OK||!Ready())throw std::runtime_error("Helpy desktop window could not start; check its plugin settings");
         worker=std::jthread([root](std::stop_token stop){
@@ -175,10 +189,10 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR,int){
             const HANDLE wake[]{activate,game.WaitHandle()};
             if(WaitForMultipleObjects(wake[1]?2:1,wake,FALSE,250)==WAIT_OBJECT_0)EnumWindows([](HWND window,LPARAM){DWORD pid=0;GetWindowThreadProcessId(window,&pid);wchar_t name[128]{};GetClassNameW(window,name,128);if(pid==GetCurrentProcessId()&&std::wstring_view(name)==L"RuneSchema.Helpy.Window"){ShowWindowAsync(window,SW_RESTORE);SetForegroundWindow(window);}return TRUE;},0);
         }
-        worker.request_stop();worker.join();shutdown(instance);instance=nullptr;Bridge.Disconnect();module=nullptr;CloseHandle(activate);CloseHandle(singleton);return 0;
+        worker.request_stop();worker.join();shutdown(instance);instance=nullptr;FrontendPlugins.Shutdown();Bridge.Disconnect();module=nullptr;CloseHandle(activate);CloseHandle(singleton);return 0;
     }catch(const std::exception& error){
         worker.request_stop();if(worker.joinable())worker.join();
-        if(instance&&shutdown)shutdown(instance);Bridge.Disconnect();if(module)FreeLibrary(module);if(activate)CloseHandle(activate);if(singleton)CloseHandle(singleton);
+        if(instance&&shutdown)shutdown(instance);FrontendPlugins.Shutdown();Bridge.Disconnect();if(module)FreeLibrary(module);if(activate)CloseHandle(activate);if(singleton)CloseHandle(singleton);
         Log(RS_LOG_ERROR,"RuneSchema.Helpy",("[RS-UI-002] "+std::string(error.what())).c_str());
         if(!smoke)MessageBoxA(nullptr,error.what(),"Helpy desktop",MB_OK|MB_ICONERROR);return 1;
     }

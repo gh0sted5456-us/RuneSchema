@@ -74,6 +74,52 @@ Each scalar callback below accepts `Position` as an Unreal `Vector` and returns 
 
 Scalar values must be finite and between `0` and `100000`; individual adapters apply narrower limits where needed. Matching scalar bonuses use the strongest value rather than multiplying together. A zero enemy-spawn result takes precedence over a doubled-spawn result. Native quantities and harvest multipliers have overflow checks.
 
+## Spatial AI temperament — private candidate
+
+This addition is being tested locally and is not in the published download.
+Implement the optional `RuneSchemaAIPassivity(Position: Vector) -> int32` callback
+on the same version-1 provider actor. `Position` is the authoritative AI actor's
+location in centimetres, including when native code supplies its controller or
+component as context. The callback has exactly one input and one return value.
+
+| Return | Policy |
+| --- | --- |
+| `0` | Inherit the current native world and AI behavior. |
+| `1` | Friendly: request nonaggression and add RuneSchema's own native attack lock. |
+| `2` | Angry: request aggression toward players while retaining native abilities. |
+
+Friendly wins over Angry across overlapping providers, regardless of registration
+order. Invalid values are reported for that provider; other valid providers still
+compose. Return `0` outside the zone or while disabled. Native attackless wildlife
+receives no invented attacks, equipment, abilities or combat tables.
+
+The candidate wraps the native `DisableAggressiveAI` difficulty queries, the
+AI-to-player attitude query and reflected `IsAiPassive` answers on the game
+thread. Direct native calls that bypass reflection still require behavior
+verification. It changes their answers only for
+an identified authoritative AI in a world with this optional policy. It does not
+change global difficulty, factions, AI data assets or class defaults. Every query
+starts with the current native answer, so leaving a zone does not restore an old
+world-setting snapshot. AI-to-AI attitudes and unrelated difficulty settings keep
+their native results.
+
+Friendly uses `DominionAICharacter.SetAttacksDisabled` with a distinct transient
+RuneSchema-owned locker. Only that locker is released on exit, disable, provider
+removal or cleanup; unrelated native/mod locks remain. Existing actors are found
+once per participating world, and new/streamed actors enter through the existing
+BeginPlay bridge. Transitions are checked on the bridge's existing 0.1-second
+update. Actor transitions are summarized in the RuneSchema log.
+
+An isolated headless Steam follow-up passed 16 actor-query and owned-lock checks
+on real wolf/deer actors, including radius exit/reentry and unchanged native
+AI data. Content registration and cooked provider callbacks passed separately.
+These checks do not certify native targeting or queued-strike cancellation. Private acceptance must verify native binding/call contexts on Steam,
+Game Pass and dedicated authority, normal/creative transitions, spawn/streaming,
+world changes, other lockers, and an enemy with an existing target and queued
+strike. In particular, the setter's declaration alone does not prove that an
+already queued strike is cancelled. Unknown native bindings disable this adapter
+and report `AI_PASSIVITY_BIND_FAILED`; other world policies remain available.
+
 ## Player effects
 
 Provide both callbacks together:
@@ -115,6 +161,62 @@ Creating or changing a profile examines only that player's bounded native effect
 arrays. This adds no periodic search or global effect scan. Normal authority,
 replication and world-policy checks still apply; use matching framework builds
 on server and clients when testing the follow-up.
+
+## Mod-owned native AI effects — private contract v1
+
+This contract is in local test builds only. It extends the earlier spatial
+adapter: native effect instances own the behavior, and a world provider only
+selects which native effects to apply. It contains no mod-specific asset names.
+
+| Owner | Member | Contract |
+| --- | --- | --- |
+| Effect data BP | `RuneSchemaAIPassivityMode()` | One `int32` return: `0` inherit, `1` Friendly, `2` Angry. No inputs or side effects. |
+| Effect instance BP | `RuneSchemaAIPassivityApplied` | Instance bool, default `false`. The data BP's native added/removed events set it on the actual instance. Never store applied state on the data CDO. |
+| Version-1 provider | `RuneSchemaAIEffectCount()` | One `int32` return, `0..64` stable slots. |
+| Provider | `RuneSchemaAIEffectData(Position, Index)` | Native GE class or `None`; `Position` is the AI's `Vector`, `Index` is `int32`. |
+| Provider | `RuneSchemaAIEffectInstigator(Position, Index)` | Actual live actor in the AI's world, or `None`. |
+| Provider | `RuneSchemaAIEffectSource(Position, Index)` | Actual source object or `None`; a world-bound source must belong to the AI's world. |
+
+The four provider callbacks form one optional contract. An environmental
+coordinator may explicitly return itself as caster/source. RuneSchema preserves
+null values and never substitutes the target AI. Standalone native applications
+keep the caster/source supplied by the spell or mod.
+
+Only authoritative, living AI are affected. A recognized instance must belong
+to that AI's native component and have a valid native handle. Never-applied,
+blocked and removed instances contribute no mode. The applied marker must also
+default to false on the instance CDO. This first version supports immediate main
+effect activation with no `ActivationCurrentValueAttribute`; conditional main
+activation is reported as unsupported. Friendly wins across active instances.
+
+Spatially selected GEs must be removable and non-single-instance. RuneSchema
+uses native forced-new handles and removes only the handles it created for that
+provider, AI and slot. Class/caster/source changes retire that slot's old handle.
+Direct spell handles remain owned by their original caller. Player effects retain
+their existing arguments, vitality, charge and rest handling.
+
+Native data add/remove events request deferred standalone discovery without a
+spatial provider. A one-time scan catches pre-existing instances; BeginPlay and
+provider discovery cover later actors. Event hints are coalesced on the existing
+policy tick. Selection runs at most twice per second. Mode callbacks and native
+authority/health checks are sampled on that tick, outside native getter and GE
+lifecycle callbacks. Native queries read sampled mode values with fresh native
+membership, applied, blocked and removed guards. New activation can wait for the
+next policy tick; disabled or removed instances cannot retain a cached mode.
+Mode publication follows native attack-lock reconciliation and readback. Each
+active Friendly instance owns its native attack lock. Replacement owners acquire
+their locks before retired owners release theirs; blocking, removal and shutdown
+release only those recorded owners. Other callers' lockers remain untouched.
+
+New GE-owning providers should remove the legacy `RuneSchemaAIPassivity` callback
+or return `0` from it, so the old spatial answer cannot outlive the GE. Existing
+legacy providers remain compatible. The mod owns its data/instance BPs and their
+native lifecycle; RuneSchema supplies the missing generic native-query bridge.
+
+Core compilation and activation/overlap model checks passed. Native lifecycle
+checks of the cooked assets are separate from acceptance of this new adapter.
+Combat, queued-strike cancellation, creative-mode and cross-platform/dedicated
+behavior remain unverified. No production installation is implied.
 
 ## Native behavior and work limits
 

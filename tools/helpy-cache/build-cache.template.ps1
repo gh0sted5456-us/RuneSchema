@@ -174,7 +174,7 @@ function Invoke-CacheZip {
         $previousBundle=Join-Path $output 'offline-helpy.rsmk-cache'
         if(Test-Path -LiteralPath $previousBundle -PathType Leaf){New-Item -ItemType Directory -Path $built | Out-Null;Copy-Item -LiteralPath $previousBundle -Destination $built}
         $preservedMetadata=@{};$metadataSource=if($CreationRequest){Join-Path $mod 'cache'}else{$output}
-        foreach($name in @('taglines.json','tips.json')){
+        foreach($name in @('taglines.json','tips.json','savefiles.json')){
             $file=Join-Path $metadataSource $name;$null=Assert-CachePath $file $metadataSource
             $preservedMetadata[$name]=if(Test-Path -LiteralPath $file -PathType Leaf){(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash}else{''}
             if($preservedMetadata[$name]){New-Item -ItemType Directory -Path $built -Force | Out-Null;Copy-Item -LiteralPath $file -Destination $built}
@@ -197,7 +197,7 @@ function Invoke-CacheZip {
         if($ModDirectory -and !(Test-Path -LiteralPath $mod -PathType Container)){throw 'Mod folder was removed; cache was not published.'}
         New-Item -ItemType Directory -Path $parent -Force | Out-Null;New-Item -ItemType Directory -Path $publish | Out-Null
         Copy-Item -LiteralPath (Join-Path $built 'offline-helpy.rsmk-cache'),(Join-Path $built 'offline-helpy-report.json') -Destination $publish
-        foreach($name in @('taglines.json','tips.json')){if(Test-Path -LiteralPath (Join-Path $built $name) -PathType Leaf){Copy-Item -LiteralPath (Join-Path $built $name) -Destination $publish}}
+        foreach($name in @('taglines.json','tips.json','savefiles.json')){if(Test-Path -LiteralPath (Join-Path $built $name) -PathType Leaf){Copy-Item -LiteralPath (Join-Path $built $name) -Destination $publish}}
         if(Test-Path -LiteralPath (Join-Path $built 'mod.png')){Copy-Item -LiteralPath (Join-Path $built 'mod.png') -Destination $publish}
         if(Test-Path -LiteralPath $output){
             if(!(Test-Path -LiteralPath $output -PathType Container)){throw 'Cache output is an existing file.'}

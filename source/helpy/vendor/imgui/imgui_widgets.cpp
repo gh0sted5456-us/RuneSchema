@@ -7264,7 +7264,11 @@ bool ImGui::Selectable(const char* label, bool selected, ImGuiSelectableFlags fl
             ImGuiNavRenderCursorFlags nav_render_cursor_flags = ImGuiNavRenderCursorFlags_Compact | ImGuiNavRenderCursorFlags_NoRounding;
             if (is_multi_select)
                 nav_render_cursor_flags |= ImGuiNavRenderCursorFlags_AlwaysDraw; // Always show the nav rectangle
+#ifdef RUNESCHEMA_HELPY_FOCUS
+            RenderNavCursor(ImRect(min_x, pos.y, min_x + size.x, pos.y + size.y), id, nav_render_cursor_flags);
+#else
             RenderNavCursor(bb, id, nav_render_cursor_flags);
+#endif
         }
     }
 

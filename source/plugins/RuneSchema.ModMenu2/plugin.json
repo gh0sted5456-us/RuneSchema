@@ -1,0 +1,12 @@
+{
+  "SchemaVersion": 1,
+  "Id": "RuneSchema.ModMenu2",
+  "Name": "Mod Menu 2",
+  "Version": "0.8.1.0",
+  "BuiltForRuneSchema": "0.8.1.0",
+  "ApiVersion": 1,
+  "Host": "helpy",
+  "EntryPoint": "RuneSchema.ModMenu2.dll",
+  "MountPaks": false,
+  "Capabilities": ["helpy.mod-menu2"]
+}

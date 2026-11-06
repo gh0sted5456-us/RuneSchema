@@ -17,6 +17,8 @@
 #include "Core/HelpyModMetadata.h"
 #include "Core/ModDeployment.h"
 #include "Generator/ModMetadataPanel.h"
+#include "Generator/ModLicensePanel.h"
+#include "Generator/ModSaveFilesPanel.h"
 #include <future>
 #include <map>
 
@@ -131,7 +133,7 @@ inline void RenderUeInventory(){
     auto& theme=HelpyImGuiTheme::Current;const auto generation=SpawnToolRequests::CurrentGeneration();
     if(UeWorker.valid()&&UeWorker.wait_for(std::chrono::seconds(0))==std::future_status::ready){auto result=UeWorker.get();if(UeRequestGeneration==generation&&UeRequestRevision==SnapshotRevision){UeGeneration=generation;UeStatus=result.value("Status",std::string{});UeSnapshot=std::move(result);++UeRevision;}}
     if(UeGeneration!=generation&&!UeWorker.valid()){UeSnapshot={};StartUeInventory();}
-    static int group=0;constexpr std::array groups{"External","RuneSchema loaders"};HelpyMenu::Tabs("ue4ss-mod-groups",groups,group);
+    static int group=0;constexpr std::array groups{"External","RuneSchema loaders"};HelpyMenu::Tabs("ue4ss-mod-groups",groups,group,false);
     ImGui::TextWrapped("Manage next-launch UE4SS configuration. Versions are optional author metadata and do not enter the host alignment report.");
     if(group)ImGui::TextWrapped("Each switch controls that RuneSchema mod's UE4SS loader only. Its other content stays enabled. Native/hybrid packages still require stock UE4SS installation.");
     ImGui::BeginDisabled(UeWorker.valid());if(!group&&HelpyImGuiTheme::Toggle("Manage external UE4SS mods",&theme.ue4ssManageExternal))HelpyImGuiTheme::SaveCurrent();ImGui::EndDisabled();
@@ -157,12 +159,19 @@ inline void RenderUeInventory(){
                     ++UeRowsDrawn;
 #endif
                     const auto a=ImGui::GetWindowPos(),size=ImGui::GetWindowSize();const float badge=theme.Y(44);UeCardBadge(enabled,{a.x+theme.X(10),a.y+theme.Y(18)},badge);
-                    ImGui::SetCursorScreenPos({a.x+theme.X(68),a.y+theme.Y(10)});const float titleWidth=std::max(1.f,size.x-theme.X(195));ImGui::TextUnformatted(ItemGridPicker::Ellipsize(title,titleWidth).c_str());
+                    ImGui::SetCursorScreenPos({a.x+theme.X(68),a.y+theme.Y(10)});const float titleWidth=std::max(1.f,size.x-theme.X(195));const auto titleAt=ImGui::GetCursorScreenPos();
+                    ModLicensePanel::Title(row,title,{titleWidth,theme.Y(64)});
+#if defined(HELPY_PREVIEW)
+                    HelpyPreviewHooks::ModTitles[row.at("Folder").get<std::string>()]=HelpyPreviewHooks::LastRect();
+#endif
+                    ImGui::GetWindowDrawList()->AddText(titleAt,ImGui::GetColorU32(theme.text),ItemGridPicker::Ellipsize(title,titleWidth).c_str());
                     if(ImGui::IsItemHovered()){HelpyImGuiTheme::BeginDetailsTooltip();HelpyImGuiTheme::DetailsText("%s",name.c_str());if(group)HelpyImGuiTheme::DetailsText("RuneSchema owner: %s",row.at("Owner").get_ref<const std::string&>().c_str());for(const auto* key:{"author","description","source","issue"})if(metadata.contains(key)&&metadata[key].is_string())HelpyImGuiTheme::DetailsText("%s: %s",key,metadata[key].get_ref<const std::string&>().c_str());HelpyImGuiTheme::EndDetailsTooltip();}
                     ImGui::SetCursorScreenPos({a.x+theme.X(68),a.y+theme.Y(34)});ImGui::TextDisabled("%s · %s",row.at("Kind").get_ref<const std::string&>().c_str(),row.at("Version").get_ref<const std::string&>().empty()?"Unversioned":row.at("Version").get_ref<const std::string&>().c_str());
                     ImGui::SetCursorScreenPos({a.x+theme.X(68),a.y+theme.Y(57)});ImGui::TextDisabled("%s",row.value("NativeUnsupported",false)?"Native loader unsupported here":!row.value("ParentEnabled",true)?"Parent mod is disabled":enabled?"Enabled for next launch":"Disabled for next launch");
                     ImGui::SetCursorScreenPos({a.x+size.x-theme.X(116),a.y+theme.Y(12)});UeToggle(row);
                     ImGui::SetCursorScreenPos({a.x+size.x-theme.X(116),a.y+theme.Y(48)});if(HelpyImGuiTheme::SoftButton("Folder"))ShellExecuteW(nullptr,L"open",std::filesystem::u8path(row.at("Folder").get<std::string>()).c_str(),nullptr,nullptr,SW_SHOWNORMAL);
+                    if(ImGui::IsWindowHovered()&&(ImGui::IsMouseClicked(0)||ImGui::IsMouseClicked(1)))ModLicensePanel::Select(row,title);
+                    if(ModLicensePanel::Selected(row))ModLicensePanel::Outline(a,{a.x+size.x,a.y+size.y});
                 }PS::HelpyImGuiTheme::EndPanel();ImGui::PopID();
             }
         }PS::HelpyImGuiTheme::EndPanel();return;
@@ -173,17 +182,17 @@ inline void RenderUeInventory(){
 #if defined(HELPY_PREVIEW)
             ++UeRowsDrawn;
 #endif
-            ImGui::PushID(static_cast<int>(filtered[i]));ImGui::TableNextRow();ImGui::TableNextColumn();auto title=metadata.value("name",name);if(title.empty())title=name;ImGui::TextUnformatted(title.c_str());
+            ImGui::PushID(static_cast<int>(filtered[i]));ImGui::TableNextRow();ImGui::TableNextColumn();auto title=metadata.value("name",name);if(title.empty())title=name;if(ImGui::Selectable(title.c_str(),ModLicensePanel::Selected(row),ImGuiSelectableFlags_SpanAllColumns|ImGuiSelectableFlags_AllowOverlap))ModLicensePanel::Select(row,title);
             if(ImGui::IsItemHovered()){HelpyImGuiTheme::BeginDetailsTooltip();HelpyImGuiTheme::DetailsText("%s",name.c_str());if(group)HelpyImGuiTheme::DetailsText("RuneSchema owner: %s",row.at("Owner").get_ref<const std::string&>().c_str());
                 for(const auto* key:{"author","description","source","issue"})if(metadata.contains(key)&&metadata[key].is_string())HelpyImGuiTheme::DetailsText("%s: %s",key,metadata[key].get_ref<const std::string&>().c_str());HelpyImGuiTheme::DetailsText("%s",row.at("Folder").get_ref<const std::string&>().c_str());HelpyImGuiTheme::EndDetailsTooltip();}
-            if(HelpyMenu::BeginContextItem("ue4ss-entry")){if(ImGui::MenuItem("Open folder"))ShellExecuteW(nullptr,L"open",std::filesystem::u8path(row.at("Folder").get<std::string>()).c_str(),nullptr,nullptr,SW_SHOWNORMAL);ImGui::TextDisabled(group?"Controlled through its owner's ue4ss/status.txt":"Optional next-launch UE4SS mods.txt management");ImGui::EndPopup();}
+            if(HelpyMenu::BeginContextItem("ue4ss-entry")){ModLicensePanel::Select(row,title);if(ImGui::MenuItem("Open folder"))ShellExecuteW(nullptr,L"open",std::filesystem::u8path(row.at("Folder").get<std::string>()).c_str(),nullptr,nullptr,SW_SHOWNORMAL);ImGui::TextDisabled(group?"Controlled through its owner's ue4ss/status.txt":"Optional next-launch UE4SS mods.txt management");ImGui::EndPopup();}
             ImGui::TableNextColumn();ImGui::TextUnformatted(version.empty()?"Unversioned":version.c_str());ImGui::TableNextColumn();ImGui::TextUnformatted(row.at("Kind").get_ref<const std::string&>().c_str());
             ImGui::TableNextColumn();UeToggle(row);
             ImGui::TableNextColumn();const auto health=theme.ue4ssDiagnostics?HelpyRuntimeMonitor::Lua.Status(name):std::string("Monitoring disabled");ImGui::TextUnformatted(health.c_str());if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Observed stock UE4SS log evidence only. Errors may precede this observation; current execution and every mod feature are not certified. Resource thresholds are in Settings > Diagnostics > Performance.");ImGui::PopID();
         }ImGui::EndTable();
     }
 }
-inline void Shutdown(){if(Worker.valid())try{(void)Worker.get();}catch(...){};if(UeWorker.valid())try{(void)UeWorker.get();}catch(...){};}
+inline void Shutdown(){ModLicensePanel::Shutdown();if(Worker.valid())try{(void)Worker.get();}catch(...){};if(UeWorker.valid())try{(void)UeWorker.get();}catch(...){};}
 inline void Metadata(const Json& row){
     const auto& metadata=row.at("Metadata");
     PS::HelpyImGuiTheme::DetailsTextUnformatted(row.at("Name").get_ref<const std::string&>().c_str());
@@ -237,6 +246,7 @@ inline void OrderBadge(size_t order,const ModHealth::State& state,bool checked,I
 }
 inline void RenderBody(){
     Poll();const auto& theme=HelpyImGuiTheme::Current;
+    if(Tab==3){ModLicensePanel::Render(OpenModPage);return;}
     if(Tab==2){RenderUeInventory();return;}
     if(Tab==1){
 #if defined(HELPY_PREVIEW)
@@ -252,7 +262,7 @@ inline void RenderBody(){
         if(counts.Ready){ImGui::TextWrapped("%zu match · %zu different · %zu missing · %zu disabled · %zu ambiguous",counts.Matched,counts.Different,counts.Missing,counts.Disabled,counts.Ambiguous);ImGui::TextWrapped("%zu unversioned host/shared entries excluded · %zu client-only entries excluded",counts.Unversioned,counts.ClientOnly);}
         else ImGui::TextDisabled("Checking installed versions...");
         if(!Status.empty())ImGui::TextWrapped("%s",Status.c_str());
-        constexpr std::array reportTabs{"Host comparison","Client only"};HelpyMenu::Tabs("server-mod-report",reportTabs,reportTab);
+        constexpr std::array reportTabs{"Host comparison","Client only"};HelpyMenu::Tabs("server-mod-report",reportTabs,reportTab,false);
         ImGui::SetNextItemWidth(std::min(theme.X(420),ImGui::GetContentRegionAvail().x));const bool searched=HelpyTextInput::InputTextWithHint("##server-mod-search","Search comparison...",search,sizeof(search));
         if(filteredRevision!=ServerComparisonRevision||filteredTab!=reportTab||searched){const auto query=LiveLog::Lower(search);filtered.clear();for(size_t i=0;i<(reportTab?comparison.ClientOnly.size():rows.size());++i){const auto index=reportTab?comparison.ClientOnly[i]:i;const auto& row=reportTab?installed.at(index):rows[index];
             if(query.empty()||LiveLog::Lower(row.value("Name",std::string{})+" "+row.value("Id",std::string{})+" "+row.value("Version",std::string{})+" "+(reportTab?row.at("Metadata").dump():comparison.Host.at(index).Version)).find(query)!=std::string::npos)filtered.push_back(index);}filteredRevision=ServerComparisonRevision;filteredTab=reportTab;}
@@ -299,10 +309,14 @@ inline void RenderBody(){
     if(HelpyImGuiTheme::SoftButton("Refresh")&&!Worker.valid()&&!Dirty)Start({{"Action","ModsRead"}});
     HelpyMenu::NextControl("Cache enabled mods");ImGui::BeginDisabled(Snapshot.is_null()||Dirty||Worker.valid()||HelpyModCacheBuilder::Current().Running||HelpyModCacheBuilder::CurrentBatch().Active);
     if(HelpyImGuiTheme::SoftButton("Cache enabled mods")&&HelpyModCacheBuilder::StartEnabled(std::filesystem::u8path(Snapshot.value("Root",std::string{})),Rows,theme.autoInstallAuthoringDotNet))CacheBuilderPanel::FocusInstalled(Snapshot,Json::object());ImGui::EndDisabled();
-    HelpyMenu::NextControl("Remove all missing entries");const bool missing=std::any_of(Rows.begin(),Rows.end(),[](const auto& row){return !row.value("Present",true);});
+    HelpyMenu::NextControl("More");
+    if(HelpyMenu::BeginMore("mods-actions")){
+const bool missing=std::any_of(Rows.begin(),Rows.end(),[](const auto& row){return !row.value("Present",true);});
     ImGui::BeginDisabled(!missing||Worker.valid()||!Snapshot.is_object()||!Snapshot.value("OrderEnabled",false));
     if(HelpyImGuiTheme::SoftButton("Remove all missing entries"))RemoveMissing();ImGui::EndDisabled();
-    ImGui::SameLine();if(Restart)ImGui::TextColored(theme.accent,"Restart required");else ImGui::TextDisabled("Changes apply next launch");
+        ImGui::EndPopup();
+    }
+    HelpyMenu::NextControl("Changes apply next launch");if(Restart)ImGui::TextColored(theme.accent,"Restart required");else ImGui::TextDisabled("Changes apply next launch");
     if(!Status.empty())ImGui::TextWrapped("%s",Status.c_str());
     if(Worker.valid()&&Snapshot.is_null())ImGui::TextDisabled("Reading mods…");
     if(Snapshot.is_null())return;
@@ -350,7 +364,7 @@ inline void RenderBody(){
                 ImGui::SetCursorScreenPos(badgeAt);ImGui::InvisibleButton("##health-order",{badgeSize,badgeSize});OrderBadge(order,health,checked,badgeAt,badgeSize);
                 if(ImGui::IsItemHovered())HealthDetails(row,health,checked);
                 const ImVec2 titleAt{a.x+theme.X(68),a.y+theme.Y(12)};const float titleWidth=std::max(theme.X(40),size.x-theme.X(190));
-                ImGui::SetCursorScreenPos(titleAt);ImGui::InvisibleButton("##mod-title",{titleWidth,theme.Y(60)},ImGuiButtonFlags_EnableNav);
+                ImGui::SetCursorScreenPos(titleAt);ModLicensePanel::Title(row,nickname,{titleWidth,theme.Y(60)});
 #if defined(HELPY_PREVIEW)
                 HelpyPreviewHooks::ModTitles[owner]=HelpyPreviewHooks::LastRect();
 #endif
@@ -359,6 +373,8 @@ inline void RenderBody(){
                 if(ImGui::BeginDragDropTarget()){if(const auto* payload=ImGui::AcceptDragDropPayload("RUNESCHEMA_MOD_ORDER")){const int from=*static_cast<const int*>(payload->Data);if(from>=0&&from<static_cast<int>(Rows.size())&&from!=static_cast<int>(i)){moveFrom=from;moveTo=static_cast<int>(i);}}ImGui::EndDragDropTarget();}
                 if(ImGui::IsWindowFocused()&&ImGui::IsKeyPressed(ImGuiKey_GamepadFaceLeft,false))ImGui::OpenPopup("mod-actions");
                 if(ImGui::BeginPopupContextWindow("mod-actions",ImGuiPopupFlags_MouseButtonRight)){
+                    ModLicensePanel::Select(row,nickname);
+                    if(ImGui::MenuItem("License"))Tab=3;
                     if(!row.value("Present",true)&&ImGui::MenuItem("Remove missing entry"))removeMissing=owner;
                     const auto url=row.at("Metadata").value("website",std::string{});
                     if(ImGui::MenuItem("Open mod page",nullptr,false,ModDownloadLink::Valid(url)))OpenModPage(url);
@@ -367,6 +383,7 @@ inline void RenderBody(){
                     ImGui::Separator();
                     if(ImGui::MenuItem("Create/Update Cache",nullptr,false,row.value("Present",false)&&!Worker.valid()))CacheBuilderPanel::FocusInstalled(Snapshot,row);
                     if(ImGui::MenuItem("Create/Edit ID.txt...",nullptr,false,row.value("Present",false)&&!Worker.valid()&&!Dirty&&!HelpyModCacheBuilder::Current().Running&&!HelpyModCacheBuilder::CurrentBatch().Active))ModMetadataPanel::Open(Snapshot,row);
+                    if(ImGui::MenuItem("Mod saves...",nullptr,false,row.value("Present",false)&&!ModSaveFilesPanel::Worker.valid()))ModSaveFilesPanel::Open(Snapshot,row);
                     if(ImGui::MenuItem("Set nickname..."))PersonalizationPanel::Edit(HelpyPersonalization::ModKey(owner),owner,false);
                     if(ImGui::MenuItem("Cache & banner...",nullptr,false,!source.empty())){HelpyIconPacks::SelectedSource=source;HelpyIconPacks::Open=true;}
                     if(ImGui::MenuItem("Export source cache…",nullptr,false,!source.empty()&&!HelpyIconPacks::Busy()&&!HelpyIconPacks::Building())){HelpyIconPacks::SelectedSource=source;HelpyIconPacks::Open=true;HelpyIconPacks::Choose(false);}
@@ -393,6 +410,8 @@ inline void RenderBody(){
                 draw->AddText({titleAt.x,titleAt.y+theme.Y(46)},ImGui::GetColorU32(theme.textDisabled),subtitle.c_str());draw->PopClipRect();
                 ImGui::SetCursorScreenPos({b.x-theme.X(116),a.y+theme.Y(12)});bool enabled=row.at("Enabled").get<bool>();if(HelpyImGuiTheme::Toggle("Enabled",&enabled)){row["Enabled"]=enabled;Dirty=true;}
                 ImGui::SetCursorScreenPos({b.x-theme.X(116),a.y+theme.Y(46)});if(ImGui::SmallButton("Up")&&i){moveFrom=static_cast<int>(i);moveTo=moveFrom-1;}ImGui::SameLine();if(ImGui::SmallButton("Down")&&i+1<Rows.size()){moveFrom=static_cast<int>(i);moveTo=moveFrom+1;}
+                if(ImGui::IsWindowHovered()&&(ImGui::IsMouseClicked(0)||ImGui::IsMouseClicked(1)))ModLicensePanel::Select(row,nickname);
+                if(ModLicensePanel::Selected(row))ModLicensePanel::Outline(a,b);
             }PS::HelpyImGuiTheme::EndPanel();ImGui::PopID();
         }
     }PS::HelpyImGuiTheme::EndPanel();
@@ -403,7 +422,8 @@ inline void RenderBody(){
     ImGui::TextDisabled("Drop a ZIP · Right-click for options");
 }
 inline void Render(){
-    constexpr std::array sections{"RuneSchema mods","Server comparison","UE4SS mods"};HelpyMenu::Categories("mod-manager-sections",sections,Tab);
+    ModLicensePanel::Context();if(Tab==3&&ModLicensePanel::Selection.empty())Tab=0;
+    constexpr std::array sections{"RuneSchema mods","Server comparison","UE4SS mods"};HelpyMenu::Categories("mod-manager-sections",sections,Tab,ModLicensePanel::Selection.empty()?nullptr:"License");
     if(HelpyMenu::BeginBody("mod-manager-body",Tab))RenderBody();HelpyMenu::EndBody();
 }
 }

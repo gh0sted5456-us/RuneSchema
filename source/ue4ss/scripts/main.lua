@@ -48,6 +48,11 @@ if type(RuneSchemaModMenuExchange)=="function" then
     if not ok then log("[MOD-MENU][INACTIVE] "..tostring(issue)) end
 end
 
+if type(RuneSchemaHUDRegister)=="function" then
+    local ok,issue=pcall(dofile,root.."/scripts/helpy-hud.lua")
+    if not ok then log("[HUD][INACTIVE] "..tostring(issue)) end
+end
+
 local relayOk, relayApi = pcall(dofile, root .. "/scripts/mod-data-relay.lua")
 if relayOk then RuneSchemaRelay=relayApi else log("[MOD-DATA][UNAVAILABLE] "..tostring(relayApi)) end
 

@@ -65,9 +65,50 @@ for _,format in ipairs({"json","lua"}) do
     else assert(config:find('-- keep comment',1,true) and config:find('shape comment',1,true) and config:find('local Extra = 9',1,true)) end
     commands[#commands+1]='{"Active":false}';tick();assert(#scheduled==0)
 end
+-- Helpy-only rows/presentation and complete templates are isolated from the legacy settings array.
+shared,scheduled,commands={},{},{};RuneSchemaModMenuExchange=nativeBridge;host=false
+schema=[[{"id":"Example","name":"Character","settings":[{"key":"Shape","type":"slider","min":0,"max":100,"default":10},{"key":"Enabled","type":"toggle","default":true},{"key":"Style","type":"choice","options":["A","B"],"default":"A"},{"key":"Caption","type":"text","maxLength":40,"default":"old"}],"--Helpy":{"schema":1,"layout":"character","controls":{"Shape":"dial","Style":"radial"},"settings":[{"key":"Hip","type":"dial","min":0,"max":5,"default":1}],"templates":{"id":"appearance","version":1,"keys":["Shape","Enabled","Style","Caption","Hip"],"contextVariable":"Example.character"}}}]]
+config="; keep\nShape = 10\nEnabled = true\nStyle = A\nCaption = old\nHip = 1\nUnknown = retained\n"
+shared['Example.character']='character-a';assert(load(adapted))()
+assert(latest.Pages[1].Helpy.templates.id=='appearance' and latest.Pages[1].TemplateContext=='character-a')
+assert(#latest.Pages[1].Settings==5 and latest.Pages[1].Settings[1].presentation=='dial' and latest.Pages[1].Settings[3].presentation=='radial' and latest.Pages[1].Settings[5].presentation=='dial')
+local apply='{"Op":"template_apply","Id":"Example","TemplateId":"appearance","TemplateVersion":1,"Revision":0,"Context":"character-a","Expected":{"Shape":10,"Enabled":true,"Style":"A","Caption":"old","Hip":1},"Values":{"Shape":25,"Enabled":false,"Style":"B","Caption":"new","Hip":2}}'
+local beforeWrites=written;tick(apply)
+assert(written==beforeWrites+1 and shared['ModMenu.Example.Shape']==25 and shared['ModMenu.Example.Enabled']==false and shared['ModMenu.Example.Hip']==2 and shared['ModMenu.Example.rev']==1)
+assert(config:find('Unknown = retained',1,true) and config:find('; keep',1,true))
+local updated=apply:gsub('"Revision":0','"Revision":1'):gsub('"Expected":{.-},','"Expected":{"Shape":25,"Enabled":false,"Style":"B","Caption":"new","Hip":2},')
+beforeWrites=written;tick(updated:gsub('"Hip":2}}','"Hip":99}}'));assert(written==beforeWrites and shared['ModMenu.Example.Shape']==25)
+tick(updated:gsub('"Hip":2}}','"Hip":2,"Unexpected":true}}'));assert(written==beforeWrites)
+shared['Example.character']='character-b';tick(updated);assert(written==beforeWrites and latest.Status:find('target changed',1,true))
+shared['Example.character']='character-a';tick(apply);assert(written==beforeWrites and latest.Status:find('page changed',1,true))
+commands[#commands+1]='{"Active":false}';tick();assert(#scheduled==0)
 shared,scheduled={},{};local scheduler=ExecuteInGameThreadWithDelay;local failures=0
 RuneSchemaModMenuExchange=function(text)local request=assert(RuneSchemaTestJson.decode(text));if request.Op=="stop" then failures=failures+1;return '{}' end;return nativeBridge(text) end
 ExecuteInGameThreadWithDelay=nil;assert(load(source))();assert(failures==1 and #scheduled==0)
 ExecuteInGameThreadWithDelay=function()error("fixture scheduler failure")end;assert(load(adapted))();assert(failures==2 and #scheduled==0 and shared["ModMenu.version"]==nil)
 ExecuteInGameThreadWithDelay=scheduler
-print("PASS: legacy schemas, text/JSON/Lua config preservation, callbacks, host controls, row requests, preview extension, competing-mod guards and game-thread scheduling")
+local radialOptions={};for i=1,13 do radialOptions[i]='"Option'..i..'"' end
+schema='{"id":"Example","settings":[],"--Helpy":{"schema":1,"settings":[{"key":"LargeChoice","type":"radial","options":['..table.concat(radialOptions,",")..'],"default":"Option1"}]}}'
+shared={};scheduled={};RuneSchemaModMenuExchange=nativeBridge;assert(load(adapted))();assert(latest.Pages[1].Settings[1].type=="choice" and latest.Pages[1].Settings[1].presentation==nil)
+-- RGB/RGBA colors retain string configs and validate live edits and complete templates.
+commands[#commands+1]='{"Active":false}';tick()
+shared,scheduled,commands={},{},{};RuneSchemaModMenuExchange=nativeBridge
+schema=[[{"id":"Example","settings":[{"key":"Tint","type":"text","default":"#112233"}],"--Helpy":{"schema":1,"controls":{"Tint":"color"},"settings":[{"key":"Accent","type":"color","alpha":true,"default":"#44556680"}],"templates":{"id":"colors","version":1,"keys":["Tint","Accent"]}}}]]
+config="Tint = #112233\nAccent = #44556680\nUnknown = retained\n"
+assert(load(adapted))();assert(latest.Pages[1].Settings[1].presentation=='color' and latest.Pages[1].Settings[2].colorAlpha==true)
+local beforeWrites=written
+tick('{"Op":"set","Id":"Example","Key":"Tint","Expected":"#112233","Value":"#FF0088"}')
+assert(written==beforeWrites+1 and shared['ModMenu.Example.Tint']=='#FF0088' and config:find('Unknown = retained',1,true))
+beforeWrites=written
+for _,invalid in ipairs({'123','"#GG0000"','"#11223344"','"red"','"#123"','"#112233\\n"'})do
+    tick('{"Op":"set","Id":"Example","Key":"Tint","Expected":"#FF0088","Value":'..invalid..'}')
+    assert(written==beforeWrites and shared['ModMenu.Example.Tint']=='#FF0088')
+end
+local colorTemplate='{"Op":"template_apply","Id":"Example","TemplateId":"colors","TemplateVersion":1,"Revision":1,"Context":"","Expected":{"Tint":"#FF0088","Accent":"#44556680"},"Values":{"Tint":"#ABCDEF","Accent":"#10203040"}}'
+tick(colorTemplate:gsub('#10203040','#102030'));assert(written==beforeWrites)
+tick(colorTemplate);assert(written==beforeWrites+1 and shared['ModMenu.Example.Tint']=='#ABCDEF' and shared['ModMenu.Example.Accent']=='#10203040')
+commands[#commands+1]='{"Active":false}';tick()
+shared,scheduled,commands={},{},{};schema=[[{"id":"Example","settings":[],"--Helpy":{"schema":1,"settings":[{"key":"Bad","type":"color","default":"#112233payload"},{"key":"BadAlpha","type":"color","alpha":"true","default":"#11223344"},{"key":"DefaultColor","type":"color"}]}}]]
+config='';assert(load(adapted))();assert(#latest.Pages[1].Settings==1 and shared['ModMenu.Example.DefaultColor']=='#FFFFFF' and shared['ModMenu.Example.Bad']==nil)
+commands[#commands+1]='{"Active":false}';tick()
+print("PASS: legacy schemas, text/JSON/Lua config preservation, callbacks, host controls, row requests, preview extension, isolated --Helpy rows, atomic templates, stale-target rejection, competing-mod guards, validated RGB/RGBA colors and game-thread scheduling")

@@ -3,6 +3,10 @@ channel: experimental
 promote_to: modders/SHARED-HUD.md
 ---
 
+!!! info "Folder layout during testing"
+    The [new runtime layout](RUNTIME-LAYOUT.md) is an unpublished development candidate. The published 0.8.1.0 ZIP keeps Helpy under `plugins/RuneSchema.Helpy/dll` and HUD under `plugins/RuneSchema.HUD`. Both layouts remain supported.
+
+
 !!! info "Pre-release · 0.8.1.0"
     Use matching Core, Helpy and HUD files from the [0.8.1.0 candidate](PRE-RELEASE.md).
     Real-app/game acceptance of the public interface remains pending.
@@ -14,7 +18,7 @@ client; other apps can use the renderer through an in-game UE4SS adapter. An app
 keeps its own UI, profiles and local fallback. HUD access grants no gameplay,
 networking or filesystem authority.
 
-The plugin lives at `RuneSchema/plugins/RuneSchema.HUD/dll/RuneSchema.HUD.dll`.
+The plugin lives at `RuneSchema/Helpy/plugins/RuneSchema.HUD/dll/RuneSchema.HUD.dll`.
 Core loads its manifest through the existing plugin lifecycle. Graphics hooks
 prepare only when requested. Dedicated servers skip it. Helpy's offline cache
 browser and separate desktop window remain usable without native presentation.

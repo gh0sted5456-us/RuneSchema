@@ -131,11 +131,11 @@ inline void StudioReview(){
     const auto& exported=AuthoringClient::Result("SaveEditorExport");if(exported.contains("File"))ImGui::TextWrapped("Export: %s",exported.at("File").get_ref<const std::string&>().c_str());
 }
 inline void StudioStageAddition(const Json& item){StudioAddition=item;StudioQuantity=1;StudioConfirm=false;}
-inline void StudioBayControls(){
+inline void StudioBayControls(const Json& catalog,uint64_t revision){
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::BaySearchId=ImGui::GetID("Search");HelpyPreviewHooks::BayRefreshId=ImGui::GetID("Refresh");
 #endif
-    ItemBayBrowser::Controls(StudioPicker,StudioFilter,sizeof(StudioFilter));
+    ItemBayBrowser::Controls(StudioPicker,catalog,revision,StudioFilter,sizeof(StudioFilter));
 }
 inline void StudioPaintKit(){
     const auto& theme=HelpyImGuiTheme::Current;ImGui::SeparatorText("Painter's kit · native palette");
@@ -290,7 +290,7 @@ inline void Studio(const Json& catalog,uint64_t revision,bool inventoryOnly=fals
         if(!DroppedInventoryItem.empty()){StudioStageAddition(DroppedInventoryItem);DroppedInventoryItem=Json::object();}
         HelpyImGuiTheme::SoftButton("Drop Item Bay item here to stage an addition");if(ImGui::BeginDragDropTarget()){if(auto item=ItemGridPicker::AcceptItemDrop(Error))StudioStageAddition(*item);ImGui::EndDragDropTarget();}
         ImGui::PopID();if(wide)ImGui::TableNextColumn();ImGui::PushID("studio-item-bay-pane");ImGui::SeparatorText("Item Bay");Json bay=catalog;LazyCatalog::Overlay(bay,0);
-        StudioBayControls();
+        StudioBayControls(bay,revision);
         {
             const auto result=ItemGridPicker::Render("character-studio-bay",bay,StudioFilter,sizeof(StudioFilter),StudioSelectedPath,sizeof(StudioSelectedPath),StudioPicker,revision,false,false,true,true,false,420);
             if(result.SelectedRow){const auto previous=StudioSelected.value("Path",std::string{});StudioSelected=*result.SelectedRow;if(std::string_view(view)=="Item"&&previous!=StudioSelected.value("Path",std::string{}))StudioRequestedView.clear();}

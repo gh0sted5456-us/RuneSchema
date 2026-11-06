@@ -4,7 +4,7 @@
 #include <string_view>
 namespace PS::StructuredDiagnosticRegistry {
 struct Entry { std::string_view Code, TypicalSeverity, Description, ProducerSite; bool LegacyCollision; };
-inline constexpr std::array<Entry,222> All{{
+inline constexpr std::array<Entry,224> All{{
     {"RS-ASSET-001","Error","Asset target remained unresolved","src/Loader/DragonWildsAssetModLoader.cpp",false},
     {"RS-ASSET-002","Warning","Asset definition has invalid root","src/Loader/DragonWildsAssetModLoader.cpp",false},
     {"RS-ASSET-003","Warning","Asset property modification rejected","src/Loader/DragonWildsAssetModLoader.cpp",false},
@@ -134,6 +134,8 @@ inline constexpr std::array<Entry,222> All{{
     {"RS-IMP-010","Error","Atomic import plan blocked","src/Loader/DragonWildsAssetModLoader.cpp",false},
     {"RS-IMP-011","Warning","Dry-run import plan blocked","src/Loader/DragonWildsAssetModLoader.cpp",false},
     {"RS-IMP-012","Warning","Import batch partially applied","src/Loader/DragonWildsAssetModLoader.cpp",false},
+    {"RS-IMP-013","Info","Dry-run import plan ready","src/Loader/DragonWildsAssetModLoader.cpp",false},
+    {"RS-IMP-014","Error","Import application failed","src/Loader/DragonWildsAssetModLoader.cpp",false},
     {"RS-JRN-001","Error","Journal runtime classes unavailable","src/Loader/DragonWildsJournalModLoader.cpp",true},
     {"RS-JRN-002","Error","Invalid journal document root","src/Loader/DragonWildsJournalModLoader.cpp",true},
     {"RS-JRN-003","Error","Invalid journal entry","src/Loader/DragonWildsJournalModLoader.cpp",false},

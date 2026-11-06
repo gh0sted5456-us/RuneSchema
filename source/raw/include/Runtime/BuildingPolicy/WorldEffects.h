@@ -28,6 +28,7 @@ inline Vec3 ActorPosition(UObject* actor){
  return *static_cast<Vec3*>(location.Data(L"ReturnValue"));
 }
 class WorldEffects {
+public:
  struct Effect {
   WeakObject component,data;
   UScriptStruct* type=nullptr;
@@ -35,6 +36,7 @@ class WorldEffects {
   ~Effect(){if(type)type->DestroyStruct(handle.data());}
   void Remove(){if(auto* target=component.Get();Live(target)&&type){Call remove(target,L"RemoveGameplayEffect");remove.Copy(L"Handle",handle.data());remove.Invoke();}}
  };
+private:
  struct Player {WeakObject actor,provider;std::vector<std::unique_ptr<Effect>> effects;bool vitality=false;};
  struct Respawn {WeakObject component;std::array<int,4> duration;};
  struct Rested {WeakObject instance;float decay=0;};
@@ -50,21 +52,28 @@ class WorldEffects {
   if(data&&(!data->IsA<UClass>()||!static_cast<UClass*>(data)->IsChildOf(Find<UClass>(L"/Script/Dominion.DominionGameplayEffectData"))))throw std::runtime_error("World policy returned a non-effect class");
   return data;
  }
- static std::unique_ptr<Effect> Apply(UObject* provider,UObject* player,UObject* data){
+public:
+ static std::unique_ptr<Effect> ApplyTo(UObject* player,UObject* data,UObject* instigator,UObject* source){
   auto* component=Object(player,L"GameplayEffectsComponent");if(!Live(component))throw std::runtime_error("Player effect component is absent");
   Call create(component,L"InstantiateGameplayEffect");create.Object(L"DataClass",data);create.Text(L"bForceNewInstance",L"True");create.Invoke();
   auto* property=CastField<FStructProperty>(create.Prop(L"ReturnValue"));
-  if(!property||property->GetStruct()->GetPathName()!=L"/Script/Dominion.DominionGameplayEffectHandle"||property->GetSize()>128)throw std::runtime_error("Native effect handle contract differs");
+  if(!property||property->GetStruct()->GetPathName()!=L"/Script/Dominion.DominionGameplayEffectHandle"||property->GetSize()<=0||property->GetSize()>128)throw std::runtime_error("Native effect handle contract differs");
   auto effect=std::make_unique<Effect>();effect->component=component;effect->data=data;effect->handle.resize(property->GetSize());
   effect->type=property->GetStruct();effect->type->InitializeStruct(effect->handle.data());property->CopyCompleteValue(effect->handle.data(),create.Data(L"ReturnValue"));
-  Call apply(component,L"ApplyGameplayEffect");apply.Object(L"Instigator",player);apply.Object(L"Source",provider);apply.Copy(L"Handle",effect->handle.data());apply.Text(L"bIgnoreChanceToApply",L"True");apply.Invoke();
-  if(!apply.Bool()){effect->Remove();throw std::runtime_error("Native player effect application was rejected");}
+  try{
+   Call apply(component,L"ApplyGameplayEffect");apply.Object(L"Instigator",instigator);apply.Object(L"Source",source);apply.Copy(L"Handle",effect->handle.data());apply.Text(L"bIgnoreChanceToApply",L"True");apply.Invoke();
+   if(!apply.Bool())throw std::runtime_error("Native effect application was rejected");
+  }catch(const std::exception& error){
+   const std::string problem=error.what();try{effect->Remove();}catch(const std::exception& rollback){throw std::runtime_error(problem+"; native effect rollback failed: "+rollback.what());}throw;
+  }
   return effect;
  }
  static bool Exists(Effect& effect){
   auto* component=effect.component.Get();if(!Live(component))return false;
   Call call(component,L"HasGameplayEffect");call.Copy(L"Handle",effect.handle.data());call.Invoke();return call.Bool();
  }
+private:
+ static std::unique_ptr<Effect> Apply(UObject* provider,UObject* player,UObject* data){return ApplyTo(player,data,player,provider);}
  static void ClampCharge(UObject* player){
   auto* component=Object(player,L"SpecialChargeComponent");if(!Live(component))return;
   Call current(component,L"GetSpecialCharge");current.Invoke();Call maximum(component,L"GetMaxSpecialCharge");maximum.Invoke();

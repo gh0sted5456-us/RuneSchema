@@ -608,11 +608,14 @@ inline void Render(){
     const auto refreshDetails=std::string("Refresh loaded world markers and player positions.\nNative markers: ")+(Data.Snapshot.value("MarkersScanning",false)?"checking loaded areas":"current snapshot")+"\n"+mapCache.Status+"\nInstalled game: "+HelpyEnvironment::GameVersion+"\nOnline filter data changes only after a confirmed installed game build change. Cached locations remain visible. No world or save edits.";
     if(HelpyLoadingIndicator::RefreshButton("Refresh",Data.Pending||Data.Snapshot.value("MarkersScanning",false)||HelpyMapCache::Busy(),refreshDetails)){Data.Next={};Data.Error.clear();if(HelpyMapCache::RefreshEligible())HelpyMapCache::Refresh();}
     inlineIfRoom(t.X(160));ImGui::SetNextItemWidth(t.X(120));ImGui::SliderFloat("Zoom",&Data.Zoom,static_cast<float>(Data.View.FitZoom()),32,"%.1fx",ImGuiSliderFlags_Logarithmic);
-    inlineIfRoom(t.X(80));if(HelpyImGuiTheme::Toggle("Players",&Data.ShowPlayers))SaveNativeFilters();
-    inlineIfRoom(t.X(70));HelpyImGuiTheme::Toggle("Party",&Data.ShowParty);
-    inlineIfRoom(t.X(90));if(HelpyImGuiTheme::Toggle("Chests",&Data.ShowChests)){SaveNativeFilters();Data.Next={};}
     inlineIfRoom(t.X(70));if(HelpyImGuiTheme::SoftButton(Data.BuildingPick?"Cancel build":"Build...")){Data.BuildingPick=!Data.BuildingPick;if(Data.BuildingPick){Data.Operation=1;Data.Permanent=true;Data.Status="Click the map to choose a building or prefab position.";}}
-    const char* hint="LMB select · drag to pan · RMB options · scroll to zoom";inlineIfRoom(ImGui::CalcTextSize(hint).x);ImGui::TextDisabled("%s",hint);
+    inlineIfRoom(t.X(60));if(HelpyMenu::BeginMore("map-actions")){
+    if(HelpyImGuiTheme::Toggle("Players",&Data.ShowPlayers))SaveNativeFilters();
+    HelpyImGuiTheme::Toggle("Party",&Data.ShowParty);
+    if(HelpyImGuiTheme::Toggle("Chests",&Data.ShowChests)){SaveNativeFilters();Data.Next={};}
+        ImGui::TextWrapped("Mouse: select, drag to pan, scroll to zoom. Right-click for actions.");
+        ImGui::EndPopup();
+    }
     Filters();ImGui::SameLine();ImGui::SetNextItemWidth(std::min(t.X(300),ImGui::GetContentRegionAvail().x));HelpyTextInput::InputTextWithHint("##map-marker-search","Find iron, oak, chest, lore...",Data.MarkerSearch,sizeof(Data.MarkerSearch));
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::MapMarkerSearch=HelpyPreviewHooks::LastRect();
@@ -653,20 +656,20 @@ inline void Render(){
     const float partyHeight=dockParty?std::clamp(available.y*.36f,t.Y(180),t.Y(240))+ImGui::GetStyle().ItemSpacing.y:0;
     const float width=std::max(t.X(160),available.x),height=std::max(t.Y(160),available.y-t.Y(24)-partyHeight);
     const auto min=ImGui::GetCursorScreenPos();const ImVec2 max(min.x+width,min.y+height);
-    Data.View={width,height,Data.Projection.Valid()?Data.Projection.HalfWidth/Data.Projection.HalfHeight:1,Data.Zoom,Data.Center};
+    Data.View={width,height,Data.Projection.Valid()?Data.Projection.HalfWidth/Data.Projection.HalfHeight:1,Data.Zoom,Data.Center,HelpyControllerInput::Selection.Controller};
     if(Data.FitRequested){Data.View.Zoom=Data.View.FitZoom();Data.FitRequested=false;}Data.View.Clamp();
     ImGui::InvisibleButton("##world-map",ImVec2(width,height),ImGuiButtonFlags_MouseButtonLeft|ImGuiButtonFlags_MouseButtonRight|ImGuiButtonFlags_EnableNav);
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::MapCanvasID=ImGui::GetItemID();HelpyPreviewHooks::MapCanvasWindow=ImGui::GetCurrentWindow()->ID;
 #endif
-    auto& io=ImGui::GetIO();const bool controllerMap=ImGui::IsItemFocused()&&HelpyControllerInput::Selection.Controller&&!HelpyControllerInput::TouchUsing&&ImGui::GetCurrentContext()->NavInputSource==ImGuiInputSource_Gamepad;
+    HelpyControllerInput::NavigationCanvas=ImGui::GetItemID();
+    auto& io=ImGui::GetIO();const bool controllerMap=ImGui::IsItemFocused()&&HelpyControllerInput::Selection.Controller&&!HelpyControllerInput::PointerUsing;
     const bool hovered=ImGui::IsItemHovered()||controllerMap;const ImVec2 pointer=controllerMap?ImVec2(min.x+width*.5f,min.y+height*.5f):io.MousePos;
     if(controllerMap){
-        const auto amount=[](ImGuiKey positive,ImGuiKey negative){return ImGui::GetKeyData(positive)->AnalogValue-ImGui::GetKeyData(negative)->AnalogValue;};
-        for(const auto key:{ImGuiKey_GamepadRStickLeft,ImGuiKey_GamepadRStickRight,ImGuiKey_GamepadRStickUp,ImGuiKey_GamepadRStickDown})ImGui::SetKeyOwner(key,ImGui::GetItemID());
-        const float speed=600*std::min(io.DeltaTime,.05f);Data.View.Pan({-amount(ImGuiKey_GamepadRStickRight,ImGuiKey_GamepadRStickLeft)*speed,amount(ImGuiKey_GamepadRStickUp,ImGuiKey_GamepadRStickDown)*speed});
-        if(ImGui::IsKeyPressed(ImGuiKey_GamepadR3,false))Data.View.ZoomAt(Data.View.Zoom*1.25,{width*.5,height*.5});
-        if(ImGui::IsKeyPressed(ImGuiKey_GamepadL3,false))Data.View.ZoomAt(Data.View.Zoom/1.25,{width*.5,height*.5});
+        const auto motion=HelpyControllerPointer::Motion(HelpyControllerInput::PhysicalPad.sThumbLX,HelpyControllerInput::PhysicalPad.sThumbLY,io.DeltaTime,600);
+        Data.View.Pan({-motion.X,-motion.Y});
+        if(ImGui::IsKeyPressed(ImGuiKey_GamepadL3,false))Data.View.ZoomAt(Data.View.Zoom*1.25,{width*.5,height*.5});
+        if(ImGui::IsKeyPressed(ImGuiKey_GamepadFaceUp,false))Data.View.ZoomAt(Data.View.Zoom/1.25,{width*.5,height*.5});
     }
     if(hovered&&ImGui::IsMouseClicked(ImGuiMouseButton_Left))Data.Dragged=false;
     if(hovered&&io.MouseWheel!=0)Data.View.ZoomAt(Data.View.Zoom*std::pow(1.2,io.MouseWheel),{pointer.x-min.x,pointer.y-min.y});
@@ -809,7 +812,7 @@ inline void Render(){
     else if(hoveredReference){const auto& category=mapCache.Data->Categories[hoveredReference->Category];const auto label=hoveredReference->Name+" · "+category.Name+" · cached reference"+(referenceCount>1?" ("+std::to_string(referenceCount)+" nearby; zoom in)":"");draw->AddRectFilled({min.x+4,min.y+4},{max.x-4,min.y+t.Y(30)},IM_COL32(0,0,0,225));draw->AddText({min.x+t.X(10),min.y+t.Y(8)},ImGui::GetColorU32(t.text),label.c_str());}
     if(controllerMap){const auto color=ImGui::GetColorU32(t.accentHover);draw->AddCircle(pointer,t.X(8),color,24,2);
         draw->AddLine({pointer.x-t.X(13),pointer.y},{pointer.x+t.X(13),pointer.y},color,2);draw->AddLine({pointer.x,pointer.y-t.Y(13)},{pointer.x,pointer.y+t.Y(13)},color,2);
-        const char* help="Right stick: pan | Stick clicks: zoom | Confirm: select | West: actions";const float wrap=std::max(1.f,width-t.X(16));const auto size=ImGui::CalcTextSize(help,nullptr,false,wrap);const ImVec2 at{min.x+t.X(8),max.y-t.Y(42)-size.y};draw->AddRectFilled({at.x-t.X(3),at.y-t.Y(3)},{std::min(max.x,at.x+size.x+t.X(3)),at.y+size.y+t.Y(3)},IM_COL32(0,0,0,220));draw->AddText(nullptr,0,at,color,help,nullptr,wrap);}
+        const char* help="Left stick: pan | Left stick click: zoom in | North: zoom out | Confirm: select | West: actions";const float wrap=std::max(1.f,width-t.X(16));const auto size=ImGui::CalcTextSize(help,nullptr,false,wrap);const ImVec2 at{min.x+t.X(8),max.y-t.Y(42)-size.y};draw->AddRectFilled({at.x-t.X(3),at.y-t.Y(3)},{std::min(max.x,at.x+size.x+t.X(3)),at.y+size.y+t.Y(3)},IM_COL32(0,0,0,220));draw->AddText(nullptr,0,at,color,help,nullptr,wrap);}
     draw->PopClipRect();draw->AddRect(min,max,ImGui::GetColorU32(controllerMap?t.accentHover:t.border));PlacePopup();
     if(mapCache.Data&&mapCache.Filters.ShowCached)ImGui::TextLinkOpenURL("Wiki / Wildsforge map data - CC BY-NC-SA 3.0",MapFilters::SourceUrl);
     Party(min,max);ResourceDetails();

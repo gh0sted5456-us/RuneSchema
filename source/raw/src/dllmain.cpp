@@ -1,3 +1,4 @@
+#include "Runtime/HelpyHudInterfaces.h"
 #include "Runtime/BuildingPolicy/Bridge.h"
 #include "Runtime/HelpyModMenu.h"
 #include "Core/ProcessExitFuture.h"
@@ -328,7 +329,7 @@ public:
                     PS::ToWideSafe(result.Detail.c_str()));
         }
         {
-            const auto pluginRoot=std::filesystem::path(PS::HostServices::WorkingDirectory())/"Mods"/"RuneSchema"/"plugins";
+            const auto pluginRoot=std::filesystem::path(PS::HostServices::WorkingDirectory())/"Mods"/"RuneSchema";
             m_pluginHost.Load(pluginRoot);
             m_pluginHost.StartDesktop();
             for(const auto& message:m_pluginHost.Diagnostics())
@@ -548,7 +549,7 @@ public:
             settings.helpyAuthority.maximumSpawnCount=std::clamp(settings.helpyAuthority.maximumSpawnCount,1,100);
             settings.helpyAuthority.maximumNpcDurationSeconds=std::clamp(settings.helpyAuthority.maximumNpcDurationSeconds,1,3600);
             ImGui::TextWrapped("Remote users need an allowlist entry or opted-in world PIN access. Configure the PIN in Helpy > Settings > Server access. PIN access covers only self-delivery and self-teleport; action limits and registry checks still apply. GUIDs are preferred for allowlists.");
-            ImGui::TextWrapped("Plugin controls are owned by each plugin under plugins/<PluginId>/settings/. Helpy activation and its hotkey are managed by RuneSchema.Helpy.");
+            ImGui::TextWrapped("Plugin controls are owned by each plugin under dlls/plugins/<PluginId>/settings/ or Helpy/settings/. Helpy activation and its hotkey are managed by RuneSchema.Helpy.");
             ImGui::TextWrapped("Settings: settings/settings.ini (legacy settings.jsonc supported) | Live jobs: runtime/live/jobs | Live state: runtime/live/saved");
             ImGui::TextWrapped("Hotloading applies supported JSON changes while the game is running. Blueprint patches and ghost appearance changes still require a restart.");
             ImGui::SeparatorText("Load-order prefixes");
@@ -832,6 +833,7 @@ public:
 
     void InstallPackageDiscovery(RC::StringViewType modName,RC::LuaMadeSimple::Lua& lua) {
         if(m_startupFailed.load(std::memory_order_acquire)||m_packageDiscoveryBootstrap.empty())return;
+        if(PS::ModFolderLayout::EqualsInsensitive(RC::to_string(modName),"RuneSchema"))try{PS::HelpyHudInterfaces::Install(PS::HostServices::ModDirectory(),lua);}catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[RuneSchema][HUD][INACTIVE] {}\n"),PS::ToWideSafe(error.what()));}
         if(PS::ModFolderLayout::EqualsInsensitive(RC::to_string(modName),"RuneSchema"))try{PS::HelpyModMenu::Install(PS::HostServices::ModDirectory(),lua);}catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[RuneSchema][MOD-MENU][INACTIVE] {}\n"),PS::ToWideSafe(error.what()));}
         try {lua.execute_string(m_packageDiscoveryBootstrap);}
         catch(const std::exception& error) {

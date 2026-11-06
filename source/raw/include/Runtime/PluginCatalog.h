@@ -1,3 +1,4 @@
+#include "RuntimePaths.h"
 #pragma once
 #include <algorithm>
 #include <cctype>
@@ -15,7 +16,7 @@
 namespace PS::PluginCatalog {
 namespace fs = std::filesystem;
 struct Plugin {
-    std::string Id,Name,Version,BuiltForRuneSchema,ConsoleMessage;
+    std::string Id,Name,Version,BuiltForRuneSchema,ConsoleMessage,Host="game";
     int ApiVersion=0;
     bool Enabled=true,Required=false,MountPaks=true;
     bool PreferSharedRegistry=false;
@@ -91,12 +92,14 @@ inline std::vector<OrderEntry> ReadOrder(const fs::path& root) {
     }
     return result;
 }
-inline std::vector<Plugin> Discover(const fs::path& root,std::vector<std::string>* diagnostics=nullptr) {
+inline std::vector<Plugin> Discover(const fs::path& root,std::vector<std::string>* diagnostics=nullptr,bool runtime=false) {
     std::vector<Plugin> result;if(!fs::is_directory(root))return result;
+    std::vector<fs::path> folders;
+    const auto append=[&](const fs::path& base){if(!fs::is_directory(base)||fs::is_symlink(fs::symlink_status(base)))return;for(const auto& folder:fs::directory_iterator(base))if(folder.is_directory()&&!folder.is_symlink())folders.push_back(folder.path());};
+    if(runtime){append(root/"dlls/plugins");if(fs::is_directory(root/"Helpy")&&!fs::is_symlink(fs::symlink_status(root/"Helpy")))folders.push_back(root/"Helpy");append(root/"Helpy/plugins");append(root/"plugins");}else append(root);
     std::unordered_set<std::string> ids;
-    for(const auto& folder:fs::directory_iterator(root)) {
-        if(!folder.is_directory()||folder.is_symlink())continue;
-        const auto manifest=folder.path()/"plugin.json";if(!fs::is_regular_file(manifest))continue;
+    for(const auto& folder:folders) {
+        const auto manifest=folder/"plugin.json";if(!fs::is_regular_file(manifest)||fs::is_symlink(fs::symlink_status(manifest)))continue;
         try {
         if(fs::file_size(manifest)>256*1024)throw std::runtime_error("Plugin manifest exceeds 256 KiB: "+manifest.string());
         std::ifstream stream(manifest);nlohmann::json data;stream>>data;
@@ -106,8 +109,10 @@ inline std::vector<Plugin> Discover(const fs::path& root,std::vector<std::string
         plugin.Version=data.at("Version").get<std::string>();plugin.ApiVersion=data.value("ApiVersion",1);
         plugin.BuiltForRuneSchema=data.value("BuiltForRuneSchema",std::string{});
         plugin.ConsoleMessage=data.value("ConsoleMessage",std::string{});
+        plugin.Host=data.value("Host",std::string("game"));if(plugin.Host!="game"&&plugin.Host!="helpy")throw std::runtime_error("Plugin host must be game or helpy: "+plugin.Id);
         plugin.Enabled=data.value("Enabled",true);plugin.Required=data.value("Required",false);
-        plugin.MountPaks=data.value("MountPaks",true);plugin.Root=folder.path();
+        plugin.MountPaks=data.value("MountPaks",true);plugin.Root=folder;
+        if(runtime&&ids.contains(plugin.Id)){if(diagnostics)diagnostics->push_back(plugin.Id+": duplicate location ignored; canonical plugin already selected");continue;}
         if(!Token(plugin.Id)||!Token(plugin.Version)||(!plugin.BuiltForRuneSchema.empty()&&!Token(plugin.BuiltForRuneSchema))
             ||plugin.Name.empty()||plugin.Name.size()>128||plugin.ConsoleMessage.size()>512
             ||plugin.ConsoleMessage.find_first_of("\r\n")!=std::string::npos||!ids.emplace(plugin.Id).second)
@@ -128,7 +133,7 @@ inline std::vector<Plugin> Discover(const fs::path& root,std::vector<std::string
             }
         }
         if(data.contains("PackagedRoot"))throw std::runtime_error("PackagedRoot is obsolete; use the fixed paks/<PackageName> layout: "+plugin.Id);
-        plugin.DllRoot=plugin.Root/"dll";plugin.PaksRoot=plugin.Root/"paks";plugin.ScriptsRoot=plugin.Root/"scripts";
+        plugin.DllRoot=runtime&&plugin.Root==root/"Helpy"?plugin.Root:plugin.Root/"dll";plugin.PaksRoot=plugin.Root/"paks";plugin.ScriptsRoot=plugin.Root/"scripts";
         if(data.contains("EntryPoint")) {
             const auto entry=fs::path(data.at("EntryPoint").get<std::string>());
             if(entry.is_absolute()||entry.empty()||entry.has_parent_path()||entry.extension()!=L".dll")throw std::runtime_error("Plugin EntryPoint must be a DLL filename under dll/: "+plugin.Id);
@@ -137,9 +142,9 @@ inline std::vector<Plugin> Discover(const fs::path& root,std::vector<std::string
         }
         result.push_back(std::move(plugin));
         } catch(const std::exception& error) {
-            if(diagnostics)diagnostics->push_back(folder.path().filename().string()+": rejected: "+error.what());
+            if(diagnostics)diagnostics->push_back(folder.filename().string()+": rejected: "+error.what());
         } catch(...) {
-            if(diagnostics)diagnostics->push_back(folder.path().filename().string()+": rejected by an unknown manifest error");
+            if(diagnostics)diagnostics->push_back(folder.filename().string()+": rejected by an unknown manifest error");
         }
     }
     // 0.7.9 renamed RuneSchema.Networking to RSNetworking. If an old
@@ -147,7 +152,7 @@ inline std::vector<Plugin> Discover(const fs::path& root,std::vector<std::string
     // ignore the retired copy instead of registering duplicate capabilities.
     const bool hasRsNetworking=std::any_of(result.begin(),result.end(),[](const auto& plugin){return plugin.Id=="RSNetworking";});
     if(hasRsNetworking)std::erase_if(result,[](const auto& plugin){return plugin.Id=="RuneSchema.Networking";});
-    const auto requested=ReadOrder(root);std::unordered_map<std::string,OrderEntry> requestedById;
+    const auto requested=ReadOrder(runtime?RuntimePaths::PluginOrder(root):root);std::unordered_map<std::string,OrderEntry> requestedById;
     for(const auto& entry:requested)requestedById.emplace(entry.Id,entry);
     for(auto& plugin:result)if(const auto found=requestedById.find(plugin.Id);found!=requestedById.end()) {
         if(plugin.Required&&!found->second.Enabled&&diagnostics)
@@ -179,4 +184,5 @@ inline std::vector<Plugin> Discover(const fs::path& root,std::vector<std::string
     }
     return ordered;
 }
+inline std::vector<Plugin> DiscoverRuntime(const fs::path& root,std::vector<std::string>* diagnostics=nullptr){return Discover(root,diagnostics,true);}
 }

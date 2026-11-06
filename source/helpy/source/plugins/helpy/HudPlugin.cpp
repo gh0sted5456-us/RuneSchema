@@ -40,6 +40,7 @@ Json Native(const Json& request){
     try{return PS::HelpyNativeOverlayBridge::Call(request);}
     catch(const std::exception& error){auto status=PS::HelpyNativeOverlayBridge::Call({{"Action","Status"},{"Client",request.value("Client",uint64_t(1))}});status["Failed"]=true;status["Error"]=error.what();return status;}
 }
+bool ClientVisible(uint64_t client){const auto status=Native({{"Action","Status"},{"Client",client}});return status.value("OwnsSurface",false)&&status.value("Visible",false);}
 int32_t RS_HUD_CALL Register(const char* owner,uint32_t pid,uint64_t* client){
     if(client)*client=0;
     if(!owner||!pid||!client)return RS_HUD_INVALID_ARGUMENT;
@@ -109,13 +110,17 @@ int32_t RS_PLUGIN_CALL Extensions(void*,const char* input,char* output,uint32_t 
     try{
         const auto request=Json::parse(input);const auto action=request.at("Action").get<std::string>();std::lock_guard lock(Gate);Json result;
         if(action=="List"){
-            auto entries=Json::array();for(const auto& [id,client]:Clients)entries.push_back({{"Client",id},{"Owner",client.Owner},{"UiReady",client.UiReady&&WaitForSingleObject(client.Process,0)==WAIT_TIMEOUT}});
+            auto entries=Json::array();for(const auto& [id,client]:Clients)entries.push_back({{"Client",id},{"Owner",client.Owner},{"UiReady",client.UiReady&&WaitForSingleObject(client.Process,0)==WAIT_TIMEOUT},{"Active",WaitForSingleObject(client.Process,0)==WAIT_TIMEOUT&&ClientVisible(id)}});
             result={{"Available",true},{"Clients",entries}};
-        }else if(action=="Activate"||action=="Deactivate"){
-            const auto found=Clients.find(request.at("Client").get<uint64_t>());
+        }else if(action=="Activate"||action=="Deactivate"||action=="Toggle"){
+            auto found=Clients.end();
+            if(request.contains("Client"))found=Clients.find(request.at("Client").get<uint64_t>());
+            else if(request.contains("Owner")){
+                const auto owner=request.at("Owner").get<std::string>();for(auto it=Clients.begin();it!=Clients.end();++it)if(it->second.Owner==owner&&WaitForSingleObject(it->second.Process,0)==WAIT_TIMEOUT){if(found!=Clients.end())return Reply({{"Accepted",false},{"Error","More than one live producer uses this HUD name"}},output,capacity,size)==RS_HUD_OK?RS_PLUGIN_OK:RS_PLUGIN_FAILED;found=it;}
+            }
             if(found==Clients.end()||WaitForSingleObject(found->second.Process,0)!=WAIT_TIMEOUT)result={{"Accepted",false},{"Error","The extension is disconnected"}};
-            else if(action=="Activate"&&!found->second.UiReady)result={{"Accepted",false},{"Error","The extension has not verified its UI producer"}};
-            else{found->second.Command=action=="Activate"?RS_HUD_COMMAND_ACTIVATE:RS_HUD_COMMAND_DEACTIVATE;SetEvent(found->second.Wake);result={{"Accepted",true}};}
+            else if(action!="Deactivate"&&!found->second.UiReady)result={{"Accepted",false},{"Error","The extension has not verified its UI producer"}};
+            else{found->second.Command=action=="Deactivate"||(action=="Toggle"&&ClientVisible(found->first))?RS_HUD_COMMAND_DEACTIVATE:RS_HUD_COMMAND_ACTIVATE;SetEvent(found->second.Wake);result={{"Accepted",true}};}
         }else return RS_PLUGIN_INVALID_ARGUMENT;
         return Reply(result,output,capacity,size)==RS_HUD_OK?RS_PLUGIN_OK:RS_PLUGIN_FAILED;
     }catch(...){return RS_PLUGIN_INVALID_ARGUMENT;}

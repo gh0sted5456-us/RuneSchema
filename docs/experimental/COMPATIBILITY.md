@@ -180,3 +180,29 @@ After an update:
 3. test with a small mod set first;
 4. read the log for unavailable features or missing content paths;
 5. test both first entry and re-entry before continuing normal play.
+
+## UE4SS scheduling and API audit
+
+Unpublished maintenance candidate; use matching Core, Helpy and Lua files.
+
+- The optional ModActor loader schedules its initial world check with
+  `ExecuteInGameThreadWithDelay(0, ...)`. If the host lacks delayed actions or
+  rejects scheduling, it reports that initial check as deferred and retains
+  its load-map hooks. It does not fall back to an async timer.
+- Relay, mapping, HUD and Mod Menu helpers already use game-thread delayed
+  actions. RuneSchema's shipped Lua helpers do not call `ExecuteWithDelay`,
+  `ExecuteAsync` or `LoopAsync`.
+- The Core implements the current single-hook-pointer `on_lua_start` callback.
+  Its deprecated vector overload is deliberately retained for older supported
+  hosts that invoke only that callback. Removing it would break their package
+  discovery; installation remains idempotent if a host invokes both.
+- The audit found explicit `FNAME_Find`/`FNAME_Add` choices and `.Get()` access
+  in the inspected lookup/object-pointer paths; no SDK upgrade is bundled.
+  Unreal's `IncludeDeprecated` property flag is intentional reflection behavior,
+  not a deprecated UE4SS API.
+
+These changes follow UE4SS's [delayed-action API](https://docs.ue4ss.com/dev/lua-api/global-functions/delayedactions.html),
+[callback overloads](https://github.com/UE4SS-RE/RE-UE4SS/blob/main/UE4SS/include/Mod/CppUserModBase.hpp)
+and [upgrade guide](https://github.com/UE4SS-RE/RE-UE4SS/blob/main/docs/upgrade-guide.md).
+Scheduler tests cover missing/failed scheduling, deferred execution and map-load
+fallback. These checks do not replace live Steam/Game Pass or Lua-restart tests.

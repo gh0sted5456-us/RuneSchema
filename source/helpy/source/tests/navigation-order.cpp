@@ -23,6 +23,19 @@ int main(int argc,char** argv){
         assert(N::Move(N::SidebarSurface,int(Page::Settings),int(Page::Profile),N::SidebarDefaults()));
         assert(N::Load(file));layout=N::Sidebar();assert(position(int(Page::Settings))>position(N::SidebarDivider));
         assert(N::Reset(N::SidebarSurface));assert(N::Sidebar()==N::SidebarDefaults());
+        auto workspaces=PS::HelpyNavigation::Workspaces{};const auto pages=N::WorkspacePages(workspaces,false);
+        assert(std::find(pages.begin(),pages.end(),Page::Profile)!=pages.end());
+        for(auto page:pages)assert(page!=Page::BugReport&&PS::HelpyNavigation::Available(page,workspaces,false));
+        assert(std::find(pages.begin(),pages.end(),Page::ModMenu2)==pages.end());
+        // Old saved layouts must drop the former main entry without resetting other ordering.
+        N::Orders["sidebar"]={int(Page::ModMenu2),int(Page::Settings),int(Page::Mods)};
+        N::Orders[N::SidebarSurface]={int(Page::ModMenu2),int(Page::Settings),int(Page::Mods)};
+        layout=N::Sidebar();assert(layout.front()==int(Page::Settings)&&layout[1]==int(Page::Mods)&&position(int(Page::ModMenu2))==layout.end());
+        workspaces.ModMenu=true;const auto enabledPages=N::WorkspacePages(workspaces,false);
+        assert(std::find(enabledPages.begin(),enabledPages.end(),Page::ModMenu2)==enabledPages.end());
+        assert(std::find(enabledPages.begin(),enabledPages.end(),Page::Mods)!=enabledPages.end());
+        N::Orders.erase("sidebar");N::Orders.erase(N::SidebarSurface);
+        assert(std::find(pages.begin(),pages.end(),Page::DedicatedServer)==pages.end());
     }
     assert(N::Move("home",4,11,defaults));PS::ConfigFiles::Write(file,"external change");assert(!N::Reset("home"));assert(PS::ConfigFiles::Read(file)=="external change");
     assert(!N::Load(file));assert(!N::Move("home",4,11,defaults));

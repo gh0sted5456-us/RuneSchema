@@ -2826,6 +2826,30 @@
       "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
+      "code": "RS-IMP-013",
+      "severity": "info",
+      "title": "Dry-run import plan ready",
+      "producer": "src/Loader/DragonWildsAssetModLoader.cpp",
+      "legacyCollision": false,
+      "namespace": "structured",
+      "category": "Imports",
+      "anchor": "rs-imp-013",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-013",
+      "troubleshooting": "Dry run succeeded without applying changes. Review the planned imports in the original report before turning off $ImpDry."
+    },
+    {
+      "code": "RS-IMP-014",
+      "severity": "error",
+      "title": "Import application failed",
+      "producer": "src/Loader/DragonWildsAssetModLoader.cpp",
+      "legacyCollision": false,
+      "namespace": "structured",
+      "category": "Imports",
+      "anchor": "rs-imp-014",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-imp-014",
+      "troubleshooting": "An import failed during application. An atomic batch leaves the destination unchanged; a non-atomic batch can retain earlier writes. Fix the reported source or allocation problem before retrying."
+    },
+    {
       "code": "RS-JRN-001",
       "severity": "error",
       "title": "Journal runtime classes unavailable",

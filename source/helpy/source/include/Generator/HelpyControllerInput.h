@@ -1,6 +1,8 @@
 #pragma once
 #include "Core/HelpyInputMode.h"
 #include "Core/HelpyControllerDevice.h"
+#include "Core/HelpyTouchpadGesture.h"
+#include "Core/HelpyControllerPointer.h"
 #include "Generator/HelpyImGuiTheme.h"
 #include <xinput.h>
 #include <imgui_internal.h>
@@ -15,10 +17,15 @@ inline bool Initialized=false,Refresh=true;inline unsigned Connected=0;inline in
 inline HelpyInputMode::Selection Selection;
 inline HelpyControllerDevice::Labels ReportedGlyphs=HelpyControllerDevice::Xbox;
 inline bool JustActivated=false;
+inline bool StickUsing=false,PointerUsing=false,StickClickArmed=false;
+inline ImGuiID NavigationCanvas=0;
+inline int ItemBayFrame=-1;
+inline ImVec2 LastPointer{-FLT_MAX,-FLT_MAX};inline double PointerUntil=0;
 inline bool KeepShortcuts=false;
 inline bool ShortcutActivated=false;
 inline HelpyControllerDevice::Reading PointerReading;
-inline bool TouchUsing=false,TouchTracking=false,TouchClickArmed=false,TouchMouseDown=false;
+inline bool TouchUsing=false,TouchTracking=false,TouchClickArmed=false,TouchMouseDown=false,TouchRightArmed=false,TouchRightMouseDown=false;
+inline HelpyTouchpadTap TouchTap;
 inline uint32_t TouchDevice=0;
 inline float TouchX=0,TouchY=0;
 inline auto DeviceRead=&HelpyControllerDevice::Read;
@@ -27,16 +34,22 @@ inline HelpyControllerDevice::Reading PreviewReading;
 #endif
 inline void Changed(){Refresh=true;}
 inline void Initialize(){if(Initialized)return;Initialized=true;Refresh=true;Library=LoadLibraryExW(L"xinput1_4.dll",nullptr,LOAD_LIBRARY_SEARCH_SYSTEM32);if(Library){GetState=reinterpret_cast<StateFn>(GetProcAddress(Library,"XInputGetState"));GetCaps=reinterpret_cast<CapsFn>(GetProcAddress(Library,"XInputGetCapabilities"));}}
-inline void Feed(const XINPUT_GAMEPAD& pad){
+inline XINPUT_GAMEPAD PhysicalPad{};
+inline HelpyControllerBindings::Profile ActiveBindings=HelpyControllerBindings::Defaults();
+inline void Feed(const XINPUT_GAMEPAD& physical){
+    PhysicalPad=physical;
+    static std::string_view family;const auto detected=std::string_view(HelpyControllerBindings::Family(ReportedGlyphs));
+    if(family!=detected||!HelpyControllerDevice::Active(physical)){ActiveBindings=HelpyControllerBindings::Read(HelpyImGuiTheme::Current.controllerBindings,detected.data());family=detected;}
+    const auto pad=HelpyControllerBindings::Apply(physical,ActiveBindings);
     auto& io=ImGui::GetIO();io.BackendFlags|=ImGuiBackendFlags_HasGamepad;
     for(const auto& [key,button]:std::array<std::pair<ImGuiKey,WORD>,14>{{{ImGuiKey_GamepadStart,XINPUT_GAMEPAD_START},{ImGuiKey_GamepadBack,XINPUT_GAMEPAD_BACK},{ImGuiKey_GamepadFaceDown,XINPUT_GAMEPAD_A},{ImGuiKey_GamepadFaceRight,XINPUT_GAMEPAD_B},{ImGuiKey_GamepadFaceLeft,XINPUT_GAMEPAD_X},{ImGuiKey_GamepadFaceUp,XINPUT_GAMEPAD_Y},{ImGuiKey_GamepadDpadLeft,XINPUT_GAMEPAD_DPAD_LEFT},{ImGuiKey_GamepadDpadRight,XINPUT_GAMEPAD_DPAD_RIGHT},{ImGuiKey_GamepadDpadUp,XINPUT_GAMEPAD_DPAD_UP},{ImGuiKey_GamepadDpadDown,XINPUT_GAMEPAD_DPAD_DOWN},{ImGuiKey_GamepadL1,XINPUT_GAMEPAD_LEFT_SHOULDER},{ImGuiKey_GamepadR1,XINPUT_GAMEPAD_RIGHT_SHOULDER},{ImGuiKey_GamepadL3,XINPUT_GAMEPAD_LEFT_THUMB},{ImGuiKey_GamepadR3,XINPUT_GAMEPAD_RIGHT_THUMB}}}){
-        const bool stick=(key==ImGuiKey_GamepadDpadLeft&&pad.sThumbLX<-12000)||(key==ImGuiKey_GamepadDpadRight&&pad.sThumbLX>12000)||(key==ImGuiKey_GamepadDpadUp&&pad.sThumbLY>12000)||(key==ImGuiKey_GamepadDpadDown&&pad.sThumbLY<-12000);
+        const bool stick=(!NavigationCanvas||ImGui::GetCurrentContext()->NavId!=NavigationCanvas)&&((key==ImGuiKey_GamepadDpadLeft&&pad.sThumbLX<-12000)||(key==ImGuiKey_GamepadDpadRight&&pad.sThumbLX>12000)||(key==ImGuiKey_GamepadDpadUp&&pad.sThumbLY>12000)||(key==ImGuiKey_GamepadDpadDown&&pad.sThumbLY<-12000));
         io.AddKeyEvent(key,(pad.wButtons&button)!=0||stick);
     }
     const auto analog=[&](ImGuiKey key,float value,float minimum,float maximum){const float amount=std::clamp((value-minimum)/(maximum-minimum),0.f,1.f);io.AddKeyAnalogEvent(key,amount>.1f,amount);};
     analog(ImGuiKey_GamepadL2,pad.bLeftTrigger,30,255);analog(ImGuiKey_GamepadR2,pad.bRightTrigger,30,255);
     // ImGui uses left-stick keys for scrolling; Helpy uses the stick for focus navigation instead.
-    analog(ImGuiKey_GamepadRStickLeft,pad.sThumbRX,-8689,-32768);analog(ImGuiKey_GamepadRStickRight,pad.sThumbRX,8689,32767);analog(ImGuiKey_GamepadRStickUp,pad.sThumbRY,8689,32767);analog(ImGuiKey_GamepadRStickDown,pad.sThumbRY,-8689,-32768);
+    for(const auto key:{ImGuiKey_GamepadRStickLeft,ImGuiKey_GamepadRStickRight,ImGuiKey_GamepadRStickUp,ImGuiKey_GamepadRStickDown})io.AddKeyEvent(key,false);
 }
 inline void Poll(int mode,const XINPUT_GAMEPAD* native=nullptr){
     PointerReading={};auto& io=ImGui::GetIO();if(mode==1){Feed({});if(!KeepShortcuts)HelpyControllerDevice::Shutdown();io.ConfigFlags&=~ImGuiConfigFlags_NavEnableGamepad;io.BackendFlags&=~ImGuiBackendFlags_HasGamepad;return;}
@@ -54,16 +67,22 @@ inline void Poll(int mode,const XINPUT_GAMEPAD* native=nullptr){
     }
     if(found){ReportedGlyphs=HelpyControllerDevice::Xbox;Feed(chosen.Gamepad);}else{Feed({});io.BackendFlags&=~ImGuiBackendFlags_HasGamepad;}
 }
-inline std::optional<ImVec2> UpdatePointer(bool enabled){
+inline std::optional<ImVec2> UpdatePointer(bool enabled,bool stickEnabled=false){
     auto& io=ImGui::GetIO();const auto& touch=PointerReading.Touch;
-    enabled=enabled&&PointerReading.Connected;TouchUsing=enabled&&(touch.Down||touch.Clicked);
-    if(!enabled||TouchDevice!=PointerReading.Id){TouchTracking=false;TouchClickArmed=false;}
+    enabled=enabled&&PointerReading.Connected;const bool tap=TouchTap.Poll(enabled,PointerReading.Id,touch,ImGui::GetTime());TouchUsing=enabled&&(touch.Down||touch.Clicked||tap);
+    if(!enabled||TouchDevice!=PointerReading.Id){TouchTracking=false;TouchClickArmed=false;TouchRightArmed=false;}
     TouchDevice=PointerReading.Id;
     if(enabled&&!touch.Clicked)TouchClickArmed=true;
-    const bool down=enabled&&touch.Clicked&&TouchClickArmed;
-    if(down!=TouchMouseDown){io.AddMouseButtonEvent(ImGuiMouseButton_Left,down);TouchMouseDown=down;}
+    if(enabled&&touch.Fingers<2)TouchRightArmed=true;
+    const bool right=enabled&&touch.Fingers>=2&&TouchRightArmed;
+    const auto delta=HelpyControllerPointer::Motion(PhysicalPad.sThumbRX,PhysicalPad.sThumbRY,io.DeltaTime,HelpyImGuiTheme::Current.controllerCursorSpeed);
+    const bool pressed=(PhysicalPad.wButtons&XINPUT_GAMEPAD_RIGHT_THUMB)!=0;
+    if(!stickEnabled)StickClickArmed=false;else if(!pressed)StickClickArmed=true;
+    StickUsing=stickEnabled&&(delta.X!=0||delta.Y!=0||pressed);
+    const bool down=tap||(enabled&&touch.Clicked&&TouchClickArmed&&touch.Fingers<2)||(stickEnabled&&pressed&&StickClickArmed);
+    if(TouchUsing)ReportedGlyphs=PointerReading.Glyphs;
     std::optional<ImVec2> result;
-    if(enabled&&touch.Down&&std::isfinite(touch.X)&&std::isfinite(touch.Y)&&io.DisplaySize.x>=1&&io.DisplaySize.y>=1){
+    if(enabled&&touch.Down&&touch.Fingers<2&&std::isfinite(touch.X)&&std::isfinite(touch.Y)&&io.DisplaySize.x>=1&&io.DisplaySize.y>=1){
         if(TouchTracking){
             const float dx=(touch.X-TouchX)*io.DisplaySize.x,dy=(touch.Y-TouchY)*io.DisplaySize.y;
             if(dx!=0||dy!=0){
@@ -74,27 +93,45 @@ inline std::optional<ImVec2> UpdatePointer(bool enabled){
         }
         TouchX=touch.X;TouchY=touch.Y;TouchTracking=true;
     }else TouchTracking=false;
+    if(stickEnabled&&(delta.X!=0||delta.Y!=0)&&io.DisplaySize.x>=1&&io.DisplaySize.y>=1){
+        const auto origin=result.value_or(ImGui::IsMousePosValid(&io.MousePos)?io.MousePos:ImVec2(io.DisplaySize.x*.5f,io.DisplaySize.y*.5f));
+        result=ImVec2(std::clamp(origin.x+delta.X,0.f,io.DisplaySize.x-1),std::clamp(origin.y+delta.Y,0.f,io.DisplaySize.y-1));
+        io.AddMousePosEvent(result->x,result->y);
+    }
+    if(result){LastPointer=*result;PointerUntil=ImGui::GetTime()+.15;}
+    PointerUsing=TouchUsing||StickUsing||(ImGui::GetTime()<PointerUntil&&std::abs(io.MousePos.x-LastPointer.x)<1&&std::abs(io.MousePos.y-LastPointer.y)<1);
+    if(right!=TouchRightMouseDown){io.AddMouseButtonEvent(ImGuiMouseButton_Right,right);TouchRightMouseDown=right;}
+    if(down!=TouchMouseDown){io.AddMouseButtonEvent(ImGuiMouseButton_Left,down);TouchMouseDown=down;}
     return result;
 }
 inline void Observe(int mode){
     bool pad=false,keys=false;static std::array<float,ImGuiKey_GamepadRStickDown-ImGuiKey_GamepadStart+1> previous{};
     for(int key=ImGuiKey_GamepadStart;key<=ImGuiKey_GamepadRStickDown;++key){const auto value=ImGui::GetKeyData(ImGuiKey(key))->AnalogValue;auto& prior=previous[key-ImGuiKey_GamepadStart];pad|=ImGui::IsKeyPressed(ImGuiKey(key),false)||(value>.1f&&std::abs(value-prior)>.08f);prior=value;}
+    static SHORT priorX=0,priorY=0;
+    const bool leftActive=std::abs(int(PhysicalPad.sThumbLX))>8847||std::abs(int(PhysicalPad.sThumbLY))>8847;
+    const bool wasActive=std::abs(int(priorX))>8847||std::abs(int(priorY))>8847;
+    pad|=NavigationCanvas&&ImGui::GetCurrentContext()->NavId==NavigationCanvas&&leftActive&&(!wasActive||std::abs(int(PhysicalPad.sThumbLX)-priorX)>2500||std::abs(int(PhysicalPad.sThumbLY)-priorY)>2500);
+    priorX=PhysicalPad.sThumbLX;priorY=PhysicalPad.sThumbLY;
     for(int key=ImGuiKey_Tab;key<=ImGuiKey_KeypadEqual;++key)keys|=ImGui::IsKeyPressed(ImGuiKey(key),false);
-    const auto& io=ImGui::GetIO();keys|=io.MouseDelta.x!=0||io.MouseDelta.y!=0||io.MouseWheel!=0||ImGui::IsMouseClicked(0)||ImGui::IsMouseClicked(1);
-    const bool prior=Selection.Controller;const bool shortcut=std::exchange(ShortcutActivated,false);Selection.Update(HelpyInputMode::Mode(mode),pad||shortcut||TouchUsing,keys&&!shortcut&&!TouchUsing);JustActivated=Selection.Controller&&!prior;
+    const auto& io=ImGui::GetIO();keys|=!PointerUsing&&(io.MouseDelta.x!=0||io.MouseDelta.y!=0||io.MouseWheel!=0||ImGui::IsMouseClicked(0)||ImGui::IsMouseClicked(1));
+    const bool prior=Selection.Controller;const bool shortcut=std::exchange(ShortcutActivated,false);Selection.Update(HelpyInputMode::Mode(mode),pad||shortcut||TouchUsing||StickUsing,keys&&!shortcut&&!TouchUsing);JustActivated=Selection.Controller&&!prior;HelpyImGuiTheme::ControllerNavigation=Selection.Controller;if(!Selection.Controller){HelpyImGuiTheme::EnterNextSection=false;HelpyControllerPanes::Pending=0;}
 }
 // Enter a pane without opening the keyboard or activating its first field.
 inline void FocusNext(){ImGui::NavClearPreferredPosForAxis(ImGuiAxis_X);ImGui::NavClearPreferredPosForAxis(ImGuiAxis_Y);ImGui::SetKeyboardFocusHere();ImGui::GetCurrentContext()->NavMoveFlags&=~ImGuiNavMoveFlags_Activate;}
 inline bool NavigationSourceItem(){
     const auto& context=*ImGui::GetCurrentContext();const auto* window=ImGui::GetCurrentWindow();
+    if(context.LastItemData.ItemFlags&ImGuiItemFlags_Disabled)return false;
     return ImGui::IsItemFocused()||(context.NavMoveSubmitted&&!context.NavId&&context.NavWindow==window&&context.LastItemData.ID&&window->NavLastIds[context.NavLayer]==context.LastItemData.ID);
 }
+inline void EnterSection(){HelpyImGuiTheme::EnterNextSection=true;}
+inline bool InSection(){const auto* window=ImGui::GetCurrentContext()->NavWindow;return window&&window->RootWindowForNav!=window->RootWindow&&!(window->RootWindowForNav->Flags&ImGuiWindowFlags_Popup);}
 inline void ResolvePaneNavigation(){
     auto& context=*ImGui::GetCurrentContext();
+    if(Selection.Controller&&HelpyControllerPanes::Move())return;
     if(!Selection.Controller||!context.NavWindow||!context.NavMoveScoringItems||(context.NavMoveFlags&(ImGuiNavMoveFlags_IsTabbing|ImGuiNavMoveFlags_AlsoScoreVisibleSet)))return;
     auto& local=context.NavMoveResultLocal;const auto& other=HelpyImGuiTheme::PaneNavigationSource==context.NavWindow?HelpyImGuiTheme::PaneNavigationBest:context.NavMoveResultOther;
     // ImGui compares a direct flattened child; Helpy's content can be several panes deep.
-    if(other.ID&&ImGui::IsWindowChildOf(other.Window,context.NavWindow,false)&&
+    if(other.ID&&other.Window->RootWindowForNav==context.NavWindow->RootWindowForNav&&ImGui::IsWindowChildOf(other.Window,context.NavWindow,false)&&
         (!local.ID||other.DistBox<local.DistBox||(other.DistBox==local.DistBox&&other.DistCenter<local.DistCenter)))local=other;
 }
 inline bool DefaultFocus(bool arriving=false){
@@ -109,21 +146,62 @@ inline bool DefaultFocus(bool arriving=false){
     ImGui::SetNavWindow(window);context.NavInitResult.ID=0;
     ImGui::SetFocusID(context.LastItemData.ID,window);context.NavInputSource=ImGuiInputSource_Gamepad;ImGui::SetNavCursorVisible(true);return true;
 }
-inline void DrawGlyph(ImVec2 center,float radius,size_t button,int style){
-    auto* draw=ImGui::GetWindowDrawList();const auto color=ImGui::GetColorU32(HelpyImGuiTheme::Current.accent);
-    draw->AddCircle(center,radius,color,24,1.5f);
-    using B=HelpyControllerDevice::Button;const auto glyph=HelpyControllerDevice::Resolve(style,ReportedGlyphs)[button];const float r=radius*.5f;
-    if(glyph==B::Cross){draw->AddLine({center.x-r,center.y-r},{center.x+r,center.y+r},color,1.5f);draw->AddLine({center.x-r,center.y+r},{center.x+r,center.y-r},color,1.5f);}
-    else if(glyph==B::Circle)draw->AddCircle(center,r,color,24,1.5f);
-    else if(glyph==B::Square)draw->AddRect({center.x-r,center.y-r},{center.x+r,center.y+r},color,0,0,1.5f);
-    else if(glyph==B::Triangle)draw->AddTriangle({center.x,center.y-r},{center.x+r,center.y+r},{center.x-r,center.y+r},color,1.5f);
-    else {const char* text=glyph==B::A?"A":glyph==B::B?"B":glyph==B::X?"X":glyph==B::Y?"Y":glyph==B::South?"S":glyph==B::East?"E":glyph==B::West?"W":"N";const auto bounds=ImGui::CalcTextSize(text);draw->AddText({center.x-bounds.x*.5f,center.y-bounds.y*.5f},color,text);}
+inline ImU32 HintColor(bool active){return ImGui::GetColorU32(active?HelpyImGuiTheme::Current.accent:HelpyImGuiTheme::Current.textDisabled);}
+inline void DrawPhysicalGlyph(ImVec2 center,float radius,uint32_t button,int style,bool active){
+    auto* draw=ImGui::GetWindowDrawList();const auto color=HintColor(active);const auto labels=HelpyControllerDevice::Resolve(style,ReportedGlyphs);
+    int face=-1;for(int i=0;i<4;++i)if(button==HelpyControllerBindings::Actions[i].Button)face=i;
+    if(face>=0){
+        draw->AddCircle(center,radius,color,24,1.5f);using B=HelpyControllerDevice::Button;const auto glyph=labels[size_t(face)];const float r=radius*.5f;
+        if(glyph==B::Cross){draw->AddLine({center.x-r,center.y-r},{center.x+r,center.y+r},color,1.5f);draw->AddLine({center.x-r,center.y+r},{center.x+r,center.y-r},color,1.5f);}
+        else if(glyph==B::Circle)draw->AddCircle(center,r,color,24,1.5f);
+        else if(glyph==B::Square)draw->AddRect({center.x-r,center.y-r},{center.x+r,center.y+r},color,0,0,1.5f);
+        else if(glyph==B::Triangle)draw->AddTriangle({center.x,center.y-r},{center.x+r,center.y+r},{center.x-r,center.y+r},color,1.5f);
+        else{const char* text=glyph==B::A?"A":glyph==B::B?"B":glyph==B::X?"X":glyph==B::Y?"Y":glyph==B::South?"S":glyph==B::East?"E":glyph==B::West?"W":"N";const auto size=ImGui::CalcTextSize(text);draw->AddText({center.x-size.x*.5f,center.y-size.y*.5f},color,text);}return;
+    }
+    if(button==InputBindings::Touchpad){draw->AddRect({center.x-radius,center.y-radius*.65f},{center.x+radius,center.y+radius*.65f},color,3,0,1.5f);draw->AddCircleFilled({center.x-radius*.35f,center.y},1.5f,color);draw->AddCircleFilled({center.x+radius*.35f,center.y},1.5f,color);return;}
+    const bool ps=labels==HelpyControllerDevice::PlayStation,nintendo=labels==HelpyControllerDevice::Nintendo;
+    const char* text=button==XINPUT_GAMEPAD_LEFT_SHOULDER?(ps?"L1":nintendo?"L":"LB"):button==XINPUT_GAMEPAD_RIGHT_SHOULDER?(ps?"R1":nintendo?"R":"RB"):button==InputBindings::LeftTrigger?(ps?"L2":nintendo?"ZL":"LT"):button==InputBindings::RightTrigger?(ps?"R2":nintendo?"ZR":"RT"):button==InputBindings::Guide?(ps?"PS":nintendo?"H":"X"):button==XINPUT_GAMEPAD_BACK?(ps?"SH":"V"):button==XINPUT_GAMEPAD_START?(ps?"OP":"M"):button==XINPUT_GAMEPAD_DPAD_LEFT?"<":button==XINPUT_GAMEPAD_DPAD_RIGHT?">":button==XINPUT_GAMEPAD_DPAD_UP?"^":button==XINPUT_GAMEPAD_DPAD_DOWN?"v":button==XINPUT_GAMEPAD_LEFT_THUMB?"LS":button==XINPUT_GAMEPAD_RIGHT_THUMB?"RS":button==0?"+":"R";
+    const auto size=ImGui::CalcTextSize(text);draw->AddRect({center.x-radius-2,center.y-radius},{center.x+radius+2,center.y+radius},color,4,0,1.5f);draw->AddText({center.x-size.x*.5f,center.y-size.y*.5f},color,text);
 }
-inline void Glyph(const char* label,size_t button,int style){
-    const float size=ImGui::GetFrameHeight();const auto at=ImGui::GetCursorScreenPos();DrawGlyph({at.x+size*.5f,at.y+size*.5f},size*.35f,button,style);
-    ImGui::Dummy({size,size});ImGui::SameLine();ImGui::AlignTextToFramePadding();ImGui::TextUnformatted(label);
+inline void DrawGlyph(ImVec2 center,float radius,size_t button,int style,bool physical=false){
+    constexpr ImGuiKey keys[]{ImGuiKey_GamepadFaceDown,ImGuiKey_GamepadFaceRight,ImGuiKey_GamepadFaceLeft,ImGuiKey_GamepadFaceUp};
+    DrawPhysicalGlyph(center,radius,physical?HelpyControllerBindings::Actions[button].Button:ActiveBindings[button],style,!physical&&ImGui::IsKeyDown(keys[button]));
 }
-inline void Hints(int style){Glyph("Select",0,style);ImGui::SameLine();Glyph("Back / hide",1,style);if(ImGui::GetContentRegionAvail().x>150){ImGui::SameLine();Glyph("Actions",2,style);}if(ImGui::GetContentRegionAvail().x>260){ImGui::SameLine();ImGui::AlignTextToFramePadding();const auto labels=HelpyControllerDevice::Resolve(style,ReportedGlyphs);ImGui::TextUnformatted(labels==HelpyControllerDevice::PlayStation?"L1/R1 Tabs · L2/R2 Pages":labels==HelpyControllerDevice::Nintendo?"L/R Tabs · ZL/ZR Pages":"LB/RB Tabs · LT/RT Pages");}}
-inline void Suspend(){PointerReading={};TouchTracking=false;TouchClickArmed=false;TouchUsing=false;if(!KeepShortcuts){HelpyControllerDevice::Shutdown();Refresh=true;}Connected=0;}
-inline void Shutdown(){KeepShortcuts=false;ShortcutActivated=false;Suspend();TouchMouseDown=false;if(Library)FreeLibrary(Library);Library=nullptr;GetState=nullptr;GetCaps=nullptr;Initialized=false;}
+inline bool PhysicalDown(uint32_t button){
+    if(button==InputBindings::Guide)return PointerReading.Guide;
+    if(button==InputBindings::Touchpad)return TouchUsing;
+    if(button==InputBindings::LeftTrigger)return PhysicalPad.bLeftTrigger>30;
+    if(button==InputBindings::RightTrigger)return PhysicalPad.bRightTrigger>30;
+    if(button==XINPUT_GAMEPAD_LEFT_THUMB)return (PhysicalPad.wButtons&button)||std::abs(int(PhysicalPad.sThumbLX))>8847||std::abs(int(PhysicalPad.sThumbLY))>8847;
+    if(button==XINPUT_GAMEPAD_RIGHT_THUMB)return (PhysicalPad.wButtons&button)||std::abs(int(PhysicalPad.sThumbRX))>8689||std::abs(int(PhysicalPad.sThumbRY))>8689;
+    return button&&(PhysicalPad.wButtons&button)!=0;
+}
+struct Hint {std::string Label;std::vector<uint32_t> Buttons;bool Active=false;};
+inline std::vector<Hint> HintItems(std::string_view shortcut){
+    constexpr ImGuiKey keys[]{ImGuiKey_GamepadFaceDown,ImGuiKey_GamepadFaceRight,ImGuiKey_GamepadFaceLeft,ImGuiKey_GamepadFaceUp};const char* labels[]{"Select / toggle","Back","Actions",NavigationCanvas&&ImGui::GetCurrentContext()->NavId==NavigationCanvas?"Zoom out":"Search"};std::vector<Hint> hints;
+    for(size_t i=0;i<4;++i)hints.push_back({labels[i],{ActiveBindings[i]},ImGui::IsKeyDown(keys[i])});
+    if(NavigationCanvas&&ImGui::GetCurrentContext()->NavId==NavigationCanvas)hints.push_back({"Pan / zoom in",{XINPUT_GAMEPAD_LEFT_THUMB},PhysicalDown(XINPUT_GAMEPAD_LEFT_THUMB)});
+    hints.push_back({"Navigate",{0},ImGui::IsKeyDown(ImGuiKey_GamepadDpadLeft)||ImGui::IsKeyDown(ImGuiKey_GamepadDpadRight)||ImGui::IsKeyDown(ImGuiKey_GamepadDpadUp)||ImGui::IsKeyDown(ImGuiKey_GamepadDpadDown)});
+    hints.push_back({"Panels",{ActiveBindings[4],ActiveBindings[5]},ImGui::IsKeyDown(ImGuiKey_GamepadL1)||ImGui::IsKeyDown(ImGuiKey_GamepadR1)});
+    hints.push_back({"Sections",{ActiveBindings[6],ActiveBindings[7]},ImGui::IsKeyDown(ImGuiKey_GamepadL2)||ImGui::IsKeyDown(ImGuiKey_GamepadR2)});
+    if(HelpyImGuiTheme::Current.controllerCursor)hints.push_back({"Pointer / click",{XINPUT_GAMEPAD_RIGHT_THUMB},StickUsing});
+    if(ItemBayFrame==ImGui::GetFrameCount())hints.push_back({"Send to cart",{XINPUT_GAMEPAD_START},PhysicalDown(XINPUT_GAMEPAD_START)});
+    const auto mask=InputBindings::ParsePad(shortcut);if(mask){Hint hint{"Helpy",{},false};for(const auto& token:InputBindings::PadButtons)if(mask&token.Bit)hint.Buttons.push_back(token.Bit);if(hint.Buttons.size()>3)hint.Buttons.resize(3);hint.Active=std::any_of(hint.Buttons.begin(),hint.Buttons.end(),[](uint32_t button){return PhysicalDown(button);});hints.push_back(std::move(hint));}
+    if(ReportedGlyphs==HelpyControllerDevice::PlayStation)hints.push_back({"Pointer / actions",{InputBindings::Touchpad},TouchUsing});return hints;
+}
+inline float HintWidth(const Hint& hint){return ImGui::GetFrameHeight()*float(hint.Buttons.size())+ImGui::CalcTextSize(hint.Label.c_str()).x+ImGui::GetStyle().ItemSpacing.x*2;}
+inline float HintsHeight(float width,std::string_view shortcut="Guide"){
+    float used=0;int rows=1;for(const auto& hint:HintItems(shortcut)){const auto size=HintWidth(hint);if(used&&used+size>width){++rows;used=0;}used+=size;}return rows*ImGui::GetFrameHeightWithSpacing();
+}
+inline void Hints(int style,std::string_view shortcut="Guide"){
+    const float width=ImGui::GetContentRegionAvail().x;float used=0;
+    for(const auto& hint:HintItems(shortcut)){
+        const float cell=HintWidth(hint);if(used&&used+cell>width){used=0;}else if(used)ImGui::SameLine(0,ImGui::GetStyle().ItemSpacing.x);
+        const auto at=ImGui::GetCursorScreenPos();const float size=ImGui::GetFrameHeight();
+        for(size_t i=0;i<hint.Buttons.size();++i)DrawPhysicalGlyph({at.x+size*(float(i)+.5f),at.y+size*.5f},size*.31f,hint.Buttons[i],style,hint.Buttons[i]?PhysicalDown(hint.Buttons[i]):hint.Active);
+        ImGui::Dummy({size*float(hint.Buttons.size()),size});ImGui::SameLine(0,ImGui::GetStyle().ItemSpacing.x);ImGui::AlignTextToFramePadding();ImGui::TextColored(hint.Active?HelpyImGuiTheme::Current.accent:HelpyImGuiTheme::Current.textDisabled,"%s",hint.Label.c_str());used+=cell;
+    }
+}
+inline void Suspend(){PointerReading={};TouchTap={};TouchTracking=false;TouchClickArmed=false;TouchRightArmed=false;TouchUsing=false;StickUsing=PointerUsing=StickClickArmed=false;PointerUntil=0;PhysicalPad={};HelpyControllerPanes::Pending=0;if(!KeepShortcuts){HelpyControllerDevice::Shutdown();Refresh=true;}Connected=0;}
+inline void Shutdown(){KeepShortcuts=false;ShortcutActivated=false;Suspend();TouchMouseDown=TouchRightMouseDown=false;if(Library)FreeLibrary(Library);Library=nullptr;GetState=nullptr;GetCaps=nullptr;Initialized=false;}
 }

@@ -1,0 +1,12 @@
+{
+  "SchemaVersion": 1,
+  "Id": "RuneSchema.DeveloperTools",
+  "Name": "Advanced Tooling",
+  "Version": "0.8.1.0",
+  "BuiltForRuneSchema": "0.8.1.0",
+  "ApiVersion": 1,
+  "Host": "helpy",
+  "EntryPoint": "RuneSchema.DeveloperTools.dll",
+  "MountPaks": false,
+  "Capabilities": ["helpy.developer-tools"]
+}

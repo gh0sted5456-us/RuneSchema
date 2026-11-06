@@ -1,3 +1,4 @@
+#include "RuntimePaths.h"
 #include "Generator/HelpyMapTexture.h"
 #include "Generator/HelpyIconTrace.h"
 #include "Generator/HelpyRuntimePreferences.h"
@@ -167,7 +168,7 @@ namespace {
     int ConfiguredCacheLimitMB() {
         static int cached=200;static bool haveStamp=false;static std::filesystem::file_time_type stamp{};static std::chrono::steady_clock::time_point next{};
         const auto now=std::chrono::steady_clock::now();if(now<next)return cached;next=now+std::chrono::milliseconds(500);
-        const auto file=HostServices::WorkingDirectory()/"Mods"/"RuneSchema"/"plugins"/"RuneSchema.Helpy"/"settings"/"ui.jsonc";std::error_code ec;
+        const auto file=RuntimePaths::Helpy(HostServices::ModDirectory())/"settings/ui.jsonc";std::error_code ec;
         const auto currentStamp=std::filesystem::last_write_time(file,ec);if(ec)return cached;if(haveStamp&&currentStamp==stamp)return cached;
         try {const auto doc=nlohmann::json::parse(ConfigFiles::Read(file),nullptr,true,true);const auto c=doc.value("cache",nlohmann::json::object());cached=std::clamp(c.value("iconCacheMB",200),0,16384);stamp=currentStamp;haveStamp=true;}catch(...){}
         return cached;

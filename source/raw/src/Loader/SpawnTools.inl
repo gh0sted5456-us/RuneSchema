@@ -771,6 +771,13 @@ void DragonWildsSpawnLoader::PumpSpawnTools(PS::WorkSlice& work) {
             for(const auto& path:paths){if(!path.is_string()||!PS::ItemCart::KitPath(path.get<std::string>()))throw std::runtime_error("Kit metadata requires canonical item paths");rows.push_back(PS::AssetSearch::ItemMetadata(path.get<std::string>()));}
             auto result=PS::SpawnToolRequests::Read();result["KitMetadata"]=std::move(rows);result["Status"]="Loaded item metadata for the staged kit; no items delivered.";PS::SpawnToolRequests::Publish(std::move(result));return;
         }
+        if(action=="InspectDeveloperContracts") {
+            if(!PS::DeveloperToolsKey::Present(PS::RuntimePaths::Plugin(PS::HostServices::ModDirectory(),"RuneSchema.DeveloperTools")))throw std::runtime_error("Developer tools are locked; a valid devmenu.key is required.");
+            auto report=InspectNativeDeveloperContracts();const auto directory=PS::HostServices::ExportsDirectory()/"native-contracts";
+            const auto stamp=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+            const auto file=directory/("developer-menu-"+std::to_string(stamp)+".json");PS::ConfigFiles::Write(file,report.dump(2));
+            auto result=PS::SpawnToolRequests::Read();result["DeveloperContracts"]=std::move(report);result["Status"]="Read-only developer-menu signatures exported: "+file.string();PS::SpawnToolRequests::Publish(std::move(result));return;
+        }
         if(action=="InspectUnlockEquipContracts") {
             auto report=InspectNativeUnlockEquipContracts();
             const auto directory=PS::HostServices::ExportsDirectory()/"native-contracts";

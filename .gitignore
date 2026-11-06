@@ -14,6 +14,7 @@ build/
 !/build/*.bat
 !/build/*.py
 !/build/*.json
+!/build/tests/helpy-bridge-imports.cmake
 !/build/tests/*.ps1
 !/build/tests/*.py
 build-*/

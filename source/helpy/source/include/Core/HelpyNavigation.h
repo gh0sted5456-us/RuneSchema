@@ -5,17 +5,18 @@
 namespace PS::HelpyNavigation {
 enum class Page { Items, Creation, Recipes, Spawns, Map, Tools, Authoring, Settings, LiveLog, DedicatedServer, SaveEditor, Home, Journal, Mods, Profile, BugReport, SaveRecovery, Notifications, ModMenu2 };
 enum class SpawnSection { Resources, Npcs, Ai };
-enum class ToolSection { Settings, Maintenance, Cleanup, Buildings, ItemCache, CacheBuilder, Repair, Extensions };
+enum class ToolSection { Settings, Maintenance, Cleanup, Buildings, ItemCache, CacheBuilder, Repair, Extensions, Developer };
 inline constexpr std::array Pages{Page::Home, Page::Items, Page::Creation, Page::Recipes, Page::Spawns, Page::Map, Page::Journal, Page::Authoring, Page::Tools, Page::Settings, Page::LiveLog, Page::SaveEditor, Page::DedicatedServer,Page::Mods,Page::Profile,Page::BugReport,Page::SaveRecovery,Page::Notifications,Page::ModMenu2};
 // Keep route identities stable: regrouping must not reset editors or drafts.
-inline constexpr std::array SidebarPages{Page::Home,Page::Items,Page::Map,Page::Mods,Page::SaveRecovery,Page::Tools,Page::Settings,Page::LiveLog,Page::BugReport,Page::DedicatedServer,Page::Notifications,Page::ModMenu2};
+inline constexpr std::array SidebarPages{Page::Home,Page::Items,Page::Map,Page::Mods,Page::SaveRecovery,Page::Tools,Page::Settings,Page::LiveLog,Page::BugReport,Page::DedicatedServer,Page::Notifications};
 inline constexpr std::array PlayerTabs{Page::Items,Page::Creation,Page::Recipes};
 inline constexpr std::array ProfileTabs{Page::Profile,Page::SaveEditor};
 inline constexpr std::array WorldTabs{Page::Map,Page::Spawns,Page::Journal};
 inline constexpr std::array ToolTabs{Page::Tools,Page::Authoring};
+inline constexpr std::array ModTabs{Page::Mods,Page::ModMenu2};
 inline constexpr Page Parent(Page page){
     switch(page){case Page::Creation:case Page::Recipes:return Page::Items;case Page::SaveEditor:return Page::Profile;
-    case Page::Spawns:case Page::Journal:return Page::Map;case Page::Authoring:return Page::Tools;default:return page;}
+    case Page::Spawns:case Page::Journal:return Page::Map;case Page::Authoring:return Page::Tools;case Page::ModMenu2:return Page::Mods;default:return page;}
 }
 inline constexpr bool TopLevel(Page page){return Parent(page)==page;}
 inline constexpr const char* Title(Page page) {
@@ -42,7 +43,7 @@ inline constexpr const char* Title(Page page) {
     }
     return "RSMK";
 }
-inline constexpr const char* TabTitle(Page page){return page==Page::Items?"Items":page==Page::Map?"Map":page==Page::Tools?"Utilities":Title(page);}
+inline constexpr const char* TabTitle(Page page){return page==Page::Items?"Items":page==Page::Map?"Map":page==Page::Tools?"Utilities":page==Page::Mods?"Management":Title(page);}
 inline constexpr const char* Description(Page page) {
     switch(page) {
     case Page::Profile:return "Your account profile, linked characters, portraits and shared details.";
@@ -57,7 +58,7 @@ inline constexpr const char* Description(Page page) {
     case Page::Recipes:return "Connect ingredients, a crafting station, and outputs. Drag items from the bay below.";
     case Page::Spawns:return "Choose resources, NPCs, or enemies, then place them near a player.";
     case Page::Map:return "Read coordinates, place resources and buildings, or teleport a player to a map point.";
-    case Page::Tools:return "Maintain catalogs and manage session tools.";
+    case Page::Tools:return "Manage content, integrations and advanced capabilities.";
     case Page::Settings:return "Adjust Helpy, game integration, appearance and diagnostics.";
     case Page::Authoring:return "Create content, inspect contracts, and export reviewed drafts and reports.";
     case Page::LiveLog:return "Live logs and advanced diagnostics: grouped issues, retained evidence, session history and reviewed reports.";

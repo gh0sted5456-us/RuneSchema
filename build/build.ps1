@@ -446,7 +446,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         )
         $configureArgs += '-DRUNESCHEMA_BUILD_MANAGED_UE4SS_HOST=OFF'
         Ensure-CMakeConfigured $RawSource $build $configureArgs 'universal RuneSchema'
-        $targets = if ($OnlyPlugin) { @('RuneSchemaHelpyPlugin','RuneSchemaHudPlugin','HelpyDesktop','HelpyVulkanBootstrap') } else { @('RuneSchema', 'RuneSchemaHelpyPlugin','RuneSchemaHudPlugin','HelpyDesktop','HelpyVulkanBootstrap') }
+        $targets = if ($OnlyPlugin) { @('RuneSchemaHelpyPlugin','RuneSchemaHudPlugin','HelpyDesktop','HelpyVulkanBootstrap','RuneSchemaModMenuPlugin','RuneSchemaDeveloperPlugin') } else { @('RuneSchema', 'RuneSchemaHelpyPlugin','RuneSchemaHudPlugin','HelpyDesktop','HelpyVulkanBootstrap','RuneSchemaModMenuPlugin','RuneSchemaDeveloperPlugin') }
         Write-Host $(if ($OnlyPlugin) { '=== Compile Helpy plugin only (RuneSchema.dll is untouched) ===' } else { '=== Compile universal RuneSchema ===' }) -ForegroundColor Cyan
         Write-Host 'Ninja auto-regeneration is disabled; build.ps1 owns all CMake reconfiguration.' -ForegroundColor DarkGray
 
@@ -523,38 +523,37 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         Copy-Item -LiteralPath $vulkan -Destination (Join-Path $Destination 'RuneSchema.Helpy.Vulkan.dll') -Force
     }
     function New-HelpyPluginPackage([string]$HelpyDll) {
-        $name = "RuneSchema.Helpy-$Version"
-        $packageRoot = Join-Path $DistRoot $name
-        $payload = Join-Path $packageRoot 'RuneSchema.Helpy'
-        if (Test-Path $packageRoot) { Remove-Item -LiteralPath $packageRoot -Recurse -Force }
-        New-Item -ItemType Directory -Path $payload -Force | Out-Null
-        $helpyTemplate = Join-Path $SourceRoot 'plugins\RuneSchema.Helpy'
-        if (Test-Path -LiteralPath $helpyTemplate -PathType Container) {
-            Get-ChildItem -LiteralPath $helpyTemplate -Force | ForEach-Object {
-                Copy-Item -LiteralPath $_.FullName -Destination $payload -Recurse -Force
-            }
-        }
-        New-Item -ItemType Directory -Path (Join-Path $payload 'dll') -Force | Out-Null
+        $name="RuneSchema.Helpy-$Version"
+        $packageRoot=Join-Path $DistRoot $name
+        $runtime=Join-Path $packageRoot 'RuneSchema'
+        if(Test-Path $packageRoot){Remove-Item -LiteralPath $packageRoot -Recurse -Force}
+        $payload=Join-Path $runtime 'plugins/RuneSchema.Helpy'
+        New-Item -ItemType Directory -Path $payload -Force|Out-Null
+        Get-ChildItem -LiteralPath (Join-Path $SourceRoot 'plugins/RuneSchema.Helpy') -Force|ForEach-Object{Copy-Item -LiteralPath $_.FullName -Destination $payload -Recurse -Force}
         Copy-HelpyDlls $HelpyDll (Join-Path $payload 'dll')
-        $hudPayload=Join-Path $packageRoot 'RuneSchema.HUD'
-        Copy-HudPlugin $HelpyDll $hudPayload
+        Copy-HudPlugin $HelpyDll (Join-Path $runtime 'plugins/RuneSchema.HUD')
+        foreach($id in @('RuneSchema.ModMenu2','RuneSchema.DeveloperTools')){Copy-HelpyFeaturePlugin $HelpyDll $id (Join-Path $runtime ('plugins/'+$id))}
         & (Join-Path $BuildRoot 'build/package-optional-art.ps1') -PayloadRoot $payload -StagingRoot $DistRoot -RepositoryRoot $BuildRoot
-        $dlls=@(Get-ChildItem -LiteralPath $payload,$hudPayload -Filter '*.dll' -File -Recurse | ForEach-Object FullName)
-        $report=foreach($dll in $dlls){@{File=[IO.Path]::GetFileName($dll);State=(Compress-DllBestEffort $dll)}}
-        $report | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $payload 'DLL-COMPRESSION.json') -Encoding utf8
+        . (Join-Path $PSScriptRoot 'runtime-layout.ps1')
+        Set-RuneSchemaRuntimeLayout $runtime
+        $dlls=@(Get-ChildItem -LiteralPath $runtime -Filter '*.dll' -File -Recurse|ForEach-Object FullName)
+        foreach($dll in $dlls){Compress-DllBestEffort $dll|Out-Null}
         Attempt-Signing $dlls
-        $zip = Join-Path $DistRoot "$name.zip"
-        if (Test-Path $zip) { Remove-Item -LiteralPath $zip -Force }
-        Compress-Archive -LiteralPath $payload,$hudPayload -DestinationPath $zip -CompressionLevel Optimal
-        $pluginRoot = Join-Path $BuildRoot 'plugins\RuneSchema.Helpy'
-        if (Test-Path $pluginRoot) { Remove-Item -LiteralPath $pluginRoot -Recurse -Force }
-        Copy-Item -LiteralPath $payload -Destination $pluginRoot -Recurse
-        $hudRoot=Join-Path $BuildRoot 'plugins\RuneSchema.HUD'
-        New-Item -ItemType Directory -Path $hudRoot -Force | Out-Null
-        Copy-Item -LiteralPath (Join-Path $hudPayload 'plugin.json') -Destination (Join-Path $hudRoot 'plugin.json') -Force
-        New-Item -ItemType Directory -Path (Join-Path $hudRoot 'dll') -Force | Out-Null
-        Copy-Item -LiteralPath (Join-Path $hudPayload 'dll\RuneSchema.HUD.dll') -Destination (Join-Path $hudRoot 'dll\RuneSchema.HUD.dll') -Force
+        $zip=Join-Path $DistRoot "$name.zip"
+        if(Test-Path $zip){Remove-Item -LiteralPath $zip -Force}
+        Compress-Archive -LiteralPath $runtime -DestinationPath $zip -CompressionLevel Optimal
+        $pluginRoot=Join-Path $BuildRoot 'plugins/RuneSchema/Helpy'
+        if(Test-Path $pluginRoot){Remove-Item -LiteralPath $pluginRoot -Recurse -Force}
+        New-Item -ItemType Directory -Path (Split-Path -Parent $pluginRoot) -Force|Out-Null
+        Copy-Item -LiteralPath (Join-Path $runtime 'Helpy') -Destination $pluginRoot -Recurse
         Write-Host "Created plugin-only package $zip; RuneSchema.dll was not built or replaced." -ForegroundColor Green
+    }
+    function Copy-HelpyFeaturePlugin([string]$HelpyDll,[string]$Id,[string]$Destination) {
+        $dll=Join-Path (Split-Path -Parent $HelpyDll) ($Id+'.dll')
+        if(-not(Test-Path -LiteralPath $dll -PathType Leaf)){throw "Matching native Helpy plugin is missing: $Id"}
+        New-Item -ItemType Directory -Path (Join-Path $Destination 'dll') -Force|Out-Null
+        Get-ChildItem -LiteralPath (Join-Path $SourceRoot ('plugins/'+$Id)) -File|ForEach-Object{Copy-Item -LiteralPath $_.FullName -Destination $Destination -Force}
+        Copy-Item -LiteralPath $dll -Destination (Join-Path $Destination ('dll/'+$Id+'.dll')) -Force
     }
     function Copy-HudPlugin([string]$HelpyDll,[string]$Destination) {
         $hud=Join-Path (Split-Path -Parent $HelpyDll) 'RuneSchema.HUD.dll'
@@ -620,6 +619,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         Copy-Item -LiteralPath (Join-Path $SourceRoot 'ue4ss\scripts\mapping-loader.lua') -Destination (Join-Path $payload 'scripts\mapping-loader.lua') -Force
         Copy-Item -LiteralPath (Join-Path $SourceRoot 'ue4ss\scripts\mod-data-relay.lua') -Destination (Join-Path $payload 'scripts\mod-data-relay.lua') -Force
         Copy-Item -LiteralPath (Join-Path $SourceRoot 'ue4ss\scripts\helpy-mod-menu.lua') -Destination (Join-Path $payload 'scripts\helpy-mod-menu.lua') -Force
+        Copy-Item -LiteralPath (Join-Path $SourceRoot 'ue4ss\scripts\helpy-hud.lua') -Destination (Join-Path $payload 'scripts\helpy-hud.lua') -Force
         $logicModsHelper = Join-Path $SourceRoot 'ue4ss\scripts\logicmods-register.lua'
         if (-not (Test-Path -LiteralPath $logicModsHelper -PathType Leaf)) {
             throw "RuneSchema LogicMods Lua helper is missing: $logicModsHelper"
@@ -698,6 +698,9 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         Copy-Item -LiteralPath $CoreDll -Destination (Join-Path $payload 'dlls\main.dll') -Force
         Copy-HelpyDlls $HelpyDll (Join-Path $payload 'plugins\RuneSchema.Helpy\dll')
         Copy-HudPlugin $HelpyDll (Join-Path $payload 'plugins\RuneSchema.HUD')
+        foreach($id in @('RuneSchema.ModMenu2','RuneSchema.DeveloperTools')){Copy-HelpyFeaturePlugin $HelpyDll $id (Join-Path $payload ('plugins/'+$id))}
+        . (Join-Path $PSScriptRoot "runtime-layout.ps1")
+        Set-RuneSchemaRuntimeLayout $payload
         $report = foreach ($dll in Get-ChildItem -LiteralPath $payload -Filter '*.dll' -File -Recurse) {
             $before = $dll.Length; $state = Compress-DllBestEffort $dll.FullName
             [pscustomobject]@{ File = $dll.FullName.Substring($payload.Length + 1); Before = $before; After = (Get-Item $dll.FullName).Length; State = $state }
@@ -824,7 +827,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
     if (-not $package) { throw 'RuneSchema package directory was not produced.' }
     New-Item -ItemType Directory -Path (Join-Path $pluginRoot 'RuneSchema') -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $package.FullName 'RuneSchema\dlls') -Destination (Join-Path $pluginRoot 'RuneSchema\dlls') -Recurse
-    Copy-Item -LiteralPath (Join-Path $package.FullName 'RuneSchema\plugins') -Destination (Join-Path $pluginRoot 'RuneSchema\plugins') -Recurse
+    Copy-Item -LiteralPath (Join-Path $package.FullName 'RuneSchema\Helpy') -Destination (Join-Path $pluginRoot 'RuneSchema\Helpy') -Recurse
     Copy-Item -LiteralPath (Join-Path $package.FullName 'RuneSchema\modmenu.json') -Destination (Join-Path $pluginRoot 'RuneSchema\modmenu.json')
     Write-Host "`n$Version build complete: $DistRoot" -ForegroundColor Green
     Write-Host 'UE4SS storefront packages are distributed separately from RuneSchema build output.' -ForegroundColor DarkGray

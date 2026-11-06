@@ -53,6 +53,14 @@ inline std::string_view Body(std::string_view raw) {
     return raw;
 }
 inline bool LimitDetail(std::string& message){
+    // Byte limits alone cannot bound a message containing many short lines.
+    std::string compact;compact.reserve(message.size());unsigned lines=0;
+    for(const unsigned char c:message){
+        if(c=='\n'&&lines<2){while(!compact.empty()&&compact.back()==' ')compact.pop_back();compact+='\n';++lines;}
+        else if(std::isspace(c)){if(!compact.empty()&&!std::isspace(static_cast<unsigned char>(compact.back())))compact+=' ';}
+        else compact+=static_cast<char>(c);
+    }
+    message.swap(compact);
     constexpr size_t maxBytes=160;
     if(message.size()<=maxBytes)return false;
     size_t limit=maxBytes;
@@ -85,7 +93,7 @@ inline Display Format(const DiagnosticToastFeed::Notice& card,const ServerModVer
     result.Subtitle.clear();
     if (card.Summary) {
         result.Title="More log activity";
-        result.Detail=card.Text; // The feed builds this bounded summary.
+        result.Detail=card.Text;result.Truncated=LimitDetail(result.Detail);
         result.Subtitle="Full details in HELPY > Diagnostics > Live Log";
         return result;
     }
@@ -138,6 +146,7 @@ inline Display Format(const DiagnosticToastFeed::Notice& card,const ServerModVer
         for(const auto& asset:card.BatchAssets)result.Detail+="\n"+asset;
         if(card.BatchCount>card.BatchAssets.size())
             result.Detail+="\n+"+std::to_string(card.BatchCount-card.BatchAssets.size())+" more modifications";
+        result.Truncated=LimitDetail(result.Detail);
         result.Subtitle="Details in HELPY > Diagnostics > Live Log";
         return result;
     }

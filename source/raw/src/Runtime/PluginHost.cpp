@@ -1,3 +1,4 @@
+#include "Runtime/HelpyHudInterfaces.h"
 #include "Runtime/PluginHost.h"
 #include "Runtime/HelpyModMenu.h"
 #include "Core/HelpyActivity.h"
@@ -68,6 +69,8 @@ int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,ui
         const auto request=nlohmann::json::parse(requestJson);const auto action=request.value("Action",std::string{});
         nlohmann::json result;
         if(action=="HudCapabilities")return JsonResponse({{"InputOwnership",true},{"Extensions",true}},response,capacity,size);
+        if(action=="HudInterfacesRead")return JsonResponse(HelpyHudInterfaces::Read(request.value("Revision",~uint64_t{})),response,capacity,size);
+        if(action=="HudInterfacesWrite")return JsonResponse(HelpyHudInterfaces::Queue(request.at("Payload")),response,capacity,size);
         if(action=="HudExtensions"){
             if(Storefront::IsDedicatedServer())return JsonResponse({{"Available",false},{"Clients",nlohmann::json::array()}},response,capacity,size);
             const auto payload=request.at("Payload").dump();return CallService("RuneSchema.Helpy","hud.extensions",payload.c_str(),response,capacity,size);
@@ -337,11 +340,11 @@ void PluginHost::Load(const std::filesystem::path& root) {
         Capabilities.insert_or_assign("mapping.query","RuneSchema.Core");
         Capabilities.insert_or_assign("binding.resolve","RuneSchema.Core");}
     std::vector<PluginCatalog::Plugin> manifests;
-    try{manifests=PluginCatalog::Discover(root,&m_state->Messages);}
+    try{manifests=PluginCatalog::DiscoverRuntime(root,&m_state->Messages);}
     catch(const std::exception& error){m_state->Messages.push_back(std::string("plugin catalog rejected; RuneSchema core continues: ")+error.what());PS::CodedLog<RC::LogLevel::Error>(PS::Diagnostics::Id::PluginCatalogRejected,TEXT("Plugin catalog rejected; RuneSchema core continues: {}\n"),PS::ToWideSafe(error.what()));return;}
     catch(...){m_state->Messages.push_back("plugin catalog rejected by an unknown error; RuneSchema core continues");PS::CodedLog<RC::LogLevel::Error>(PS::Diagnostics::Id::PluginCatalogRejected,TEXT("Plugin catalog rejected by an unknown error; RuneSchema core continues.\n"));return;}
     for(const auto& manifest:manifests) {
-        if(!manifest.Enabled)continue;
+        if(!manifest.Enabled||manifest.Host!="game")continue;
         // The desktop Helpy frontend has no Unreal imports or viewport hook.
         // Other client plugins retain the existing dedicated-server exclusion.
         if(Storefront::IsDedicatedServer()&&manifest.Id!="RuneSchema.Helpy")continue;

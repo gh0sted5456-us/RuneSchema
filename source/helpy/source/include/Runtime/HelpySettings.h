@@ -1,6 +1,8 @@
 #pragma once
 #include "Core/ConfigFiles.h"
 #include "Core/HelpyShortcut.h"
+#include "InputBindings.h"
+#include <memory>
 #include <atomic>
 #include <filesystem>
 #include <mutex>
@@ -15,8 +17,9 @@ inline bool StartWithGame=true;
 inline bool MinimizeOnClose=true;
 inline bool ExitWithGame=false;
 inline std::atomic<int> Hotkey=HelpyShortcut::DefaultKey;
-inline void ApplyHotkey(std::string_view name){const auto* binding=HelpyShortcut::Find(name);Hotkey=binding?binding->Key:HelpyShortcut::DefaultKey;}
-inline std::string HotkeyName(){return std::string(HelpyShortcut::Name(Hotkey.load()));}
+inline std::atomic<std::shared_ptr<const InputBindings::Keys>> HotkeyChord=std::make_shared<const InputBindings::Keys>(InputBindings::Parse("F2"));
+inline void ApplyHotkey(std::string_view name){InputBindings::Keys keys;try{keys=InputBindings::Parse(name);}catch(const std::exception&){keys=InputBindings::Parse("F2");}Hotkey=InputBindings::Primary(keys);HotkeyChord.store(std::make_shared<const InputBindings::Keys>(std::move(keys)));}
+inline std::string HotkeyName(){return InputBindings::Text(*HotkeyChord.load());}
 inline std::string HotkeyHint(){return HotkeyName()+" for Helpy";}
 inline std::string ExpectedContents;
 inline std::string Status;
@@ -24,7 +27,7 @@ inline std::filesystem::path File;
 inline nlohmann::json Document=nlohmann::json::object();
 inline void Configure(const std::filesystem::path& pluginRoot) {
     std::lock_guard lock(Mutex);
-    File=pluginRoot/"settings"/"settings.jsonc";Loaded=false;Writable=true;Enabled=true;AutoOpen=false;StartWithGame=true;MinimizeOnClose=true;ExitWithGame=false;Hotkey=HelpyShortcut::DefaultKey;ExpectedContents.clear();Status.clear();Document=nlohmann::json::object();
+    File=pluginRoot/"settings"/"settings.jsonc";Loaded=false;Writable=true;Enabled=true;AutoOpen=false;StartWithGame=true;MinimizeOnClose=true;ExitWithGame=false;ApplyHotkey("F2");ExpectedContents.clear();Status.clear();Document=nlohmann::json::object();
 }
 inline void EnsureLoaded() {
     std::lock_guard lock(Mutex);if(Loaded)return;Loaded=true;

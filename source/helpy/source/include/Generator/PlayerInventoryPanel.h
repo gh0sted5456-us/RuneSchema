@@ -152,9 +152,9 @@ inline void Contents(){
     ImGui::TextWrapped("%s",Status.c_str());
     if(ChangingGear){
         ImGui::SeparatorText(("Change gear · "+GearLocation).c_str());
-        ItemBayBrowser::Controls(Bay,BaySearch,sizeof(BaySearch),[]{SelectedBay=Json::object();BaySelected[0]=0;ResetGearCatalog();},false);
-        LazyCatalog::State view;view.Started=true;view.HasMore=GearMore;view.Pending=GearCatalogRequest!=0;
         Json catalog={{"Items",GearRows}};
+        ItemBayBrowser::Controls(Bay,catalog,Revision+GearRevision,BaySearch,sizeof(BaySearch),[]{SelectedBay=Json::object();BaySelected[0]=0;ResetGearCatalog();},false);
+        LazyCatalog::State view;view.Started=true;view.HasMore=GearMore;view.Pending=GearCatalogRequest!=0;
         const auto result=ItemGridPicker::Render("matching-equipment-bay",catalog,BaySearch,sizeof(BaySearch),BaySelected,sizeof(BaySelected),Bay,Revision+GearRevision,false,false,true,true,false,320,&view);
         if(result.SelectedRow)SelectedBay=*result.SelectedRow;
         const Json* owned=nullptr;if(ValidSnapshot()&&Snapshot.contains("Items"))for(const auto& row:Snapshot["Items"])if(!SelectedBay.empty()&&ItemPresentation::Text(row,"Path")==ItemPresentation::Text(SelectedBay,"Path")&&row.contains("Instance")){owned=&row;break;}
@@ -170,7 +170,7 @@ inline void Contents(){
         ImGui::TableNextColumn();Inventory(280);if(wide)ImGui::TableNextColumn();ImGui::PushID("live-item-bay-pane");ImGui::SeparatorText("Item Bay");
         if(!LazyCatalog::For(0).Started&&!LazyCatalog::For(0).Pending)LazyCatalog::Search(0,ItemGridPicker::BackendQuery(Bay));
         Json catalog=Json::object();LazyCatalog::Overlay(catalog,0);
-        ItemBayBrowser::Controls(Bay,BaySearch,sizeof(BaySearch));
+        ItemBayBrowser::Controls(Bay,catalog,Revision+LazyCatalog::For(0).AppliedRevision,BaySearch,sizeof(BaySearch));
         const auto result=ItemGridPicker::Render("live-inventory-item-bay",catalog,BaySearch,sizeof(BaySearch),BaySelected,sizeof(BaySelected),Bay,Revision+LazyCatalog::For(0).AppliedRevision,false,false,true,true,false,280);
         if(result.SelectedRow)SelectedBay=*result.SelectedRow;
         ImGui::BeginDisabled(SelectedBay.empty()||Container||Personal||delivering);if(HelpyImGuiTheme::SoftButton("Stage selected for delivery"))Stage(SelectedBay);ImGui::EndDisabled();ImGui::PopID();ImGui::EndTable();

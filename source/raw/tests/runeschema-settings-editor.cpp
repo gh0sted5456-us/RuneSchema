@@ -53,6 +53,8 @@ int main(int argc,char** argv)try{
     const auto shortcut=save(json{{"/helpyHotkey","F5"}},current);Need(shortcut.at("Ok").get<bool>());
     Need(shortcut["Document"]["helpyHotkey"]=="F5"&&DecodeSettings(DecodeIniDocument(ConfigFiles::Read(file)).dump()).helpyHotkey=="F5");
     Need(ConfigFiles::Read(shortcut.at("Backup").get<std::string>())==current);
+    const auto chord=save(json{{"/helpyHotkey","Ctrl+F7"}},ConfigFiles::Read(file));Need(chord.at("Ok").get<bool>());
+    Need(chord["Document"]["helpyHotkey"]=="Ctrl+F7"&&DecodeSettings(DecodeIniDocument(ConfigFiles::Read(file)).dump()).helpyHotkey=="Ctrl+F7");
     const auto entrySave=save(json{{"/persistence/cleanupOnWorldEntry",true}},ConfigFiles::Read(file));
     Need(entrySave.at("Ok")==true&&entrySave.at("RestartRequired")==false);
     const auto launchSave=save(json{{"/persistence/cleanupOnWorldEntry",false}},ConfigFiles::Read(file));

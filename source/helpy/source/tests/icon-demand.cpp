@@ -105,6 +105,11 @@ int Run() {
         drawBay(2);assert(ItemGridPicker::Bay.Revision==rowsRevision&&ItemGridPicker::Bay.Picker.CatalogRevision==rowsRevision);
         LazyCatalog::RecordNativeIcon("/Game/UIFixture/Row.Row","");drawBay(2);
         assert(ItemGridPicker::Bay.Revision>rowsRevision&&ItemGridPicker::Bay.Catalog["Items"][0]["Icon"]=="");
+        std::snprintf(ItemGridPicker::Bay.Selected,sizeof(ItemGridPicker::Bay.Selected),"%s","/Game/UIFixture/Row.Row");drawBay(2);
+        const auto* detailsStorage=&ItemGridPicker::Bay.DetailsRow["Name"].get_ref<const std::string&>();
+        drawBay(2);assert(&ItemGridPicker::Bay.DetailsRow["Name"].get_ref<const std::string&>()==detailsStorage);
+        window.Rows[0]["Name"]="Updated row";window.RowsRevision=++LazyCatalog::RowsClock;drawBay(2);
+        assert(ItemGridPicker::Bay.DetailsRow["Name"]=="Updated row");
         ItemGridPicker::Bay=previousBay;LazyCatalog::For(0)=previousWindow;HelpyImGuiTheme::Current=previousTheme;LazyCatalog::NativeIcons.erase("/Game/UIFixture/Row.Row");}
     for(const float paneWidth:{192.f,240.f,480.f})for(int frame=0;frame<3;++frame){
         begin();PS::HelpyImGuiTheme::BeginPanel("pagination",{paneWidth,120});ItemGridPicker::State page;page.PageIndex=1;

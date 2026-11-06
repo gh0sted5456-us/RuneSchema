@@ -52,6 +52,12 @@ int main(int argc,char** argv){
     assert(ExtensionService(nullptr,activate.c_str(),output,sizeof(output),&bytes)==RS_PLUGIN_OK&&std::strstr(output,"true"));
     assert(WaitForSingleObject(event,0)==WAIT_OBJECT_0&&api->NextCommand(second,&command)==RS_HUD_OK&&command==RS_HUD_COMMAND_ACTIVATE);
     assert(api->NextCommand(second,&command)==RS_HUD_OK&&command==RS_HUD_COMMAND_NONE);
+    assert(ExtensionService(nullptr,R"({"Action":"Activate","Owner":"Fixture.Two"})",output,sizeof(output),&bytes)==RS_PLUGIN_OK&&std::strstr(output,"true"));
+    assert(api->NextCommand(second,&command)==RS_HUD_OK&&command==RS_HUD_COMMAND_ACTIVATE);
+    uint64_t duplicate=0;assert(api->RegisterClient("Fixture.Two",GetCurrentProcessId(),&duplicate)==RS_HUD_OK);
+    assert(ExtensionService(nullptr,R"({"Action":"Activate","Owner":"Fixture.Two"})",output,sizeof(output),&bytes)==RS_PLUGIN_OK&&std::strstr(output,"More than one"));api->CloseClient(duplicate);
+    assert(ExtensionService(nullptr,R"({"Action":"Toggle","Owner":"Fixture.Two"})",output,sizeof(output),&bytes)==RS_PLUGIN_OK&&std::strstr(output,"true"));
+    assert(api->NextCommand(second,&command)==RS_HUD_OK&&command==RS_HUD_COMMAND_ACTIVATE);
     const auto deactivate=std::string(R"({"Action":"Deactivate","Client":)")+std::to_string(second)+"}";
     assert(ExtensionService(nullptr,deactivate.c_str(),output,sizeof(output),&bytes)==RS_PLUGIN_OK);
     assert(WaitForSingleObject(event,0)==WAIT_OBJECT_0&&api->NextCommand(second,&command)==RS_HUD_OK&&command==RS_HUD_COMMAND_DEACTIVATE);

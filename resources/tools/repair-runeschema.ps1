@@ -1,4 +1,5 @@
 param([string]$Request,[string]$ProgressFile,[string]$ControlFile)
+function Get-RepairHelpyExe([string]$Root){$current=Join-Path $Root 'Helpy/Helpy.exe';if(Test-Path -LiteralPath $current -PathType Leaf){return $current};return (Join-Path $Root 'plugins/RuneSchema.Helpy/dll/Helpy.exe')}
 $ErrorActionPreference='Stop'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $script:RepairPlugins=@('RuneSchema.Helpy','RuneSchema.RegistryBridge','RuneSchema.QuestItems','RSNetworking')
@@ -106,28 +107,30 @@ function Get-RepairEntries([string]$Archive,[string]$Platform,[string]$Stage,[sw
         if($roots.Count -gt 1){$roots=@($roots | Where-Object {$_ -match ('Binaries/'+$Platform+'/')})}
         if($roots.Count -ne 1){throw 'The package does not have one unambiguous RuneSchema base.'};$prefix=$roots[0]
         $plugins=@($script:RepairPlugins)
-        if($Partial -or $all.ContainsKey($prefix+'plugins/RuneSchema.HUD/plugin.json')){$plugins+='RuneSchema.HUD'}
+        if($Partial -or $all.ContainsKey($prefix+'plugins/RuneSchema.HUD/plugin.json') -or $all.ContainsKey($prefix+'Helpy/plugins/RuneSchema.HUD/plugin.json')){$plugins+='RuneSchema.HUD'}
+        foreach($id in @('RuneSchema.ModMenu2','RuneSchema.DeveloperTools')){if($Partial -or $all.ContainsKey($prefix+'Helpy/plugins/'+$id+'/plugin.json') -or $all.ContainsKey($prefix+'plugins/'+$id+'/plugin.json')){$plugins+=$id}}
+        $locations=@{};foreach($plugin in $plugins){$legacy='plugins/'+$plugin;$current=if($plugin -eq 'RuneSchema.Helpy'){'Helpy'}elseif($plugin -in @('RuneSchema.HUD','RuneSchema.ModMenu2','RuneSchema.DeveloperTools')){'Helpy/plugins/'+$plugin}else{'dlls/plugins/'+$plugin};$locations[$plugin]=if($all.ContainsKey($prefix+$current+'/plugin.json')){$current}else{$legacy}}
         $result=@();[long]$expanded=0
         foreach($name in @($all.Keys | Sort-Object)){
             if(!$name.StartsWith($prefix,[StringComparison]::OrdinalIgnoreCase)){continue};$relative=$name.Substring($prefix.Length)
             $allowed=$relative -eq 'dlls/main.dll' -or $relative -eq 'modmenu.json' -or $relative.StartsWith('scripts/',[StringComparison]::OrdinalIgnoreCase)
-            foreach($plugin in $plugins){if($relative.StartsWith('plugins/'+$plugin+'/',[StringComparison]::OrdinalIgnoreCase)){$allowed=$true}}
+            foreach($plugin in $plugins){foreach($folder in @(('plugins/'+$plugin),$locations[$plugin],$(if($plugin -eq 'RuneSchema.Helpy'){'Helpy'}elseif($plugin -in @('RuneSchema.HUD','RuneSchema.ModMenu2','RuneSchema.DeveloperTools')){'Helpy/plugins/'+$plugin}else{'dlls/plugins/'+$plugin}))){if($folder -eq 'Helpy' -and $relative.StartsWith('Helpy/plugins/',[StringComparison]::OrdinalIgnoreCase)){continue};if($relative.StartsWith($folder+'/',[StringComparison]::OrdinalIgnoreCase)){$allowed=$true}}}
             if(!$allowed -or $relative -match '(^|/)(settings|mods|cache|logs|profiles|saves|backups)(/|$)' -or $relative -match '\.(ini|log|pdb|bak)$'){continue}
             $entry=$all[$name];$expanded+=$entry.Length;if($entry.Length -gt 536870912 -or $expanded -gt 1073741824 -or $result.Count -ge 4096){throw 'Repair payload exceeds its expansion limit.'}
             $target=Join-Path $Stage $relative;[IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($target)) | Out-Null
             [IO.Compression.ZipFileExtensions]::ExtractToFile($entry,$target,$false)
             $result+=@{Relative=$relative;Stage=$target;Hash=(Get-RepairHash $target)}
         }
-        if(!$Partial){foreach($required in @('dlls/main.dll')+@($plugins | ForEach-Object {'plugins/'+$_+'/plugin.json'})) {
+        if(!$Partial){foreach($required in @('dlls/main.dll')+@($plugins | ForEach-Object {$locations[$_]+'/plugin.json'})) {
             if($required -notin $result.Relative){throw "Required base file missing from package: $required"}
         }
-        if(!@($result | Where-Object {$_.Relative -match '^plugins/RuneSchema\.Helpy/(dll/)?RuneSchema\.Helpy\.dll$'}).Count){throw 'Required Helpy bridge DLL missing from package.'}
-        $helpy=Get-Content -LiteralPath (Join-Path $Stage 'plugins/RuneSchema.Helpy/plugin.json') -Raw | ConvertFrom-Json
+        if(!@($result | Where-Object {$_.Relative -match '^(plugins/RuneSchema\.Helpy/(dll/)?RuneSchema\.Helpy\.dll|Helpy/Helpy\.dll)$'}).Count){throw 'Required Helpy bridge DLL missing from package.'}
+        $helpy=Get-Content -LiteralPath (Join-Path $Stage ($locations['RuneSchema.Helpy']+'/plugin.json')) -Raw | ConvertFrom-Json
         if($helpy.PSObject.Properties['NativeHudPlugin'] -and $helpy.NativeHudPlugin -and ($helpy.NativeHudPlugin -ne 'RuneSchema.HUD' -or 'RuneSchema.HUD' -notin $plugins)){throw 'Required shared HUD plugin is missing from this Helpy package.'}
-        if('RuneSchema.HUD' -in $plugins -and 'plugins/RuneSchema.HUD/dll/RuneSchema.HUD.dll' -notin $result.Relative){throw 'Required shared HUD DLL is missing from the package.'}}
+        if('RuneSchema.HUD' -in $plugins -and ($locations['RuneSchema.HUD']+'/dll/RuneSchema.HUD.dll') -notin $result.Relative){throw 'Required shared HUD DLL is missing from the package.'}}
         foreach($plugin in $plugins){
-            if($Partial -and ('plugins/'+$plugin+'/plugin.json') -notin $result.Relative){continue}
-            $manifest=Get-Content -LiteralPath (Join-Path $Stage ('plugins/'+$plugin+'/plugin.json')) -Raw | ConvertFrom-Json
+            if($Partial -and ($locations[$plugin]+'/plugin.json') -notin $result.Relative){continue}
+            $manifest=Get-Content -LiteralPath (Join-Path $Stage ($locations[$plugin]+'/plugin.json')) -Raw | ConvertFrom-Json
             if($manifest.Id -ne $plugin){throw 'Bundled plugin identity does not match its folder.'}
         }
         foreach($entry in @($result | Where-Object {$_.Relative -match '\.(utoc|ucas)$'})){
@@ -160,7 +163,7 @@ function Read-HotfixManifest([string]$Archive,[string]$Tag,[string]$Version,[str
 function Wait-HotfixApply([string]$Root) {
     $control=Read-RepairControl
     $owner=Get-Process -Id ([int]$control.OwnerPid) -ErrorAction Stop
-    $exe=Join-Path $Root 'plugins/RuneSchema.Helpy/dll/Helpy.exe';Assert-RepairPath $exe
+    $exe=Get-RepairHelpyExe $Root;Assert-RepairPath $exe
     if(![string]::Equals($owner.MainModule.FileName,$exe,[StringComparison]::OrdinalIgnoreCase)){throw 'Apply a hotfix from Helpy in the installation being updated.'}
     $owner.Handle | Out-Null
     $script:HotfixWaiting=$true
@@ -263,6 +266,6 @@ if($MyInvocation.InvocationName -ne '.') {
     $code=0
     try {Invoke-RuneSchemaRepair (Get-Content -LiteralPath $Request -Raw | ConvertFrom-Json)}
     catch {Write-RepairLine ('ERROR: '+$_.Exception.Message);Write-RepairProgress 'Failed' $_.Exception.Message 0;$code=1}
-    finally {if($script:RestartRoot){try{Start-Process -FilePath (Join-Path $script:RestartRoot 'plugins/RuneSchema.Helpy/dll/Helpy.exe') -WorkingDirectory $script:RestartRoot -WindowStyle Hidden | Out-Null}catch{Write-RepairLine ('Please reopen Helpy: '+$_.Exception.Message)}}}
+    finally {if($script:RestartRoot){try{Start-Process -FilePath (Get-RepairHelpyExe $script:RestartRoot) -WorkingDirectory $script:RestartRoot -WindowStyle Hidden | Out-Null}catch{Write-RepairLine ('Please reopen Helpy: '+$_.Exception.Message)}}}
     exit $code
 }

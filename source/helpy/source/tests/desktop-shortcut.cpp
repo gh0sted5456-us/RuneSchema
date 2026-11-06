@@ -16,6 +16,10 @@ int main(){namespace fs=std::filesystem;const auto root=fs::temp_directory_path(
         CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);Check(SUCCEEDED(CoCreateInstance(CLSID_ShellLink,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&link)))&&SUCCEEDED(link.As(&file))&&SUCCEEDED(file->Load(path.c_str(),STGM_READ)));
         Check(SUCCEEDED(link->GetPath(target,32768,nullptr,SLGP_RAWPATH))&&fs::equivalent(target,executable));Check(SUCCEEDED(link->GetArguments(args,1024))&&assigned==args);file.Reset();link.Reset();CoUninitialize();
         const auto stamp=fs::last_write_time(path);Check(!PS::HelpyDesktopShortcut::CreateOnce(executable,root/"Desktop","gamepass",marker,hosted,assigned)&&fs::last_write_time(path)==stamp);
+        const auto current=root/"runtime/Helpy/Helpy.exe";fs::create_directories(current.parent_path());std::ofstream(current)<<"new app";fs::remove(marker);
+        Check(PS::HelpyDesktopShortcut::CreateOnce(current,root/"Desktop","gamepass",marker,hosted,assigned,executable));
+        CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);Check(SUCCEEDED(CoCreateInstance(CLSID_ShellLink,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&link)))&&SUCCEEDED(link.As(&file))&&SUCCEEDED(file->Load(path.c_str(),STGM_READ)));
+        Check(SUCCEEDED(link->GetPath(target,32768,nullptr,SLGP_RAWPATH))&&fs::equivalent(target,current));file.Reset();link.Reset();CoUninitialize();
         fs::remove(marker);std::ofstream(path,std::ios::binary|std::ios::trunc)<<"user shortcut";Check(!PS::HelpyDesktopShortcut::CreateOnce(executable,root/"Desktop","gamepass",marker));Check(PS::ConfigFiles::Read(path,100)=="user shortcut");
     }catch(...){fs::remove_all(root);throw;}fs::remove_all(root);
 }

@@ -1,3 +1,4 @@
+#include "RuntimePaths.h"
 #pragma once
 #include "RuneSchemaUserSecurity.h"
 #include <windows.h>
@@ -29,7 +30,7 @@ inline std::wstring PipeName(const std::filesystem::path& root){
 }
 inline std::wstring WakeName(const std::filesystem::path& root){const auto pipe=PipeName(root);return L"Local\\"+pipe.substr(pipe.find_last_of(L'\\')+1)+L".updates";}
 inline bool Enabled(const std::filesystem::path& root){
-    try{const auto file=root/"plugins/RuneSchema.Helpy/settings/settings.jsonc";
+    try{const auto file=RuntimePaths::Helpy(root)/"settings/settings.jsonc";
         if(std::filesystem::file_size(file)>65536)return false;std::ifstream input(file);
         const auto value=Json::parse(input,nullptr,true,true);return value.value("enabled",true);
     }catch(...){return false;}

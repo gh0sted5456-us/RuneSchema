@@ -1,3 +1,4 @@
+#include "RuntimePaths.h"
 #include "Runtime/HelpyPaths.h"
 #include "Runtime/HostServices.h"
 #include "Core/HelpyUiAssets.h"
@@ -31,7 +32,7 @@ std::filesystem::path Asset(const char* name){
 }
 }
 namespace PS::HostServices {
-std::filesystem::path ModDirectory(){return HelpyPaths::PluginRoot().parent_path().parent_path();}
+std::filesystem::path ModDirectory(){return RuntimePaths::ModFromHelpy(HelpyPaths::PluginRoot());}
 std::filesystem::path WorkingDirectory(){return ModDirectory().parent_path().parent_path();}
 std::filesystem::path SettingsDirectory(){return ModDirectory()/"settings";}
 // Helpy-owned mutable data stays writable even in a protected game install.

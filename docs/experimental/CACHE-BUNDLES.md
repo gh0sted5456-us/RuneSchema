@@ -32,6 +32,21 @@ the tracked game/mod versions and fingerprints, so unchanged sources do not
 recreate old alerts. Future changes and newly completed cache jobs can still
 generate notifications. Clearing the inbox does not cancel a running cache job.
 
+## Item Bay toolbar and sources
+
+Search and **Refresh search** stay together. The settings cog contains card
+sizing, cache tools, display names and cache policy. **Select multiple** exposes
+page selection and clearing; adding to the cart still clears submitted selections.
+
+The source picker searches mod names and source IDs locally. Choose **Modded**
+for all mod content, or a named mod for that source only. The same picker is used
+in live inventory, gear selection and Character Studio. Its provider list is
+reused until the catalogue or source metadata changes.
+
+**Clear filters** resets category, source, family and personal filters while
+keeping the item search and cart. **Refresh selected mod** is inside the source
+picker; it requires a connected game and retains existing cached results.
+
 ## Use an existing cache immediately
 
 Helpy prepares the saved item index on a lower-priority file worker during its

@@ -162,5 +162,20 @@ int main() try
     const auto legacyFallback=std::find_if(fallback.begin(),fallback.end(),[](const auto& plugin){return plugin.Id=="RSNetworking";});
     Check(legacyFallback!=fallback.end()&&!legacyFallback->PreferSharedRegistry,"disabled shared provider retains legacy validation");
 
+    const auto modern=root/"modern";
+    Write(modern/"Helpy/plugin.json",R"({"Id":"RuneSchema.Helpy","Version":"0.8.1.0","EntryPoint":"Helpy.dll"})");
+    Write(modern/"Helpy/plugins/RuneSchema.HUD/plugin.json",R"({"Id":"RuneSchema.HUD","Version":"0.8.1.0","EntryPoint":"RuneSchema.HUD.dll"})");
+    Write(modern/"dlls/plugins/RSNetworking/plugin.json",R"({"Id":"RSNetworking","Version":"0.8.1.0"})");
+    Write(modern/"plugins/RuneSchema.Helpy/plugin.json",R"({"Id":"RuneSchema.Helpy","Version":"0.8.0.3"})");
+    Write(modern/"plugins/ThirdParty/plugin.json",R"({"Id":"ThirdParty","Version":"1.0.0"})");
+    Write(modern/"settings/plugins.txt","RuneSchema.HUD:0\nRSNetworking:1\n");
+    Write(modern/"Helpy/plugins/RuneSchema.ModMenu2/plugin.json",R"({"Id":"RuneSchema.ModMenu2","Version":"0.8.1.0","Host":"helpy","EntryPoint":"RuneSchema.ModMenu2.dll"})");
+    Write(modern/"Helpy/plugins/InvalidHost/plugin.json",R"({"Id":"InvalidHost","Version":"1","Host":"unknown"})");
+    const auto combined=PS::PluginCatalog::DiscoverRuntime(modern,&diagnostics);
+    Check(combined.size()==4,"canonical/legacy roots combine once and canonical order disables HUD");
+    const auto app=std::find_if(combined.begin(),combined.end(),[](const auto& p){return p.Id=="RuneSchema.Helpy";});
+    Check(app!=combined.end()&&app->Version=="0.8.1.0"&&app->EntryPoint==modern/"Helpy/Helpy.dll","canonical Helpy wins over old manifest and loads flat binary");
+    Check(std::any_of(combined.begin(),combined.end(),[](const auto& p){return p.Id=="RuneSchema.ModMenu2"&&p.Host=="helpy";}),"frontend host routing is explicit");
+    Check(std::any_of(combined.begin(),combined.end(),[](const auto& p){return p.Id=="ThirdParty";}),"legacy third-party plugin stays discoverable");
     std::cout << "Plugin catalog compatibility contract passed.\n";
 }catch(const std::exception& error){std::cerr<<"FAIL: "<<error.what()<<'\n';return 1;}

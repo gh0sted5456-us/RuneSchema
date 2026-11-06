@@ -1,7 +1,11 @@
 #pragma once
 #include "Core/HelpyShortcut.h"
+#include "Core/HelpyControllerBindings.h"
+#include "InputBindings.h"
 #include "Core/RuneSchemaDataRoot.h"
 #include "imgui.h"
+#include "Generator/HelpyFocusHighlight.h"
+#include "Generator/HelpyControllerPanes.h"
 #include "Generator/HelpyTextInput.h"
 #include "Core/ConfigFiles.h"
 #include "Core/HelpyBrowsePolicy.h"
@@ -77,11 +81,14 @@ struct Theme {
     bool gameOverlay{true};
     bool nativeOverlay{true};
     int inputMode=0,controllerGlyphs=0,controllerShortcut=1;
-    bool reserveControllerGuide=true,controllerTouchpad=true;
+    bool reserveControllerGuide=true,controllerTouchpad=true,controllerCursor=true;
+    float controllerCursorSpeed=900.f;
+    std::string quickSendPlayerGuid;
     bool navigationCollapsed=false,navigationPinned=false;
     bool autoInstallAuthoringDotNet{true};
     float overlayOpacity{.88f},overlaySize{.9f},overlayUiScale{1.f};
-    std::string fpsHotkey{"F10"};
+    nlohmann::json hudBindings=nlohmann::json::object(),controllerBindings=nlohmann::json::object();
+    std::string fpsHotkey{"F10"},fpsControllerBinding{"None"},controllerBinding,helpyKeyboardBinding;
     std::string backgroundFile;
     float backgroundStrength{.12f};
     bool dpiAware{true},autoReload{true},textBold{false},verboseTooltips{false},itemGridView{true},itemInternalNames{false},aiGridView{false},advancedMode{false};
@@ -125,8 +132,27 @@ inline void CenterNextWindow(){
     ImGui::SetNextWindowPos(viewport->GetWorkCenter(),ImGuiCond_Appearing,{.5f,.5f});
 }
 inline bool BeginCenteredModal(const char* name,bool* open,ImGuiWindowFlags flags){
-    CenterNextWindow();const auto area=ImGui::GetMainViewport()->WorkSize;
-    ImGui::SetNextWindowSizeConstraints({0,0},{std::max(1.f,area.x-Current.X(24)),std::max(1.f,area.y-Current.Y(24))});
+    CenterNextWindow();const auto* viewport=ImGui::GetMainViewport();const auto area=viewport->WorkSize;
+    const ImVec2 margin{std::min(Current.X(12),std::max(0.f,(area.x-1)*.5f)),std::min(Current.Y(12),std::max(0.f,(area.y-1)*.5f))};
+    const ImVec2 limit{std::max(1.f,area.x-margin.x*2),std::max(1.f,area.y-margin.y*2)};
+    auto& next=ImGui::GetCurrentContext()->NextWindowData;
+    if(next.HasFlags&ImGuiNextWindowDataFlags_HasSizeConstraint){
+        // Keep the caller's width/callback; only tighten its bounds to the viewport.
+        auto& bounds=next.SizeConstraintRect;
+        for(int axis=0;axis<2;++axis)if(bounds.Min[axis]>=0&&bounds.Max[axis]>=0){bounds.Min[axis]=std::min(bounds.Min[axis],limit[axis]);bounds.Max[axis]=std::clamp(bounds.Max[axis],bounds.Min[axis],limit[axis]);}
+    }else{
+        ImVec2 minimum{0,0},maximum=limit;
+        // Full-width controls feed auto-sized windows back into themselves unless width is fixed.
+        if((flags&ImGuiWindowFlags_AlwaysAutoResize)&&(next.HasFlags&ImGuiNextWindowDataFlags_HasSize)&&next.SizeVal.x>0)minimum.x=maximum.x=std::min(next.SizeVal.x,limit.x);
+        ImGui::SetNextWindowSizeConstraints(minimum,maximum);
+    }
+    if(const auto* window=ImGui::FindWindowByName(name);window&&window->WasActive&&ImGui::IsPopupOpen(name)){
+        const ImVec2 minimum{viewport->WorkPos.x+margin.x,viewport->WorkPos.y+margin.y};
+        const ImVec2 maximum{std::max(minimum.x,viewport->WorkPos.x+area.x-margin.x-std::min(window->Size.x,limit.x)),
+                             std::max(minimum.y,viewport->WorkPos.y+area.y-margin.y-std::min(window->Size.y,limit.y))};
+        const ImVec2 position{std::clamp(window->Pos.x,minimum.x,maximum.x),std::clamp(window->Pos.y,minimum.y,maximum.y)};
+        if(position.x!=window->Pos.x||position.y!=window->Pos.y)ImGui::SetNextWindowPos(position,ImGuiCond_Always);
+    }
     return ImGui::BeginPopupModal(name,open,flags);
 }
 inline void CenterRow(float width){ImGui::SetCursorPosX(ImGui::GetCursorPosX()+std::max(0.f,(ImGui::GetContentRegionAvail().x-width)*.5f));}
@@ -289,16 +315,16 @@ inline nlohmann::json DocumentFrom(const Theme& t,int iconCacheMB) {
         {"version",21},{"autoReload",t.autoReload},{"windowOpacity",t.windowOpacity},
         {"workspaces",{{"authoring",t.workspaces.Authoring},{"tools",t.workspaces.Tools},{"liveLog",t.workspaces.LiveLog},{"saveEditor",t.workspaces.SaveEditor},{"serverTools",t.workspaces.ServerTools},{"journal",t.workspaces.Journal}}},
         {"display",{{"dpiAware",t.dpiAware},{"userScale",t.userScale},{"fontScale",t.fontScale},{"density",t.density},{"fontFamily",t.fontFamily},{"textBold",t.textBold},{"verboseTooltips",t.verboseTooltips},{"tooltipDelay",t.tooltipDelay}}},
-        {"views",{{"advancedMode",t.advancedMode},{"itemGrid",t.itemGridView},{"itemInternalNames",t.itemInternalNames},{"itemPageSize",t.itemPageSize},{"itemGridColumns",t.itemGridColumns},{"itemGridRows",t.itemGridRows},{"itemGridFitRows",t.itemGridFitRows},{"itemShowPlaceholders",t.itemShowPlaceholders},{"aiGrid",t.aiGridView},{"itemResultHeight",t.itemResultHeight},{"aiResultHeight",t.aiResultHeight},{"itemCategory",t.itemCategory},{"itemSource",t.itemSource},{"itemBayBrowseRatio",t.itemBayBrowseRatio},{"dockedBayHeight",t.dockedBayHeight},{"itemCartWidth",t.itemCartWidth}}},
+        {"views",{{"quickSendPlayerGuid",t.quickSendPlayerGuid},{"advancedMode",t.advancedMode},{"itemGrid",t.itemGridView},{"itemInternalNames",t.itemInternalNames},{"itemPageSize",t.itemPageSize},{"itemGridColumns",t.itemGridColumns},{"itemGridRows",t.itemGridRows},{"itemGridFitRows",t.itemGridFitRows},{"itemShowPlaceholders",t.itemShowPlaceholders},{"aiGrid",t.aiGridView},{"itemResultHeight",t.itemResultHeight},{"aiResultHeight",t.aiResultHeight},{"itemCategory",t.itemCategory},{"itemSource",t.itemSource},{"itemBayBrowseRatio",t.itemBayBrowseRatio},{"dockedBayHeight",t.dockedBayHeight},{"itemCartWidth",t.itemCartWidth}}},
         {"cache",{{"iconCacheMB",std::clamp(iconCacheMB,0,16384)},{"loadOrder",HelpyRuntimePreferences::CacheFirst.load()?"cacheFirst":"gameFirst"},{"passiveRefresh",HelpyRuntimePreferences::PassiveRefresh.load()}}},
         {"monitoring",{{"resources",t.resourceDiagnostics},{"gpu",t.gpuResourceDiagnostics},{"ue4ss",t.ue4ssDiagnostics},{"playTimeReminders",t.playTimeReminders},{"startupResourceAlerts",t.startupResourceAlerts},{"cpuThreshold",t.resourceCpuThreshold},{"memoryThreshold",t.resourceMemoryThreshold},{"gpuThreshold",t.resourceGpuThreshold},{"luaMessages",t.ue4ssLogBudget},{"overlapSeconds",t.ue4ssOverlapSeconds}}},
-        {"input",{{"mode",t.inputMode},{"glyphs",t.controllerGlyphs},{"shortcut",t.controllerShortcut},{"reserveGuide",t.reserveControllerGuide},{"touchpad",t.controllerTouchpad}}},
+        {"input",{{"mode",t.inputMode},{"glyphs",t.controllerGlyphs},{"shortcut",t.controllerShortcut},{"binding",t.controllerBinding},{"keyboardBinding",t.helpyKeyboardBinding},{"hudBindings",t.hudBindings},{"reserveGuide",t.reserveControllerGuide},{"touchpad",t.controllerTouchpad},{"cursor",t.controllerCursor},{"cursorSpeed",t.controllerCursorSpeed},{"controllerBindings",t.controllerBindings}}},
         {"navigation",{{"collapsed",t.navigationCollapsed},{"pinned",t.navigationPinned}}},
         {"authoring",{{"autoInstallDotNet",t.autoInstallAuthoringDotNet}}},
         {"mods",{{"manageExternalUE4SS",t.ue4ssManageExternal},{"compactUE4SS",t.ue4ssCompact}}},
         {"updates",{{"automaticChecks",t.automaticUpdateChecks},{"artwork",t.updateArtwork},{"worldMap",t.updateWorldMap},{"mapFilters",t.updateMapFilters}}},
         {"preview",{{"quality",t.previewQuality},{"animation",t.previewAnimate},{"details",t.previewDetails},{"scaleUsePortrait",t.scaleUsePortrait},{"scaleReferenceIcon",t.scaleReferenceIcon}}},
-        {"runtime",{{"timeUnit",t.runtimeTimeUnit},{"helpyFpsLimit",t.helpyFpsLimit},{"showFps",t.showFps},{"fpsRefreshMs",t.fpsRefreshMs},{"showGameFps",t.showGameFps},{"showCoordinates",t.showCoordinates},{"showStartupProgress",t.showStartupProgress},{"fpsHotkey",t.fpsHotkey},{"gameOverlay",t.gameOverlay},{"nativeOverlay",t.nativeOverlay},{"overlayOpacity",t.overlayOpacity},{"overlaySize",t.overlaySize},{"overlayUiScale",t.overlayUiScale}}},
+        {"runtime",{{"timeUnit",t.runtimeTimeUnit},{"helpyFpsLimit",t.helpyFpsLimit},{"showFps",t.showFps},{"fpsRefreshMs",t.fpsRefreshMs},{"showGameFps",t.showGameFps},{"showCoordinates",t.showCoordinates},{"showStartupProgress",t.showStartupProgress},{"fpsHotkey",t.fpsHotkey},{"fpsControllerBinding",t.fpsControllerBinding},{"gameOverlay",t.gameOverlay},{"nativeOverlay",t.nativeOverlay},{"overlayOpacity",t.overlayOpacity},{"overlaySize",t.overlaySize},{"overlayUiScale",t.overlayUiScale}}},
         {"background",{{"file",t.backgroundFile},{"strength",t.backgroundStrength}}},
         {"liveLog",{{"colorRules",LiveLog::WriteColors(t.logColors)}}},
         {"notifications",{{"enabled",t.diagnosticToastsEnabled},{"visibleLimit",t.diagnosticToastLimit},{"durationSeconds",t.diagnosticToastDuration},{"registryActivity",t.diagnosticRegistryActivity}}},
@@ -396,7 +422,7 @@ inline void Reload(bool createIfMissing=true) {
         next.dockedBayHeight=ReadFloat(views,"dockedBayHeight",280.0f,160.0f,900.0f);
         next.itemCartWidth=ReadFloat(views,"itemCartWidth",270.0f,210.0f,500.0f);
         next.itemGridColumns=ReadInt(views,"itemGridColumns",ItemBayLayout::DefaultColumns,1,ItemBayLayout::MaxColumns);
-        next.itemPageSize=ReadInt(views,"itemPageSize",ItemPaging::DefaultSize,1,ItemPaging::MaximumSize);
+        next.itemPageSize=ReadInt(views,"itemPageSize",ItemPaging::DefaultSize,1,ItemPaging::MaximumSize);next.quickSendPlayerGuid=views.value("quickSendPlayerGuid",std::string{});if(next.quickSendPlayerGuid.size()>128)next.quickSendPlayerGuid.clear();
         next.itemGridRows=ReadInt(views,"itemGridRows",ItemBayLayout::DefaultRows,1,ItemBayLayout::MaxRows);
         next.itemGridFitRows=views.value("itemGridFitRows",true);
         next.itemShowPlaceholders=views.value("itemShowPlaceholders",false);
@@ -410,13 +436,18 @@ inline void Reload(bool createIfMissing=true) {
         next.showStartupProgress=runtime.value("showStartupProgress",true);
         next.gameOverlay=runtime.value("gameOverlay",true);
         next.nativeOverlay=runtime.value("nativeOverlay",true);
-        const auto input=doc.value("input",nlohmann::json::object());next.inputMode=ReadInt(input,"mode",0,0,2);next.controllerGlyphs=ReadInt(input,"glyphs",0,0,4);next.controllerShortcut=ReadInt(input,"shortcut",1,0,2);next.reserveControllerGuide=input.value("reserveGuide",true);next.controllerTouchpad=input.value("touchpad",true);
+        const auto input=doc.value("input",nlohmann::json::object());next.inputMode=ReadInt(input,"mode",0,0,2);next.controllerGlyphs=ReadInt(input,"glyphs",0,0,4);next.controllerShortcut=ReadInt(input,"shortcut",1,0,2);
+        next.hudBindings=input.value("hudBindings",nlohmann::json::object());if(!next.hudBindings.is_object()||next.hudBindings.size()>256)throw std::runtime_error("Invalid HUD bindings.");
+        for(auto& [id,binding]:next.hudBindings.items()){if(id.empty()||id.size()>256)throw std::runtime_error("Invalid HUD binding identity.");binding={{"Keyboard",InputBindings::Text(InputBindings::Parse(binding.value("Keyboard",std::string("None"))))},{"Controller",InputBindings::PadText(InputBindings::ParsePad(binding.value("Controller",std::string("None"))))}};}
+        next.helpyKeyboardBinding=input.value("keyboardBinding",std::string{});if(!next.helpyKeyboardBinding.empty())try{next.helpyKeyboardBinding=InputBindings::Text(InputBindings::Parse(next.helpyKeyboardBinding));}catch(const std::exception&){next.helpyKeyboardBinding.clear();}
+        next.controllerBinding=input.value("binding",std::string{});if(!next.controllerBinding.empty())try{next.controllerBinding=InputBindings::PadText(InputBindings::ParsePad(next.controllerBinding));}catch(const std::exception&){next.controllerBinding.clear();}next.controllerBindings=HelpyControllerBindings::Validate(input.value("controllerBindings",nlohmann::json::object()));next.reserveControllerGuide=input.value("reserveGuide",true);next.controllerTouchpad=input.value("touchpad",true);next.controllerCursor=input.value("cursor",true);next.controllerCursorSpeed=ReadFloat(input,"cursorSpeed",900.f,200.f,1800.f);
         next.autoInstallAuthoringDotNet=doc.value("authoring",nlohmann::json::object()).value("autoInstallDotNet",true);
         next.overlayOpacity=ReadFloat(runtime,"overlayOpacity",.88f,.60f,1.f);
         next.overlaySize=ReadFloat(runtime,"overlaySize",.9f,.45f,.98f);
         next.overlayUiScale=ReadFloat(runtime,"overlayUiScale",1.f,.65f,1.5f);
         next.fpsHotkey=runtime.value("fpsHotkey",std::string("F10"));
-        if(const auto* key=HelpyShortcut::Find(next.fpsHotkey))next.fpsHotkey=key->Name;else next.fpsHotkey="F10";
+        try{next.fpsHotkey=InputBindings::Text(InputBindings::Parse(next.fpsHotkey));}catch(const std::exception&){next.fpsHotkey="F10";}
+        next.fpsControllerBinding=runtime.value("fpsControllerBinding",std::string("None"));try{next.fpsControllerBinding=InputBindings::PadText(InputBindings::ParsePad(next.fpsControllerBinding));}catch(const std::exception&){next.fpsControllerBinding="None";}
         const auto background=doc.value("background",nlohmann::json::object());
         next.backgroundFile=background.value("file",std::string{});if(!BackgroundPolicy::Filename(next.backgroundFile))next.backgroundFile.clear();
         next.backgroundStrength=ReadFloat(background,"strength",.12f,0,.3f);
@@ -511,17 +542,21 @@ inline bool SearchIconButton(const char* id,float logicalSize=0.0f) {
     ImGui::PopID();return clicked;
 }
 
-struct PaneNavigationScope {ImGuiWindow* Source=nullptr;ImGuiNavItemData Saved;};
+inline bool ControllerNavigation=false,EnterNextSection=false;
+struct PaneNavigationScope {ImGuiWindow* Source=nullptr;ImGuiNavItemData Saved;bool Section=false;};
 inline std::vector<PaneNavigationScope> PaneNavigationStack;
 inline ImGuiContext* PaneNavigationContext=nullptr;inline int PaneNavigationFrame=-1;
 inline ImGuiWindow* PaneNavigationSource=nullptr;inline ImGuiNavItemData PaneNavigationBest;
 inline bool Nearer(const ImGuiNavItemData& a,const ImGuiNavItemData& b){return a.ID&&(!b.ID||a.DistBox<b.DistBox||(a.DistBox==b.DistBox&&a.DistCenter<b.DistCenter));}
-inline bool BeginPanel(const char* id,const ImVec2& size=ImVec2(0,0),ImGuiChildFlags childFlags=0,ImGuiWindowFlags windowFlags=0) {
+inline bool BeginPanel(const char* id,const ImVec2& size=ImVec2(0,0),ImGuiChildFlags childFlags=0,ImGuiWindowFlags windowFlags=0,bool section=false) {
     auto& context=*ImGui::GetCurrentContext();
     if(PaneNavigationContext!=&context||PaneNavigationFrame!=context.FrameCount){PaneNavigationContext=&context;PaneNavigationFrame=context.FrameCount;PaneNavigationStack.clear();PaneNavigationSource=nullptr;PaneNavigationBest.Clear();}
-    const bool visible=ImGui::BeginChild(id,size,childFlags|ImGuiChildFlags_NavFlattened,windowFlags);
-    PaneNavigationScope scope;auto* window=ImGui::GetCurrentWindow();
-    if(context.NavWindow&&window!=context.NavWindow&&context.NavMoveScoringItems&&!(context.NavMoveFlags&(ImGuiNavMoveFlags_IsTabbing|ImGuiNavMoveFlags_AlsoScoreVisibleSet))&&ImGui::IsWindowChildOf(window,context.NavWindow,false)){
+    const bool contained=section&&ControllerNavigation;
+    const bool visible=ImGui::BeginChild(id,size,contained?childFlags:childFlags|ImGuiChildFlags_NavFlattened,windowFlags);
+    PaneNavigationScope scope;scope.Section=contained;auto* window=ImGui::GetCurrentWindow();
+    if(contained&&visible)HelpyControllerPanes::Register(window);
+    if(contained&&EnterNextSection){EnterNextSection=false;ImGui::FocusWindow(window);ImGui::NavInitWindow(window,false);ImGui::SetNavCursorVisible(true);}
+    if(context.NavWindow&&window->RootWindowForNav==context.NavWindow->RootWindowForNav&&window!=context.NavWindow&&context.NavMoveScoringItems&&!(context.NavMoveFlags&(ImGuiNavMoveFlags_IsTabbing|ImGuiNavMoveFlags_AlsoScoreVisibleSet))&&ImGui::IsWindowChildOf(window,context.NavWindow,false)){
         scope.Source=context.NavWindow;scope.Saved=context.NavMoveResultOther;context.NavMoveResultOther.Clear();
     }
     PaneNavigationStack.push_back(scope);return visible;
@@ -538,11 +573,12 @@ inline void EndPanel(){
         }
         if(Nearer(scope.Saved,context.NavMoveResultOther))context.NavMoveResultOther=scope.Saved;
     }
+    if(scope.Section&&context.NavWindow&&context.NavWindow->RootWindowForNav==ImGui::GetCurrentWindow()&&context.NavInputSource==ImGuiInputSource_Gamepad){const auto* window=ImGui::GetCurrentWindow();const auto a=window->Pos,b=ImVec2(a.x+window->Size.x,a.y+window->Size.y);HelpyFocusHighlight::Draw(window->DrawList,a,b,ImGui::GetColorU32(Current.accent),Current.X(Current.childRounding),false,Current.X(2));}
     ImGui::EndChild();
 }
-inline bool BeginScroll(const char* id,const ImVec2& size=ImVec2(0,0),bool border=false) {
+inline bool BeginScroll(const char* id,const ImVec2& size=ImVec2(0,0),bool border=false,bool section=false) {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(Current.X(Current.contentPaddingX),Current.Y(Current.contentPaddingY)));
-    return BeginPanel(id,size,border?ImGuiChildFlags_Borders:0,ImGuiWindowFlags_AlwaysVerticalScrollbar|ImGuiWindowFlags_AlwaysUseWindowPadding);
+    return BeginPanel(id,size,border?ImGuiChildFlags_Borders:0,ImGuiWindowFlags_AlwaysVerticalScrollbar|ImGuiWindowFlags_AlwaysUseWindowPadding,section);
 }
 inline void EndScroll(const Theme& t) {
     const float y=ImGui::GetScrollY(),max=ImGui::GetScrollMaxY(),h=t.Y(t.scrollFadeHeight);

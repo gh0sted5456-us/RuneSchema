@@ -6,6 +6,9 @@
     "Pre-release & pending changelog": "experimental/PRE-RELEASE.md"
   },
   {
+    "Runtime folder layout": "experimental/RUNTIME-LAYOUT.md"
+  },
+  {
     "Install & compatibility": [
       {
         "Install or update": "experimental/INSTALLATION.md"
@@ -30,10 +33,16 @@
         "Controller navigation": "experimental/CONTROLLER-NAVIGATION.md"
       },
       {
+        "Bindings & mod HUDs (in development)": "experimental/CONTROLLER-HUD-BINDINGS.md"
+      },
+      {
         "Mod Menu 2 & HUD layout": "experimental/MOD-MENU-2-AND-HUD.md"
       },
       {
         "Save recovery": "experimental/SAVE-RECOVERY.md"
+      },
+      {
+        "Mod-owned save files": "experimental/MOD-SAVE-FILES.md"
       },
       {
         "Resource & UE4SS diagnostics": "experimental/PERFORMANCE-DIAGNOSTICS.md"
@@ -43,6 +52,9 @@
       },
       {
         "Report a bug": "experimental/HELPY-BUG-REPORTS.md"
+      },
+      {
+        "Advanced Tooling (in development)": "experimental/DEVELOPER-TOOLS.md"
       }
     ]
   },

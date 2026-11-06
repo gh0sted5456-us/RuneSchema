@@ -78,6 +78,12 @@ inline std::vector<Package> Discover(const fs::path& mod,const std::string& owne
     std::sort(children.begin(),children.end(),[](const auto& a,const auto& b){return ModFolderLayout::FoldAscii(a.Name)<ModFolderLayout::FoldAscii(b.Name);});
     return children;
 }
+// HUD declarations are data; a client binding does not need a no-op Lua loader.
+inline std::vector<fs::path> HudRoots(const fs::path& mod,const std::string& owner){
+    const auto packages=Discover(mod,owner);const auto container=ModFolderLayout::FindChildDirectory(mod,"ue4ss");
+    if(container.empty()||!StatusEnabled(container))return {};
+    std::vector<fs::path> roots{container};for(const auto& package:packages)if(package.Enabled&&package.Root!=container)roots.push_back(package.Root);return roots;
+}
 inline std::string Manifest(const fs::path& mods,const std::vector<Package>& packages){
     std::ostringstream out;out<<"# RuneSchema UE4SS packages v1; generated from enabled parent mods.\n";
     for(const auto& package:packages){

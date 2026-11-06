@@ -175,15 +175,14 @@ inline void RenderStream(size_t index){
     auto& Search=state.Search;auto& Scope=state.Scope;auto& Dirty=state.Dirty;auto& Revision=state.Revision;auto& Scopes=state.Scopes;auto& Visible=state.Visible;
     ImGui::TextColored(Paused?theme.warning:theme.accentHover,"%s",Paused?"PAUSED":"LIVE");ImGui::SameLine();const auto filename=Path(index).filename().string();ImGui::TextDisabled("%s",filename.c_str());
     if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("%s",Path(index).string().c_str());
-    if(index==3){ImGui::TextDisabled("EOS events from the game log");if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Use Actions to choose a separate EOS log.");}
+    if(index==3){ImGui::TextDisabled("EOS events from the game log");if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Use More to choose a separate EOS log.");}
     ImGui::SetNextItemWidth(std::max(theme.X(60),std::min(theme.X(380),ImGui::GetContentRegionAvail().x-theme.X(60))));Dirty|=HelpyTextInput::InputTextWithHint("##log-search","Search words, phrases or codes…",Search,sizeof(Search));
     if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("All words must match. Use quotes for a phrase, -word to exclude, or source:, code: and level:. Example: source:loganimation guid -optional");
     ImGui::SameLine();ImGui::BeginDisabled(!Search[0]);if(ImGui::SmallButton("Clear")){Search[0]=0;Dirty=true;}ImGui::EndDisabled();
     int preset=std::all_of(Levels.begin(),Levels.end(),[](bool value){return value;})?0:Levels==std::array<bool,4>{false,false,true,true}?1:Levels==std::array<bool,4>{false,false,false,true}?2:3;
     ImGui::SetNextItemWidth(theme.X(180));if(ImGui::Combo("Severity",&preset,"All\0Warnings + errors\0Errors\0Custom\0")){if(preset<3){Levels={preset==0,preset==0,preset<=1,true};Dirty=true;}}
     if(HelpyImGuiTheme::Toggle("Pause",&Paused))NextRead={};ImGui::SameLine();HelpyImGuiTheme::Toggle("Follow newest",&Follow);ImGui::SameLine();
-    if(HelpyImGuiTheme::SoftButton("Actions"))ImGui::OpenPopup("Log actions");
-    if(ImGui::BeginPopup("Log actions")){
+    if(HelpyMenu::BeginMore("log-actions")){
         if(ImGui::MenuItem("Open log file"))ShellExecuteW(nullptr,L"open",Path(index).c_str(),nullptr,nullptr,SW_SHOWNORMAL);
         if(ImGui::MenuItem("Open log folder"))ShellExecuteW(nullptr,L"open",Path(index).parent_path().c_str(),nullptr,nullptr,SW_SHOWNORMAL);
         if(index>=2&&ImGui::MenuItem("Choose log file...",nullptr,false,!state.Worker.valid())){

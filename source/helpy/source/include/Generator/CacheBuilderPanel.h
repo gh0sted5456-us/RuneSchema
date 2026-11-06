@@ -56,10 +56,11 @@ inline void Render(const Json& snapshot,const Json& rows){
 #endif
     int tab=wanted>=0?wanted:SelectedTab?1:0;constexpr std::array labels{"Installed","Creation"};
     HelpyMenu::Tabs("cache-builder",labels,tab);SelectedTab=tab==1;SelectInstalled=false;
+    ImGui::PushID(tab);
     const auto available=ImGui::GetContentRegionAvail();const bool stacked=available.x<t.X(640);
     const float left=std::max(1.f,stacked?available.x:(available.x-ImGui::GetStyle().ItemSpacing.x)*.52f);
     ImGui::PushStyleColor(ImGuiCol_ChildBg,t.panel);
-    if(HelpyImGuiTheme::BeginPanel("##cache-builder-input",{left,stacked?std::max(t.Y(140),available.y*.55f):0},true)){
+    if(HelpyImGuiTheme::BeginPanel("##cache-builder-input",{left,stacked?std::max(t.Y(140),available.y*.55f):0},true,0,true)){
         ImGui::BeginDisabled(HelpyModCacheBuilder::Current().Running||HelpyModCacheBuilder::CurrentBatch().Active);
         if(!SelectedTab){
             ImGui::SeparatorText("Installed mod");
@@ -92,7 +93,7 @@ inline void Render(const Json& snapshot,const Json& rows){
         }
         ImGui::EndDisabled();Dependencies();if(!Notice.empty())ImGui::TextWrapped("%s",Notice.c_str());
     }PS::HelpyImGuiTheme::EndPanel();if(!stacked)ImGui::SameLine();
-    if(HelpyImGuiTheme::BeginPanel("##cache-builder-progress",{0,stacked?std::max(t.Y(140),ImGui::GetContentRegionAvail().y):0},true)){
+    if(HelpyImGuiTheme::BeginPanel("##cache-builder-progress",{0,stacked?std::max(t.Y(140),ImGui::GetContentRegionAvail().y):0},true,0,true)){
         const auto& job=HelpyModCacheBuilder::Current();ImGui::SeparatorText("Progress & output");
         const auto& batch=HelpyModCacheBuilder::CurrentBatch();
         if(batch.Total)ImGui::TextWrapped("Enabled mods: %u total · %u completed · %u failed · %u skipped",batch.Total,batch.Completed,batch.Failed,batch.Skipped);
@@ -117,5 +118,6 @@ inline void Render(const Json& snapshot,const Json& rows){
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::CacheBuilderCreation=SelectedTab;
 #endif
+    ImGui::PopID();
 }
 }

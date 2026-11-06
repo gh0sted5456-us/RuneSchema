@@ -1,3 +1,4 @@
+#include "RuntimePaths.h"
 #include <windows.h>
 #include <shellapi.h>
 #include <cstring>
@@ -26,14 +27,14 @@ int32_t Reply(const nlohmann::json& value,char* output,uint32_t capacity,uint32_
 int32_t StartDesktop(State* state){
     std::lock_guard lock(state->LaunchMutex);if(state->Launcher.joinable())return RS_PLUGIN_OK;
     wchar_t image[32768]{};const auto length=GetModuleFileNameW(Module,image,32768);if(!length||length>=32768)throw std::runtime_error("Cannot locate Helpy bridge");
-    const auto plugin=std::filesystem::path(image).parent_path().parent_path();PS::HelpyPaths::Configure(plugin);PS::HelpySettings::Configure(plugin);PS::HelpySettings::EnsureLoaded();
+    const auto plugin=PS::RuntimePaths::HelpyFromBinary(image);PS::HelpyPaths::Configure(plugin);PS::HelpySettings::Configure(plugin);PS::HelpySettings::EnsureLoaded();
     if(!PS::HelpySettings::IsEnabled()||!PS::HelpySettings::StartAlongsideGame())return RS_PLUGIN_OK;
     nlohmann::json environment,bridge;if(ReadCore(state,{{"Action","Environment"}},environment))PS::HelpyEnvironment::Configure(environment);
     state->Ready=ReadCore(state,{{"Action","DesktopBridgeStatus"}},bridge)&&bridge.value("Ready",false);if(!state->Ready)return RS_PLUGIN_OK;
     USEROBJECTFLAGS flags{};DWORD bytes=0;if(!GetUserObjectInformationW(GetProcessWindowStation(),UOI_FLAGS,&flags,sizeof(flags),&bytes)||!(flags.dwFlags&WSF_VISIBLE))return RS_PLUGIN_OK;
-    if(!std::filesystem::is_regular_file(plugin/"dll/Helpy.exe"))throw std::runtime_error("Helpy.exe is missing. Install the matching application beside the bridge DLL.");
+    if(!std::filesystem::is_regular_file(PS::RuntimePaths::HelpyBinary(PS::RuntimePaths::ModFromHelpy(plugin),"Helpy.exe")))throw std::runtime_error("Helpy.exe is missing. Install the matching application beside the bridge DLL.");
     const std::string platform=PS::HelpyEnvironment::Server()?"server":PS::HelpyEnvironment::Current==PS::HelpyEnvironment::Kind::GamePass?"gamepass":PS::HelpyEnvironment::Current==PS::HelpyEnvironment::Kind::Epic?"epic":"steam";
-    const auto root=plugin.parent_path().parent_path();const bool hidden=!PS::HelpySettings::OpenOnGameStart();
+    const auto root=PS::RuntimePaths::ModFromHelpy(plugin);const bool hidden=!PS::HelpySettings::OpenOnGameStart();
     state->Launcher=std::jthread([state,root,platform,hidden]{try{PS::HelpyDesktopLaunch::Start(root,platform,hidden);}catch(const std::exception& error){const auto message="[RS-UI-002] Helpy desktop launch failed: "+std::string(error.what());state->Host->Log(RS_LOG_WARNING,Descriptor.Id,message.c_str());}});
     return RS_PLUGIN_OK;
 }
@@ -96,7 +97,7 @@ extern "C" __declspec(dllexport) int32_t RS_PLUGIN_CALL RuneSchemaPlugin_OnUnrea
     auto* state=static_cast<State*>(context);if(!state)return RS_PLUGIN_INVALID_ARGUMENT;
     try{
         wchar_t image[32768]{};const auto length=GetModuleFileNameW(Module,image,32768);if(!length||length>=32768)throw std::runtime_error("Cannot locate Helpy bridge");
-        const auto plugin=std::filesystem::path(image).parent_path().parent_path();PS::HelpyPaths::Configure(plugin);PS::HelpySettings::Configure(plugin);PS::HelpySettings::EnsureLoaded();if(!PS::HelpySettings::IsEnabled())return RS_PLUGIN_OK;
+        const auto plugin=PS::RuntimePaths::HelpyFromBinary(image);PS::HelpyPaths::Configure(plugin);PS::HelpySettings::Configure(plugin);PS::HelpySettings::EnsureLoaded();if(!PS::HelpySettings::IsEnabled())return RS_PLUGIN_OK;
         nlohmann::json environment,bridge;if(ReadCore(state,{{"Action","Environment"}},environment))PS::HelpyEnvironment::Configure(environment);
         state->Ready=ReadCore(state,{{"Action","DesktopBridgeStatus"}},bridge)&&bridge.value("Ready",false);
         PS::RuneSchemaProfile::Load(PS::HostServices::StateDirectory());PS::HelpyPersonalization::Load(PS::RuneSchemaProfile::Ready?PS::RuneSchemaProfile::Data("labels.json"):PS::HostServices::StateDirectory()/"personalization.json");state->InventoryReady=true;
@@ -109,7 +110,7 @@ extern "C" __declspec(dllexport) void RS_PLUGIN_CALL RuneSchemaPlugin_Shutdown(v
 VKAPI_ATTR VkResult VKAPI_CALL vkNegotiateLoaderLayerInterfaceVersion(VkNegotiateLayerInterface* version){
     try{
         wchar_t image[32768]{};const auto count=GetModuleFileNameW(Module,image,32768);if(!count||count>=32768)return VK_ERROR_INITIALIZATION_FAILED;
-        const auto path=std::filesystem::path(image).parent_path().parent_path().parent_path()/"RuneSchema.HUD/dll/RuneSchema.HUD.dll";
+        const auto path=PS::RuntimePaths::Plugin(PS::RuntimePaths::ModFromBinary(image),"RuneSchema.HUD")/"dll/RuneSchema.HUD.dll";
         const auto module=LoadLibraryExW(path.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);if(!module)return VK_ERROR_INITIALIZATION_FAILED;
         const auto negotiate=reinterpret_cast<PFN_vkNegotiateLoaderLayerInterfaceVersion>(GetProcAddress(module,"vkNegotiateLoaderLayerInterfaceVersion"));
         if(!negotiate){FreeLibrary(module);return VK_ERROR_INITIALIZATION_FAILED;}

@@ -1,3 +1,4 @@
+#include "RuntimePaths.h"
 #pragma once
 #include "Core/CacheBundleIO.h"
 #include "Core/ItemCategory.h"
@@ -43,7 +44,7 @@ inline std::vector<std::pair<std::filesystem::path,std::string>> Files(const std
     const auto mods=root/"mods";CacheBundleIO::Safe(mods);if(std::filesystem::is_directory(mods))for(const auto& mod:std::filesystem::directory_iterator(mods)){
         CacheBundleIO::Safe(mod.path());if(!mod.is_directory())continue;if(result.size()>2048)throw std::runtime_error("Too many installed grouping sources.");result.emplace_back(mod.path()/"cache/taglines.json","mods/"+HelpyCacheSources::Lower(mod.path().filename().string()));
     }
-    result.emplace_back(root/"plugins/RuneSchema.Helpy/settings/item-groupings.json",std::string{});return result;
+    result.emplace_back(RuntimePaths::Helpy(root)/"settings/item-groupings.json",std::string{});return result;
 }
 inline Plan Load(const std::filesystem::path& cache,const std::filesystem::path& root){Plan result;for(const auto& [file,owner]:Files(cache,root))if(std::filesystem::is_regular_file(file)){
     const auto incoming=Bound(Read(file),owner);if(file.filename()=="item-groupings.json")for(const auto& [key,rule]:incoming)if(rule.Owner.empty())for(auto& [existingKey,existing]:result)if(HelpyCacheSources::Lower(existing.Path)==HelpyCacheSources::Lower(rule.Path)){existing.Category=rule.Category;existing.Family=rule.Family;}

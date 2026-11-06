@@ -44,9 +44,10 @@ try {
         }
     } finally { $inputZip.Dispose() }
     $payload = Join-Path $staging 'RuneSchema'
-    foreach ($required in @('dlls/main.dll', 'enabled.txt', 'scripts/main.lua', 'plugins/plugins.txt')) {
+    foreach ($required in @('dlls/main.dll', 'enabled.txt', 'scripts/main.lua')) {
         if (-not (Test-Path -LiteralPath (Join-Path $payload $required) -PathType Leaf)) { throw "Missing runtime file: $required" }
     }
+    if (-not ((Test-Path -LiteralPath (Join-Path $payload 'settings/plugins.txt')) -or (Test-Path -LiteralPath (Join-Path $payload 'plugins/plugins.txt')))) { throw 'Missing plugin load order.' }
     if (-not ((Test-Path -LiteralPath (Join-Path $payload 'settings/settings.ini')) -or
               (Test-Path -LiteralPath (Join-Path $payload 'settings/settings.jsonc')))) { throw 'Missing runtime settings.' }
     foreach ($file in Get-ChildItem -LiteralPath $payload -File -Recurse) {

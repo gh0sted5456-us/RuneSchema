@@ -44,5 +44,9 @@ int main(){
     assert(emitted[3].Context["Property"]=="Effect.Particle.Radius");
     assert(emitted[0].OperationId==first);
     assert(PS::StructuredDiagnostic::IssueKey(emitted[3])!=PS::StructuredDiagnostic::IssueKey(emitted[4]));
+    Provenance imports{"ImportsMod","assets/import.jsonc","/Game/Test.Target",NewOperationId("import")};
+    assert(Report("RS-IMP-013","Info","Succeeded","ImportPlanner","Dry-run import plan ready","No changes applied",imports,"Planning"));
+    assert(Report("RS-IMP-014","Error","Blocked","ImportPlanner","Import application failed","Destination unchanged",imports,"Application"));
+    assert(emitted.size()==8&&emitted[6].OperationId==emitted[7].OperationId&&emitted[6].Context["Phase"]=="Planning"&&emitted[7].Context["Phase"]=="Application");
     for(const auto& record:emitted){auto line=PS::StructuredDiagnostic::Encode(record);assert(line);}
 }

@@ -45,7 +45,7 @@ inline void Poll(){
 inline void Render(){
     Poll();
     if(!Attempted&&SpawnToolRequests::IsAvailable()){Attempted=true;Submit("Read");}
-    HelpyMenu::Tabs("server-player-access",std::array{"RuneSchema access","Native Admin"},Tab);
+    HelpyMenu::Tabs("server-player-access",std::array{"RuneSchema access","Native Admin"},Tab,false);
     ImGui::SeparatorText("Player administration");
     ImGui::TextWrapped("Authorize connected players from server Helpy or the owner's client. Access is saved for their character; native Admin is managed separately.");
     ImGui::BeginDisabled(Pending||SpawnToolRequests::IsWaiting());

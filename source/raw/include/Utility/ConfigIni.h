@@ -77,7 +77,7 @@ namespace PS {
         (void)DecodeSettings(document.dump());
         std::string text="; RuneSchema settings. Edit with the game closed, then restart.\n"
             "; Booleans: true/false. Lists: JSON arrays. Quote strings containing ; or #.\n"
-            "; Plugin-owned settings remain below plugins/<PluginId>/settings/.\n\n";
+            "; Plugin-owned settings remain below dlls/plugins/<PluginId>/settings/ or Helpy/settings/.\n\n";
         const auto emit=[&](auto&& self,const nlohmann::json& object,const std::string& section)->void {
             text+='['+section+"]\n";
             for(const auto& [key,value]:object.items()){

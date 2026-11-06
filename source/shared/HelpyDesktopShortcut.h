@@ -1,3 +1,4 @@
+#include "RuntimePaths.h"
 #pragma once
 #include "Core/ConfigFiles.h"
 #include "HelpyDesktopTransport.h"
@@ -9,7 +10,7 @@
 #include <stdexcept>
 
 namespace PS::HelpyDesktopShortcut {
-inline bool CreateOnce(const std::filesystem::path& executable,const std::filesystem::path& desktop,const std::string& platform,const std::filesystem::path& marker,const std::filesystem::path& previous={},const std::wstring& arguments={}){
+inline bool CreateOnce(const std::filesystem::path& executable,const std::filesystem::path& desktop,const std::string& platform,const std::filesystem::path& marker,const std::filesystem::path& previous={},const std::wstring& arguments={},const std::filesystem::path& alternate={}){
     namespace fs=std::filesystem;if(fs::exists(marker))return false;
     const wchar_t* label=platform=="steam"?L"Steam":platform=="gamepass"?L"Game Pass":platform=="epic"?L"Epic Games":platform=="server"?L"Server":nullptr;
     if(!label||!fs::is_regular_file(executable)||executable.filename()!=L"Helpy.exe"||!fs::is_directory(desktop))throw std::runtime_error("Helpy desktop shortcut location is unavailable");
@@ -20,7 +21,7 @@ inline bool CreateOnce(const std::filesystem::path& executable,const std::filesy
     bool replace=false;
     if(fs::exists(target)){
         Microsoft::WRL::ComPtr<IShellLinkW> old;Microsoft::WRL::ComPtr<IPersistFile> saved;wchar_t path[32768]{},description[256]{};
-        if(!previous.empty()&&SUCCEEDED(CoCreateInstance(CLSID_ShellLink,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&old)))&&SUCCEEDED(old.As(&saved))&&SUCCEEDED(saved->Load(target.c_str(),STGM_READ))&&SUCCEEDED(old->GetPath(path,32768,nullptr,SLGP_RAWPATH))&&SUCCEEDED(old->GetDescription(description,256))){replace=CompareStringOrdinal(fs::absolute(path).lexically_normal().c_str(),-1,fs::absolute(previous).lexically_normal().c_str(),-1,TRUE)==CSTR_EQUAL&&std::wstring_view(description)==L"Open RuneSchema Helpy with or without Dragonwilds running.";}
+        if((!previous.empty()||!alternate.empty())&&SUCCEEDED(CoCreateInstance(CLSID_ShellLink,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&old)))&&SUCCEEDED(old.As(&saved))&&SUCCEEDED(saved->Load(target.c_str(),STGM_READ))&&SUCCEEDED(old->GetPath(path,32768,nullptr,SLGP_RAWPATH))&&SUCCEEDED(old->GetDescription(description,256))){const auto matches=[&](const fs::path& candidate){return !candidate.empty()&&CompareStringOrdinal(fs::absolute(path).lexically_normal().c_str(),-1,fs::absolute(candidate).lexically_normal().c_str(),-1,TRUE)==CSTR_EQUAL;};replace=(matches(previous)||matches(alternate))&&std::wstring_view(description)==L"Open RuneSchema Helpy with or without Dragonwilds running.";}
         if(!replace){ConfigFiles::Write(marker,"Existing desktop shortcut preserved.\n");return false;}
     }
     Microsoft::WRL::ComPtr<IShellLinkW> link;Microsoft::WRL::ComPtr<IPersistFile> file;
@@ -34,9 +35,9 @@ inline bool CreateOnce(const std::filesystem::path& executable,const std::filesy
     }catch(...){std::error_code error;fs::remove(pending,error);throw;}
 }
 inline bool Ensure(const std::filesystem::path& executable,const std::string& platform,const std::filesystem::path& stateDirectory){
-    const auto root=executable.parent_path().parent_path().parent_path().parent_path();const auto pipe=HelpyDesktop::PipeName(root);const auto id=pipe.substr(pipe.find_last_of(L'.')+1);
-    const auto marker=stateDirectory/"desktop"/id/"shortcut-runtime-v3.done";if(std::filesystem::exists(marker))return false;
+    const auto root=RuntimePaths::ModFromBinary(executable);const auto pipe=HelpyDesktop::PipeName(root);const auto id=pipe.substr(pipe.find_last_of(L'.')+1);
+    const auto marker=stateDirectory/"desktop"/id/"shortcut-layout-v4.done";if(std::filesystem::exists(marker))return false;
     PWSTR value=nullptr;if(FAILED(SHGetKnownFolderPath(FOLDERID_Desktop,0,nullptr,&value)))throw std::runtime_error("Windows Desktop folder unavailable");const std::filesystem::path desktop(value);CoTaskMemFree(value);
-    return CreateOnce(executable,desktop,platform,marker,stateDirectory/"apps"/id/"Helpy.exe",L"--runtime-root \""+root.wstring()+L"\" --platform "+std::wstring(platform.begin(),platform.end()));
+    return CreateOnce(executable,desktop,platform,marker,stateDirectory/"apps"/id/"Helpy.exe",L"--runtime-root \""+root.wstring()+L"\" --platform "+std::wstring(platform.begin(),platform.end()),root/"plugins/RuneSchema.Helpy/dll/Helpy.exe");
 }
 }

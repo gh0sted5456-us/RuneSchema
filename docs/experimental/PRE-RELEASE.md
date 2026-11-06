@@ -18,6 +18,17 @@ The download is the maintainer's complete ZIP, published unchanged with a
 versioned filename. It includes Helpy and all bundled plugins. Install UE4SS
 separately; preserve your settings, mods and saves when updating.
 
+## Unpublished development follow-up
+
+The [runtime folder restructure](RUNTIME-LAYOUT.md) separates core plugins under
+`dlls/plugins` from Helpy under `Helpy`. It is a separate local candidate and is
+not included in the published download above. The same local follow-up adds a
+[native Helpy Mod Menu 2 plugin](MOD-MENU-2-AND-HUD.md) and
+[controller profiles, touchpad gestures and glyph feedback](CONTROLLER-HUD-BINDINGS.md#reconfigure-a-detected-controller).
+
+The independent [Developer Tools plugin](DEVELOPER-TOOLS.md) is also in local
+development; its additional native gameplay commands are not yet complete.
+
 ## Pending changelog
 
 These changes are available in the candidate and await stable promotion.
@@ -36,6 +47,22 @@ These changes are available in the candidate and await stable promotion.
 [Browse the feature guides](index.md) for controls and defaults.
 [Detailed development history](CHANGELOG-0.8.1.0.md) retains the individual changes
 and earlier test-stage notes.
+
+## Local changes awaiting a new package
+
+- **Mod licenses:** Select RuneSchema or UE4SS mod cards for a gold border, then
+  open **License** at the bottom of the internal navigation. Read, copy and
+  refresh bundled notices, or open the author's linked mod page. Compact UE4SS
+  rows also support selection. See [selected mod licenses](HELPY-STANDALONE.md#selected-mod-licenses-in-development).
+
+- **Direct item delivery:** Right-click Give waits behind background cart validation
+  and sends only the requested items. Existing cart contents and selection remain
+  unchanged; a disconnected recipient or world change cancels queued delivery.
+- **Player mark synchronization:** An unavailable owned-player bridge uses bounded
+  retry backoff and one warning per outage. Only submitted requests count toward
+  acknowledgement retries. Local marks remain saved.
+
+These changes are available in local test builds; a new download has not been published.
 
 ## Testing and feedback
 

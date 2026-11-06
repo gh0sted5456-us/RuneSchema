@@ -21,19 +21,54 @@ entry assigns the first focus target automatically, so a mouse click is not
 required to start navigation. Returning to Home focuses its first available
 tile. Mouse/keyboard mode keeps the normal **Enter** label.
 
-The left stick uses the same focus movement and repeat behavior as the D-pad,
-with a dead zone to avoid drift. It moves the highlighted control rather than
-independently scrolling the window. Opening a page starts at an available tab
-or category; active text fields, drags and popups keep their existing focus.
+## Navigation and quick actions
 
-**Settings → Helpy → Display → Controller navigation** offers **Automatic**,
-**Mouse & keyboard** and **Controller** input modes. Automatic follows new input
-activity; a held stick does not repeatedly take over after mouse/keyboard use.
-Controller mode keeps the hints visible. Navigation state is read for Helpy's
-focused interface. An enabled controller shortcut also keeps a bounded button
-check active while the assigned game has focus, including when Helpy is hidden.
-Other foreground applications suspend that check. Passive diagnostic cards do
-not enable controller navigation.
+| Input | Action |
+| --- | --- |
+| Left / right trigger | Previous / next main section |
+| Left / right bumper | Previous / next visible panel; restore its last focused control |
+| D-pad / left stick | Move within the highlighted panel |
+| Bottom face button | Select or deselect an item; enter or activate a control |
+| Right face button | Back; close the current editor before returning to its parent |
+| Left face button | Actions for the focused item |
+| Top face button | Item Bay search |
+| Menu / Options / Plus | Send selected Item Bay items to cart |
+| Right stick | Move the pointer; press and hold to click or drag |
+
+A gold border identifies the focused panel. The D-pad stays within its boundary;
+use the bumpers to switch between Item Bay controls, results and cart. Quantity
+fields support controller adjustment after activation; explicit **−**, **+** and
+remove buttons remain available. Active editors, popups and drags keep focus.
+
+For one item, choose **Send to player…** from its right-click/actions menu. Set
+quantity, choose a connected player and send. Helpy remembers the chosen player
+by character identity and asks again if that player is absent. This action uses
+only that item and leaves staged cart contents unchanged.
+
+Open **Mods → Mod Menu 2** for live mod controls. It keeps the same panel focus and controller hints. Activate a slider or
+dial with the bottom face button, adjust with left/right, then confirm to submit
+the edit. Bumpers and section changes wait until the editor is closed.
+
+On the map, the **left stick pans**, its **press zooms in**, and the **top face
+button zooms out** while the canvas has focus. The right-stick pointer can select
+locations or click and drag the map. The usual mouse controls remain available.
+
+**Settings → Helpy → Controllers** offers **Always on**, **Auto detect** and
+**Disabled (mouse & keyboard)**. Auto detect follows new input activity, including
+the controller pointer. Always on keeps the controller presentation and hints.
+Cursor speed, cursor enablement, glyph choice and per-controller bindings are
+saved locally and shared by standalone Helpy and its overlay. Stick dead zones
+prevent resting drift; cursor movement uses elapsed frame time.
+
+PlayStation touchpad movement, one-finger tap/press and two-finger actions remain
+available. Synthetic pointer events stay associated with the controller so they
+do not switch Auto detect to mouse mode. The pointer stops and releases its click
+when Helpy loses input focus or controller input is disabled.
+
+This pass follows [Xbox navigation guidance](https://learn.microsoft.com/en-us/gaming/accessibility/xbox-accessibility-guidelines/112)
+and [focus guidance](https://learn.microsoft.com/en-us/gaming/accessibility/xbox-accessibility-guidelines/113).
+Virtual-device/render fixtures are separate from physical USB/Bluetooth and live
+game verification.
 
 ## Open and hide Helpy from the controller
 
@@ -130,7 +165,7 @@ the selected one; disconnects release its held controls.
 - On DualSense/PS5 and DualShock controllers, slide one finger on the touchpad
   to move the pointer; press the touchpad to click or hold it to drag. Lift and
   reposition your finger without jumping the cursor. Disable **PlayStation
-  touchpad pointer** under **Settings → Helpy → Display → Controller navigation**
+  touchpad pointer** under **Settings → Helpy → Controllers**
   if another input mapper handles it. Helpy processes touchpad clicks only while
   its interface has focus; hiding it, disconnecting or disabling the option
   releases its click. Steam Input/emulation may hide the original touchpad.
