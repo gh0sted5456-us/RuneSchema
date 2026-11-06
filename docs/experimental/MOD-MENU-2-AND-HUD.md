@@ -115,7 +115,7 @@ group controls into tabs and request a character-preview column:
 }
 ```
 
-Tabs contain setting keys. Up to 16 tabs and 200 keys per tab are accepted. A
+Tabs contain setting keys. Up to 16 tabs and 1,024 keys per tab are accepted. A
 narrow window stacks the preview below the controls. Without a provider, the
 settings still work and the preview area explains what is missing.
 
@@ -164,7 +164,7 @@ valid JSON, not literal `--` comments. The older `helpy` extension remains accep
 text fields to color controls. Dials and radial segments use scale-aware vector
 arcs; narrow radial controls fall back to a regular choice picker.
 `settings` adds Helpy-only settings using the same config, variables, callbacks,
-visibility and authority rules. Ordinary and Helpy-only settings share a 200-row
+visibility and authority rules. Ordinary and Helpy-only settings share a 1,024-row
 limit. Radial choices support up to 12 options; larger lists use standard choices.
 Circular numeric controls use the normal pointer/controller editing behavior.
 
@@ -210,7 +210,10 @@ token is exported in a shared template.
 
 The portable format is `RuneSchema.ModMenu2.Template`, version `1`, with
 `mod`, `template`, `templateVersion` and `values`; `name` and `modVersion` are
-optional metadata. Its maximum size is 256 KiB. A future web editor can produce
+optional metadata. Templates accept up to 1,024 declared keys. The 1,024-setting
+capacity requires the matching local Helpy and Lua adapter builds; existing
+downloads retain their 200-setting limit. Its maximum size is 256 KiB.
+A future web editor can produce
 the same format; no web editor is included in this candidate.
 
 ## Public HUD layout

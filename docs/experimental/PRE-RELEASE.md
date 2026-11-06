@@ -29,6 +29,10 @@ not included in the published download above. The same local follow-up adds a
 The independent [Developer Tools plugin](DEVELOPER-TOOLS.md) is also in local
 development; its additional native gameplay commands are not yet complete.
 
+The local Mod Menu 2 follow-up raises the combined settings, tab-key and template
+capacity to 1,024. It requires matching Helpy and Lua adapter builds; the published
+downloads retain the 200-setting limit. Template byte and validation limits remain.
+
 ## Pending changelog
 
 These changes are available in the candidate and await stable promotion.

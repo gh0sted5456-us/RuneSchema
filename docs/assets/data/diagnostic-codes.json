@@ -3964,6 +3964,18 @@
       "anchor": "rs-vnd-001",
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-vnd-001",
       "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
+    },
+    {
+      "code": "RS-WORLD-006",
+      "severity": "warning",
+      "title": "World component unavailable",
+      "producer": "src/Runtime/WorldComponentEnrollment.cpp",
+      "legacyCollision": false,
+      "namespace": "structured",
+      "category": "World components",
+      "anchor": "rs-world-006",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-world-006",
+      "troubleshooting": "Check the named mod-owned cooked component class, nonreplicated defaults and matching RuneSchema candidate. Keep the exact exception; do not add a duplicate startup loader."
     }
   ],
   "bridgeReasons": [

@@ -26,6 +26,7 @@ end
 -- RuneSchema owns presentation. The licensed backend below retains config
 -- coercion, comments, live variables and action/revision compatibility.
 local VERSION = "2.0.2"
+local MAX_SETTINGS = 1024
 local function log(msg) RuneSchemaModMenuExchange(HMencode({Op="log",Text=tostring(msg)})) end
 
 -- JSON --------------------------------------------------------------------------------------------
@@ -571,7 +572,7 @@ local function loadSchema(folderName, dirPath)
         if type(extension.tabs)=="table" then for i,tab in ipairs(extension.tabs) do
             if i>16 then break end
             if type(tab)=="table" and type(tab.name)=="string" and type(tab.keys)=="table" then
-                local keys={};for n,key in ipairs(tab.keys) do if n>200 then break end;if type(key)=="string" and key:match("^[%w_.%-]+$") then keys[#keys+1]=key end end
+                local keys={};for n,key in ipairs(tab.keys) do if n>MAX_SETTINGS then break end;if type(key)=="string" and key:match("^[%w_.%-]+$") then keys[#keys+1]=key end end
                 m.helpy.tabs[#m.helpy.tabs+1]={name=tab.name:sub(1,80),keys=keys}
             end
         end end
@@ -596,7 +597,7 @@ local function loadSchema(folderName, dirPath)
     local seen = {}
     if type(doc.settings) == "table" then
         for i, raw in ipairs(doc.settings) do
-            if i > 200 then m.errors[#m.errors + 1] = "only the first 200 settings are shown"; break end
+            if i > MAX_SETTINGS then m.errors[#m.errors + 1] = "only the first "..MAX_SETTINGS.." settings are shown"; break end
             local s, why = checkSetting(raw, i, seen, m.format == "lua")
             if s then m.settings[#m.settings + 1] = s else m.errors[#m.errors + 1] = why end
         end
@@ -606,7 +607,7 @@ local function loadSchema(folderName, dirPath)
     -- Only Helpy reads this namespace. The original menu sees valid JSON and ignores it.
     if type(extension)=="table" and type(extension.settings)=="table" then
         for _,raw in ipairs(extension.settings) do
-            if #m.settings>=200 then m.errors[#m.errors+1]="Only 200 combined settings are supported";break end
+            if #m.settings>=MAX_SETTINGS then m.errors[#m.errors+1]="Only "..MAX_SETTINGS.." combined settings are supported";break end
             local copy={};if type(raw)=="table" then for key,value in pairs(raw) do copy[key]=value end end
             local widget=copy.type;copy.type=widget=="dial" and "slider" or widget=="radial" and "choice" or widget=="color" and "text" or copy.type
             local alpha=copy.alpha==true
@@ -635,7 +636,7 @@ local function loadSchema(folderName, dirPath)
         end
     end
     if type(extension)=="table" and type(extension.templates)=="table" then
-        local raw=extension.templates;local keys,used={},{};local valid=type(raw.id)=="string" and #raw.id<=80 and raw.id:match("^[%w_.%-]+$") and type(raw.version)=="number" and raw.version>=1 and raw.version<=65535 and raw.version%1==0 and type(raw.keys)=="table" and #raw.keys>=1 and #raw.keys<=200
+        local raw=extension.templates;local keys,used={},{};local valid=type(raw.id)=="string" and #raw.id<=80 and raw.id:match("^[%w_.%-]+$") and type(raw.version)=="number" and raw.version>=1 and raw.version<=65535 and raw.version%1==0 and type(raw.keys)=="table" and #raw.keys>=1 and #raw.keys<=MAX_SETTINGS
         if valid then for _,key in ipairs(raw.keys)do local setting=byKey[key];if type(key)~="string" or used[key] or not setting or setting.type=="key" then valid=false;break end;used[key]=true;keys[#keys+1]=key end end
         local context=raw.contextVariable
         if context~=nil and (type(context)~="string" or #context>192 or not context:match("^[%w_.%-]+$")) then valid=false end

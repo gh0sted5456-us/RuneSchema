@@ -133,5 +133,8 @@
         "0.8.1.0 development history": "experimental/CHANGELOG-0.8.1.0.md"
       }
     ]
+  },
+  {
+    "Cooked world components": "experimental/WORLD-COMPONENTS.md"
   }
 ]

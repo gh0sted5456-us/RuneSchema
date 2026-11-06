@@ -24,5 +24,24 @@ int main(){
    auto colors=page;colors["Settings"].push_back({{"key","Tint"},{"type","text"},{"presentation","color"},{"colorAlpha",false}});colors["Values"]["Tint"]="#112233";colors["Helpy"]["templates"]["keys"].push_back("Tint");
    auto shared=Export(colors);shared["values"]["Tint"]="#AABBCC";assert(Prepare(colors,shared)["Values"]["Tint"]=="#AABBCC");shared["values"]["Tint"]="#bad";Reject([&]{Prepare(colors,shared);});
  }
+ for(const size_t count:{size_t{209},MaximumSettings}){
+   auto large=page;large["Settings"]=Json::array();large["Values"]=Json::object();large["Helpy"]["templates"]["keys"]=Json::array();
+   for(size_t i=0;i<count;++i){
+     const auto key="Field"+std::to_string(i);
+     large["Settings"].push_back({{"key",key},{"type","slider"},{"min",0},{"max",100}});
+     large["Values"][key]=25;large["Helpy"]["templates"]["keys"].push_back(key);
+   }
+   auto shared=Export(large);assert(shared["values"].size()==count);
+   const auto last="Field"+std::to_string(count-1);shared["values"][last]=50;
+   const auto full=Prepare(large,Parse(shared.dump()));
+   assert(full["Values"].size()==count&&full["Values"][last]==50&&Current(large,full));
+   assert(full.dump().size()<=512*1024);
+   auto stale=large;stale["Values"][last]=26;assert(!Current(stale,full));
+   auto invalid=shared;invalid["values"][last]=101;Reject([&]{Prepare(large,invalid);});
+   if(count==MaximumSettings){
+     auto extraKey=large;extraKey["Helpy"]["templates"]["keys"].push_back("Overflow");Reject([&]{Contract(extraKey);});
+     auto extraSetting=large;extraSetting["Settings"].push_back({{"key","Overflow"},{"type","toggle"}});Reject([&]{Settings(extraSetting);});
+   }
+ }
  changed=page;changed.erase("TemplateContext");Reject([&]{Export(changed);});std::cout<<"Templates: roundtrip, typed full values, private-field exclusion, bounds, identity/version, stale target and input limits passed.\n";
 }

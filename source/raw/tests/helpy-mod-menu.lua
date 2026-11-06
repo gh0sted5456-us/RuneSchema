@@ -111,4 +111,35 @@ commands[#commands+1]='{"Active":false}';tick()
 shared,scheduled,commands={},{},{};schema=[[{"id":"Example","settings":[],"--Helpy":{"schema":1,"settings":[{"key":"Bad","type":"color","default":"#112233payload"},{"key":"BadAlpha","type":"color","alpha":"true","default":"#11223344"},{"key":"DefaultColor","type":"color"}]}}]]
 config='';assert(load(adapted))();assert(#latest.Pages[1].Settings==1 and shared['ModMenu.Example.DefaultColor']=='#FFFFFF' and shared['ModMenu.Example.Bad']==nil)
 commands[#commands+1]='{"Active":false}';tick()
+-- Large pages exercise legacy rows, Helpy-only rows, tab keys and the full write path.
+local function capacity(count,split)
+    shared,scheduled,commands={},{},{};RuneSchemaModMenuExchange=nativeBridge
+    local legacy,extra,keys,expected,values={},{},{},{},{}
+    for i=1,count do
+        local key='Field'..i
+        local rows=i<=split and legacy or extra
+        rows[#rows+1]='{"key":"'..key..'","type":"slider","min":0,"max":1,"step":1,"default":0}'
+        keys[#keys+1]='"'..key..'"';expected[#expected+1]='"'..key..'":0';values[#values+1]='"'..key..'":1'
+    end
+    schema='{"id":"Example","settings":['..table.concat(legacy,',')..'],"--Helpy":{"schema":1,"settings":['..table.concat(extra,',')..'],"tabs":[{"name":"All","keys":['..table.concat(keys,',')..']}],"templates":{"id":"capacity","version":1,"keys":['..table.concat(keys,',')..']}}}'
+    config='Unknown = retained\n';assert(load(adapted))()
+    local page=latest.Pages[1];assert(#page.Settings==math.min(count,1024) and #page.Helpy.tabs[1].keys==math.min(count,1024))
+    local beforeWrites=written
+    local apply='{"Op":"template_apply","Id":"Example","TemplateId":"capacity","TemplateVersion":1,"Revision":0,"Context":"","Expected":{'..table.concat(expected,',')..'},"Values":{'..table.concat(values,',')..'}}'
+    if count<=1024 then
+        assert(#page.Helpy.templates.keys==count and #page.Errors==0)
+        tick(apply);assert(written==beforeWrites+1 and shared['ModMenu.Example.rev']==1)
+        for i=1,count do assert(shared['ModMenu.Example.Field'..i]==1) end
+        assert(config:find('Unknown = retained',1,true))
+    else
+        assert(page.Helpy.templates==nil and #page.Errors>0 and shared['ModMenu.Example.Field1025']==nil)
+        tick(apply);assert(written==beforeWrites)
+    end
+    commands[#commands+1]='{"Active":false}';tick();assert(#scheduled==0)
+end
+capacity(209,100)
+capacity(1024,1024)
+capacity(1024,512)
+capacity(1025,1025)
+capacity(1025,512)
 print("PASS: legacy schemas, text/JSON/Lua config preservation, callbacks, host controls, row requests, preview extension, isolated --Helpy rows, atomic templates, stale-target rejection, competing-mod guards, validated RGB/RGBA colors and game-thread scheduling")

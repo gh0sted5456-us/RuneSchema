@@ -291,8 +291,8 @@ void DragonWildsRegistryLoader::LoadDocument(const json& input,const std::string
         std::size_t assetCount=0,definitionCount=0;
         for(const auto& lane:nativeManifest.AssetLanes)assetCount+=lane.Paths.size();
         for(const auto& [lane,definitions]:nativeManifest.LoaderDefinitions.items())definitionCount+=definitions.size();
-        PS::Log<RC::LogLevel::Verbose>(STR("[NATIVE-REGISTRY][DECLARED] owner='{}' asset_paths={} loader_definitions={} melee_classes={} ranged_classes={} fingerprint={:016x} source='{}'.\n"),
-            PS::ToWideSafe(owner.c_str()),assetCount,definitionCount,nativeManifest.MeleeAttackClasses.size(),nativeManifest.RangedAttackClasses.size(),nativeManifest.Fingerprint,PS::ToWideSafe(source.c_str()));
+        PS::Log<RC::LogLevel::Verbose>(STR("[NATIVE-REGISTRY][DECLARED] owner='{}' asset_paths={} loader_definitions={} melee_classes={} ranged_classes={} world_components={} fingerprint={:016x} source='{}'.\n"),
+            PS::ToWideSafe(owner.c_str()),assetCount,definitionCount,nativeManifest.MeleeAttackClasses.size(),nativeManifest.RangedAttackClasses.size(),nativeManifest.WorldComponents.size(),nativeManifest.Fingerprint,PS::ToWideSafe(source.c_str()));
     }
     std::string rejection;
     std::size_t ordinal=0;for(const auto& entry:document["Entries"]) {++ordinal;

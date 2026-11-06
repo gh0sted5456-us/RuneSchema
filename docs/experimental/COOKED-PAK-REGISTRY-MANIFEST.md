@@ -400,3 +400,10 @@ asset twice, hide conflicting policies, or split a journal asset between Lore
 and Journals. Conflicting publication rejects the new batch without changing
 the previous declarations. Original object paths and persistence identities
 are not rewritten.
+
+## Private world-component lane
+
+The [world-component test contract](WORLD-COMPONENTS.md) adds an optional
+`NativeRegistries.WorldComponents` list for mod-owned cooked GameState
+controllers. It requires a matching private experimental core and is not
+implemented by the published 0.8.1.0 downloads.

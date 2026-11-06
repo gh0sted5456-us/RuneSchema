@@ -886,9 +886,10 @@ inline nlohmann::json LoaderSchemas() {
             {"description","Exact existing cooked objects only. Startup identity enrollment does not synthesize assets, activate hooks or certify gameplay/save lifecycle."}};
     nativeRegistries["properties"]["CacheAssets"]={{"type","array"},{"maxItems",4096},{"uniqueItems",true},{"items",nativePath},{"description","Original artwork references; not gameplay registry identities."}};
     const json schemaPath={{"type","object"},{"additionalProperties",false},{"required",{"Path","Source"}},{"properties",{{"Path",nativePath},{"Source",{{"const","Schema"}}}}}};
-    for(const auto* lane:{"Items","Recipes","Quests","CombatSpells","UtilitySpells","EquipmentEffects","Journals","Lore","WearableMeshData","MeleeAttackClasses","RangedAttackClasses"})
+    for(const auto* lane:{"Items","Recipes","Quests","CombatSpells","UtilitySpells","EquipmentEffects","Journals","Lore","WearableMeshData","MeleeAttackClasses","RangedAttackClasses","WorldComponents"})
         nativeRegistries["properties"][lane]={{"type","array"},{"maxItems",4096},{"uniqueItems",true},{"items",{{"anyOf",{nativePath,schemaPath}}}}};
-    for(const auto* lane:{"MeleeAttackClasses","RangedAttackClasses"})nativeRegistries["properties"][lane]["items"]=nativePath;
+    for(const auto* lane:{"MeleeAttackClasses","RangedAttackClasses","WorldComponents"})nativeRegistries["properties"][lane]["items"]=nativePath;
+    nativeRegistries["properties"]["WorldComponents"]={{"type","array"},{"maxItems",4096},{"uniqueItems",true},{"items",{{"type","string"},{"maxLength",1024},{"pattern","^/[^\\r\\n\\t]+\\.[^/]+_C$"}}},{"description","Mod-owned, nonreplicated cooked ActorComponent classes enrolled once per local gameplay GameState."}};
     result["registry"]["definitions"]["modOwnedCookedPaths"]={{"type","array"},{"maxItems",4096},{"uniqueItems",true},
         {"items",{{"type","string"},{"maxLength",1024},{"pattern","^/(?!Script/|Engine/)[A-Za-z0-9_.-]+/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"},{"not",{{"pattern","\\.\\."}}}}},
         {"description","Runtime requires the owning /Owner/ or /Game/Mods/Owner/ namespace and rejects case-insensitive duplicates. Strings only; no Source:Schema or arbitrary property writes."}};

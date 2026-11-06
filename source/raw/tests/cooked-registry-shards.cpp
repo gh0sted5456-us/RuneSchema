@@ -15,6 +15,9 @@ static Json Payload(const std::string& recipe){
     return {{"SchemaVersion",1},{"Entries",Json::array()},{"RegistryShard",true},{"LoaderDefinitions",{{"Recipes",{{recipe,body}}}}}};
 }
 int main()try{
+    const auto world=PS::CookedPakRegistryManifest::Parse({{"NativeRegistries",{{"WorldComponents",{"/Game/Mods/Example/BP_World.BP_World_C"}}}}},"Example","registry/world.jsonc");
+    assert(world&&PS::CookedRegistryShards::References(*world)==1);
+
     M::Reset();PS::RegistryEnrollment::Reset();
     const std::string recipeA="/Example/Recipes/RECIPE_A.RECIPE_A",recipeB="/Example/Recipes/RECIPE_B.RECIPE_B";
     const auto a=Child("0001"),b=Child("0002"),rootPath=RootPath("Dye");

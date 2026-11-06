@@ -10,6 +10,7 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include <utility>
 #include <map>
 #include <optional>
 #include <set>
@@ -31,6 +32,7 @@ namespace PS::CookedPakRegistryManifest {
         std::vector<std::string> WearableMeshData;
         std::vector<std::string> MeleeAttackClasses;
         std::vector<std::string> RangedAttackClasses;
+        std::vector<std::string> WorldComponents; // Mod-owned nonreplicated GameState components.
         std::vector<std::string> CacheAssets; // Exact original artwork declarations; never native gameplay registration.
         std::uint64_t Fingerprint = 0;
     };
@@ -122,11 +124,11 @@ namespace PS::CookedPakRegistryManifest {
         const auto native = document.value("NativeRegistries",nlohmann::json::object());
         if (!native.is_object())
             throw std::runtime_error("NativeRegistries must be an object");
-        static constexpr std::array<const char*, 16> Allowed{{
+        static constexpr std::array<const char*, 17> Allowed{{
             "Items", "Recipes", "Quests", "CombatSpells", "UtilitySpells",
             "Journals", "Lore",
             "EquipmentEffects", "WearableMeshData", "MeleeAttackClasses",
-            "RangedAttackClasses", "CacheAssets", "Skills", "SkillPerks", "Enums", "Buildings"}};
+            "RangedAttackClasses", "WorldComponents", "CacheAssets", "Skills", "SkillPerks", "Enums", "Buildings"}};
         for (const auto& [key, unused] : native.items())
         {
             (void)unused;
@@ -180,6 +182,10 @@ namespace PS::CookedPakRegistryManifest {
             native, "MeleeAttackClasses", total);
         result.RangedAttackClasses = Detail::ReadPaths(
             native, "RangedAttackClasses", total);
+        result.WorldComponents = Detail::ReadPaths(native,"WorldComponents",total);
+        for(const auto& path:result.WorldComponents)
+            if(!Detail::OwnedObjectPath(path,owner)||!path.ends_with("_C"))
+                throw std::runtime_error("NativeRegistries.WorldComponents requires mod-owned cooked component class paths ending in _C");
         result.CacheAssets = Detail::ReadPaths(native,"CacheAssets",total);
         for(const auto& path:result.CacheAssets){
             const auto dot=path.find('.',path.find_last_of('/')+1);
@@ -266,6 +272,7 @@ namespace PS::CookedPakRegistryManifest {
         Detail::Hash(hash, "RangedAttackClasses");
         for (const auto& path : result.RangedAttackClasses) Detail::Hash(hash, path);
         Detail::Hash(hash,"CacheAssets");for(const auto& path:result.CacheAssets)Detail::Hash(hash,path);
+        if(!result.WorldComponents.empty()){Detail::Hash(hash,"WorldComponents");for(const auto& path:result.WorldComponents)Detail::Hash(hash,path);}
         Detail::Hash(hash,result.LoaderDefinitions.dump());
         if(!result.SchemaPaths.empty()){Detail::Hash(hash,"SchemaReferences");for(const auto& path:result.SchemaPaths)Detail::Hash(hash,path);}
         result.Fingerprint = hash;
@@ -283,6 +290,14 @@ namespace PS::CookedPakRegistryManifest {
         std::scoped_lock lock(Detail::Mutex);
         std::vector<Manifest> result;result.reserve(Detail::Manifests.size());
         for(const auto& manifest:Detail::Manifests)result.push_back(*manifest);
+        return result;
+    }
+
+    inline std::vector<std::pair<std::string,std::string>> WorldComponentClasses(){
+        std::scoped_lock lock(Detail::Mutex);
+        std::vector<std::pair<std::string,std::string>> result;
+        for(const auto& manifest:Detail::Manifests)for(const auto& path:manifest->WorldComponents)
+            result.emplace_back(manifest->Owner,path);
         return result;
     }
 

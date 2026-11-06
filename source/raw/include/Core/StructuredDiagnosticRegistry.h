@@ -4,7 +4,7 @@
 #include <string_view>
 namespace PS::StructuredDiagnosticRegistry {
 struct Entry { std::string_view Code, TypicalSeverity, Description, ProducerSite; bool LegacyCollision; };
-inline constexpr std::array<Entry,224> All{{
+inline constexpr std::array<Entry,225> All{{
     {"RS-ASSET-001","Error","Asset target remained unresolved","src/Loader/DragonWildsAssetModLoader.cpp",false},
     {"RS-ASSET-002","Warning","Asset definition has invalid root","src/Loader/DragonWildsAssetModLoader.cpp",false},
     {"RS-ASSET-003","Warning","Asset property modification rejected","src/Loader/DragonWildsAssetModLoader.cpp",false},
@@ -229,6 +229,7 @@ inline constexpr std::array<Entry,224> All{{
     {"RS-STR-002","Warning","String replacements unmatched","src/Loader/DragonWildsStringModLoader.cpp",false},
     {"RS-STR-003","Error","String definition rejected","src/Loader/DragonWildsStringModLoader.cpp",false},
     {"RS-VND-001","Warning","Vendor reload requires restart","src/Loader/DragonWildsVendorLoader.cpp",false},
+    {"RS-WORLD-006","Warning","World component unavailable","src/Runtime/WorldComponentEnrollment.cpp",false},
 }};
 inline constexpr const Entry* Find(std::string_view code) noexcept {
     std::size_t first=0,count=All.size();

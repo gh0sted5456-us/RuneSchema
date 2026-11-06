@@ -11,14 +11,15 @@
 namespace PS::ModMenuTemplates {
 using Json=nlohmann::json;
 inline constexpr size_t MaximumBytes=256*1024;
+inline constexpr size_t MaximumSettings=1024;
 inline void Require(bool ok,const char* reason){if(!ok)throw std::runtime_error(reason);}
 inline const Json& Contract(const Json& page){
     const auto& definition=page.at("Helpy").at("templates");
     Require(definition.is_object()&&definition.at("id").is_string()&&definition.at("version").is_number_integer(),"This mod has not declared a supported template contract.");
-    const auto& keys=definition.at("keys");Require(keys.is_array()&&!keys.empty()&&keys.size()<=200,"Invalid template key list.");return definition;
+    const auto& keys=definition.at("keys");Require(keys.is_array()&&!keys.empty()&&keys.size()<=MaximumSettings,"Invalid template key list.");return definition;
 }
 inline std::map<std::string,const Json*> Settings(const Json& page){
-    std::map<std::string,const Json*> result;const auto& settings=page.at("Settings");Require(settings.is_array()&&settings.size()<=200,"Invalid settings definition.");
+    std::map<std::string,const Json*> result;const auto& settings=page.at("Settings");Require(settings.is_array()&&settings.size()<=MaximumSettings,"Invalid settings definition.");
     for(const auto& setting:settings)if(setting.contains("key")){const auto key=setting.at("key").get<std::string>();Require(result.emplace(key,&setting).second,"Duplicate setting key.");}
     return result;
 }

@@ -14,6 +14,7 @@
 #include "Utility/UnrealReadinessGate.h"
 #include "Runtime/RegistryBridge.h"
 #include "Runtime/LogicPakBridge.h"
+#include "Runtime/WorldComponentEnrollment.h"
 
 namespace RC::Unreal {
     class AGameModeBase;
@@ -60,6 +61,7 @@ namespace DragonWilds {
         CharacterEntryRecovery m_characterEntryRecovery;
         PS::Network::RegistryBridge m_registryBridge;
         PS::LogicPakBridge m_logicPakBridge;
+        PS::WorldComponentEnrollment m_worldComponents;
 
         void AutoReload(const std::filesystem::path& filePath);
 

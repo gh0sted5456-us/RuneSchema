@@ -134,6 +134,7 @@ inline std::string_view Category(std::string_view code,bool structured=false){
     if(family=="RS-STR")return "Strings";
     if(family=="RS-VND")return "Vendors";
     if(family=="RS-JRN")return "Journal";
+    if(family=="RS-WORLD")return "World components";
     return "Other diagnostics";
 }
 }

@@ -32,6 +32,21 @@ int main()
     assert(published.MeleeAttackClasses.size() == 2);
     assert(published.RangedAttackClasses.size() == 1);
     assert(published.Fingerprint != 0);
+    const std::string component="/Game/Mods/ExampleMod/BP_World.BP_World_C";
+    const nlohmann::json worldOnly={{"NativeRegistries",{{"WorldComponents",{component}}}}};
+    const auto world=Parse(worldOnly,"ExampleMod","registry/world.jsonc");
+    assert(world&&world->WorldComponents==std::vector<std::string>{component}&&world->AssetLanes.empty());
+    auto withWorld=document;withWorld["NativeRegistries"]["WorldComponents"]={component};
+    assert(Parse(withWorld,"ExampleMod","registry/world.jsonc")->Fingerprint!=published.Fingerprint);
+    auto emptyWorld=document;emptyWorld["NativeRegistries"]["WorldComponents"]=nlohmann::json::array();
+    assert(Parse(emptyWorld,"ExampleMod","registry/world.jsonc")->Fingerprint==published.Fingerprint);
+    for(const auto* path:{"/Game/Mods/Other/BP.BP_C","/Game/Mods/ExampleMod/BP.BP","/Script/Engine.ActorComponent","/Game/Mods/ExampleMod/BP.BP_C:Sub"}){
+        auto invalidWorld=worldOnly;invalidWorld["NativeRegistries"]["WorldComponents"]={path};bool bad=false;
+        try{Parse(invalidWorld,"ExampleMod","registry/world.jsonc");}catch(const std::runtime_error&){bad=true;}assert(bad);
+    }
+    auto duplicateWorld=worldOnly;duplicateWorld["NativeRegistries"]["WorldComponents"].push_back(component);bool badWorld=false;
+    try{Parse(duplicateWorld,"ExampleMod","registry/world.jsonc");}catch(const std::runtime_error&){badWorld=true;}assert(badWorld);
+
     auto artwork=document;artwork["NativeRegistries"]["CacheAssets"]={"/Example/Icons/T_Original.T_Original"};
     const auto loose=Parse(artwork,"ExampleMod","registry/example.jsonc");
     const auto cooked=Parse(artwork,"ExampleMod","pak:/Example.RSREG_Test");
@@ -274,4 +289,9 @@ int main()
     auto explicitDefault=defaults;explicitDefault.Source="b";explicitDefault.LoaderDefinitions["Recipes"]["/Shared/R.R"]["Unlock"]=false;
     PublishBatch({defaults,explicitDefault});assert(Definitions("Recipes").size()==1);
     Reset();
+    assert(WorldComponentClasses().empty());
+    assert(Publish(worldOnly,"ExampleMod","registry/world.jsonc"));
+    const auto worldClasses=WorldComponentClasses();
+    assert(worldClasses.size()==1&&worldClasses.front().first=="ExampleMod"&&worldClasses.front().second==component);
+    Reset();assert(WorldComponentClasses().empty());
 }

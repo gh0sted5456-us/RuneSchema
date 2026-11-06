@@ -12,7 +12,7 @@ STRUCTURED_AREAS = {
     "RS-IMP":"Imports", "RS-JSON":"Configuration and definitions", "RS-LOAD":"Loaders",
     "RS-NIA":"Niagara", "RS-NPC":"NPCs", "RS-RAW":"Data tables", "RS-REC":"Recipes",
     "RS-RGST":"Registry", "RS-SPAWN":"Spawns", "RS-STR":"Strings", "RS-VND":"Vendors",
-    "RS-JRN":"Journal",
+    "RS-JRN":"Journal", "RS-WORLD":"World components",
 }
 
 def structured_catalogue():

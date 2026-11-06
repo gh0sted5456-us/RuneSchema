@@ -4,7 +4,7 @@
 
 namespace PS::StructuredDiagnosticAdvice {
 struct Entry {std::string_view Code,Check;};
-inline constexpr std::array<Entry,40> Checks{{
+inline constexpr std::array<Entry,41> Checks{{
     {"RS-IMP-013", "Dry run succeeded without applying changes. Review the planned imports in the original report before turning off $ImpDry."},
     {"RS-IMP-014", "An import failed during application. An atomic batch leaves the destination unchanged; a non-atomic batch can retain earlier writes. Fix the reported source or allocation problem before retrying."},
     {"RS-BLD-023", "Check the exact cooked BuildingPieceData path, native PersistenceID/InternalName and optional assertions. Keep gameplay in the cooked asset; only AddTo and Unlock are enrollment metadata. World cleanup remains deferred for rejected content; unrelated character lanes can continue."},
@@ -44,7 +44,8 @@ inline constexpr std::array<Entry,40> Checks{{
     {"RS-ENUM-002", "The enum namespace or value is invalid for this loader. Check the exact namespace and enum entry in the source definition."},
     {"RS-STR-003", "The string override document was rejected. Check the file structure before making string-level changes."},
     {"RS-JRN-002", "The journal definition root is invalid. Review the expected top-level structure of the source file."},
-    {"RS-CRS-003", "The course patch declaration was missing or malformed. Inspect the named patch identity and source structure."}
+    {"RS-CRS-003", "The course patch declaration was missing or malformed. Inspect the named patch identity and source structure."},
+    {"RS-WORLD-006", "Check the named mod-owned cooked component class, nonreplicated defaults and matching RuneSchema candidate. Keep the exact exception; do not add a duplicate startup loader."},
 }};
 inline std::string_view Find(std::string_view code) noexcept {
     for(const auto& entry:Checks)if(entry.Code==code)return entry.Check;

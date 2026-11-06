@@ -951,6 +951,7 @@ namespace DragonWilds {
         GameInstanceInitCallbacks.clear();
         PS::NetworkIdentityBootstrap::Stop();
         PS::ServerFilterStartup::Stop();
+        m_worldComponents.Stop();
         m_registryBridge.Stop();
         m_dataRegistrar.Shutdown();
         m_characterEntryRecovery.Shutdown();
@@ -1353,6 +1354,7 @@ namespace DragonWilds {
                 "DataRegistrar","Application"))
                 PS::Log<LogLevel::Error>(STR("[DEGRADED][SERVICE:data-registrar] General registration and character-save cleanup unavailable: {}. Dedicated-server building cleanup will still check its live registries independently.\n"),PS::ToWideSafe(error.what()));
         }
+        m_worldComponents.Start();
         // All lanes attempt building cleanup independently of unrelated item,
         // quest or journal service health. Its own live registries must validate.
         SetupWorldBuildingCleanup();
@@ -1786,6 +1788,7 @@ namespace DragonWilds {
         GameInstanceInitCallbacks.clear();
         PS::NetworkIdentityBootstrap::Stop();
         PS::ServerFilterStartup::Stop();
+        m_worldComponents.Stop();
         m_registryBridge.Stop();
         m_dataRegistrar.Shutdown();
         m_characterEntryRecovery.Shutdown();

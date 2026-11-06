@@ -15,7 +15,10 @@ int RunLoaderSchemas(int argc,char** argv) {
     assert(ownerEntry.at("properties").at("Profile").at("required")==nlohmann::json::array({"Class"}));
     assert(ownerEntry.at("allOf").size()==3);
     assert(ownerEntry.at("properties").at("Appearance").at("properties").at("MaxBytes").at("maximum")==4096);
-    assert(schemas["registry"]["properties"]["NativeRegistries"]["properties"].size()==24);
+    assert(schemas["registry"]["properties"]["NativeRegistries"]["properties"].size()==25);
+    const auto& worldComponents=schemas["registry"]["properties"]["NativeRegistries"]["properties"]["WorldComponents"];
+    assert(worldComponents["items"]["type"]=="string" && worldComponents["uniqueItems"]==true);
+    assert(worldComponents["items"]["pattern"]=="^/[^\\r\\n\\t]+\\.[^/]+_C$");
     for(const auto& family:PS::NativeDataFamilies::Families)assert(schemas["registry"]["properties"]["NativeRegistries"]["properties"][family.Lane]["items"]["type"]=="string");
     for(const auto* lane:{"Skills","SkillPerks","Enums"})assert(schemas["registry"]["properties"]["NativeRegistries"]["properties"][lane]["$ref"]=="#/definitions/modOwnedCookedPaths");
     assert(schemas["registry"]["properties"]["LoaderDefinitions"]["properties"].size()==5);
