@@ -76,7 +76,7 @@ Scalar values must be finite and between `0` and `100000`; individual adapters a
 
 ## Spatial AI temperament — private candidate
 
-This addition is being tested locally and is not in the published download.
+This addition is included in the [complete candidate](PRE-RELEASE.md).
 Implement the optional `RuneSchemaAIPassivity(Position: Vector) -> int32` callback
 on the same version-1 provider actor. `Position` is the authoritative AI actor's
 location in centimetres, including when native code supplies its controller or
@@ -137,7 +137,7 @@ mods apply their modifiers.
 
 ### Player profiles and native bonuses — local follow-up
 
-This follow-up is being verified locally; it is not in the published ZIP yet.
+This follow-up is included in the [complete candidate](PRE-RELEASE.md); the checks below describe its coverage.
 Health, stamina and carry-capacity player rules use their own native Add effects.
 They leave equipment and world-policy effect handles alone. An unchanged profile
 refresh keeps its existing handle; a changed rule replaces its own modifier.

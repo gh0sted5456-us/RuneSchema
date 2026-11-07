@@ -9,6 +9,21 @@ promote_to: CHANGELOG-0.8.1.0.md
 
 # RuneSchema 0.8.1.0 — experimental
 
+!!! info "Complete candidate published · 2026-11-06"
+    The [complete candidate](PRE-RELEASE.md) includes the runtime, Helpy and plugin
+    follow-ups below. Older entries retain their original test-stage wording;
+    their historical “unpublished” labels are superseded by this dated package.
+
+## 2026-11-06 complete refresh
+
+- Controller pointer/click/drag and multi-selection updates.
+- Redirected-AppData startup fix on pinned UE4SS; child path guards retained.
+- Experimental mod-local templates/providers with resolved-mod ordering and safe
+  one-shot tick handoff. Actual cooked typed-array and template storage checks pass.
+- All current core, Helpy, bundled plugins and matching Lua adapters repackaged;
+  complete package, checksums and source are linked from the candidate page.
+
+
 Development history follows. Earlier local-testing/publication holds describe
 those stages; use the [current candidate notes](PRE-RELEASE.md) for downloads,
 installation and remaining limits.

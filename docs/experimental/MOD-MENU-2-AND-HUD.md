@@ -4,7 +4,7 @@ promote_to: MOD-MENU-2-AND-HUD.md
 ---
 
 !!! info "Folder layout during testing"
-    The [new runtime layout](RUNTIME-LAYOUT.md) is an unpublished development candidate. The published 0.8.1.0 ZIP keeps Helpy under `plugins/RuneSchema.Helpy/dll` and HUD under `plugins/RuneSchema.HUD`. Both layouts remain supported.
+    The [complete 2026-11-06 candidate](PRE-RELEASE.md) uses the [new runtime layout](RUNTIME-LAYOUT.md): Helpy under `Helpy`, core plugins under `dlls/plugins` and Helpy plugins under `Helpy/plugins`. Legacy layouts remain supported.
 
 
 !!! info "Pre-release · 0.8.1.0"
@@ -13,10 +13,10 @@ promote_to: MOD-MENU-2-AND-HUD.md
 
 # Mod Menu 2 and HUD layout
 
-!!! warning "Unpublished native Helpy plugin"
-    The current local candidate moves session polling and commands into
+!!! info "Native Helpy plugin in the complete candidate"
+    The complete candidate moves session polling and commands into
     `Helpy/plugins/RuneSchema.ModMenu2/dll/RuneSchema.ModMenu2.dll`. Use its
-    matching manifest, Core and Helpy. This is not in the published ZIP.
+    matching manifest, Core and Helpy. Use the complete package.
 
 The plugin runs in Helpy, using the shared themed controls and input capture.
 Only the narrow Lua/game adapter runs inside Dragonwilds. Removing or disabling
@@ -263,7 +263,7 @@ configuration and shared-variable backend comes from Mod Menu 2.0.2, Copyright
 
 ## Runnable external Lua example
 
-The unpublished candidate includes a separate `HelpyEditorExample-1.0.0.zip`.
+A runnable external example is available in [the source example folder](https://github.com/gh0sted5456-us/RuneSchema/tree/pre-release/docs/examples/HelpyEditorExample).
 Copy its complete `HelpyEditorExample` folder into `ue4ss/Mods`; it includes
 `enabled.txt` and its root license notice. The source is in
 `docs/examples/HelpyEditorExample`.

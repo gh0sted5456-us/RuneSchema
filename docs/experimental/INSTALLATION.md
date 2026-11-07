@@ -4,7 +4,7 @@ promote_to: INSTALLATION.md
 ---
 
 !!! info "Folder layout during testing"
-    The [new runtime layout](RUNTIME-LAYOUT.md) is an unpublished development candidate. The published 0.8.1.0 ZIP keeps Helpy under `plugins/RuneSchema.Helpy/dll` and HUD under `plugins/RuneSchema.HUD`. Both layouts remain supported.
+    The [complete 2026-11-06 candidate](PRE-RELEASE.md) uses the [new runtime layout](RUNTIME-LAYOUT.md): Helpy under `Helpy`, core plugins under `dlls/plugins` and Helpy plugins under `Helpy/plugins`. Legacy layouts remain supported.
 
 
 !!! info "Experimental · 0.8.1.0"

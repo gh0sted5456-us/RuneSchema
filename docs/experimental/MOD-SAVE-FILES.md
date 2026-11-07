@@ -4,7 +4,7 @@ promote_to: MOD-SAVE-FILES.md
 ---
 
 !!! info "Experimental · 0.8.1.0"
-    This describes an unpublished candidate. [Experimental overview](index.md).
+    Included in the complete 2026-11-06 candidate; this remains experimental. [Experimental overview](index.md).
 
 # Mod-owned save files
 

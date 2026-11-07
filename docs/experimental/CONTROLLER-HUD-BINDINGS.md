@@ -4,7 +4,7 @@ promote_to: CONTROLLER-HUD-BINDINGS.md
 ---
 
 !!! warning "Local development candidate"
-    These changes are not included in the published 0.8.1.0 download. Use matching
+    These changes are included in the [complete candidate](PRE-RELEASE.md). Use matching
     locally built Core, Helpy, HUD and Lua helpers. Hardware/game acceptance is pending.
 
 # Bindings and mod HUDs

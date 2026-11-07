@@ -183,7 +183,7 @@ After an update:
 
 ## UE4SS scheduling and API audit
 
-Unpublished maintenance candidate; use matching Core, Helpy and Lua files.
+Included in the complete 2026-11-06 candidate; use matching Core, Helpy and Lua files.
 
 - The optional ModActor loader schedules its initial world check with
   `ExecuteInGameThreadWithDelay(0, ...)`. If the host lacks delayed actions or

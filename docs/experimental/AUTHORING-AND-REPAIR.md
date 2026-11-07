@@ -5,14 +5,14 @@ promote_to: ADVANCED-AUTHORING-TOOLS.md
 
 # Authoring, cache creation and repair
 
-!!! info "Experimental Â· 0.8.1.0"
+!!! info "Experimental · 0.8.1.0"
     These workflows use the experimental Helpy application. See the
     [experimental overview](index.md) and [stable downloads](../CURRENT-RELEASE.md).
 
 ## Update an installed mod's cache
 
 1. Open **Mods**, right-click the installed mod and choose **Create/Update Cache**.
-2. Helpy opens **Tools â†’ Utilities â†’ Authoring tools**, focused on that mod in
+2. Helpy opens **Tools → Utilities → Authoring tools**, focused on that mod in
    the **Installed** tab. Confirm the folder and source name.
 3. The assigned Dragonwilds game or dedicated server may remain open. Installed-mod
    capture reads its PAK inputs in a separate, lower-priority worker. It does not
@@ -54,7 +54,7 @@ explains the standalone BAT route and dependencies. The current experimental
 authoring tools ZIP is available through Tools; its content-addressed download index
 selects the matching reviewed scripts.
 
-The local follow-up reads cooked culture-invariant display text as well as
+The complete candidate reads cooked culture-invariant display text as well as
 localized/source text. An unresolved localization key is not treated as a
 display name. Rebuild an older mod cache once to replace names written by the
 older exporter. The Dye validation produced 2,241 records and 2,176 icons with
@@ -80,7 +80,7 @@ fast presentation; it does not prove that every gameplay contract is registered.
 
 ## Repair RuneSchema base files
 
-Open **Tools â†’ Utilities â†’ Repair**, with the assigned game/server and other
+Open **Tools → Utilities → Repair**, with the assigned game/server and other
 Helpy instances for that installation closed, then choose **Repair**.
 
 The console first shows available log context, then checks the required base

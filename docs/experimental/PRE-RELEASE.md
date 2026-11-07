@@ -3,14 +3,14 @@ channel: experimental
 promote_to: RELEASE-0.8.1.0.md
 ---
 
-# Pre-release Â· 0.8.1.0
+# Pre-release · 0.8.1.0
 
-!!! info "Available for testing Â· pending promotion to stable"
+!!! info "Available for testing · pending promotion to stable"
     Stable RuneSchema remains **0.8.0.3**. The changes below belong to the
     **0.8.1.0 prerelease** and have not been promoted to the stable guides.
 
 <div class="rs-actions">
-  <a class="md-button md-button--primary" href="https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0/RuneSchema-0.8.1.0.zip">Download 0.8.1.0</a>
+  <a class="md-button md-button--primary" href="https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0-pre.20261106/RuneSchema-0.8.1.0-complete-20261106.zip">Download complete 0.8.1.0</a>
   <a class="md-button" href="../INSTALLATION/">Installation</a>
 </div>
 
@@ -20,10 +20,11 @@ separately; preserve your settings, mods and saves when updating.
 
 ## Complete candidate refresh
 
-The next complete package includes the current core, Helpy, bundled plugins and
+The complete 2026-11-06 package includes the current core, Helpy, bundled plugins and
 matching Lua adapters. It retains the maintainer-assembled package layout; UE4SS
-is installed separately. The complete 68-file refresh has passed package integrity and native broker
-checks. Its updated download will be linked here after upload finishes.
+is installed separately. The complete 68-file refresh is published under
+[`0.8.1.0-pre.20261106`](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0-pre.20261106).
+Earlier tags and downloads are retained for reference. Use the complete package above.
 
 - **Runtime layout:** Core plugins live in `dlls/plugins`; Helpy and its native
   plugins live in `Helpy`. Existing user settings and mod folders are preserved.
@@ -64,9 +65,11 @@ and earlier test-stage notes.
 
 ## Testing and feedback
 
-Package integrity, the compressed core DLL, licenses, versions, matching source
-files and strict documentation checks passed. Exact hashes and evidence are in
-[the release verification files](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0).
+All 274 core and 172 Helpy tests passed, along with package integrity, the
+compressed core DLL, licenses, versions, matching source and strict combined-site
+checks. Windows shipping-game coverage includes redirected AppData, native
+provider initialization and cooked template/typed-array roundtrips. Exact hashes and evidence are in
+[the release verification files](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0-pre.20261106).
 
 Proton/Wine, every physical controller/driver and full multiplayer restart
 behavior still need live coverage. Mod Menu 2 is optional and key-gated;
