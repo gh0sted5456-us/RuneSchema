@@ -93,7 +93,7 @@ struct Theme {
     float backgroundStrength{.12f};
     bool dpiAware{true},autoReload{true},textBold{false},verboseTooltips{false},itemGridView{true},itemInternalNames{false},aiGridView{false},advancedMode{false};
     bool automaticUpdateChecks{true};
-    bool ue4ssManageExternal{false},ue4ssCompact{false};
+    bool ue4ssManageExternal{false},modsCompact{false};
     bool resourceDiagnostics{true},gpuResourceDiagnostics{true},ue4ssDiagnostics{true},playTimeReminders{true},startupResourceAlerts{false};
     int resourceCpuThreshold{90},resourceMemoryThreshold{90},resourceGpuThreshold{98},ue4ssLogBudget{100},ue4ssOverlapSeconds{5};
     bool updateArtwork{true},updateWorldMap{true},updateMapFilters{true};
@@ -321,7 +321,7 @@ inline nlohmann::json DocumentFrom(const Theme& t,int iconCacheMB) {
         {"input",{{"mode",t.inputMode},{"glyphs",t.controllerGlyphs},{"shortcut",t.controllerShortcut},{"binding",t.controllerBinding},{"keyboardBinding",t.helpyKeyboardBinding},{"hudBindings",t.hudBindings},{"reserveGuide",t.reserveControllerGuide},{"touchpad",t.controllerTouchpad},{"cursor",t.controllerCursor},{"cursorSpeed",t.controllerCursorSpeed},{"controllerBindings",t.controllerBindings}}},
         {"navigation",{{"collapsed",t.navigationCollapsed},{"pinned",t.navigationPinned}}},
         {"authoring",{{"autoInstallDotNet",t.autoInstallAuthoringDotNet}}},
-        {"mods",{{"manageExternalUE4SS",t.ue4ssManageExternal},{"compactUE4SS",t.ue4ssCompact}}},
+        {"mods",{{"manageExternalUE4SS",t.ue4ssManageExternal},{"compactView",t.modsCompact}}},
         {"updates",{{"automaticChecks",t.automaticUpdateChecks},{"artwork",t.updateArtwork},{"worldMap",t.updateWorldMap},{"mapFilters",t.updateMapFilters}}},
         {"preview",{{"quality",t.previewQuality},{"animation",t.previewAnimate},{"details",t.previewDetails},{"scaleUsePortrait",t.scaleUsePortrait},{"scaleReferenceIcon",t.scaleReferenceIcon}}},
         {"runtime",{{"timeUnit",t.runtimeTimeUnit},{"helpyFpsLimit",t.helpyFpsLimit},{"showFps",t.showFps},{"fpsRefreshMs",t.fpsRefreshMs},{"showGameFps",t.showGameFps},{"showCoordinates",t.showCoordinates},{"showStartupProgress",t.showStartupProgress},{"fpsHotkey",t.fpsHotkey},{"fpsControllerBinding",t.fpsControllerBinding},{"gameOverlay",t.gameOverlay},{"nativeOverlay",t.nativeOverlay},{"overlayOpacity",t.overlayOpacity},{"overlaySize",t.overlaySize},{"overlayUiScale",t.overlayUiScale}}},
@@ -388,7 +388,7 @@ inline void Reload(bool createIfMissing=true) {
         next.windowOpacity=ReadFloat(doc,"windowOpacity",next.windowOpacity,0.60f,1.0f);
         const auto display=doc.value("display",nlohmann::json::object());
         const auto navigation=doc.value("navigation",nlohmann::json::object());next.navigationCollapsed=navigation.value("collapsed",false);next.navigationPinned=navigation.value("pinned",false);
-        const auto mods=doc.value("mods",nlohmann::json::object());next.ue4ssManageExternal=mods.value("manageExternalUE4SS",false);next.ue4ssCompact=mods.value("compactUE4SS",false);
+        const auto mods=doc.value("mods",nlohmann::json::object());next.ue4ssManageExternal=mods.value("manageExternalUE4SS",false);next.modsCompact=mods.value("compactView",mods.value("compactUE4SS",false));
         const auto monitoring=doc.value("monitoring",nlohmann::json::object());
         next.resourceDiagnostics=monitoring.value("resources",true);next.gpuResourceDiagnostics=monitoring.value("gpu",true);next.ue4ssDiagnostics=monitoring.value("ue4ss",true);next.playTimeReminders=monitoring.value("playTimeReminders",true);
         next.startupResourceAlerts=monitoring.value("startupResourceAlerts",false);

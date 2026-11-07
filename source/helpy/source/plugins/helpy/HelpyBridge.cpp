@@ -35,7 +35,7 @@ int32_t StartDesktop(State* state){
     if(!std::filesystem::is_regular_file(PS::RuntimePaths::HelpyBinary(PS::RuntimePaths::ModFromHelpy(plugin),"Helpy.exe")))throw std::runtime_error("Helpy.exe is missing. Install the matching application beside the bridge DLL.");
     const std::string platform=PS::HelpyEnvironment::Server()?"server":PS::HelpyEnvironment::Current==PS::HelpyEnvironment::Kind::GamePass?"gamepass":PS::HelpyEnvironment::Current==PS::HelpyEnvironment::Kind::Epic?"epic":"steam";
     const auto root=PS::RuntimePaths::ModFromHelpy(plugin);const bool hidden=!PS::HelpySettings::OpenOnGameStart();
-    state->Launcher=std::jthread([state,root,platform,hidden]{try{PS::HelpyDesktopLaunch::Start(root,platform,hidden);}catch(const std::exception& error){const auto message="[RS-UI-002] Helpy desktop launch failed: "+std::string(error.what());state->Host->Log(RS_LOG_WARNING,Descriptor.Id,message.c_str());}});
+    state->Launcher=std::jthread([state,root,platform,hidden]{try{PS::HelpyDesktopLaunch::Start(root,platform,hidden,true);}catch(const std::exception& error){const auto message="[RS-UI-002] Helpy desktop launch failed: "+std::string(error.what());state->Host->Log(RS_LOG_WARNING,Descriptor.Id,message.c_str());}});
     return RS_PLUGIN_OK;
 }
 int32_t RS_PLUGIN_CALL Launch(void* context,const char*,char* output,uint32_t capacity,uint32_t* size){

@@ -470,7 +470,12 @@ inline void RenderCartDock(ImVec2 size,const std::function<void()>& recipient) {
         HelpyPreviewHooks::Cart=HelpyPreviewHooks::WindowRect();
 #endif
         if(!delivering&&ImGui::BeginDragDropTargetCustom(ImRect(pos,ImVec2(pos.x+bounds.x,pos.y+bounds.y)),ImGui::GetID("cart-transfer"))){
-            if(const auto* payload=ImGui::AcceptDragDropPayload("RS_ITEM_ROW")){
+            if(const auto* group=ImGui::AcceptDragDropPayload("RS_CART_SELECTION")){
+                auto& bay=ItemGridPicker::Bay;
+                if(ItemGridPicker::MatchesDraggedSelection(*group,bay.Picker))
+                    ItemGridPicker::SendSelectionToCart(UiSnapshot,bay.Picker,bay.Selected,sizeof(bay.Selected));
+                else ItemGridPicker::CartStatus="Selection changed while dragging. Grab the selected items again.";
+            }else if(const auto* payload=ImGui::AcceptDragDropPayload("RS_ITEM_ROW")){
                 try{
                     const auto item=ItemTransfer::Decode(payload->Data,payload->DataSize);
                     const auto* row=ItemGridPicker::Find(UiSnapshot,item.at("Path").get_ref<const std::string&>().c_str());

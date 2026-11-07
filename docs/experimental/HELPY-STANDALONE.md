@@ -91,9 +91,10 @@ The tray tooltip identifies the runtime. Windows controls whether its icon is
 visible or under the overflow arrow. If the tray is unavailable, Helpy uses the
 taskbar instead.
 
-The supplied release settings enable **Exit Helpy when the game closes**. This
-follows an attached game/server process; temporary bridge disconnects do not
-request an exit. Turn it off to keep Helpy available offline after playing.
+**Exit game-launched Helpy when the game closes** follows the game or server
+process that started Helpy. Helpy opened from its desktop shortcut stays
+available after the game closes. A temporary bridge disconnect keeps either
+session open.
 Leftover-process reports are still under investigation; see [known limits](PRE-RELEASE.md#known-limits).
 
 The executable stays in its installed runtime folder. The desktop shortcut

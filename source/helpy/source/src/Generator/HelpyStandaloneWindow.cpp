@@ -2890,7 +2890,9 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 LiveLogPanel::PreviewOptions=false;ImGui::ClosePopupsOverWindow(nullptr,false);
             }
             {
-                using namespace ModsPanel;const auto oldSnapshot=Snapshot,oldRows=Rows;const auto oldStatus=Status;const auto oldHealth=Health;const auto oldRevision=HealthRevision;const bool oldDirty=Dirty;
+                using namespace ModsPanel;
+                auto& modTheme=HelpyImGuiTheme::Current;const bool wasCompact=modTheme.modsCompact;modTheme.modsCompact=false;
+                const auto oldSnapshot=Snapshot,oldRows=Rows;const auto oldStatus=Status;const auto oldHealth=Health;const auto oldRevision=HealthRevision;const bool oldDirty=Dirty;
                 Rows=nlohmann::json::array();for(const auto* owner:{"Dye_Quests","Flintlocks","RSDWSpears"})Rows.push_back({{"Name",owner},{"Folder",(HostServices::ModDirectory()/"mods"/owner).string()},{"Enabled",true},{"Present",true},{"Metadata",{{"version","1.0"},{"description","Synthetic mod-manager layout fixture"}}},{"Loaders",nlohmann::json::array({"RuneSchema","Unreal PAK"})},{"HasCache",true}});
                 Snapshot={{"Ok",true},{"OrderEnabled",true},{"ExpectedExists",false},{"ExpectedContents",""},{"Rows",Rows}};Status.clear();PreviewChecked=true;
                 Health.clear();Health["Flintlocks"].Warnings=1;Health["RSDWSpears"].Errors=1;HealthRevision=LiveLogPanel::Streams[0].History.Revision+LiveLogPanel::Streams[2].History.Revision;
@@ -2926,6 +2928,9 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                     throw std::runtime_error("Missing-entry removal must preserve installed rows and stage the order change");
                 Rows.push_back({{"Name","Missing one"},{"Present",false}});Rows.push_back({{"Name","Missing two"},{"Present",false}});
                 if(RemoveMissing()!=2||Rows.size()!=2)throw std::runtime_error("Missing-list cleanup must remove only absent folders");
+                modTheme.modsCompact=true;for(int i=0;i<3;++i)RenderFrame();
+                if(PreviewPlacards!=0||PreviewBadgeOrders.size()!=2)throw std::runtime_error("Compact view must render the RuneSchema rows as a table");
+                PreviewCapture=output/"mods-compact.png";RenderFrame();PreviewCapture.clear();modTheme.modsCompact=wasCompact;
                 Snapshot=oldSnapshot;Rows=oldRows;Status=oldStatus;Health=oldHealth;HealthRevision=oldRevision;Dirty=oldDirty;PreviewChecked=false;
             }
             {
@@ -3607,7 +3612,7 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 SpawnToolRequests::RemoteAvailable=available;PluginRuntimeServices::ExternalDesktop=external;PluginRuntimeServices::GameProcessId=gamePid;LazyCatalog::RemoteSubmit=submit;LazyCatalog::LocalPoll=poll;Hooks::MouseEnabled=false;Hooks::Mouse={-100,-100};
             }
             {namespace Hooks=HelpyPreviewHooks;
-                const auto saved=ModsPanel::UeSnapshot;const bool compactBefore=HelpyImGuiTheme::Current.ue4ssCompact;HelpyImGuiTheme::Current.ue4ssCompact=true;const auto savedGeneration=ModsPanel::UeGeneration;const auto savedStatus=ModsPanel::UeStatus;const auto savedTab=ModsPanel::Tab;
+                const auto saved=ModsPanel::UeSnapshot;const bool compactBefore=HelpyImGuiTheme::Current.modsCompact;HelpyImGuiTheme::Current.modsCompact=true;const auto savedGeneration=ModsPanel::UeGeneration;const auto savedStatus=ModsPanel::UeStatus;const auto savedTab=ModsPanel::Tab;
                 ModsPanel::UeSnapshot={{"Ok",true},{"Rows",nlohmann::json::array({
                     {{"Name","ModMenu"},{"Owner",""},{"Folder",(output/"inventory-fixture/ModMenu").string()},{"Managed",false},{"ConfiguredEnabled",true},{"NativeUnsupported",false},{"Kind","Lua"},{"Version","2.0.2"},{"Metadata",{{"name","Mod Menu"},{"source","modmenu.json"}}}},
                     {{"Name","External without version"},{"Owner",""},{"Folder",(output/"inventory-fixture/External").string()},{"Managed",false},{"ConfiguredEnabled",false},{"NativeUnsupported",false},{"Kind","Native"},{"Version",""},{"Metadata",nlohmann::json::object()}},
@@ -3617,11 +3622,11 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 for(int i=0;i<3;++i)RenderFrame();if(ModsPanel::UeRowsDrawn!=2)throw std::runtime_error("External UE4SS view must show versioned and unversioned mods");
                 for(const char* label:{"RuneSchema mods","Server comparison","UE4SS mods"}){const auto rect=Hooks::MenuTabs.at(std::string("mod-manager-sections/")+label);if(rect.z<=rect.x||rect.x<0||rect.z>width||rect.w>height)throw std::runtime_error("Mods category rail escaped the viewport");}
                 PreviewCapture=output/"mods-ue4ss-external.png";RenderFrame();PreviewCapture.clear();
-                HelpyImGuiTheme::Current.ue4ssCompact=false;for(int i=0;i<3;++i)RenderFrame();PreviewCapture=output/"mods-ue4ss-cards.png";RenderFrame();PreviewCapture.clear();HelpyImGuiTheme::Current.ue4ssCompact=true;RenderFrame();
+                HelpyImGuiTheme::Current.modsCompact=false;for(int i=0;i<3;++i)RenderFrame();PreviewCapture=output/"mods-ue4ss-cards.png";RenderFrame();PreviewCapture.clear();HelpyImGuiTheme::Current.modsCompact=true;RenderFrame();
                 {const auto rect=Hooks::MenuTabs.at("ue4ss-mod-groups/RuneSchema loaders");Hooks::MouseEnabled=true;Hooks::Mouse={(rect.x+rect.z)*.5f,(rect.y+rect.w)*.5f};Hooks::MouseDown=false;RenderFrame();Hooks::MouseDown=true;RenderFrame();Hooks::MouseDown=false;RenderFrame();}
                 if(ModsPanel::UeRowsDrawn!=1)throw std::runtime_error("RuneSchema UE4SS view must exclude external mods");
                 PreviewCapture=output/"mods-ue4ss-owned.png";RenderFrame();PreviewCapture.clear();Hooks::MouseEnabled=false;Hooks::Mouse={-100,-100};
-                HelpyImGuiTheme::Current.ue4ssCompact=compactBefore;ModsPanel::UeSnapshot=saved;ModsPanel::UeGeneration=savedGeneration;ModsPanel::UeStatus=savedStatus;++ModsPanel::UeRevision;ModsPanel::Tab=savedTab;
+                HelpyImGuiTheme::Current.modsCompact=compactBefore;ModsPanel::UeSnapshot=saved;ModsPanel::UeGeneration=savedGeneration;ModsPanel::UeStatus=savedStatus;++ModsPanel::UeRevision;ModsPanel::Tab=savedTab;
             }
             {
                 nlohmann::json mods=nlohmann::json::array();
@@ -3943,6 +3948,18 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 check(Hooks::CartRects.contains(path),"Staged cart item has no return drag surface");
                 drag(center(Hooks::CartRects.at(path)),ImVec2(Hooks::Browser.x+30,Hooks::Browser.y+30),"Cart item","drag-cart-item.png");
                 check(ItemGridPicker::SharedCart.Entries().empty(),"Dragging a cart item back did not remove it");
+                auto& bay=ItemGridPicker::Bay;auto& picker=bay.Picker;
+                const auto other=std::find_if(items.begin(),items.end(),[&](const auto& row){
+                    const auto candidate=row.value("Path",std::string{});
+                    return candidate!=path&&Hooks::ItemRects.contains(candidate);
+                });
+                check(other!=items.end(),"Grouped drag needs a second Item Bay item");
+                check(ItemGridPicker::ApplySelection(picker,path,bay.Selected,sizeof(bay.Selected),false,true,&items[0])
+                    &&ItemGridPicker::ApplySelection(picker,other->at("Path").get<std::string>(),bay.Selected,sizeof(bay.Selected),true,true,&*other),
+                    "Could not select the two Item Bay fixtures");
+                drag(center(Hooks::ItemRects.at(path)),center(Hooks::Cart),"Items","drag-item-selection.png");
+                check(ItemGridPicker::SharedCart.Entries().size()==2&&picker.SelectedPaths.empty(),"Dragging a selection must add both rows and clear them from the selection");
+                ItemGridPicker::ClearSharedCart();
                 mouse(center(Hooks::ItemRects.at(path)),false);Hooks::RightDown=true;RenderFrame();Hooks::RightDown=false;RenderFrame();RenderFrame();
                 check(ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId),"Right-click did not open item actions");
                 mouse(center(Hooks::AddCart),true);mouse(center(Hooks::AddCart),false);

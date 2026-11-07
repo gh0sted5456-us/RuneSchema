@@ -131,13 +131,27 @@ inline void ClearSharedCart(){SharedCart.Clear();CartStatus.clear();}
 inline void HeldItem(const json& row,const char* kind="Item"){
     auto* texture=ItemIconCache::Get(IconForRow(row));DragFeedback::Held(kind,ItemPresentation::Name(row).c_str(),texture&&texture->Status==ImTextureStatus_OK?texture->GetTexRef():ImTextureRef{});
 }
-inline void DragItem(const json& row){
+inline void DragItem(const json& row,const std::vector<std::string>* selection=nullptr){
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::ItemRects[row.value("Path",std::string{})]=HelpyPreviewHooks::LastRect();
 #endif
     if(!ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID|ImGuiDragDropFlags_SourceNoPreviewTooltip))return;
-    try{auto compact=ItemTransfer::Compact(row);compact["Name"]=ItemPresentation::Name(row);compact["Icon"]=IconForRow(row);const auto data=compact.dump();ImGui::SetDragDropPayload("RS_ITEM_ROW",data.c_str(),data.size()+1);}catch(const std::exception&){}
-    HeldItem(row);ImGui::EndDragDropSource();
+    const auto path=row.value("Path",std::string{});
+    const bool group=selection&&selection->size()>1&&std::find(selection->begin(),selection->end(),path)!=selection->end();
+    const auto* current=ImGui::GetDragDropPayload();
+    if(!current||current->DataFrameCount<0)try {
+        if(group) {
+            const auto data=json(*selection).dump();
+            ImGui::SetDragDropPayload("RS_CART_SELECTION",data.c_str(),data.size()+1,ImGuiCond_Once);
+        }else{
+            auto compact=ItemTransfer::Compact(row);compact["Name"]=ItemPresentation::Name(row);compact["Icon"]=IconForRow(row);
+            const auto data=compact.dump();
+            ImGui::SetDragDropPayload("RS_ITEM_ROW",data.c_str(),data.size()+1,ImGuiCond_Once);
+        }
+    }catch(const std::exception&){}
+    if(group){const auto title=std::to_string(selection->size())+" selected";DragFeedback::Held("Items",title.c_str());}
+    else HeldItem(row);
+    ImGui::EndDragDropSource();
 }
 // Quick actions can be hidden in an editor without disabling item transfers.
 inline std::optional<json> AcceptItemDrop(std::string& error) {
@@ -312,6 +326,11 @@ inline size_t SendSelectionToCart(const json& catalog,State& state,char* selecte
     CartStatus="Added "+std::to_string(added)+" of "+std::to_string(total)+" selected items to the cart.";
     if(added<total)CartStatus+=" Unavailable items or the cart limit prevented the rest; those items remain selected.";
     return added;
+}
+inline bool MatchesDraggedSelection(const ImGuiPayload& payload,const State& state){
+    const auto data=json(state.SelectedPaths).dump();
+    return state.SelectedPaths.size()>1&&payload.Data&&payload.DataSize==static_cast<int>(data.size()+1)
+        &&std::memcmp(payload.Data,data.c_str(),data.size()+1)==0;
 }
 inline bool SelectionCheck(const ImVec2& at,bool selected){
     const float side=ImGui::GetFrameHeight();const ImVec2 end(at.x+side,at.y+side);auto* draw=ImGui::GetWindowDrawList();
@@ -846,7 +865,7 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
 #endif
                     const bool check=quickActions&&allowMulti&&SelectionCheck({rowPos.x+theme.X(4),rowPos.y+(itemHeight-ImGui::GetFrameHeight())*.5f},selectedThis);
                     if(clicked&&fits){const bool additive=ImGui::GetIO().KeyCtrl||ImGui::GetIO().KeyShift||state.MultiSelect||check||(quickActions&&allowMulti&&ControllerConfirm());if(ApplySelection(state,path,selected,selectedCapacity,additive,allowMulti,&row,!(quickActions&&allowMulti&&additive))){out.Changed=true;}}
-                    if(fits)DragItem(row);
+                    if(fits)DragItem(row,quickActions&&allowMulti?&state.SelectedPaths:nullptr);
                     ImGui::EndDisabled();const float pad=theme.X(4.0f);const ImVec2 iconMin(rowPos.x+pad+(quickActions&&allowMulti?ImGui::GetFrameHeight()+pad:0.f),rowPos.y+(itemHeight-iconSize)*0.5f),iconMax(iconMin.x+iconSize,iconMin.y+iconSize);
                     if(!iconPath.empty())HelpyIconTrace::Event("render-row",iconPath,"name='"+name+"' row="+std::to_string(rowIndex));
                     if(iconPath.empty()||!ItemIconCache::Draw(iconPath,iconMin,iconMax,true))DrawPlaceholder(iconMin,iconMax,theme);
@@ -884,7 +903,7 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
                         DrawPlacard(row,cardMin,cardMax,selectedThis,ImGui::IsItemHovered()||ImGui::IsItemFocused(),quickActions&&allowMulti?ImGui::GetFrameHeight()+theme.X(12):0.f);
                         const bool check=quickActions&&allowMulti&&SelectionCheck({cardMin.x+theme.X(6),cardMax.y-theme.Y(42)+std::max(0.f,(theme.Y(42)-ImGui::GetFrameHeight())*.5f)},selectedThis);
                         if(clicked&&fits){const bool additive=ImGui::GetIO().KeyCtrl||ImGui::GetIO().KeyShift||state.MultiSelect||check||(quickActions&&allowMulti&&ControllerConfirm());if(ApplySelection(state,path,selected,selectedCapacity,additive,allowMulti,&row,!(quickActions&&allowMulti&&additive))){out.Changed=true;}}
-                        if(fits)DragItem(row);
+                        if(fits)DragItem(row,quickActions&&allowMulti?&state.SelectedPaths:nullptr);
                         ContextMenu(catalog,row,path,name,selected,selectedCapacity,state,out,allowMulti,true,quickActions);if(HelpyImGuiTheme::TooltipReady(std::string("item:")+path+":"+std::to_string(rowIndex),ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)))VerboseTooltip(row,name,path,allowMulti,fits,!(quickActions&&allowMulti&&(state.MultiSelect||state.SelectedPaths.size()>1||ImGui::GetIO().KeyCtrl||ImGui::GetIO().KeyShift||check)));
                         ImGui::PopID();ImGui::PopID();if(col<columns-1&&rowIndex+1<total)ImGui::SameLine();
                     }

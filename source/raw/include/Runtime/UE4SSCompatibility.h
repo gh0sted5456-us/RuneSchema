@@ -106,5 +106,23 @@ namespace PS::UE4SSCompatibility {
         PS::ConsolidatedLog<RC::LogLevel::Normal>(
             STR("[RuneSchema] UE4SS compatibility: host={} | weak-serial=local-safe | lifecycle=InitGameState\n"),
             hashTables ? STR("hash-table line") : STR("classic line"));
+        const auto& snapshot=Snapshot();
+        const UE4SSBuildIdentity::Identity installed{snapshot.at("Version").get<std::string>(),snapshot.at("Commit").get<std::string>()};
+        if(installed.Commit.empty())return;
+        const auto shortPin=PS::ToWideSafe(std::string_view(RUNESCHEMA_UE4SS_PIN).substr(0,8));
+        const auto build=PS::ToWideSafe(snapshot.at("Build").get_ref<const std::string&>());
+        using UE4SSBuildIdentity::Relation;
+        switch(UE4SSBuildIdentity::Compare(installed,RUNESCHEMA_UE4SS_PIN,RUNESCHEMA_UE4SS_VERSION)) {
+        case Relation::Older:
+            PS::Log<RC::LogLevel::Warning>(STR("Older UE4SS installed ({}, SDK pin {}). RuneSchema will use available capabilities.\n"),build,shortPin);
+            break;
+        case Relation::Newer:
+            PS::ConsolidatedLog<RC::LogLevel::Normal>(STR("[RuneSchema] Newer UE4SS installed than built against ({}, SDK pin {}). RuneSchema will load what it can, pending any deprecated API issues.\n"),build,shortPin);
+            break;
+        case Relation::Unknown:
+            PS::ConsolidatedLog<RC::LogLevel::Normal>(STR("[RuneSchema] UE4SS revision differs from SDK pin ({} vs {}). Revision order is unknown; using available capabilities.\n"),build,shortPin);
+            break;
+        case Relation::Pinned: break;
+        }
     }
 }

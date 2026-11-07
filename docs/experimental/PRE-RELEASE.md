@@ -10,7 +10,7 @@ promote_to: RELEASE-0.8.1.0.md
     **0.8.1.0 prerelease** and have not been promoted to the stable guides.
 
 <div class="rs-actions">
-  <a class="md-button md-button--primary" href="https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0-pre.20261107/RuneSchema-0.8.1.0-complete-20261107.zip">Download complete 0.8.1.0</a>
+  <a class="md-button md-button--primary" href="https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0-pre.20261107.2/RuneSchema-0.8.1.0-complete-20261107-ux.zip">Download complete 0.8.1.0</a>
   <a class="md-button" href="../INSTALLATION/">Installation</a>
 </div>
 
@@ -23,7 +23,7 @@ separately; preserve your settings, mods and saves when updating.
 The complete 2026-11-07 package includes the current core, Helpy, bundled plugins and
 matching Lua adapters. It retains the maintainer-assembled package layout; UE4SS
 is installed separately. The complete 68-file refresh is published under
-[`0.8.1.0-pre.20261107`](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0-pre.20261107).
+[`0.8.1.0-pre.20261107.2`](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0-pre.20261107.2).
 Earlier tags and downloads are retained for reference. Use the complete package above.
 
 - **Runtime layout:** Core plugins live in `dlls/plugins`; Helpy and its native
@@ -35,6 +35,10 @@ Earlier tags and downloads are retained for reference. Use the complete package 
   1,024 combined settings, tab keys and template entries.
 - **Core startup:** Redirected AppData is resolved to its physical application
   root. Redirected child caches remain rejected, with the exact path reported.
+- **Helpy usability:** RuneSchema and UE4SS share Compact view. The controller left
+  stick scrolls panels and pans the focused map. Right-stick click can grab an
+  Item Bay selection and drop it into the cart. Desktop-launched Helpy stays open
+  when the game closes. UE4SS version notices are advisory.
 - **Save editor:** Character copies, imports and exports follow redirected save
   folders. Nested profile redirects and imports outside the resolved folder are blocked.
 - **Mod-local services:** Optional typed template storage and native numeric
@@ -67,11 +71,12 @@ and earlier test-stage notes.
 
 ## Testing and feedback
 
-The preceding candidate passed 274 core and 172 Helpy tests. This refresh
-adds a focused Windows regression test for redirected save folders and verifies
-the complete ZIP against the prior package. See the
-[release verification files](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0-pre.20261107)
-for checks and file hashes. The save editor still needs a live game check.
+The previous candidate verified redirected save folders. This refresh adds
+virtual Xbox, PlayStation and Nintendo controller checks, three rendered window
+sizes, and an import check against the pinned and installed UE4SS builds.
+The save editor and controller changes still need live game coverage.
+See the [release verification files](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0-pre.20261107.2)
+for checks and file hashes.
 
 Proton/Wine, every physical controller/driver and full multiplayer restart
 behavior still need live coverage. Mod Menu 2 is optional and key-gated;

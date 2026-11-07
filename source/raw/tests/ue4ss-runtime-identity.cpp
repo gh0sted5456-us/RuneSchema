@@ -8,6 +8,15 @@ int main(int argc,char** argv){
     assert(current&&current->Version=="3.0.1 Beta #0"&&current->Commit=="f6d5f942");
     const auto future=ParseStartup("UE4SS - v99.12.45 PreRelease #9999 - Git SHA #ABCDEF0123456789\n");
     assert(future&&future->Commit=="abcdef0123456789"); // identity is not a version gate
+    constexpr auto pin="f6d5f9425a31f3e3a4fd185b40148f5aa4d81a44";
+    const auto shortPin=ParseStartup("UE4SS - v3.0.1 Beta #0 - Git SHA #f6d5f94");
+    assert(shortPin&&Compare(*shortPin,pin,"3.0.1")==Relation::Pinned);
+    assert(Compare(*current,pin,"3.0.1")==Relation::Pinned);
+    assert(Compare(*future,pin,"3.0.1")==Relation::Newer);
+    assert(Compare({"3.0.1","d935b5b"},pin,"3.0.1")==Relation::Older);
+    assert(Compare({"3.0.1 Beta #0","1ba38db4"},pin,"3.0.1")==Relation::Newer);
+    assert(Compare({"2.5.2","1234567"},pin,"3.0.1")==Relation::Older);
+    assert(Compare({"3.0.1 Beta #0","1234567"},pin,"3.0.1")==Relation::Unknown);
     assert(!ParseStartup("UE4SS - vlatest - Git SHA #f6d5f942"));
     assert(!ParseStartup("UE4SS - v3.0.1 - Git SHA #unknown"));
     assert(!ParseStartup("a log without a startup banner"));

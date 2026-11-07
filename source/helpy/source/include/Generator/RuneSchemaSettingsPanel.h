@@ -171,7 +171,7 @@ inline void QuickSettings(){
     if(ImGui::RadioButton("Open window at startup",&startup,1))HelpySettings::SetOpenOnGameStart(true);
     hint("The app runs as its own process. The system tray is beside the Windows clock; use the tray icon or your Helpy shortcut to open it. Startup changes apply next game launch.\n"+HelpySettings::Message());
     ImGui::EndDisabled();
-    if(PluginRuntimeServices::ExternalDesktop){bool exit=HelpySettings::ExitWhenGameCloses();if(HelpyImGuiTheme::Toggle("Exit Helpy when the game closes",&exit))HelpySettings::SetBool("exitWithGame",exit);
+    if(PluginRuntimeServices::ExternalDesktop){bool exit=HelpySettings::ExitWhenGameCloses();if(HelpyImGuiTheme::Toggle("Exit game-launched Helpy when the game closes",&exit))HelpySettings::SetBool("exitWithGame",exit);
         hint("Applies immediately. Helpy exits fully when its attached game or dedicated server process ends. A temporary bridge disconnect does not close it; starting Helpy offline still works. Off by default.\n"+HelpySettings::Message());}
     bool minimize=HelpySettings::CloseToTaskbar();if(HelpyImGuiTheme::Toggle("Close to system tray",&minimize))HelpySettings::SetBool("minimizeOnClose",minimize);
     hint("X and Alt+F4 return Helpy to the system tray when enabled, or exit it when disabled. Applies immediately.\n"+HelpySettings::Message());

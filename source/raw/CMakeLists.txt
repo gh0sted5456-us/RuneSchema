@@ -52,6 +52,8 @@ FetchContent_Declare(
     GIT_TAG ${RUNESCHEMA_UE4SS_TAG}
 )
 FetchContent_MakeAvailable(UE4SS)
+file(STRINGS "${ue4ss_SOURCE_DIR}/UE4SS/generated_src/version.cache" RUNESCHEMA_UE4SS_VERSION_CACHE LIMIT_COUNT 1)
+string(REGEX MATCH "^[0-9]+[.][0-9]+[.][0-9]+" RUNESCHEMA_UE4SS_VERSION "${RUNESCHEMA_UE4SS_VERSION_CACHE}")
 option(RUNESCHEMA_BUILD_MANAGED_UE4SS_HOST "Retired: custom UE4SS hosts are not supported" OFF)
 if(RUNESCHEMA_BUILD_MANAGED_UE4SS_HOST)
     message(FATAL_ERROR "RuneSchema must run on an unmodified UE4SS.dll. Configure RUNESCHEMA_BUILD_MANAGED_UE4SS_HOST=OFF.")
@@ -143,6 +145,8 @@ target_compile_definitions(${TARGET} PRIVATE
     NOMINMAX
     WIN32_LEAN_AND_MEAN
     _CRT_SECURE_NO_WARNINGS
+    RUNESCHEMA_UE4SS_PIN="${RUNESCHEMA_UE4SS_TAG}"
+    RUNESCHEMA_UE4SS_VERSION="${RUNESCHEMA_UE4SS_VERSION}"
 )
 target_link_libraries(${TARGET} PRIVATE
     RuneSchemaJsonCore

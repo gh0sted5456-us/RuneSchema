@@ -19,7 +19,7 @@ inline bool ActivateExisting(const fs::path& root,bool show){
     if(show){const auto event=OpenEventW(EVENT_MODIFY_STATE,FALSE,(name+L".activate").c_str());if(event){SetEvent(event);CloseHandle(event);}}return true;
 }
 inline fs::path Application(const fs::path& root){
-    const auto directory=RuntimePaths::HelpyBinary(root,"Helpy.exe").parent_path();RuneSchemaData::Safe(directory);
+    const auto directory=RuntimePaths::HelpyBinary(fs::weakly_canonical(root),"Helpy.exe").parent_path();RuneSchemaData::Safe(directory);
     for(const auto* name:{"SDL3.dll","Helpy.exe"}){
         const auto file=directory/name;RuneSchemaData::Safe(file);
         if(!fs::is_regular_file(file)||fs::file_size(file)==0||fs::file_size(file)>8*1024*1024)throw std::runtime_error(std::string("Helpy runtime file unavailable: ")+name);
@@ -32,10 +32,10 @@ inline bool InGameContext(){
     if(package!=APPMODEL_ERROR_NO_PACKAGE)throw std::runtime_error("Cannot verify Helpy's Windows package identity");
     return GetEnvironmentVariableW(L"SteamAppId",nullptr,0)||GetEnvironmentVariableW(L"SteamGameId",nullptr,0)||GetEnvironmentVariableW(L"SteamOverlayGameId",nullptr,0);
 }
-inline std::wstring Arguments(const fs::path& root,const std::string& platform,bool hidden){
+inline std::wstring Arguments(const fs::path& root,const std::string& platform,bool hidden,bool gameStarted=false){
     const auto text=root.wstring();if(text.find_first_of(L"\"\r\n")!=text.npos)throw std::runtime_error("Invalid assigned runtime path");
     const auto key=RuneSchemaData::RuntimeKey(platform);if(key=="core/runtime/unknown")throw std::runtime_error("Choose a Helpy runtime");
-    return L"--runtime-root \""+text+L"\" --platform "+std::wstring(platform.begin(),platform.end())+(hidden?L" --start-hidden":L"");
+    return L"--runtime-root \""+text+L"\" --platform "+std::wstring(platform.begin(),platform.end())+(hidden?L" --start-hidden":L"")+(gameStarted?L" --game-started":L"");
 }
 inline void FromDesktop(const fs::path& executable,const std::wstring& arguments){
     // Explorer supplies its own package/job/environment instead of inheriting the game session.
@@ -56,8 +56,8 @@ inline void FromDesktop(const fs::path& executable,const std::wstring& arguments
     VARIANT a{},d{},o{},show{};a.vt=d.vt=o.vt=VT_BSTR;a.bstrVal=args.get();d.bstrVal=directory.get();o.bstrVal=operation.get();show.vt=VT_I4;show.lVal=SW_SHOWNOACTIVATE;
     check(shell->ShellExecute(file.get(),a,d,o,show));
 }
-inline void Start(const fs::path& root,const std::string& platform,bool hidden){
+inline void Start(const fs::path& root,const std::string& platform,bool hidden,bool gameStarted=false){
     if(ActivateExisting(root,!hidden))return;
-    FromDesktop(Application(root),Arguments(root,platform,hidden));
+    FromDesktop(Application(root),Arguments(root,platform,hidden,gameStarted));
 }
 }

@@ -61,17 +61,15 @@ inline void Feed(const XINPUT_GAMEPAD& physical){
     if(!PointerEnabled||(!HelpyImGuiTheme::Current.controllerCursor&&!HelpyImGuiTheme::Current.controllerTouchpad))PointerModeTo(false,pad.wButtons);
     else if((HelpyImGuiTheme::Current.controllerCursor&&(motion.X!=0||motion.Y!=0||(physical.wButtons&XINPUT_GAMEPAD_RIGHT_THUMB)))
         ||(HelpyImGuiTheme::Current.controllerTouchpad&&PointerReading.Connected&&PointerReading.Touch.Down))PointerModeTo(true,pad.wButtons);
-    else if((pad.wButtons&~(XINPUT_GAMEPAD_A|XINPUT_GAMEPAD_X|XINPUT_GAMEPAD_RIGHT_THUMB|XINPUT_GAMEPAD_LEFT_THUMB))||pad.bLeftTrigger>30||pad.bRightTrigger>30
-        ||std::abs(int(pad.sThumbLX))>8847||std::abs(int(pad.sThumbLY))>8847)PointerModeTo(false,pad.wButtons);
+    else if((pad.wButtons&~(XINPUT_GAMEPAD_A|XINPUT_GAMEPAD_X|XINPUT_GAMEPAD_RIGHT_THUMB|XINPUT_GAMEPAD_LEFT_THUMB))||pad.bLeftTrigger>30||pad.bRightTrigger>30)PointerModeTo(false,pad.wButtons);
     auto& io=ImGui::GetIO();io.BackendFlags|=ImGuiBackendFlags_HasGamepad;
     for(const auto& [key,button]:std::array<std::pair<ImGuiKey,WORD>,14>{{{ImGuiKey_GamepadStart,XINPUT_GAMEPAD_START},{ImGuiKey_GamepadBack,XINPUT_GAMEPAD_BACK},{ImGuiKey_GamepadFaceDown,XINPUT_GAMEPAD_A},{ImGuiKey_GamepadFaceRight,XINPUT_GAMEPAD_B},{ImGuiKey_GamepadFaceLeft,XINPUT_GAMEPAD_X},{ImGuiKey_GamepadFaceUp,XINPUT_GAMEPAD_Y},{ImGuiKey_GamepadDpadLeft,XINPUT_GAMEPAD_DPAD_LEFT},{ImGuiKey_GamepadDpadRight,XINPUT_GAMEPAD_DPAD_RIGHT},{ImGuiKey_GamepadDpadUp,XINPUT_GAMEPAD_DPAD_UP},{ImGuiKey_GamepadDpadDown,XINPUT_GAMEPAD_DPAD_DOWN},{ImGuiKey_GamepadL1,XINPUT_GAMEPAD_LEFT_SHOULDER},{ImGuiKey_GamepadR1,XINPUT_GAMEPAD_RIGHT_SHOULDER},{ImGuiKey_GamepadL3,XINPUT_GAMEPAD_LEFT_THUMB},{ImGuiKey_GamepadR3,XINPUT_GAMEPAD_RIGHT_THUMB}}}){
-        const bool stick=(!NavigationCanvas||ImGui::GetCurrentContext()->NavId!=NavigationCanvas)&&((key==ImGuiKey_GamepadDpadLeft&&pad.sThumbLX<-12000)||(key==ImGuiKey_GamepadDpadRight&&pad.sThumbLX>12000)||(key==ImGuiKey_GamepadDpadUp&&pad.sThumbLY>12000)||(key==ImGuiKey_GamepadDpadDown&&pad.sThumbLY<-12000));
         const bool pointerButton=key==ImGuiKey_GamepadFaceDown||key==ImGuiKey_GamepadFaceLeft;
-        io.AddKeyEvent(key,((pad.wButtons&button)!=0||stick)&&!(pointerButton&&(PointerMode||(BlockedFaces&button)))&&!(PointerMode&&key==ImGuiKey_GamepadR3));
+        io.AddKeyEvent(key,((pad.wButtons&button)!=0)&&!(pointerButton&&(PointerMode||(BlockedFaces&button)))&&!(PointerMode&&key==ImGuiKey_GamepadR3));
     }
     const auto analog=[&](ImGuiKey key,float value,float minimum,float maximum){const float amount=std::clamp((value-minimum)/(maximum-minimum),0.f,1.f);io.AddKeyAnalogEvent(key,amount>.1f,amount);};
     analog(ImGuiKey_GamepadL2,pad.bLeftTrigger,30,255);analog(ImGuiKey_GamepadR2,pad.bRightTrigger,30,255);
-    // ImGui uses left-stick keys for scrolling; Helpy uses the stick for focus navigation instead.
+    // Helpy routes the left stick to the active scrollable panel or the map.
     for(const auto key:{ImGuiKey_GamepadRStickLeft,ImGuiKey_GamepadRStickRight,ImGuiKey_GamepadRStickUp,ImGuiKey_GamepadRStickDown})io.AddKeyEvent(key,false);
 }
 inline void Poll(int mode,const XINPUT_GAMEPAD* native=nullptr,bool pointerInteractive=true){
@@ -136,13 +134,32 @@ inline std::optional<ImVec2> UpdatePointer(bool enabled,bool stickEnabled=false)
     if(down!=TouchMouseDown){io.AddMouseButtonEvent(ImGuiMouseButton_Left,down);TouchMouseDown=down;}
     return result;
 }
+inline void ScrollPanel() {
+    auto& context=*ImGui::GetCurrentContext();
+    if(NavigationCanvas&&context.NavId==NavigationCanvas&&!PointerMode)return;
+    const auto delta=HelpyControllerPointer::Motion(PhysicalPad.sThumbLX,PhysicalPad.sThumbLY,ImGui::GetIO().DeltaTime,850.f);
+    if(delta.X==0&&delta.Y==0)return;
+    auto* window=PointerMode?context.HoveredWindow:context.NavWindow;
+    const bool horizontal=std::abs(delta.X)>std::abs(delta.Y);
+    for(;window;window=(window->Flags&ImGuiWindowFlags_ChildWindow)?window->ParentWindow:nullptr) {
+        if(window->Flags&(ImGuiWindowFlags_NoScrollWithMouse|ImGuiWindowFlags_NoMouseInputs))continue;
+        if(horizontal&&window->ScrollMax.x>0) {
+            ImGui::SetScrollX(window,std::clamp(window->Scroll.x+delta.X,0.f,window->ScrollMax.x));
+            return;
+        }
+        if(!horizontal&&window->ScrollMax.y>0) {
+            ImGui::SetScrollY(window,std::clamp(window->Scroll.y+delta.Y,0.f,window->ScrollMax.y));
+            return;
+        }
+    }
+}
 inline void Observe(int mode){
     bool pad=false,keys=false;static std::array<float,ImGuiKey_GamepadRStickDown-ImGuiKey_GamepadStart+1> previous{};
     for(int key=ImGuiKey_GamepadStart;key<=ImGuiKey_GamepadRStickDown;++key){const auto value=ImGui::GetKeyData(ImGuiKey(key))->AnalogValue;auto& prior=previous[key-ImGuiKey_GamepadStart];pad|=ImGui::IsKeyPressed(ImGuiKey(key),false)||(value>.1f&&std::abs(value-prior)>.08f);prior=value;}
     static SHORT priorX=0,priorY=0;
     const bool leftActive=std::abs(int(PhysicalPad.sThumbLX))>8847||std::abs(int(PhysicalPad.sThumbLY))>8847;
     const bool wasActive=std::abs(int(priorX))>8847||std::abs(int(priorY))>8847;
-    pad|=NavigationCanvas&&ImGui::GetCurrentContext()->NavId==NavigationCanvas&&leftActive&&(!wasActive||std::abs(int(PhysicalPad.sThumbLX)-priorX)>2500||std::abs(int(PhysicalPad.sThumbLY)-priorY)>2500);
+    pad|=leftActive&&(!wasActive||std::abs(int(PhysicalPad.sThumbLX)-priorX)>2500||std::abs(int(PhysicalPad.sThumbLY)-priorY)>2500);
     priorX=PhysicalPad.sThumbLX;priorY=PhysicalPad.sThumbLY;
     for(int key=ImGuiKey_Tab;key<=ImGuiKey_KeypadEqual;++key)keys|=ImGui::IsKeyPressed(ImGuiKey(key),false);
     const auto& io=ImGui::GetIO();
@@ -150,7 +167,7 @@ inline void Observe(int mode){
     keys|=!generatedPointer&&(io.MouseDelta.x!=0||io.MouseDelta.y!=0||io.MouseWheel!=0||ImGui::IsMouseClicked(0)||ImGui::IsMouseClicked(1));
     if(keys&&!StickUsing&&!TouchUsing)PointerModeTo(false,HelpyControllerBindings::Apply(PhysicalPad,ActiveBindings).wButtons);
     PointerUsing=TouchUsing||StickUsing||PointerMode;
-    const bool prior=Selection.Controller;const bool shortcut=std::exchange(ShortcutActivated,false);Selection.Update(HelpyInputMode::Mode(mode),pad||shortcut||TouchUsing||StickUsing||PointerMode,keys&&!shortcut&&!TouchUsing);JustActivated=Selection.Controller&&!prior;if(PointerMode){ImGui::SetNavCursorVisible(false);ImGui::GetCurrentContext()->NavHighlightItemUnderNav=false;}HelpyImGuiTheme::ControllerNavigation=Selection.Controller;if(!Selection.Controller){HelpyImGuiTheme::EnterNextSection=false;HelpyControllerPanes::Pending=0;}
+    const bool prior=Selection.Controller;const bool shortcut=std::exchange(ShortcutActivated,false);Selection.Update(HelpyInputMode::Mode(mode),pad||shortcut||TouchUsing||StickUsing||PointerMode,keys&&!shortcut&&!TouchUsing);JustActivated=Selection.Controller&&!prior;if(PointerMode){ImGui::SetNavCursorVisible(false);ImGui::GetCurrentContext()->NavHighlightItemUnderNav=false;}HelpyImGuiTheme::ControllerNavigation=Selection.Controller;if(Selection.Controller)ScrollPanel();if(!Selection.Controller){HelpyImGuiTheme::EnterNextSection=false;HelpyControllerPanes::Pending=0;}
 }
 // Enter a pane without opening the keyboard or activating its first field.
 inline void FocusNext(){ImGui::NavClearPreferredPosForAxis(ImGuiAxis_X);ImGui::NavClearPreferredPosForAxis(ImGuiAxis_Y);ImGui::SetKeyboardFocusHere();ImGui::GetCurrentContext()->NavMoveFlags&=~ImGuiNavMoveFlags_Activate;}
@@ -216,13 +233,16 @@ struct Hint {std::string Label;std::vector<uint32_t> Buttons;bool Active=false;}
 inline std::vector<Hint> HintItems(std::string_view shortcut){
     constexpr ImGuiKey keys[]{ImGuiKey_GamepadFaceDown,ImGuiKey_GamepadFaceRight,ImGuiKey_GamepadFaceLeft,ImGuiKey_GamepadFaceUp};const char* labels[]{PointerMode?"Left-click / drag":"Select / toggle","Back",PointerMode?"Right-click":"Actions",NavigationCanvas&&ImGui::GetCurrentContext()->NavId==NavigationCanvas?"Zoom out":"Search"};std::vector<Hint> hints;
     for(size_t i=0;i<4;++i)hints.push_back({labels[i],{ActiveBindings[i]},PointerMode&&(i==0||i==2)?PhysicalDown(ActiveBindings[i]):ImGui::IsKeyDown(keys[i])});
-    if(NavigationCanvas&&ImGui::GetCurrentContext()->NavId==NavigationCanvas)hints.push_back({"Pan / zoom in",{XINPUT_GAMEPAD_LEFT_THUMB},PhysicalDown(XINPUT_GAMEPAD_LEFT_THUMB)});
+    if(!PointerMode&&NavigationCanvas&&ImGui::GetCurrentContext()->NavId==NavigationCanvas)
+        hints.push_back({"Pan / zoom in",{XINPUT_GAMEPAD_LEFT_THUMB},PhysicalDown(XINPUT_GAMEPAD_LEFT_THUMB)});
+    else if(ItemBayFrame!=ImGui::GetFrameCount())
+        hints.push_back({"Scroll",{XINPUT_GAMEPAD_LEFT_THUMB},PhysicalDown(XINPUT_GAMEPAD_LEFT_THUMB)});
     hints.push_back({"Navigate",{0},ImGui::IsKeyDown(ImGuiKey_GamepadDpadLeft)||ImGui::IsKeyDown(ImGuiKey_GamepadDpadRight)||ImGui::IsKeyDown(ImGuiKey_GamepadDpadUp)||ImGui::IsKeyDown(ImGuiKey_GamepadDpadDown)});
     hints.push_back({"Panels",{ActiveBindings[4],ActiveBindings[5]},ImGui::IsKeyDown(ImGuiKey_GamepadL1)||ImGui::IsKeyDown(ImGuiKey_GamepadR1)});
     hints.push_back({"Sections",{ActiveBindings[6],ActiveBindings[7]},ImGui::IsKeyDown(ImGuiKey_GamepadL2)||ImGui::IsKeyDown(ImGuiKey_GamepadR2)});
     if(HelpyImGuiTheme::Current.controllerCursor)hints.push_back({"Pointer / grab / drop",{XINPUT_GAMEPAD_RIGHT_THUMB},StickUsing||DragLatched});
     if(ItemBayFrame==ImGui::GetFrameCount()){
-        hints.push_back({"Multi-select",{XINPUT_GAMEPAD_LEFT_THUMB},ItemBayMultiSelect||PhysicalDown(XINPUT_GAMEPAD_LEFT_THUMB)});
+        hints.push_back({"Scroll / multi-select",{XINPUT_GAMEPAD_LEFT_THUMB},ItemBayMultiSelect||PhysicalDown(XINPUT_GAMEPAD_LEFT_THUMB)});
         hints.push_back({"Send to cart",{XINPUT_GAMEPAD_START},PhysicalDown(XINPUT_GAMEPAD_START)});
     }
     const auto mask=InputBindings::ParsePad(shortcut);if(mask){Hint hint{"Helpy",{},false};for(const auto& token:InputBindings::PadButtons)if(mask&token.Bit)hint.Buttons.push_back(token.Bit);if(hint.Buttons.size()>3)hint.Buttons.resize(3);hint.Active=std::any_of(hint.Buttons.begin(),hint.Buttons.end(),[](uint32_t button){return PhysicalDown(button);});hints.push_back(std::move(hint));}
