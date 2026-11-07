@@ -10,12 +10,12 @@ inline void Render(const std::function<void()>& shortcuts){
  ImGui::TextUnformatted("Glyphs");ImGui::SetNextItemWidth(-1);changed|=ImGui::Combo("##controller-glyphs",&theme.controllerGlyphs,"Automatic (device labels)\0Xbox\0PlayStation\0Generic\0Nintendo\0");
  changed|=HelpyImGuiTheme::Toggle("Right-stick cursor",&theme.controllerCursor);
  ImGui::TextUnformatted("Cursor speed");ImGui::SetNextItemWidth(-1);changed|=ImGui::SliderFloat("##controller-cursor-speed",&theme.controllerCursorSpeed,200.f,1800.f,"%.0f px/s");
- ImGui::TextWrapped("Triggers change main sections. Bumpers change panels. D-pad and left stick stay within the active panel. Right stick moves the pointer; press it to click or drag. On the map, left stick pans, left-stick press zooms in and the top face button zooms out.");
+ ImGui::TextWrapped("Triggers change main sections. Bumpers change panels. D-pad and left stick stay within the active panel. Right stick enters pointer mode: the bottom face button left-clicks or drags and the left face button right-clicks. D-pad or left stick returns to focus navigation. Right-stick click grabs; click again to drop. Left-stick click toggles multi-select in Item Bay. On the map, left stick pans, left-stick press zooms in and the top face button zooms out.");
  changed|=HelpyImGuiTheme::Toggle("PlayStation touchpad pointer",&theme.controllerTouchpad);
  ImGui::TextWrapped("Swipe with one finger to move; tap to left-click, or physically press to click and drag. Two fingers right-click. PlayStation glyphs stay active.");
  if(changed)HelpyImGuiTheme::SaveCurrent();
  const auto family=HelpyControllerBindings::Family(HelpyControllerInput::ReportedGlyphs);auto profile=HelpyControllerBindings::Read(theme.controllerBindings,family);
- ImGui::SeparatorText("Controller navigation");ImGui::TextWrapped("Profile: %s. Assigning an occupied button swaps the two actions. Bindings apply after held buttons are released and are saved with your Helpy settings.",family);
+ ImGui::SeparatorText("Controller navigation");ImGui::TextWrapped("Profile: %s. Assigning an occupied button swaps the two actions. Bindings apply after held buttons are released and are saved with your Helpy settings. Confirm and Item actions also control left-click and right-click in pointer mode.",family);
  if(HelpyImGuiTheme::SoftButton("Reset this controller profile")){theme.controllerBindings.erase(family);profile=HelpyControllerBindings::Defaults();HelpyImGuiTheme::SaveCurrent();}
  for(size_t i=0;i<profile.size();++i){const auto& action=HelpyControllerBindings::Actions[i];const auto id=std::string("controller-")+family+"-"+action.Id;auto keyboard=std::string("None"),button=InputBindings::PadText(profile[i]);
   const auto check=[](const std::string&,const std::string& value){try{if(HelpyControllerBindings::Supported(InputBindings::ParsePad(value)))return std::string{};}catch(...){}return std::string("Choose one face, shoulder, trigger or direction button.");};

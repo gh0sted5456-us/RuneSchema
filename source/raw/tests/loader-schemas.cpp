@@ -15,7 +15,7 @@ int RunLoaderSchemas(int argc,char** argv) {
     assert(ownerEntry.at("properties").at("Profile").at("required")==nlohmann::json::array({"Class"}));
     assert(ownerEntry.at("allOf").size()==3);
     assert(ownerEntry.at("properties").at("Appearance").at("properties").at("MaxBytes").at("maximum")==4096);
-    assert(schemas["registry"]["properties"]["NativeRegistries"]["properties"].size()==26);
+    assert(schemas["registry"]["properties"]["NativeRegistries"]["properties"].size()==27);
     const auto& worldComponents=schemas["registry"]["properties"]["NativeRegistries"]["properties"]["WorldComponents"];
     assert(worldComponents["items"]["type"]=="string" && worldComponents["uniqueItems"]==true);
     assert(worldComponents["items"]["pattern"]=="^/[^\\r\\n\\t]+\\.[^/]+_C$");

@@ -3,10 +3,11 @@ channel: experimental
 promote_to: MOD-LOCAL-SERVICES.md
 ---
 
-!!! warning "Interface v1 frozen; implementation in progress"
-    This is a new contract, not an API in the installed core or existing downloads.
-    Do not claim template or compute integration until a matching native candidate
-    passes its actual Blueprint and platform tests.
+!!! warning "Experimental candidate API"
+    The complete candidate implements this contract. Existing older downloads do
+    not provide it. Core models and an actual provider DLL have automated coverage;
+    cooked Blueprint interoperability and platform coverage are tracked separately.
+    A passing parser or model test does not certify a mod's full editor workflow.
 
 # Mod-local templates and compute
 
@@ -16,8 +17,8 @@ network authority, arbitrary file paths or UObject property mutation.
 
 ## Declaration and packaging
 
-An enabled mod declares its exact cooked ActorComponent classes in its existing
-loose or cooked registry JSON. The component must belong to the actual local
+An enabled mod declares its exact cooked ActorComponent classes in
+`mods/<Owner>/registry/*.json` or its existing cooked registry JSON. The component must belong to the actual local
 PlayerController and share its world. Frontend drafts do not need a pawn or GUID.
 
 ```json
@@ -54,7 +55,12 @@ The new mod-owned plugin lane uses API 1 `RuneSchemaPlugin_Query`,
 and `EntryPoint: "Example.ShapeMath.dll"`. It is not the nested Lua loader or a
 stock UE4SS `start_mod` DLL. Core derives the parent owner from its enabled mod
 snapshot. Native provider IDs must remain in that owner's namespace. Disabling
-or changing native modules requires restart; there is no hot DLL unload.
+or changing native modules requires restart; there is no hot DLL unload. Mod-owned
+native initialization waits for the resolved enabled-mod snapshot and registry
+loading, then runs on the game thread before resource registration;
+ordinary plugin Unreal initialization is not run twice during that handoff. The
+one-shot tick removes itself through UE4SS iteration metadata rather than waiting
+for its own callback to finish.
 
 ## Template files and typed documents
 
@@ -160,3 +166,58 @@ A provider registers only a capability it has actually implemented and tested.
 A probe evaluator and complete solver use different provider IDs; loading a DLL
 alone cannot claim the complete solver or UI is ready. Network payload limits,
 profile GUID storage and the owning mod's Apply/Cancel behavior are unchanged.
+
+## Buildable provider example
+
+[The example source](https://github.com/gh0sted5456-us/RuneSchema/blob/pre-release/docs/examples/ModLocalServices/Provider.cpp),
+[plugin manifest](https://github.com/gh0sted5456-us/RuneSchema/blob/pre-release/docs/examples/ModLocalServices/plugin.json) and
+[registry declaration](https://github.com/gh0sted5456-us/RuneSchema/blob/pre-release/docs/examples/ModLocalServices/registry.json) demonstrate
+API 1 without an engine dependency. `Example.ShapeMath/Scale4/Default` multiplies
+four inputs by immutable coefficients; it is not a character solver.
+
+The core test build produces `Example.ShapeMath.dll`. `mod-local-provider` loads
+that actual DLL, checks unavailable/older hosts, registers it through the host
+API table, submits work to the real broker and drains resources before unload.
+Place the manifest and `dll/Example.ShapeMath.dll` under the enabled
+`mods/Example/plugins/Example.ShapeMath/` root only for private acceptance.
+The matching cooked components are still supplied by the mod. Do not include
+this demonstration plugin in an ordinary RuneSchema installation.
+
+Templates need no compute DLL. Call `RuneSchemaTemplateList` once at UI startup
+and again on Reload. Read only the selected ID, close its document after copying
+the validated values, and create a new document/file for export. The mod owns
+preview snapshots, Confirm, Cancel, native saves and any character-specific save.
+An unavailable broker leaves the mod's standalone native SaveGame path intact.
+
+## Idle work and isolated acceptance
+
+The script hook first rejects unrelated function names using interned names,
+before building a class path. File operations run only on explicit calls.
+Template-only declarations register no per-frame compute callback. Compute
+completion delivery skips its queue mutex when no completion is pending.
+
+Private acceptance can compile `RUNESCHEMA_PRIVATE_TEMPLATE_TEST_DOCUMENTS` to
+an absolute D: or F: Documents root. This is a build-time test option, not a
+Blueprint argument or user setting. Such a DLL is a distinct private candidate;
+never install or distribute it. Ordinary builds leave the option empty and use
+the current user's Known Documents folder. Isolating game AppData alone does
+not redirect that folder.
+
+## Candidate status and shutdown
+
+The complete candidate includes enabled-parent native discovery, strict template
+storage, typed JSON calls and serialized native compute. A stock-pinned Windows
+shipping-game test passed provider initialization, a real cooked component's
+Blueprint list call, typed number/string arrays and atomic template write/read/
+close, with redirected AppData and normal exit. Core models also cover provider
+work, generation changes and teardown.
+
+A mod's full native editor, preview/Confirm/Cancel, travel, dedicated-server
+behavior and Proton/Wine still need their own acceptance. The private test root
+and cooked test mod are excluded from the public package.
+
+The v1 native lane is client-side `Host: game`; dedicated servers keep their
+existing exclusion. Resources are released on the game thread before plugin
+shutdown. If late teardown has lost the game thread, workers are drained and the
+native module is retained until process exit rather than calling a release
+callback on the wrong thread. `RS-MOD-001` reports this condition.

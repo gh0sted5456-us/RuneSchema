@@ -3,9 +3,9 @@ channel: experimental
 promote_to: RELEASE-0.8.1.0.md
 ---
 
-# Pre-release · 0.8.1.0
+# Pre-release Â· 0.8.1.0
 
-!!! info "Available for testing · pending promotion to stable"
+!!! info "Available for testing Â· pending promotion to stable"
     Stable RuneSchema remains **0.8.0.3**. The changes below belong to the
     **0.8.1.0 prerelease** and have not been promoted to the stable guides.
 
@@ -14,29 +14,34 @@ promote_to: RELEASE-0.8.1.0.md
   <a class="md-button" href="../INSTALLATION/">Installation</a>
 </div>
 
-The download is the maintainer's complete ZIP, published unchanged with a
-versioned filename. It includes Helpy and all bundled plugins. Install UE4SS
+The downloads follow the maintainer's complete package layout. They include
+Helpy and all bundled plugins. Install UE4SS
 separately; preserve your settings, mods and saves when updating.
 
-## Unpublished development follow-up
+## Complete candidate refresh
 
-The [cooked host console](MOD-CONSOLE.md) now has an isolated saved-world
-acceptance test: an enabled mod's existing component receives a guarded local
-host command, and undeclared commands are rejected. Remote-client testing is
-pending. This source follow-up is not included in the published ZIP.
+The next complete package includes the current core, Helpy, bundled plugins and
+matching Lua adapters. It retains the maintainer-assembled package layout; UE4SS
+is installed separately. The complete 68-file refresh has passed package integrity and native broker
+checks. Its updated download will be linked here after upload finishes.
 
-The [runtime folder restructure](RUNTIME-LAYOUT.md) separates core plugins under
-`dlls/plugins` from Helpy under `Helpy`. It is a separate local candidate and is
-not included in the published download above. The same local follow-up adds a
-[native Helpy Mod Menu 2 plugin](MOD-MENU-2-AND-HUD.md) and
-[controller profiles, touchpad gestures and glyph feedback](CONTROLLER-HUD-BINDINGS.md#reconfigure-a-detected-controller).
-
-The independent [Developer Tools plugin](DEVELOPER-TOOLS.md) is also in local
-development; its additional native gameplay commands are not yet complete.
-
-The local Mod Menu 2 follow-up raises the combined settings, tab-key and template
-capacity to 1,024. It requires matching Helpy and Lua adapter builds; the published
-downloads retain the 200-setting limit. Template byte and validation limits remain.
+- **Runtime layout:** Core plugins live in `dlls/plugins`; Helpy and its native
+  plugins live in `Helpy`. Existing user settings and mod folders are preserved.
+- **Controller interaction:** Right-stick pointer control, confirm/context clicks,
+  stick-click drag and multi-selection, and clearer controller glyph feedback.
+- **Item Bay and mods:** Direct delivery works with a populated cart. Mod cards
+  are selectable and expose their bundled licenses. Mod Menu 2 supports up to
+  1,024 combined settings, tab keys and template entries.
+- **Core startup:** Redirected AppData is resolved to its physical application
+  root. Redirected child caches remain rejected, with the exact path reported.
+- **Mod-local services:** Optional typed template storage and native numeric
+  providers, scoped to their declaring mod and local controller. Native modules
+  initialize on the game thread. This API remains experimental; see its
+  [contract and verification limits](MOD-LOCAL-SERVICES.md).
+- **Cooked interfaces:** World components and mod-owned host console commands
+  retain explicit registration and authority checks. Remote coverage is pending.
+- **Diagnostics:** Player-mark bridge outages use bounded retry backoff and one
+  warning per outage. The shared diagnostic registry includes local-service errors.
 
 ## Pending changelog
 
@@ -56,22 +61,6 @@ These changes are available in the candidate and await stable promotion.
 [Browse the feature guides](index.md) for controls and defaults.
 [Detailed development history](CHANGELOG-0.8.1.0.md) retains the individual changes
 and earlier test-stage notes.
-
-## Local changes awaiting a new package
-
-- **Mod licenses:** Select RuneSchema or UE4SS mod cards for a gold border, then
-  open **License** at the bottom of the internal navigation. Read, copy and
-  refresh bundled notices, or open the author's linked mod page. Compact UE4SS
-  rows also support selection. See [selected mod licenses](HELPY-STANDALONE.md#selected-mod-licenses-in-development).
-
-- **Direct item delivery:** Right-click Give waits behind background cart validation
-  and sends only the requested items. Existing cart contents and selection remain
-  unchanged; a disconnected recipient or world change cancels queued delivery.
-- **Player mark synchronization:** An unavailable owned-player bridge uses bounded
-  retry backoff and one warning per outage. Only submitted requests count toward
-  acknowledgement retries. Local marks remain saved.
-
-These changes are available in local test builds; a new download has not been published.
 
 ## Testing and feedback
 

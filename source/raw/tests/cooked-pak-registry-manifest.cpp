@@ -65,6 +65,20 @@ int main()
     auto duplicateCommand=commands;duplicateCommand["NativeRegistries"]["ConsoleCommands"].push_back({{"Version",1},{"Id","weather"},{"Class",component}});
     bool rejectedCommand=false;try{Parse(duplicateCommand,"ExampleMod","registry/commands.jsonc");}catch(const std::runtime_error&){rejectedCommand=true;}assert(rejectedCommand);
 
+    const nlohmann::json local={{"NativeRegistries",{{"LocalServices",nlohmann::json::array({{{"Version",1},{"Id","templates"},{"Class","/Game/ExampleMod/Core/BPC_Template.BPC_Template_C"},{"Templates",true}}})}}}};
+    const auto localService=Parse(local,"ExampleMod","registry/local.jsonc");assert(localService&&localService->LocalServices.size()==1&&localService->LocalServices[0].Templates);
+    assert(!Detail::OwnedObjectPath("/Game/ExampleMod/Core/BPC_Template.BPC_Template_C","ExampleMod"));
+    auto computeService=local;computeService["NativeRegistries"]["LocalServices"][0].erase("Templates");computeService["NativeRegistries"]["LocalServices"][0]["ComputeProviders"]={"ExampleMod.Math/Check180"};assert(Parse(computeService,"ExampleMod","registry/local.jsonc"));
+    for(const auto& row:nlohmann::json::array({
+        {{"Version",1},{"Id","t"},{"Class","/Game/Other/BPC.BPC_C"},{"Templates",true}},
+        {{"Version",1},{"Id","t"},{"Class",component},{"Templates","true"}},
+        {{"Version",1},{"Id","t"},{"Class",component}},
+        {{"Version",1},{"Id","t"},{"Class",component},{"ComputeProviders",{"Other.Math/Probe"}}},
+        {{"Version",1},{"Id","t"},{"Class",component},{"Templates",true},{"Root","C:/other"}}})){
+        auto invalid=local;invalid["NativeRegistries"]["LocalServices"][0]=row;bool rejected=false;try{Parse(invalid,"ExampleMod","registry/local.jsonc");}catch(const std::runtime_error&){rejected=true;}assert(rejected);
+    }
+    auto duplicateLocal=local;duplicateLocal["NativeRegistries"]["LocalServices"].push_back(duplicateLocal["NativeRegistries"]["LocalServices"][0]);bool rejectedLocal=false;try{Parse(duplicateLocal,"ExampleMod","registry/local.jsonc");}catch(const std::runtime_error&){rejectedLocal=true;}assert(rejectedLocal);
+
     auto artwork=document;artwork["NativeRegistries"]["CacheAssets"]={"/Example/Icons/T_Original.T_Original"};
     const auto loose=Parse(artwork,"ExampleMod","registry/example.jsonc");
     const auto cooked=Parse(artwork,"ExampleMod","pak:/Example.RSREG_Test");

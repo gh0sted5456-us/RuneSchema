@@ -177,5 +177,16 @@ int main() try
     Check(app!=combined.end()&&app->Version=="0.8.1.0"&&app->EntryPoint==modern/"Helpy/Helpy.dll","canonical Helpy wins over old manifest and loads flat binary");
     Check(std::any_of(combined.begin(),combined.end(),[](const auto& p){return p.Id=="RuneSchema.ModMenu2"&&p.Host=="helpy";}),"frontend host routing is explicit");
     Check(std::any_of(combined.begin(),combined.end(),[](const auto& p){return p.Id=="ThirdParty";}),"legacy third-party plugin stays discoverable");
+    const auto owned=modern/"mods/Example/plugins/Example.Native";
+    Write(owned/"plugin.json",R"({"Id":"Example.Native","Version":"1","Host":"game","EntryPoint":"Example.dll"})");
+    Write(owned/"dll/Example.dll");
+    Write(modern/"mods/Disabled/plugins/Disabled.Native/plugin.json",R"({"Id":"Disabled.Native","Version":"1","EntryPoint":"Disabled.dll"})");
+    Write(modern/"mods/Example/ue4ss/Unrelated/dlls/main.dll");
+    const auto native=PS::PluginCatalog::DiscoverOwned(modern,{modern/"mods/Example"},&diagnostics);
+    Check(native.size()==1&&native[0].ModOwner=="Example"&&native[0].Id=="Example.Native"&&!native[0].MountPaks,"native plugin binds its actual enabled parent and never mounts a second PAK copy");
+    Check(PS::PluginCatalog::DiscoverOwned(modern,{},&diagnostics).empty(),"disabled parent cannot load a native plugin");
+    Check(PS::PluginCatalog::DiscoverOwned(modern,{root/"elsewhere/Example"},&diagnostics).empty(),"nonruntime owner root rejected");
+    Write(owned/"plugin.json",R"({"Id":"Other.Native","Version":"1","EntryPoint":"Example.dll"})");
+    Check(PS::PluginCatalog::DiscoverOwned(modern,{modern/"mods/Example"},&diagnostics).empty(),"native plugin cannot claim another owner's namespace");
     std::cout << "Plugin catalog compatibility contract passed.\n";
 }catch(const std::exception& error){std::cerr<<"FAIL: "<<error.what()<<'\n';return 1;}

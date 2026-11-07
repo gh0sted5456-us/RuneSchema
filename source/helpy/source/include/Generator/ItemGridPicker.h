@@ -793,6 +793,8 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
     if(!localCatalog)LazyCatalog::FillTo(0,static_cast<int>(lazy.Rows.size())+std::max(0,wanted-static_cast<int>(state.Matches.size())));
     if(state.ProgressPage!=state.PageIndex){state.ProgressPage=state.PageIndex;state.VisibleProgressIcons.clear();}
     if(quickActions&&allowMulti){
+        if(HelpyControllerInput::Selection.Controller&&!ImGui::IsAnyItemActive()&&!ImGui::GetIO().WantTextInput&&!ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId)
+            &&ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)&&ImGui::IsKeyPressed(ImGuiKey_GamepadL3,false))state.MultiSelect=!state.MultiSelect;
         HelpyImGuiTheme::Toggle("Select multiple",&state.MultiSelect);
         if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Toggle cards with a mouse click or controller confirm. Ctrl+click also changes individual selections. Click a card's check box to add or remove it.");
         if(state.MultiSelect){
@@ -901,7 +903,7 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
     }
     PageControls(state,state.Matches.size(),lazy.HasMore&&lazy.LastError.empty(),lazy.Pending||populationWait);
     if(quickActions&&allowMulti){
-        HelpyControllerInput::ItemBayFrame=ImGui::GetFrameCount();
+        HelpyControllerInput::ItemBayFrame=ImGui::GetFrameCount();HelpyControllerInput::ItemBayMultiSelect=state.MultiSelect;
         if(HelpyControllerInput::Selection.Controller&&!ImGui::IsAnyItemActive()&&!ImGui::GetIO().WantTextInput&&!ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId)&&ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)&&ImGui::IsKeyPressed(ImGuiKey_GamepadStart,false))SendSelectionToCart(catalog,state,selected,selectedCapacity);
         ImGui::BeginDisabled(state.SelectedPaths.empty()||SharedCart.Delivery()!=0);
         const auto label="Send to cart ("+std::to_string(state.SelectedPaths.size())+")";

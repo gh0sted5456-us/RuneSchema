@@ -1,4 +1,5 @@
 #include "RuntimePaths.h"
+#include "Core/CacheBundleIO.h"
 #pragma once
 #include <algorithm>
 #include <cctype>
@@ -16,7 +17,7 @@
 namespace PS::PluginCatalog {
 namespace fs = std::filesystem;
 struct Plugin {
-    std::string Id,Name,Version,BuiltForRuneSchema,ConsoleMessage,Host="game";
+    std::string Id,Name,Version,BuiltForRuneSchema,ConsoleMessage,Host="game",ModOwner;
     int ApiVersion=0;
     bool Enabled=true,Required=false,MountPaks=true;
     bool PreferSharedRegistry=false;
@@ -183,6 +184,22 @@ inline std::vector<Plugin> Discover(const fs::path& root,std::vector<std::string
         ordered.push_back(result[i]);
     }
     return ordered;
+}
+// Only the loader's resolved enabled roots may enter this lane; never scan /ue4ss.
+inline std::vector<Plugin> DiscoverOwned(const fs::path& runtime,const std::vector<fs::path>& enabled,std::vector<std::string>* diagnostics=nullptr){
+    std::vector<Plugin> result;const auto mods=fs::absolute(runtime/"mods").lexically_normal();
+    for(const auto& root:enabled)try{
+        const auto exact=fs::absolute(root).lexically_normal();const auto owner=exact.filename().string();
+        if(exact.parent_path()!=mods||!Token(owner)||owner=="."||owner=="..")throw std::runtime_error("Owner is not an enabled direct mod folder");
+        CacheBundleIO::Safe(exact);CacheBundleIO::Safe(exact/"plugins");
+        if(!fs::exists(exact/"plugins"))continue;
+        for(auto plugin:Discover(exact/"plugins",diagnostics)){
+            if(plugin.Host!="game"||plugin.EntryPoint.empty()||!plugin.Id.starts_with(owner+"."))throw std::runtime_error("Mod-owned plugins require Host game, a DLL EntryPoint and Owner-prefixed Id");
+            CacheBundleIO::Safe(plugin.EntryPoint);
+            plugin.ModOwner=owner;plugin.MountPaks=false;result.push_back(std::move(plugin));
+        }
+    }catch(const std::exception& error){if(diagnostics)diagnostics->push_back(root.filename().string()+": mod plugin rejected: "+error.what());}
+    return result;
 }
 inline std::vector<Plugin> DiscoverRuntime(const fs::path& root,std::vector<std::string>* diagnostics=nullptr){return Discover(root,diagnostics,true);}
 }

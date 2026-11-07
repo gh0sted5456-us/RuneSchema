@@ -25,6 +25,7 @@ namespace PS::CookedPakRegistryManifest {
 
     struct Manifest {
         struct ConsoleCommand {std::string Owner,Id,Class;};
+        struct LocalService {std::string Owner,Id,Class;bool Templates=false;std::vector<std::string> ComputeProviders;};
         std::string Owner;
         std::string Source;
         std::vector<Lane> AssetLanes;
@@ -35,6 +36,7 @@ namespace PS::CookedPakRegistryManifest {
         std::vector<std::string> RangedAttackClasses;
         std::vector<std::string> WorldComponents; // Mod-owned nonreplicated GameState components.
         std::vector<ConsoleCommand> ConsoleCommands;
+        std::vector<LocalService> LocalServices;
         std::vector<std::string> CacheAssets; // Exact original artwork declarations; never native gameplay registration.
         std::uint64_t Fingerprint = 0;
     };
@@ -84,6 +86,12 @@ namespace PS::CookedPakRegistryManifest {
                 &&(folded.starts_with("/"+name+"/")||folded.starts_with("/game/mods/"+name+"/"));
         }
 
+        inline bool LocalServicePath(const std::string& path,const std::string& owner){
+            if(OwnedObjectPath(path,owner))return true;
+            return Fold(path).starts_with("/game/"+Fold(owner)+"/")&&OwnedObjectPath(path.substr(0,6)+"Mods/"+path.substr(6),owner);
+        }
+        inline bool ServiceToken(const std::string& value){return !value.empty()&&value.size()<=96&&value!="."&&value!=".."&&std::all_of(value.begin(),value.end(),[](unsigned char c){return (c>='a'&&c<='z')||(c>='A'&&c<='Z')||(c>='0'&&c<='9')||c=='_'||c=='-'||c=='.';});}
+
         inline std::vector<std::string> ReadPaths(const nlohmann::json& root,
             const char* field, std::size_t& total,std::set<std::string>* schemaPaths=nullptr)
         {
@@ -126,11 +134,11 @@ namespace PS::CookedPakRegistryManifest {
         const auto native = document.value("NativeRegistries",nlohmann::json::object());
         if (!native.is_object())
             throw std::runtime_error("NativeRegistries must be an object");
-        static constexpr std::array<const char*, 18> Allowed{{
+        static constexpr std::array<const char*, 19> Allowed{{
             "Items", "Recipes", "Quests", "CombatSpells", "UtilitySpells",
             "Journals", "Lore",
             "EquipmentEffects", "WearableMeshData", "MeleeAttackClasses",
-            "RangedAttackClasses", "WorldComponents", "ConsoleCommands", "CacheAssets", "Skills", "SkillPerks", "Enums", "Buildings"}};
+            "RangedAttackClasses", "WorldComponents", "ConsoleCommands", "LocalServices", "CacheAssets", "Skills", "SkillPerks", "Enums", "Buildings"}};
         for (const auto& [key, unused] : native.items())
         {
             (void)unused;
@@ -188,6 +196,28 @@ namespace PS::CookedPakRegistryManifest {
         for(const auto& path:result.WorldComponents)
             if(!Detail::OwnedObjectPath(path,owner)||!path.ends_with("_C"))
                 throw std::runtime_error("NativeRegistries.WorldComponents requires mod-owned cooked component class paths ending in _C");
+        if(native.contains("LocalServices")){
+            const auto& declarations=native.at("LocalServices");std::set<std::string> ids,classes;
+            if(!declarations.is_array()||declarations.size()>256)throw std::runtime_error("LocalServices requires at most 256 declarations");
+            for(const auto& row:declarations){
+                if(!row.is_object()||row.size()<3||!row.contains("Version")||!row.at("Version").is_number_integer()||row.at("Version")!=1
+                    ||!row.contains("Id")||!row.at("Id").is_string()||!row.contains("Class")||!row.at("Class").is_string())throw std::runtime_error("LocalServices requires Version 1, Id and Class");
+                for(const auto& [key,value]:row.items())if(key!="Version"&&key!="Id"&&key!="Class"&&key!="Templates"&&key!="ComputeProviders")throw std::runtime_error("Unknown LocalServices field");
+                Manifest::LocalService service{owner,row.at("Id").get<std::string>(),row.at("Class").get<std::string>()};
+                if(!Detail::ServiceToken(service.Id)||!ids.insert(Detail::Fold(service.Id)).second||!Detail::LocalServicePath(service.Class,owner)||!service.Class.ends_with("_C")||!classes.insert(Detail::Fold(service.Class)).second)throw std::runtime_error("LocalServices requires unique IDs and mod-owned component classes");
+                if(row.contains("Templates")){if(!row.at("Templates").is_boolean())throw std::runtime_error("LocalServices Templates must be boolean");service.Templates=row.at("Templates").get<bool>();}
+                if(row.contains("ComputeProviders")){
+                    const auto& providers=row.at("ComputeProviders");std::set<std::string> unique;
+                    if(!providers.is_array()||providers.size()>32)throw std::runtime_error("LocalServices ComputeProviders requires at most 32 provider IDs");
+                    for(const auto& value:providers){if(!value.is_string())throw std::runtime_error("ComputeProviders requires strings");const auto text=value.get<std::string>();const auto slash=text.find('/');
+                        if(slash==text.npos||!Detail::ServiceToken(text.substr(0,slash))||!Detail::ServiceToken(text.substr(slash+1))||!text.starts_with(owner+".")||!unique.insert(text).second)throw std::runtime_error("ComputeProviders must identify unique owner-prefixed PluginId/ProviderId pairs");
+                        service.ComputeProviders.push_back(text);
+                    }
+                }
+                if(!service.Templates&&service.ComputeProviders.empty())throw std::runtime_error("LocalServices must request templates or native compute");
+                result.LocalServices.push_back(std::move(service));if(++total>16384)throw std::runtime_error("Cooked registry exceeds the 16384-reference document limit");
+            }
+        }
         if(native.contains("ConsoleCommands")){
             const auto& declarations=native.at("ConsoleCommands");std::set<std::string> ids;
             if(!declarations.is_array()||declarations.size()>256)throw std::runtime_error("ConsoleCommands requires at most 256 declarations");
@@ -291,6 +321,7 @@ namespace PS::CookedPakRegistryManifest {
         Detail::Hash(hash,"CacheAssets");for(const auto& path:result.CacheAssets)Detail::Hash(hash,path);
         if(!result.WorldComponents.empty()){Detail::Hash(hash,"WorldComponents");for(const auto& path:result.WorldComponents)Detail::Hash(hash,path);}
         if(!result.ConsoleCommands.empty()){Detail::Hash(hash,"ConsoleCommands");for(const auto& command:result.ConsoleCommands){Detail::Hash(hash,command.Id);Detail::Hash(hash,command.Class);}}
+        if(!result.LocalServices.empty()){Detail::Hash(hash,"LocalServices");for(const auto& service:result.LocalServices){Detail::Hash(hash,service.Id);Detail::Hash(hash,service.Class);Detail::Hash(hash,service.Templates?"Templates":"");for(const auto& provider:service.ComputeProviders)Detail::Hash(hash,provider);}}
         Detail::Hash(hash,result.LoaderDefinitions.dump());
         if(!result.SchemaPaths.empty()){Detail::Hash(hash,"SchemaReferences");for(const auto& path:result.SchemaPaths)Detail::Hash(hash,path);}
         result.Fingerprint = hash;
@@ -323,6 +354,11 @@ namespace PS::CookedPakRegistryManifest {
         std::scoped_lock lock(Detail::Mutex);std::vector<Manifest::ConsoleCommand> result;
         for(const auto& manifest:Detail::Manifests)result.insert(result.end(),manifest->ConsoleCommands.begin(),manifest->ConsoleCommands.end());
         return result;
+    }
+
+    inline std::vector<Manifest::LocalService> LocalServiceDefinitions(){
+        std::scoped_lock lock(Detail::Mutex);std::vector<Manifest::LocalService> result;
+        for(const auto& manifest:Detail::Manifests)result.insert(result.end(),manifest->LocalServices.begin(),manifest->LocalServices.end());return result;
     }
 
     struct Definition {std::string Owner,Source,Path;nlohmann::json Body;bool Explicit=false;};

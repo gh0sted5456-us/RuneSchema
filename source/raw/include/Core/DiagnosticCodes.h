@@ -136,6 +136,7 @@ inline std::string_view Category(std::string_view code,bool structured=false){
     if(family=="RS-JRN")return "Journal";
     if(family=="RS-WORLD")return "World components";
     if(family=="RS-CMD")return "Mod console";
+    if(family=="RS-MOD")return "Mod-local services";
     return "Other diagnostics";
 }
 }

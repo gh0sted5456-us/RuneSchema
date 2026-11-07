@@ -1,0 +1,22 @@
+{
+  "SchemaVersion": 1,
+  "Entries": [],
+  "NativeRegistries": {
+    "LocalServices": [
+      {
+        "Version": 1,
+        "Id": "templates",
+        "Class": "/Game/Example/Core/BPC_Templates.BPC_Templates_C",
+        "Templates": true
+      },
+      {
+        "Version": 1,
+        "Id": "compute",
+        "Class": "/Game/Example/Core/BPC_Compute.BPC_Compute_C",
+        "ComputeProviders": [
+          "Example.ShapeMath/Scale4"
+        ]
+      }
+    ]
+  }
+}

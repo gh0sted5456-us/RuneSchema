@@ -5,6 +5,7 @@
 #include <vector>
 
 namespace PS {
+namespace PluginCatalog {struct Plugin;}
 class PluginHost {
 public:
     PluginHost();
@@ -12,6 +13,7 @@ public:
     PluginHost(const PluginHost&)=delete;
     PluginHost& operator=(const PluginHost&)=delete;
     void Load(const std::filesystem::path& root);
+    void LoadOwned(const std::filesystem::path& root,const std::vector<std::filesystem::path>& enabled);
     void Shutdown() noexcept;
     void OnUiInit();
     void StartDesktop();
@@ -22,6 +24,7 @@ public:
     static std::string Call(const std::string& caller,const std::string& service,const std::string& request);
     std::vector<std::string> Diagnostics() const;
 private:
+    void LoadCatalog(const std::vector<PluginCatalog::Plugin>& manifests);
     struct State;
     std::unique_ptr<State> m_state;
 };

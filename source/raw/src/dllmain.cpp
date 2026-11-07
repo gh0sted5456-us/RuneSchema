@@ -863,6 +863,9 @@ public:
                 PS::RuntimeJobs::Shutdown();
                 m_pluginHost.Shutdown();
             });
+            MainLoader.SetModsReadyHandler([this]{
+                m_pluginHost.LoadOwned(PS::HostServices::ModDirectory(),MainLoader.EnabledModRoots());
+            });
             MainLoader.Initialize();
             m_buildingPolicy.Start();
             PS::ModHealthService::Initialize();

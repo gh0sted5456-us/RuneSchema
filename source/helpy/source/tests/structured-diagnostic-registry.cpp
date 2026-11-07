@@ -2,7 +2,7 @@
 #include <cassert>
 #include <string_view>
 using namespace PS;
-static_assert(StructuredDiagnosticRegistry::All.size()==226);
+static_assert(StructuredDiagnosticRegistry::All.size()==227);
 static_assert(StructuredDiagnosticRegistry::Find("RS-BLD-001")!=nullptr);
 static_assert(StructuredDiagnosticRegistry::Find("RS-BLD-001")->TypicalSeverity=="Error");
 static_assert(StructuredDiagnosticRegistry::Find("RS-BLD-022")->TypicalSeverity=="Warning");
@@ -23,5 +23,5 @@ int main(){
         collisions+=row.LegacyCollision;
         assert(StructuredDiagnosticRegistry::Find(row.Code)==&row);
     }
-    assert(errors==151&&warnings==74&&information==1&&collisions==3);
+    assert(errors==151&&warnings==75&&information==1&&collisions==3);
 }

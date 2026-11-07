@@ -895,6 +895,11 @@ inline nlohmann::json LoaderSchemas() {
             {"Version",{{"const",1}}},{"Id",{{"type","string"},{"minLength",1},{"maxLength",96},{"pattern","^[A-Za-z0-9_.-]+$"},{"not",{{"enum",{".",".."}}}}}},
             {"Class",{{"type","string"},{"maxLength",1024},{"pattern","^/[^\\r\\n\\t]+\\.[^/]+_C$"}}}}}}},
         {"description","Mod-owned host-only local console handlers on existing GameState components. Runtime validates unique IDs, class ownership and the four-pin local Blueprint signature."}};
+    nativeRegistries["properties"]["LocalServices"]=nativeRegistries["properties"]["ConsoleCommands"];
+    auto& localServices=nativeRegistries["properties"]["LocalServices"];
+    localServices["items"]["properties"]["Templates"]={{"type","boolean"}};
+    localServices["items"]["properties"]["ComputeProviders"]={{"type","array"},{"maxItems",32},{"uniqueItems",true},{"items",{{"type","string"},{"maxLength",193},{"pattern","^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"}}}};
+    localServices["description"]="Explicit local template and native compute services. Runtime binds owner, class, local PlayerController, exact typed pins and allowed owner-prefixed native providers.";
     result["registry"]["definitions"]["modOwnedCookedPaths"]={{"type","array"},{"maxItems",4096},{"uniqueItems",true},
         {"items",{{"type","string"},{"maxLength",1024},{"pattern","^/(?!Script/|Engine/)[A-Za-z0-9_.-]+/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"},{"not",{{"pattern","\\.\\."}}}}},
         {"description","Runtime requires the owning /Owner/ or /Game/Mods/Owner/ namespace and rejects case-insensitive duplicates. Strings only; no Source:Schema or arbitrary property writes."}};

@@ -4,7 +4,7 @@
 #include <string_view>
 namespace PS::StructuredDiagnosticRegistry {
 struct Entry { std::string_view Code, TypicalSeverity, Description, ProducerSite; bool LegacyCollision; };
-inline constexpr std::array<Entry,226> All{{
+inline constexpr std::array<Entry,227> All{{
     {"RS-ASSET-001","Error","Asset target remained unresolved","src/Loader/DragonWildsAssetModLoader.cpp",false},
     {"RS-ASSET-002","Warning","Asset definition has invalid root","src/Loader/DragonWildsAssetModLoader.cpp",false},
     {"RS-ASSET-003","Warning","Asset property modification rejected","src/Loader/DragonWildsAssetModLoader.cpp",false},
@@ -160,6 +160,7 @@ inline constexpr std::array<Entry,226> All{{
     {"RS-LOAD-002","Warning","Loader capability unavailable","src/Loader/DragonWildsModLoaderBase.cpp",false},
     {"RS-LOAD-003","Warning","Loader section raised an exception","src/Loader/DragonWildsModLoaderBase.cpp",false},
     {"RS-LOAD-004","Warning","Loader section raised an unknown exception","src/Loader/DragonWildsModLoaderBase.cpp",false},
+    {"RS-MOD-001","Warning","Mod-local service unavailable","src/Runtime/ModLocalServices.cpp",false},
     {"RS-NIA-001","Error","Invalid Niagara document root","src/Loader/DragonWildsNiagaraLoader.cpp",false},
     {"RS-NIA-002","Error","Duplicate Niagara ID","src/Loader/DragonWildsNiagaraLoader.cpp",false},
     {"RS-NIA-003","Error","Niagara definition rejected","src/Loader/DragonWildsNiagaraLoader.cpp",false},

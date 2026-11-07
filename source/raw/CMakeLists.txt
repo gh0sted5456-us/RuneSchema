@@ -117,6 +117,19 @@ add_library(${TARGET} SHARED
     src/Core/CharacterEntryRecovery.cpp
     src/Core/PersistencePruner.cpp)
 
+# Compile-time isolation for private template acceptance. Empty in ordinary builds.
+set(RUNESCHEMA_PRIVATE_TEMPLATE_TEST_DOCUMENTS "" CACHE PATH "PRIVATE test Documents root; never distribute this build")
+if(RUNESCHEMA_PRIVATE_TEMPLATE_TEST_DOCUMENTS)
+    file(TO_CMAKE_PATH "${RUNESCHEMA_PRIVATE_TEMPLATE_TEST_DOCUMENTS}" RUNESCHEMA_TEST_DOCUMENTS)
+    string(TOUPPER "${RUNESCHEMA_TEST_DOCUMENTS}" RUNESCHEMA_TEST_DOCUMENTS_DRIVE)
+    if(NOT IS_ABSOLUTE "${RUNESCHEMA_TEST_DOCUMENTS}" OR NOT RUNESCHEMA_TEST_DOCUMENTS_DRIVE MATCHES "^[DF]:/")
+        message(FATAL_ERROR "Private template test Documents must be an absolute D:/ or F:/ path")
+    endif()
+    set_property(SOURCE src/Runtime/ModLocalServices.cpp APPEND PROPERTY COMPILE_DEFINITIONS
+        "RUNESCHEMA_PRIVATE_TEMPLATE_TEST_DOCUMENTS=\"${RUNESCHEMA_TEST_DOCUMENTS}\"")
+    message(WARNING "PRIVATE TEMPLATE TEST ROOT enabled. Do not install or distribute this core.")
+endif()
+
 # API-1 Helpy native plugin. All Helpy UI/input ownership lives in this optional
 # binary; multiplayer orchestration remains in the mandatory RuneSchema target.
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../helpy" "${CMAKE_CURRENT_BINARY_DIR}/helpy")

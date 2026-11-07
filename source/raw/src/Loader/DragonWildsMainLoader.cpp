@@ -1164,6 +1164,7 @@ namespace DragonWilds {
         InitializeMods(EEngineLifecyclePhase::PostEngineInit);
         LoadMods(EEngineLifecyclePhase::PostEngineInit);
         SetupLogicPakBridge();
+        if(auto ready=std::move(m_modsReady))ready();
         PS::StartupTrace::Mark("PostEngineInit complete");
     }
 

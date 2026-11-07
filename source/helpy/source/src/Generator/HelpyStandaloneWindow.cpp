@@ -4779,18 +4779,19 @@ void HelpyStandaloneWindow::RenderFrame() {
     ImGui::GetIO().MouseDrawCursor=native&&!m_nativeOverlay.HardwareCursor();
     ImGui_ImplDX11_NewFrame();ImGui_ImplWin32_NewFrame();auto& frameIo=ImGui::GetIO();const auto& t=HelpyImGuiTheme::Current;SelectUiFontFamily(t.fontFamily);frameIo.FontDefault=UiRegularFont;frameIo.FontGlobalScale=std::clamp(t.Scale()*t.fontScale,0.50f,4.00f);
     const bool controllerFocused=native?GetForegroundWindow()==m_nativeOverlay.GameWindow():OwnsWindow(GetForegroundWindow());
+    const bool pointerInteractive=m_visible.load()&&t.inputMode!=1&&controllerFocused&&!HelpyBindingPicker::Recording();
     if(native){auto* page=m_nativeOverlay.Page();HelpyOverlayInput::Feed(*page,m_nativeOverlay.GameWindow());frameIo.DisplaySize={float(page->Width),float(page->Height)};frameIo.DisplayFramebufferScale={1,1};const auto pad=HelpyOverlayInput::FreshPad(*page);
 #if defined(HELPY_PREVIEW)
-        const XINPUT_GAMEPAD neutral{};HelpyControllerInput::Poll(t.inputMode,&neutral);
+        const XINPUT_GAMEPAD neutral{};HelpyControllerInput::Poll(t.inputMode,&neutral,pointerInteractive);
 #else
-        if(controllerFocused)HelpyControllerInput::Poll(t.inputMode,pad?&*pad:nullptr);else{HelpyControllerInput::Suspend();HelpyControllerInput::Poll(1);}
+        if(controllerFocused)HelpyControllerInput::Poll(t.inputMode,pad?&*pad:nullptr,pointerInteractive);else{HelpyControllerInput::Suspend();HelpyControllerInput::Poll(1);}
 #endif
         NativeCaption.Controls={LONG(page->Width)-138,NativeCaption.Border,LONG(page->Width),NativeCaption.Height};}
     else {
 #if defined(HELPY_PREVIEW)
-        const XINPUT_GAMEPAD neutral{};HelpyControllerInput::Poll(t.inputMode,&neutral);
+        const XINPUT_GAMEPAD neutral{};HelpyControllerInput::Poll(t.inputMode,&neutral,pointerInteractive);
 #else
-        if(controllerFocused)HelpyControllerInput::Poll(t.inputMode);else{HelpyControllerInput::Suspend();HelpyControllerInput::Poll(1);}
+        if(controllerFocused)HelpyControllerInput::Poll(t.inputMode,nullptr,pointerInteractive);else{HelpyControllerInput::Suspend();HelpyControllerInput::Poll(1);}
 #endif
     }
     MainSurfacePosition={0,0};MainSurfaceSize=frameIo.DisplaySize;DesktopBayLayout::Canvas bayCanvas;
@@ -4807,7 +4808,6 @@ void HelpyStandaloneWindow::RenderFrame() {
 #if defined(HELPY_PREVIEW)
     frameIo.DeltaTime=1.f/60.f; // Capture I/O and machine load must not advance an input-test animation.
 #endif
-    const bool pointerInteractive=m_visible.load()&&t.inputMode!=1&&controllerFocused&&!HelpyBindingPicker::Recording();
     const auto touchPointer=HelpyControllerInput::UpdatePointer(t.controllerTouchpad&&pointerInteractive,t.controllerCursor&&pointerInteractive);
 #if !defined(HELPY_PREVIEW)
     if(touchPointer&&controllerFocused&&(native?GetForegroundWindow()==m_nativeOverlay.GameWindow():OwnsWindow(GetForegroundWindow()))){
@@ -4857,7 +4857,7 @@ void HelpyStandaloneWindow::RenderFrame() {
         HelpyImGuiTheme::Scope skin(t);ImFont* workspaceFont=(t.textBold&&UiBoldFont)?UiBoldFont:UiRegularFont;
         if(workspaceFont)ImGui::PushFont(workspaceFont);
         const bool controller=HelpyControllerInput::Selection.Controller;
-        if(controller)ImGui::SetNavCursorVisible(true);
+        if(controller)ImGui::SetNavCursorVisible(!HelpyControllerInput::PointerMode);
         if(controller){const float footer=HelpyControllerInput::HintsHeight(ImGui::GetContentRegionAvail().x,HelpyBindingActions::Controller());MainSurfaceSize.y=std::max(1.f,MainSurfaceSize.y-footer);ItemGridPicker::DetailsSurfaceSize=MainSurfaceSize;HelpyWindowChrome::Bounds(MainSurfacePosition,MainSurfaceSize);HelpyImGuiTheme::BeginPanel("##controller-content",{0,std::max(1.f,ImGui::GetContentRegionAvail().y-footer)},false);}
         const bool taskbar=HelpyTaskbar::Current.Count()!=0;
         if(taskbar)HelpyImGuiTheme::BeginPanel("##helpy-workspace-above-taskbar",{0,std::max(1.0f,ImGui::GetContentRegionAvail().y-ImGui::GetFrameHeightWithSpacing()*(HelpyTaskbar::Current.Count()>2?2:1)-t.Y(12))},false);
@@ -4958,6 +4958,7 @@ void HelpyStandaloneWindow::RenderFrame() {
     // Submit once, after every visible panel has declared this frame's demand.
     ItemIconCache::Update();
     HelpyControllerInput::ResolvePaneNavigation();
+    HelpyControllerInput::DrawPointer();
     ImGui::Render();
     if(native)m_nativeOverlay.Cursor(ImGui::GetMouseCursor());
     if(native){const int slot=m_nativeOverlay.Begin();if(slot>=0){auto* target=m_nativeOverlay.Target(slot);const float clear[4]{};m_context->OMSetRenderTargets(1,&target,nullptr);m_context->ClearRenderTargetView(target,clear);ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());m_nativeOverlay.Publish(slot);}return;}

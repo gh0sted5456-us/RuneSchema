@@ -44,6 +44,19 @@ Core services live under `dlls/plugins`. Helpy's bridge and feature bundles live
 
 AppData keeps the same runtime identity, caches, profiles, notifications and window state. Installed mod folders remain under `mods`. Helpy's bundled settings and theme live under `Helpy/settings`.
 
+## Redirected AppData
+
+The trusted `LocalAppData/RSDragonwilds/RuneSchema` root resolves to its physical
+directory at startup. Redirected user profiles, game-data folders and whole
+RuneSchema data roots remain usable without moving or copying their contents.
+Core and Helpy use the same resolved root. Links below that root, including
+redirected cache or settings children, remain guarded; an error names the exact
+blocked path.
+
+A startup log showing UE4SS `f6d5f942` already matches the pinned compile SDK.
+`DID-NOT-START` followed by a redirected-path error concerns data-path setup;
+changing the UE4SS version does not address that failure.
+
 ## Transition
 
 Use a complete matching candidate with the game and Helpy closed. Preserve existing Helpy settings, themes and activation keys when moving the old plugin folder. Existing owned desktop shortcuts are refreshed at the next launch; custom shortcuts are preserved. Already enrolled Vulkan startup bindings follow the relocated HUD adapter.

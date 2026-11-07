@@ -33,7 +33,19 @@ tile. Mouse/keyboard mode keeps the normal **Enter** label.
 | Left face button | Actions for the focused item |
 | Top face button | Item Bay search |
 | Menu / Options / Plus | Send selected Item Bay items to cart |
-| Right stick | Move the pointer; press and hold to click or drag |
+| Right stick | Enter pointer mode and move the cursor |
+| Right-stick click | Grab; click again to drop without holding the stick down |
+| Left-stick click | Toggle Item Bay multi-select; zoom in on the map |
+
+Moving the right stick enters pointer mode and shows a gold ring cursor. The
+bottom face button becomes **left-click / drag**, and the left face button becomes
+**right-click** at the pointer. On PS5 these are **Cross** and **Square**; Xbox uses
+**A** and **X**. Pointer mode stays active when the stick rests. D-pad, left-stick
+or menu navigation returns to focus controls. Mouse clicks and navigation
+confirmation are routed exclusively, so one press cannot trigger both. The
+footer shows the current actions; remapping Confirm or Actions also updates the
+corresponding mouse button. Right-stick click holds the grab until its next
+click. Hiding Helpy, losing focus or leaving pointer mode cancels the grab.
 
 A gold border identifies the focused panel. The D-pad stays within its boundary;
 use the bumpers to switch between Item Bay controls, results and cart. Quantity
@@ -62,8 +74,9 @@ prevent resting drift; cursor movement uses elapsed frame time.
 
 PlayStation touchpad movement, one-finger tap/press and two-finger actions remain
 available. Synthetic pointer events stay associated with the controller so they
-do not switch Auto detect to mouse mode. The pointer stops and releases its click
-when Helpy loses input focus or controller input is disabled.
+do not switch Auto detect to mouse mode. The pointer stops and releases both mouse buttons
+when Helpy loses input focus or controller input is disabled. Held face buttons
+must be released before they can click again after a focus or mode change.
 
 This pass follows [Xbox navigation guidance](https://learn.microsoft.com/en-us/gaming/accessibility/xbox-accessibility-guidelines/112)
 and [focus guidance](https://learn.microsoft.com/en-us/gaming/accessibility/xbox-accessibility-guidelines/113).

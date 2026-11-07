@@ -3138,6 +3138,18 @@
       "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
+      "code": "RS-MOD-001",
+      "severity": "warning",
+      "title": "Mod-local service unavailable",
+      "producer": "src/Runtime/ModLocalServices.cpp",
+      "legacyCollision": false,
+      "namespace": "structured",
+      "category": "Mod-local services",
+      "anchor": "rs-mod-001",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-mod-001",
+      "troubleshooting": "Check the enabled parent mod, LocalServices declaration, exact local Blueprint pins and matching native plugin. Keep the mod-owned fallback; do not copy another mod DLL into RuneSchema or bypass component ownership."
+    },
+    {
       "code": "RS-NIA-001",
       "severity": "error",
       "title": "Invalid Niagara document root",

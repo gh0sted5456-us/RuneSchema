@@ -43,6 +43,12 @@ namespace DragonWilds {
 		void PreInitialize();
 
 		void Initialize();
+        void SetModsReadyHandler(std::function<void()> handler){m_modsReady=std::move(handler);}
+        std::vector<std::filesystem::path> EnabledModRoots() const {
+            std::vector<std::filesystem::path> result;
+            if(m_orderResolved)for(const auto& name:m_orderedMods)result.push_back(GetModsPath()/name);
+            return result;
+        }
         void AbortStartup(const std::string& stage, const std::string& reason);
         void SetFatalStartupHandler(std::function<void(std::string)> handler)
         { m_fatalStartupHandler = std::move(handler); }
@@ -103,6 +109,7 @@ namespace DragonWilds {
 
         static void OnDataTableSerialized(RC::Unreal::UDataTable* This, RC::Unreal::FArchive* Archive);
 
+        std::function<void()> m_modsReady;
         static void OnGameInstanceInit(RC::Unreal::UObject* This);
 
         PS::UnrealReadinessGate<RC::Unreal::UDataTable*> m_readiness;

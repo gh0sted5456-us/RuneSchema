@@ -1,5 +1,8 @@
 #include "Runtime/HelpyHudInterfaces.h"
 #include "Runtime/PluginHost.h"
+#include "Runtime/ModLocalServices.h"
+#include "Unreal/Hooks.hpp"
+#include "Unreal/UnrealInitializer.hpp"
 #include "Runtime/HelpyModMenu.h"
 #include "Core/HelpyActivity.h"
 #include "Core/PlayerCoordinates.h"
@@ -49,7 +52,7 @@
 namespace PS {
 namespace {
 struct Service { std::string Owner;RuneSchemaServiceFn Callback{};void* Context{}; };
-struct Loaded { PluginCatalog::Plugin Manifest;HMODULE Module{};void* Instance{};RuneSchemaPluginShutdownFn Shutdown{};RuneSchemaPluginPhaseFn UiInit{};RuneSchemaPluginPhaseFn UnrealInit{}; };
+struct Loaded { PluginCatalog::Plugin Manifest;HMODULE Module{};void* Instance{};RuneSchemaPluginShutdownFn Shutdown{};RuneSchemaPluginPhaseFn UiInit{};RuneSchemaPluginPhaseFn UnrealInit{};bool UnrealReady=false; };
 std::mutex Gate;std::unordered_map<std::string,Service> Services;std::unordered_map<std::string,std::string> Capabilities;
 std::unordered_map<std::string,std::string> ActiveConnections;
 thread_local const char* ActiveOwner=nullptr;
@@ -319,8 +322,12 @@ int32_t RS_PLUGIN_CALL ObjectIdentity(void* object,int32_t* index,int32_t* seria
     try{const WeakObjectHandle handle(static_cast<RC::Unreal::UObject*>(object));if(handle.Get()!=object)return RS_PLUGIN_NOT_FOUND;*index=handle.ObjectIndex;*serial=handle.ObjectSerialNumber;return RS_PLUGIN_OK;}catch(...){return RS_PLUGIN_FAILED;}
 }
 void* RS_PLUGIN_CALL ResolveObjectIdentity(int32_t index,int32_t serial){WeakObjectHandle handle;handle.ObjectIndex=index;handle.ObjectSerialNumber=serial;return handle.Get();}
+const RuneSchemaModApiV1* RS_PLUGIN_CALL GetModApi(const char* plugin){
+    if(!ActiveOwner||!plugin||!Token(plugin)||std::string_view(ActiveOwner)!=plugin)return nullptr;
+    return ModLocalServices::Api(plugin);
+}
 constexpr RuneSchemaHostApi HostApi{sizeof(RuneSchemaHostApi),RUNESCHEMA_PLUGIN_API_VERSION,HostLog,RegisterCapability,
-    RegisterService,CallService,FindObject,ForEachObjectOfClass,FindFieldClass,IsFieldA,ResolveBinding,ObjectIdentity,ResolveObjectIdentity};
+    RegisterService,CallService,FindObject,ForEachObjectOfClass,FindFieldClass,IsFieldA,ResolveBinding,ObjectIdentity,ResolveObjectIdentity,GetModApi};
 void CompatibilityNotice(const std::string& message) {
     const auto mode=PSConfig::Get()->GetSettings().plugins.compatibilityNotices;
     if(mode=="off")return;
@@ -328,7 +335,7 @@ void CompatibilityNotice(const std::string& message) {
     else Log<RC::LogLevel::Verbose>(TEXT("Plugin compatibility: {}\n"),ToWideSafe(message.c_str()));
 }
 }
-struct PluginHost::State { std::vector<Loaded> LoadedPlugins;std::vector<std::string> Messages;HelpyDesktop::Server Desktop; };
+struct PluginHost::State { std::vector<Loaded> LoadedPlugins;std::vector<std::string> Messages;std::unordered_set<std::string> SelectedIds;HelpyDesktop::Server Desktop;std::atomic<bool> UnrealReady=false;RC::Unreal::Hook::GlobalCallbackId OwnedInit=RC::Unreal::Hook::ERROR_ID; };
 PluginHost::PluginHost():m_state(std::make_unique<State>()){}
 PluginHost::~PluginHost(){Shutdown();}
 void PluginHost::Load(const std::filesystem::path& root) {
@@ -343,8 +350,27 @@ void PluginHost::Load(const std::filesystem::path& root) {
     try{manifests=PluginCatalog::DiscoverRuntime(root,&m_state->Messages);}
     catch(const std::exception& error){m_state->Messages.push_back(std::string("plugin catalog rejected; RuneSchema core continues: ")+error.what());PS::CodedLog<RC::LogLevel::Error>(PS::Diagnostics::Id::PluginCatalogRejected,TEXT("Plugin catalog rejected; RuneSchema core continues: {}\n"),PS::ToWideSafe(error.what()));return;}
     catch(...){m_state->Messages.push_back("plugin catalog rejected by an unknown error; RuneSchema core continues");PS::CodedLog<RC::LogLevel::Error>(PS::Diagnostics::Id::PluginCatalogRejected,TEXT("Plugin catalog rejected by an unknown error; RuneSchema core continues.\n"));return;}
+    LoadCatalog(manifests);
+}
+void PluginHost::LoadOwned(const std::filesystem::path& root,const std::vector<std::filesystem::path>& enabled){
+    if(Storefront::IsDedicatedServer())return;
+    auto manifests=PluginCatalog::DiscoverOwned(root,enabled,&m_state->Messages);
+    // GameInstance init may precede UE4SS game-thread identification; wait for an actual tick.
+    RC::Unreal::Hook::FCallbackOptions options{};options.OwnerModName=TEXT("RuneSchema");options.HookName=TEXT("ModOwnedPluginInit");
+    m_state->OwnedInit=RC::Unreal::Hook::RegisterEngineTickPostCallback([this,manifests=std::move(manifests)](auto& iteration,auto*,float,bool){
+        if(!m_state->UnrealReady.load(std::memory_order_acquire))return;
+        iteration.RemoveSelf();m_state->OwnedInit=RC::Unreal::Hook::ERROR_ID;
+        try{LoadCatalog(manifests);OnUnrealInit();}
+        catch(const std::exception& error){HostLog(RS_LOG_ERROR,"RuneSchema.Core",error.what());}
+        catch(...){HostLog(RS_LOG_ERROR,"RuneSchema.Core","Mod-owned plugin initialization failed");}
+    },options);
+    if(m_state->OwnedInit==RC::Unreal::Hook::ERROR_ID)HostLog(RS_LOG_ERROR,"RuneSchema.Core","Mod-owned plugin initialization requires an available game-thread tick");
+}
+void PluginHost::LoadCatalog(const std::vector<PluginCatalog::Plugin>& manifests){
     for(const auto& manifest:manifests) {
         if(!manifest.Enabled||manifest.Host!="game")continue;
+        auto identity=manifest.Id;std::transform(identity.begin(),identity.end(),identity.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
+        if(!m_state->SelectedIds.insert(identity).second){m_state->Messages.push_back(manifest.Id+": duplicate plugin identity rejected");continue;}
         // The desktop Helpy frontend has no Unreal imports or viewport hook.
         // Other client plugins retain the existing dedicated-server exclusion.
         if(Storefront::IsDedicatedServer()&&manifest.Id!="RuneSchema.Helpy")continue;
@@ -400,6 +426,7 @@ void PluginHost::Load(const std::filesystem::path& root) {
         m_state->Messages.push_back(manifest.Id+": manifest="+manifest.Version+", dll="+descriptor->Version+
             ", built-for="+(manifest.BuiltForRuneSchema.empty()?std::string("unspecified"):manifest.BuiltForRuneSchema)+
             ", host="+BuildInfo::Version);
+        if(!manifest.ModOwner.empty())try{ModLocalServices::Bind(manifest.Id,manifest.ModOwner);}catch(const std::exception& error){m_state->Messages.push_back(manifest.Id+": mod API binding failed: "+error.what());FreeLibrary(module);continue;}
         void* instance=nullptr;int32_t result=RS_PLUGIN_FAILED;ActiveOwner=manifest.Id.c_str();
         try{result=initialize(&HostApi,&instance);}catch(...){result=RS_PLUGIN_FAILED;}ActiveOwner=nullptr;
         bool complete=result==RS_PLUGIN_OK;{std::scoped_lock lock(Gate);for(const auto& capability:manifest.Capabilities) {
@@ -408,12 +435,12 @@ void PluginHost::Load(const std::filesystem::path& root) {
         if(!complete){m_state->Messages.push_back(manifest.Id+": initialization/capability contract failed ("+std::to_string(result)+")");
             PS::CodedLog<RC::LogLevel::Error>(PS::Diagnostics::Id::PluginInitFailed,TEXT("Plugin {}: initialization/capability contract failed ({}).\n"),PS::ToWideSafe(manifest.Id),result);
             {std::scoped_lock lock(Gate);std::erase_if(Services,[&](const auto& value){return value.second.Owner==manifest.Id;});std::erase_if(Capabilities,[&](const auto& value){return value.second==manifest.Id;});}
-            FreeLibrary(module);continue;}
+            if(ModLocalServices::Drop(manifest.Id))FreeLibrary(module);continue;}
         {std::scoped_lock lock(Gate);for(const auto& connection:manifest.Connections) {
             const auto [it,inserted]=ActiveConnections.emplace(connection,manifest.Id);
             if(!inserted&&it->second!=manifest.Id){complete=false;m_state->Messages.push_back(manifest.Id+": connection conflict: "+connection);}
         }}
-        if(!complete){if(shutdown)try{shutdown(instance);}catch(...){}
+        if(!complete){if(!ModLocalServices::Drop(manifest.Id))continue;if(shutdown)try{shutdown(instance);}catch(...){}
             {std::scoped_lock lock(Gate);std::erase_if(Services,[&](const auto& value){return value.second.Owner==manifest.Id;});std::erase_if(Capabilities,[&](const auto& value){return value.second==manifest.Id;});std::erase_if(ActiveConnections,[&](const auto& value){return value.second==manifest.Id;});}
             FreeLibrary(module);continue;}
         const auto uiInit=reinterpret_cast<RuneSchemaPluginPhaseFn>(GetProcAddress(module,"RuneSchemaPlugin_OnUiInit"));
@@ -448,6 +475,7 @@ void PluginHost::StartDesktop(){
 void PluginHost::OnUnrealInit(){
     StartDesktop();
     for(auto& plugin:m_state->LoadedPlugins){
+    if(std::exchange(plugin.UnrealReady,true))continue;
     size_t packs=0;
     try{packs=PluginCatalog::PakDirectories(plugin.Manifest).size();}
     catch(const std::exception& error){
@@ -475,8 +503,13 @@ void PluginHost::OnUnrealInit(){
         bootstrap={{"Result",SpawnToolRequests::Result}};
         bootstrapRevision=SpawnToolRequests::Revision;
     }SpawnToolRequests::PushUpdate("bootstrap",bootstrap,bootstrapRevision);
+    ModLocalServices::Start();
+    m_state->UnrealReady.store(true,std::memory_order_release);
 }
 void PluginHost::Shutdown() noexcept {
+    if(m_state)m_state->UnrealReady.store(false,std::memory_order_release);
+    if(m_state&&m_state->OwnedInit!=RC::Unreal::Hook::ERROR_ID){RC::Unreal::Hook::UnregisterCallback(m_state->OwnedInit);m_state->OwnedInit=RC::Unreal::Hook::ERROR_ID;}
+    ModLocalServices::Stop();
     if(m_state)m_state->Desktop.Stop();DesktopBridgeReady=false;
     HelpyActivity::Visible=false;HelpyActivity::CaptureInput=false;HelpyActivity::HudCaptureInput=false;HelpySourceCache::Requested=false;HelpySourceCache::Shutdown();
     AssetSearch::ShutdownItemCatalog();
@@ -484,11 +517,12 @@ void PluginHost::Shutdown() noexcept {
     if(!m_state)return;
     SpawnToolRequests::PushUpdate={};
     for(auto iterator=m_state->LoadedPlugins.rbegin();iterator!=m_state->LoadedPlugins.rend();++iterator) {
+        if(!ModLocalServices::Drop(iterator->Manifest.Id))continue;
         if(iterator->Shutdown)try{iterator->Shutdown(iterator->Instance);}catch(...){}
         {std::scoped_lock lock(Gate);std::erase_if(Services,[&](const auto& value){return value.second.Owner==iterator->Manifest.Id;});std::erase_if(Capabilities,[&](const auto& value){return value.second==iterator->Manifest.Id;});std::erase_if(ActiveConnections,[&](const auto& value){return value.second==iterator->Manifest.Id;});}
         if(iterator->Module)FreeLibrary(iterator->Module);
     }
-    m_state->LoadedPlugins.clear();
+    m_state->LoadedPlugins.clear();m_state->SelectedIds.clear();
 }
 bool PluginHost::HasCapability(const std::string& capability) const {std::scoped_lock lock(Gate);return Capabilities.contains(capability);}
 bool PluginHost::HasConnection(const std::string& connection) const {std::scoped_lock lock(Gate);return ActiveConnections.contains(connection);}

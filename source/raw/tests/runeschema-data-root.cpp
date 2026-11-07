@@ -4,11 +4,12 @@
 #include <cassert>
 #include <chrono>
 #include <fstream>
-int main(int argc,char** argv){
+int main(int argc,char** argv)try{
     namespace fs=std::filesystem;namespace R=PS::RuneSchemaData;
     if(argc==2&&std::string_view(argv[1])=="--paths"){
-        std::cout<<R::Directory().generic_string()<<"\n";
-        for(const auto* platform:{"steam","gamepass","epic","server"})std::cout<<R::MappingDirectory(platform).generic_string()<<"\n";
+        const auto print=[](const fs::path& path){const auto text=path.generic_u8string();std::cout.write(reinterpret_cast<const char*>(text.data()),text.size());std::cout<<"\n";};
+        print(R::Directory());
+        for(const auto* platform:{"steam","gamepass","epic","server"})print(R::MappingDirectory(platform));
         return 0;
     }
     const auto root=fs::temp_directory_path()/("runeschema-data-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
@@ -41,4 +42,4 @@ int main(int argc,char** argv){
     error.clear();fs::create_directory_symlink(outside,cacheLink,error);
     if(!error){failed=false;try{R::MappingDirectory(next,"steam");}catch(...){failed=true;}assert(failed);fs::remove(cacheLink);}
     assert(root.filename().string().starts_with("runeschema-data-"));fs::remove_all(root);
-}
+}catch(const std::exception& error){std::cerr<<error.what()<<"\n";return 1;}

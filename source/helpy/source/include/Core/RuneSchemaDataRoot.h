@@ -11,7 +11,10 @@ namespace fs=std::filesystem;
 inline void Safe(const fs::path& path){
     for(auto current=fs::absolute(path);!current.empty();){
         const auto attributes=GetFileAttributesW(current.c_str());
-        if(attributes!=INVALID_FILE_ATTRIBUTES&&(attributes&FILE_ATTRIBUTE_REPARSE_POINT))throw std::runtime_error("RuneSchema data refuses redirected paths");
+        if(attributes!=INVALID_FILE_ATTRIBUTES&&(attributes&FILE_ATTRIBUTE_REPARSE_POINT)){
+            const auto name=current.generic_u8string();
+            throw std::runtime_error("RuneSchema data refuses a redirected child path: "+std::string(name.begin(),name.end()));
+        }
         const auto parent=current.parent_path();if(parent==current)break;current=parent;
     }
 }
@@ -24,7 +27,10 @@ inline fs::path LocalDirectory(){
 }
 inline fs::path GameSavedDirectory(){return LocalDirectory()/L"RSDragonwilds"/L"Saved";}
 inline fs::path Resolve(const fs::path& local){
-    const auto destination=local/L"RSDragonwilds"/L"RuneSchema";
+    if(!local.is_absolute())throw std::runtime_error("LOCALAPPDATA must name an absolute directory");
+    // Resolve the trusted application root once; child cache/settings paths still reject links.
+    std::error_code error;const auto destination=fs::weakly_canonical(local/L"RSDragonwilds"/L"RuneSchema",error);
+    if(error)throw std::runtime_error("Cannot resolve the RuneSchema data root: "+error.message());
     Safe(destination);return destination;
 }
 inline const fs::path& Directory(){static const fs::path directory=Resolve(LocalDirectory());return directory;}

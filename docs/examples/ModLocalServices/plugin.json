@@ -1,0 +1,10 @@
+{
+  "SchemaVersion": 1,
+  "Id": "Example.ShapeMath",
+  "Name": "Example immutable scale provider",
+  "Version": "1.0.0",
+  "ApiVersion": 1,
+  "Host": "game",
+  "EntryPoint": "Example.ShapeMath.dll",
+  "MountPaks": false
+}

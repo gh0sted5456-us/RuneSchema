@@ -118,6 +118,17 @@ int Run() {
         PS::HelpyImGuiTheme::EndPanel();end();
     }
     {
+        ItemGridPicker::State picker;char filter[257]{},selected[1025]{};LazyCatalog::State local;local.Started=true;
+        const nlohmann::json catalog={{"Items",nlohmann::json::array()}};const bool previous=HelpyControllerInput::Selection.Controller;HelpyControllerInput::Selection.Controller=true;
+        io.ConfigFlags|=ImGuiConfigFlags_NavEnableGamepad;io.BackendFlags|=ImGuiBackendFlags_HasGamepad;
+        const auto draw=[&](bool editing=false){begin();ImGui::SetWindowFocus();if(editing)io.WantTextInput=true;
+            ItemGridPicker::Render("thumb-selection",catalog,filter,sizeof(filter),selected,sizeof(selected),picker,1,true,true,false,false,false,0,&local);end();};
+        draw();io.AddKeyEvent(ImGuiKey_GamepadL3,true);draw();assert(picker.MultiSelect&&HelpyControllerInput::ItemBayMultiSelect);draw();assert(picker.MultiSelect);
+        io.AddKeyEvent(ImGuiKey_GamepadL3,false);draw();io.AddKeyEvent(ImGuiKey_GamepadL3,true);draw();assert(!picker.MultiSelect);
+        io.AddKeyEvent(ImGuiKey_GamepadL3,false);draw();io.AddKeyEvent(ImGuiKey_GamepadL3,true);draw(true);assert(!picker.MultiSelect);
+        io.AddKeyEvent(ImGuiKey_GamepadL3,false);draw();HelpyControllerInput::Selection.Controller=previous;
+    }
+    {
         ItemGridPicker::State picker;char filter[257]{},selected[1025]{};uint64_t revision=1;
         const auto liveTyping=ItemGridPicker::SearchAsYouType;ItemGridPicker::SearchAsYouType=false;
         LazyCatalog::State local;local.Started=true;const nlohmann::json catalog={{"Items",nlohmann::json::array()}};
