@@ -10,7 +10,7 @@ promote_to: RELEASE-0.8.1.0.md
     **0.8.1.0 prerelease** and have not been promoted to the stable guides.
 
 <div class="rs-actions">
-  <a class="md-button md-button--primary" href="https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0-pre.20261106/RuneSchema-0.8.1.0-complete-20261106.zip">Download complete 0.8.1.0</a>
+  <a class="md-button md-button--primary" href="https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0-pre.20261107/RuneSchema-0.8.1.0-complete-20261107.zip">Download complete 0.8.1.0</a>
   <a class="md-button" href="../INSTALLATION/">Installation</a>
 </div>
 
@@ -20,10 +20,10 @@ separately; preserve your settings, mods and saves when updating.
 
 ## Complete candidate refresh
 
-The complete 2026-11-06 package includes the current core, Helpy, bundled plugins and
+The complete 2026-11-07 package includes the current core, Helpy, bundled plugins and
 matching Lua adapters. It retains the maintainer-assembled package layout; UE4SS
 is installed separately. The complete 68-file refresh is published under
-[`0.8.1.0-pre.20261106`](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0-pre.20261106).
+[`0.8.1.0-pre.20261107`](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0-pre.20261107).
 Earlier tags and downloads are retained for reference. Use the complete package above.
 
 - **Runtime layout:** Core plugins live in `dlls/plugins`; Helpy and its native
@@ -35,6 +35,8 @@ Earlier tags and downloads are retained for reference. Use the complete package 
   1,024 combined settings, tab keys and template entries.
 - **Core startup:** Redirected AppData is resolved to its physical application
   root. Redirected child caches remain rejected, with the exact path reported.
+- **Save editor:** Character copies, imports and exports follow redirected save
+  folders. Nested profile redirects and imports outside the resolved folder are blocked.
 - **Mod-local services:** Optional typed template storage and native numeric
   providers, scoped to their declaring mod and local controller. Native modules
   initialize on the game thread. This API remains experimental; see its
@@ -65,11 +67,11 @@ and earlier test-stage notes.
 
 ## Testing and feedback
 
-All 274 core and 172 Helpy tests passed, along with package integrity, the
-compressed core DLL, licenses, versions, matching source and strict combined-site
-checks. Windows shipping-game coverage includes redirected AppData, native
-provider initialization and cooked template/typed-array roundtrips. Exact hashes and evidence are in
-[the release verification files](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0-pre.20261106).
+The preceding candidate passed 274 core and 172 Helpy tests. This refresh
+adds a focused Windows regression test for redirected save folders and verifies
+the complete ZIP against the prior package. See the
+[release verification files](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0-pre.20261107)
+for checks and file hashes. The save editor still needs a live game check.
 
 Proton/Wine, every physical controller/driver and full multiplayer restart
 behavior still need live coverage. Mod Menu 2 is optional and key-gated;

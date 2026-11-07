@@ -81,15 +81,15 @@ json SaveEditorOperation(const std::string& op,const json& args){
                 if(entry.is_regular_file()&&entry.path().extension()==L".json")append(entry.path(),"Steam/Epic JSON","SteamEpic");
             }}
         }
-        try{const auto profileCharacters=HostServices::ProfileDirectory()/"characters";HelpyKitFiles::NoRedirect(profileCharacters);std::error_code profileError;
+        try{const auto profileCharacters=RuneSchemaData::CharacterCopiesDirectory();std::error_code profileError;
         if(fs::is_directory(profileCharacters,profileError)){
             size_t folders=0,profileFiles=0;for(const auto& character:fs::directory_iterator(profileCharacters)){
                 if(++folders>256||files.size()>=512||profileFiles>=1024)break;
-                HelpyKitFiles::NoRedirect(character.path());if(!character.is_directory()||CharacterSaveEditor::Guid(character.path().filename().string()).empty())continue;
+                RuneSchemaData::Safe(character.path());if(!character.is_directory()||CharacterSaveEditor::Guid(character.path().filename().string()).empty())continue;
                 for(const auto* kind:{"snapshots","exports"}){
-                    const auto folder=character.path()/kind;HelpyKitFiles::NoRedirect(folder);if(!fs::is_directory(folder,profileError))continue;
+                    const auto folder=character.path()/kind;RuneSchemaData::Safe(folder);if(!fs::is_directory(folder,profileError))continue;
                     std::vector<std::pair<fs::file_time_type,fs::path>> copies;size_t inspected=0;
-                    for(const auto& copy:fs::directory_iterator(folder)){if(++inspected>256||++profileFiles>1024)break;HelpyKitFiles::NoRedirect(copy.path());if(copy.is_regular_file()&&copy.path().extension()==L".json")copies.emplace_back(copy.last_write_time(),copy.path());}
+                    for(const auto& copy:fs::directory_iterator(folder)){if(++inspected>256||++profileFiles>1024)break;RuneSchemaData::Safe(copy.path());if(copy.is_regular_file()&&copy.path().extension()==L".json")copies.emplace_back(copy.last_write_time(),copy.path());}
                     std::sort(copies.begin(),copies.end(),std::greater<>());size_t shown=0;
                     for(const auto& [time,path]:copies){if(++shown>3||files.size()>=512)break;append(path,"RuneSchema profile copy","Profile");}
                 }
@@ -117,7 +117,7 @@ json SaveEditorOperation(const std::string& op,const json& args){
         }
         const auto originalPath=SavePathText(path);
         if((xbox||copyOnly)&&CharacterSaveEditor::Identity(source).empty())throw std::runtime_error("Character identity is unavailable; no profile copy was created");
-        if(xbox||copyOnly)path=WriteSaveCopy(HostServices::ProfileDirectory()/"characters"/CharacterSaveEditor::Identity(source)/"snapshots",xbox?"xbox-character":"character",source,path);
+        if(xbox||copyOnly)path=WriteSaveCopy(RuneSchemaData::CharacterCopiesDirectory()/CharacterSaveEditor::Identity(source)/"snapshots",xbox?"xbox-character":"character",source,path);
         characterEditor.Session.Open(source);characterEditor.Path=path;characterEditor.Time=fs::last_write_time(path);characterEditor.Size=fs::file_size(path);
         auto result=characterEditor.Session.Browse();result["Path"]=SavePathText(path);result["OriginalPath"]=originalPath;result["CopyOnly"]=xbox||copyOnly;result["Format"]="Native character JSON";result["Status"]="Saved snapshot opened. Edits export a separate copy, not the live character.";return result;
     }
@@ -195,7 +195,7 @@ json SaveEditorOperation(const std::string& op,const json& args){
     if(op=="SaveEditorPreview")return characterEditor.Session.Preview(source);
     if(op=="SaveEditorExport"){
         const auto document=characterEditor.Session.Consume(source,args.at("Token").get<std::string>(),args.value("Confirm",false));
-        return {{"File",SavePathText(WriteSaveCopy(HostServices::ProfileDirectory()/"characters"/characterEditor.Session.CharacterGuid()/"exports","edited",document,characterEditor.Path))},
+        return {{"File",SavePathText(WriteSaveCopy(RuneSchemaData::CharacterCopiesDirectory()/characterEditor.Session.CharacterGuid()/"exports","edited",document,characterEditor.Path))},
             {"Status","Verified character copy exported. Original unchanged; no runtime attachment or platform conversion was performed."}};
     }
     throw std::runtime_error("Unknown save-editor operation");

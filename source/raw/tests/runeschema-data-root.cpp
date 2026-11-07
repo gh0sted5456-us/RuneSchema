@@ -6,8 +6,19 @@
 #include <fstream>
 int main(int argc,char** argv)try{
     namespace fs=std::filesystem;namespace R=PS::RuneSchemaData;
+    const auto print=[](const fs::path& path){const auto text=path.generic_u8string();std::cout.write(reinterpret_cast<const char*>(text.data()),text.size());std::cout<<"\n";};
+    if(argc==2&&std::string_view(argv[1])=="--save-paths"){
+        const auto profile=R::CharacterCopiesDirectory();
+        const auto copies=profile/"00112233445566778899aabbccddeeff";
+        R::Safe(copies/"snapshots");
+        R::Safe(copies/"exports");
+        print(profile);
+        const auto jobs=R::PlatformDirectory("steam")/"runtime/jobs";
+        print(R::ResolveSaveRoot(jobs/"imports/saves"));
+        print(R::ResolveSaveRoot(jobs/"exports/saves"));
+        return 0;
+    }
     if(argc==2&&std::string_view(argv[1])=="--paths"){
-        const auto print=[](const fs::path& path){const auto text=path.generic_u8string();std::cout.write(reinterpret_cast<const char*>(text.data()),text.size());std::cout<<"\n";};
         print(R::Directory());
         for(const auto* platform:{"steam","gamepass","epic","server"})print(R::MappingDirectory(platform));
         return 0;
@@ -38,6 +49,9 @@ int main(int argc,char** argv)try{
     const auto outside=root/"outside";fs::create_directory(outside);
     const auto staleLink=old/"redirect";std::error_code error;fs::create_directory_symlink(outside,staleLink,error);
     if(!error){assert(R::Resolve(local)==next);fs::remove(staleLink);}
+    const auto characters=next/"core/runeschema.profile/characters";
+    error.clear();fs::create_directory_symlink(outside,characters,error);
+    if(!error){assert(R::CharacterCopiesDirectory(next)==outside);fs::remove(characters);}
     fs::create_directories(next/"steam/cache");const auto cacheLink=next/"steam/cache/mappings";
     error.clear();fs::create_directory_symlink(outside,cacheLink,error);
     if(!error){failed=false;try{R::MappingDirectory(next,"steam");}catch(...){failed=true;}assert(failed);fs::remove(cacheLink);}

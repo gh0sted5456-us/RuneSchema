@@ -53,6 +53,10 @@ Core and Helpy use the same resolved root. Links below that root, including
 redirected cache or settings children, remain guarded; an error names the exact
 blocked path.
 
+The character editor follows junctions and symlinks on its save-copy,
+import, and export folders. RuneSchema checks nested profile paths against
+the resolved folder and still exports a separate verified copy.
+
 A startup log showing UE4SS `f6d5f942` already matches the pinned compile SDK.
 `DID-NOT-START` followed by a redirected-path error concerns data-path setup;
 changing the UE4SS version does not address that failure.

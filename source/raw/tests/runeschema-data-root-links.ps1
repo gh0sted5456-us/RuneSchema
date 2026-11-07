@@ -1,4 +1,4 @@
-﻿param([Parameter(Mandatory=$true)][string]$Binary,[Parameter(Mandatory=$true)][string]$Root)
+param([Parameter(Mandatory=$true)][string]$Binary,[Parameter(Mandatory=$true)][string]$Root)
 $ErrorActionPreference='Stop'
 $base=[IO.Path]::GetFullPath($Root)
 if($base -notmatch '^[DF]:[\\/]'){throw 'Redirect fixtures must stay on D: or F:'}
@@ -12,9 +12,9 @@ function Junction([string]$path,[string]$target){
  if(!((Get-Item -LiteralPath $path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)){throw 'Junction fixture was not created'}
  $links.Add($path)
 }
-function RunPaths([string]$local){
+function RunPaths([string]$local,[string]$mode='--paths'){
  $info=New-Object Diagnostics.ProcessStartInfo
- $info.FileName=[IO.Path]::GetFullPath($Binary);$info.Arguments='--paths';$info.UseShellExecute=$false;$info.CreateNoWindow=$true;$info.WindowStyle='Hidden'
+ $info.FileName=[IO.Path]::GetFullPath($Binary);$info.Arguments=$mode;$info.UseShellExecute=$false;$info.CreateNoWindow=$true;$info.WindowStyle='Hidden'
  $info.RedirectStandardOutput=$true;$info.RedirectStandardError=$true
  $info.StandardOutputEncoding=[Text.Encoding]::UTF8;$info.StandardErrorEncoding=[Text.Encoding]::UTF8
  $info.EnvironmentVariables['LOCALAPPDATA']=$local;$info.EnvironmentVariables['TEMP']=(Join-Path $fixture 'temp');$info.EnvironmentVariables['TMP']=(Join-Path $fixture 'temp')
@@ -54,7 +54,26 @@ try{
  if($blocked.Code -eq 0 -or !$blocked.Error.Contains($child.Replace('\','/'))){throw 'Redirected cache child was not rejected with its exact path'}
  $invalid=RunPaths 'relative-local'
  if($invalid.Code -eq 0 -or !$invalid.Error.Contains('LOCALAPPDATA')){throw 'Relative LocalAppData was not rejected'}
- 'PASS: redirected LocalAppData/game/data roots, Unicode, preserved profile, rejected child link and relative root'
+ $profile=Join-Path $fixture 'physical-profile';Directory $profile
+ $characters=Join-Path $fixture 'physical-characters';Directory $characters
+ Junction (Join-Path $physical3 'runeschema.profile') $profile
+ Junction (Join-Path $profile 'characters') $characters
+ $imports=Join-Path $fixture 'physical-imports';Directory $imports
+ $exports=Join-Path $fixture 'physical-exports';Directory $exports
+ Junction (Join-Path $physical3 'steam/runtime/jobs/imports/saves') $imports
+ Junction (Join-Path $physical3 'steam/runtime/jobs/exports') $exports
+ $savePaths=RunPaths $local3 '--save-paths'
+ if($savePaths.Code -ne 0){throw $savePaths.Error}
+ $actual=@($savePaths.Output -split '\r?\n'|Where-Object {$_})
+ $wanted=@($characters,$imports,(Join-Path $exports 'saves'))
+ if($actual.Count -ne $wanted.Count){throw 'Wrong number of save paths'}
+ for($i=0;$i -lt $wanted.Count;$i++){if(![string]::Equals($actual[$i],$wanted[$i].Replace('\','/'),[StringComparison]::OrdinalIgnoreCase)){throw ('Unexpected physical save path: '+$actual[$i])}}
+ $nested=Join-Path $characters '00112233445566778899aabbccddeeff/snapshots'
+ Junction $nested $outside
+ $blockedSave=RunPaths $local3 '--save-paths'
+ if($blockedSave.Code -eq 0 -or !$blockedSave.Error.Contains($nested.Replace('\','/'))){throw 'Redirected snapshot child was not rejected'}
+ if((Hash $marker) -ne $hash){throw 'Existing profile bytes changed'}
+ 'PASS: redirected AppData and save roots, Unicode, preserved profile, rejected nested links and relative root'
 }finally{
  for($i=$links.Count-1;$i -ge 0;$i--){$link=$links[$i];if(Test-Path -LiteralPath $link){if(!((Get-Item -LiteralPath $link -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)){throw 'Fixture link changed; cleanup stopped'};[IO.Directory]::Delete($link)}}
  if(Test-Path -LiteralPath $fixture){
