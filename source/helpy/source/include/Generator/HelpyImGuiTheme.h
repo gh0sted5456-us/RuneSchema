@@ -91,6 +91,8 @@ struct Theme {
     std::string fpsHotkey{"F10"},fpsControllerBinding{"None"},controllerBinding,helpyKeyboardBinding;
     std::string backgroundFile;
     float backgroundStrength{.12f};
+    bool splashGameLogo=true,splashRuntimeLogo=true,splashBackgrounds=true;
+    float splashLogoSeconds=8.f;
     bool dpiAware{true},autoReload{true},textBold{false},verboseTooltips{false},itemGridView{true},itemInternalNames{false},aiGridView{false},advancedMode{false};
     bool automaticUpdateChecks{true};
     bool ue4ssManageExternal{false},modsCompact{false};
@@ -326,6 +328,7 @@ inline nlohmann::json DocumentFrom(const Theme& t,int iconCacheMB) {
         {"preview",{{"quality",t.previewQuality},{"animation",t.previewAnimate},{"details",t.previewDetails},{"scaleUsePortrait",t.scaleUsePortrait},{"scaleReferenceIcon",t.scaleReferenceIcon}}},
         {"runtime",{{"timeUnit",t.runtimeTimeUnit},{"helpyFpsLimit",t.helpyFpsLimit},{"showFps",t.showFps},{"fpsRefreshMs",t.fpsRefreshMs},{"showGameFps",t.showGameFps},{"showCoordinates",t.showCoordinates},{"showStartupProgress",t.showStartupProgress},{"fpsHotkey",t.fpsHotkey},{"fpsControllerBinding",t.fpsControllerBinding},{"gameOverlay",t.gameOverlay},{"nativeOverlay",t.nativeOverlay},{"overlayOpacity",t.overlayOpacity},{"overlaySize",t.overlaySize},{"overlayUiScale",t.overlayUiScale}}},
         {"background",{{"file",t.backgroundFile},{"strength",t.backgroundStrength}}},
+        {"splash",{{"gameLogo",t.splashGameLogo},{"runtimeLogo",t.splashRuntimeLogo},{"rotateBackgrounds",t.splashBackgrounds},{"logoSeconds",t.splashLogoSeconds}}},
         {"liveLog",{{"colorRules",LiveLog::WriteColors(t.logColors)}}},
         {"notifications",{{"enabled",t.diagnosticToastsEnabled},{"visibleLimit",t.diagnosticToastLimit},{"durationSeconds",t.diagnosticToastDuration},{"registryActivity",t.diagnosticRegistryActivity}}},
         {"diagnosticHistory",{{"ageDays",t.diagnosticHistoryDays},{"maxSessions",t.diagnosticHistorySessions},{"maxStorageMB",t.diagnosticHistoryMB}}},
@@ -448,6 +451,11 @@ inline void Reload(bool createIfMissing=true) {
         next.fpsHotkey=runtime.value("fpsHotkey",std::string("F10"));
         try{next.fpsHotkey=InputBindings::Text(InputBindings::Parse(next.fpsHotkey));}catch(const std::exception&){next.fpsHotkey="F10";}
         next.fpsControllerBinding=runtime.value("fpsControllerBinding",std::string("None"));try{next.fpsControllerBinding=InputBindings::PadText(InputBindings::ParsePad(next.fpsControllerBinding));}catch(const std::exception&){next.fpsControllerBinding="None";}
+        const auto splash=doc.value("splash",nlohmann::json::object());
+        next.splashGameLogo=splash.value("gameLogo",true);
+        next.splashRuntimeLogo=splash.value("runtimeLogo",true);
+        next.splashBackgrounds=splash.value("rotateBackgrounds",true);
+        next.splashLogoSeconds=ReadFloat(splash,"logoSeconds",8.f,2.f,30.f);
         const auto background=doc.value("background",nlohmann::json::object());
         next.backgroundFile=background.value("file",std::string{});if(!BackgroundPolicy::Filename(next.backgroundFile))next.backgroundFile.clear();
         next.backgroundStrength=ReadFloat(background,"strength",.12f,0,.3f);

@@ -20,7 +20,19 @@ int main()try{using namespace PS::HelpyInputMode;Selection selected;selected.Upd
     PS::HelpyControllerInput::Poll(0,&pad);ImGui::NewFrame();Check(ImGui::IsKeyDown(ImGuiKey_GamepadFaceDown)&&!ImGui::IsKeyDown(ImGuiKey_GamepadDpadRight)&&!ImGui::IsKeyDown(ImGuiKey_GamepadLStickRight));PS::HelpyControllerInput::Observe(0);Check(PS::HelpyControllerInput::Selection.Controller);
     ImGui::Begin("Controller glyph feedback");const auto gold=PS::HelpyControllerInput::HintColor(true),neutral=PS::HelpyControllerInput::HintColor(false);Check(gold!=neutral);
     auto* draw=ImGui::GetWindowDrawList();const auto before=draw->VtxBuffer.Size;PS::HelpyControllerInput::DrawGlyph({100,100},12,0,2);bool highlighted=false;for(int i=before;i<draw->VtxBuffer.Size;++i)highlighted|=draw->VtxBuffer[i].col==gold;Check(highlighted);
-    Check(PS::HelpyControllerInput::HintsHeight(320)>PS::HelpyControllerInput::HintsHeight(1800));ImGui::End();ImGui::EndFrame();
+    namespace Input=PS::HelpyControllerInput;
+    const auto controllerHints=Input::HintItems("Guide",false,true);
+    Check(Input::HintsHeight(320,controllerHints)>Input::HintsHeight(1800,controllerHints));
+    const auto itemHints=Input::DesktopHints("Ctrl+F2",false,true,false,false);
+    Check(Input::HintsHeight(320,itemHints)>Input::HintsHeight(1800,itemHints));
+    Check(std::any_of(itemHints.begin(),itemHints.end(),[](const Input::Hint& hint){
+        return hint.Mouse==Input::MouseHint::Left&&hint.Key=="Ctrl";
+    }));
+    const auto mapHints=Input::DesktopHints("Ctrl+F2",false,false,true,true);
+    Check(std::any_of(mapHints.begin(),mapHints.end(),[](const Input::Hint& hint){
+        return hint.Mouse==Input::MouseHint::Wheel;
+    }));
+    ImGui::End();ImGui::EndFrame();
     pad={};PS::HelpyControllerInput::Poll(0,&pad);ImGui::NewFrame();Check(!ImGui::IsKeyDown(ImGuiKey_GamepadFaceDown)&&!ImGui::IsKeyDown(ImGuiKey_GamepadDpadRight));ImGui::EndFrame();PS::HelpyControllerInput::Poll(1,&pad);Check(!(io.ConfigFlags&ImGuiConfigFlags_NavEnableGamepad));Check(!PS::HelpyControllerInput::Initialized);ImGui::DestroyContext();
     {
         PS::HelpyTouchpadTap tap;Touchpad touch;Check(!tap.Poll(true,1,touch,0));touch.Down=true;touch.Fingers=1;touch.X=.5f;touch.Y=.5f;Check(!tap.Poll(true,1,touch,.1));touch.Down=false;touch.Fingers=0;Check(tap.Poll(true,1,touch,.2));

@@ -139,7 +139,9 @@ inline void DragItem(const json& row,const std::vector<std::string>* selection=n
     const auto path=row.value("Path",std::string{});
     const bool group=selection&&selection->size()>1&&std::find(selection->begin(),selection->end(),path)!=selection->end();
     const auto* current=ImGui::GetDragDropPayload();
-    if(!current||current->DataFrameCount<0)try {
+    if(current&&current->DataFrameCount>=0)
+        ImGui::SetDragDropPayload(current->DataType,current->Data,current->DataSize,ImGuiCond_Once);
+    else try {
         if(group) {
             const auto data=json(*selection).dump();
             ImGui::SetDragDropPayload("RS_CART_SELECTION",data.c_str(),data.size()+1,ImGuiCond_Once);
@@ -331,6 +333,24 @@ inline bool MatchesDraggedSelection(const ImGuiPayload& payload,const State& sta
     const auto data=json(state.SelectedPaths).dump();
     return state.SelectedPaths.size()>1&&payload.Data&&payload.DataSize==static_cast<int>(data.size()+1)
         &&std::memcmp(payload.Data,data.c_str(),data.size()+1)==0;
+}
+inline bool CartPayload(const ImGuiPayload* payload){
+    return payload&&(payload->IsDataType("RS_CART_SELECTION")||payload->IsDataType("RS_ITEM_ROW"));
+}
+inline void AcceptCartDrop(const json& catalog,State& state,char* selected,size_t selectedCapacity){
+    constexpr auto preview=ImGuiDragDropFlags_AcceptBeforeDelivery;
+    if(const auto* group=ImGui::AcceptDragDropPayload("RS_CART_SELECTION",preview)){
+        if(!group->IsDelivery())return;
+        if(MatchesDraggedSelection(*group,state))SendSelectionToCart(catalog,state,selected,selectedCapacity);
+        else CartStatus="Selection changed while dragging. Grab the selected items again.";
+    }else if(const auto* payload=ImGui::AcceptDragDropPayload("RS_ITEM_ROW",preview)){
+        if(!payload->IsDelivery())return;
+        try{
+            const auto item=ItemTransfer::Decode(payload->Data,payload->DataSize);
+            const auto* row=Find(catalog,item.at("Path").get_ref<const std::string&>().c_str());
+            AddToCart(row?*row:item);
+        }catch(const std::exception& error){CartStatus=error.what();}
+    }
 }
 inline bool SelectionCheck(const ImVec2& at,bool selected){
     const float side=ImGui::GetFrameHeight();const ImVec2 end(at.x+side,at.y+side);auto* draw=ImGui::GetWindowDrawList();
@@ -822,9 +842,26 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
         HelpyMenu::NextControl("Clear selection");if(ImGui::SmallButton("Clear selection")){state.SelectedPaths.clear();state.SelectedRows=json::object();state.SelectedPath.clear();selected[0]=0;state.SelectedRevision=0;out.Changed=true;}
         }
     }
+    if(quickActions&&allowMulti){
+        HelpyControllerInput::ItemBayFrame=ImGui::GetFrameCount();HelpyControllerInput::ItemBayMultiSelect=state.MultiSelect;
+        if(HelpyControllerInput::Selection.Controller&&!ImGui::IsAnyItemActive()&&!ImGui::GetIO().WantTextInput&&!ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId)&&ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)&&ImGui::IsKeyPressed(ImGuiKey_GamepadStart,false))SendSelectionToCart(catalog,state,selected,selectedCapacity);
+        const bool dropping=CartPayload(ImGui::GetDragDropPayload());
+        const bool canDrop=SharedCart.Delivery()==0;
+        ImGui::BeginDisabled((state.SelectedPaths.empty()&&!dropping)||!canDrop);
+        const auto label=(dropping?std::string("Drop into cart"):"Send to cart ("+std::to_string(state.SelectedPaths.size())+")")+"###send-selection-to-cart";
+        if(ImGui::Button(label.c_str(),{ImGui::GetContentRegionAvail().x,0})&&!dropping)SendSelectionToCart(catalog,state,selected,selectedCapacity);
+#if defined(HELPY_PREVIEW)
+        HelpyPreviewHooks::BaySendToCart=HelpyPreviewHooks::LastRect();
+        HelpyPreviewHooks::BaySendFocus={ImGui::GetItemID(),ImGui::GetCurrentWindow()->ID};
+#endif
+        if(canDrop&&ImGui::BeginDragDropTarget()){
+            AcceptCartDrop(catalog,state,selected,selectedCapacity);
+            ImGui::EndDragDropTarget();
+        }
+        ImGui::EndDisabled();
+    }
     const float availableLogical=ImGui::GetContentRegionAvail().y/std::max(0.01f,theme.Scale()*theme.density);
-    const float selectionHeight=quickActions&&allowMulti?ImGui::GetFrameHeightWithSpacing()/std::max(.01f,theme.Scale()*theme.density):0.f;
-    const float maxPane=std::max(1.0f,availableLogical-selectionHeight-(fillSpace?56.0f:quickActions?ItemPaging::CartHeight(SharedCart.Entries().size(),theme.advancedMode)+80.0f:100.0f));
+    const float maxPane=std::max(1.0f,availableLogical-(fillSpace?56.0f:quickActions?ItemPaging::CartHeight(SharedCart.Entries().size(),theme.advancedMode)+80.0f:100.0f));
     const float gapLogical=ImGui::GetStyle().ItemSpacing.y/std::max(0.01f,theme.Scale()*theme.density);
     const float desiredPane=fillSpace?maxPane:state.GridView&&theme.itemGridFitRows
         ?ItemBayLayout::RowsHeight(theme.itemGridRows,theme.gridCardHeight,gapLogical,theme.contentPaddingY)+2.0f
@@ -921,18 +958,6 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
     ImGui::PopID();
     }
     PageControls(state,state.Matches.size(),lazy.HasMore&&lazy.LastError.empty(),lazy.Pending||populationWait);
-    if(quickActions&&allowMulti){
-        HelpyControllerInput::ItemBayFrame=ImGui::GetFrameCount();HelpyControllerInput::ItemBayMultiSelect=state.MultiSelect;
-        if(HelpyControllerInput::Selection.Controller&&!ImGui::IsAnyItemActive()&&!ImGui::GetIO().WantTextInput&&!ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId)&&ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)&&ImGui::IsKeyPressed(ImGuiKey_GamepadStart,false))SendSelectionToCart(catalog,state,selected,selectedCapacity);
-        ImGui::BeginDisabled(state.SelectedPaths.empty()||SharedCart.Delivery()!=0);
-        const auto label="Send to cart ("+std::to_string(state.SelectedPaths.size())+")";
-        if(ImGui::Button(label.c_str(),{ImGui::GetContentRegionAvail().x,0}))SendSelectionToCart(catalog,state,selected,selectedCapacity);
-#if defined(HELPY_PREVIEW)
-        HelpyPreviewHooks::BaySendToCart=HelpyPreviewHooks::LastRect();
-        HelpyPreviewHooks::BaySendFocus={ImGui::GetItemID(),ImGui::GetCurrentWindow()->ID};
-#endif
-        ImGui::EndDisabled();
-    }
     if(lazy.LastError.empty()&&state.Matches.empty()&&!populationWait&&lazy.Started){
         ImGui::TextDisabled("No matching items in the loaded runtime window.");
 #if defined(HELPY_PREVIEW)

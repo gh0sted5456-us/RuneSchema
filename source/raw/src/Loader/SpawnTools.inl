@@ -1,10 +1,42 @@
 #include "Core/HelpySourceCache.h"
 #include "QuickMenuCatalog.inl"
 namespace {
+    PS::MapProjection::Projection ToolScornedEntrance(UWorld* world){
+        auto* type=ActorHelper::ResolveClass(TEXT("/Script/Dominion.TeleportationTarget"));
+        if(!type||!ActorHelper::IsActorClass(type))throw std::runtime_error("The native Rasthin's Rest entrance is unavailable");
+        using namespace DragonWilds::ReflectedContract;
+        auto* name=CastField<FNameProperty>(PropertyHelper::GetPropertyByName(type,TEXT("TargetName")));
+        if(!Fits(name,type->GetPropertiesSize())||name->GetArrayDim()!=1||name->GetElementSize()!=sizeof(FName))
+            throw std::runtime_error("The native Rasthin's Rest entrance contract changed");
+        TArray<UObject*> targets;
+        UECustom::UObjectGlobals::GetObjectsOfClass(type,targets,true);
+        if(targets.Num()<0||targets.Num()>512)throw std::runtime_error("Native teleport target roster exceeds its bound");
+        AActor* target=nullptr;
+        const FName entrance(PS::ScornedTravel::NativeTarget,FNAME_Find);
+        if(entrance.IsNone())throw std::runtime_error("The native Rasthin's Rest entrance name is unavailable");
+        for(auto* object:targets){
+            if(!ToolMapTravelAlive(object)||object->GetWorld()!=world||!object->IsA(type)
+                ||object->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject))
+                ||name->GetPropertyValue(name->ContainerPtrToValuePtr<void>(object))!=entrance)continue;
+            if(target)throw std::runtime_error("The native Rasthin's Rest entrance is ambiguous");
+            target=static_cast<AActor*>(object);
+        }
+        if(!target)throw std::runtime_error("The native Rasthin's Rest entrance is unavailable");
+        const auto at=ActorHelper::GetActorLocation(target);
+        return PS::ScornedTravel::LandingArea({at.X(),at.Y()},at.Z());
+    }
     std::pair<PS::MapProjection::Point,PS::MapProjection::Projection> ToolMapTarget(UWorld* world,const nlohmann::json& request){
         const auto& value=request.at("TargetLocation");
         if(!value.is_object()||!value.contains("X")||!value.contains("Y")||!value["X"].is_number()||!value["Y"].is_number())throw std::runtime_error("Select a valid map position");
-        const PS::MapProjection::Point point{value["X"].get<double>(),value["Y"].get<double>()};const auto projection=PS::HelpyMapRuntime::Projection(world);
+        const PS::MapProjection::Point point{value["X"].get<double>(),value["Y"].get<double>()};
+        if(request.value("ScornedEntrance",false)){
+            if(request.value("Action",std::string{})!="MapTeleport"||request.contains("TargetPlayer")||request.value("PartyPoint",false)
+                ||!world||!PS::ScornedTravel::Matches(RC::to_string(world->GetPathName()),point))
+                throw std::runtime_error("Choose the native Rasthin's Rest entrance in Ashenfall");
+            const auto landing=ToolScornedEntrance(world);
+            return {landing.Center,landing};
+        }
+        const auto projection=PS::HelpyMapRuntime::Projection(world);
         if(!projection.Contains(point))throw std::runtime_error("Selected position is outside the native world map");return {point,projection};
     }
     FVector ToolMapGround(UWorld* world,const nlohmann::json& request,AActor* pawn=nullptr){
@@ -1156,7 +1188,9 @@ void DragonWildsSpawnLoader::PumpSpawnTools(PS::WorkSlice& work) {
             if(target.contains("Z")&&target["Z"].is_number()){
                 const auto z=target["Z"].get<double>();if(std::isfinite(z)&&z>=projection.MinZ&&z<=projection.MaxZ)height=z;
             }
-            ToolMapTravelBegin(world,selected,pawn,projection,point,request->value("NearMarker",false),height);return;
+            const bool scorned=request->value("ScornedEntrance",false);
+            const auto authoredFloor=scorned?std::optional<double>{(projection.MinZ+projection.MaxZ)*.5}:std::nullopt;
+            ToolMapTravelBegin(world,selected,pawn,projection,point,!scorned&&request->value("NearMarker",false),height,authoredFloor);return;
         }
         if(action=="DismissHelpyNpcs"||(action=="Spawn"&&request->value("NPC",false))) {
             auto* npcs=DragonWildsNpcLoader::HelpyInstance;

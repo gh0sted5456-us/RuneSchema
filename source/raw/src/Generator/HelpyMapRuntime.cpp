@@ -1,4 +1,5 @@
 #include "Generator/HelpyMapRuntime.h"
+#include "ScornedTravel.h"
 #include "Runtime/HostServices.h"
 #include "Core/MapPresentationCache.h"
 #include "Generator/HelpyMapTexture.h"
@@ -119,7 +120,8 @@ nlohmann::json Snapshot(UWorld* world,const nlohmann::json& players){
     // Host actions address controller identities. Clients still see replicated
     // pawn locations without pretending those pawn paths are authority handles.
     auto locations=players.empty()?PlayerLocations(world):players;
-    return {{"BridgeVersion",1},{"World",RC::to_string(world->GetPathName())},{"CachedMapReference",cachedAlignment},{"Projection",alignment.ToJson()},{"Players",std::move(locations)},{"Image",std::move(image)}};
+    const auto worldPath=RC::to_string(world->GetPathName());
+    return {{"BridgeVersion",1},{"World",worldPath},{"ScornedTravel",worldPath==ScornedTravel::World},{"CachedMapReference",cachedAlignment},{"Projection",alignment.ToJson()},{"Players",std::move(locations)},{"Image",std::move(image)}};
 }
 nlohmann::json Buildings(const std::string& query,std::size_t offset){
     if(query.size()>256||offset>4096)throw std::runtime_error("Building search exceeds its bounds");

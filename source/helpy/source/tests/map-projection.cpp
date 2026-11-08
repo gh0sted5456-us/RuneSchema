@@ -1,10 +1,103 @@
 #include "Core/MapProjection.h"
-#include "Core/MapViewport.h"
+#include "Core/MapAtlas.h"
 #include "Core/MapSpawnRequest.h"
 #include "Core/BuildingMenu.h"
 #include "Core/MapParty.h"
 #include <cassert>
+
+static void CheckAtlas() {
+    using namespace PS::MapAtlas;
+    const auto mainland = Mainland.Project(-90000, 90000);
+    assert(MatchesMainland(mainland));
+    auto rotated = mainland;
+    rotated.Right = {0, 1};
+    rotated.Up = {1, 0};
+    assert(rotated.Valid() && !MatchesMainland(rotated));
+    const auto overview = Overview.Project(-90000, 90000);
+    const auto scorned = Scorned.Project(-90000, 90000);
+    const auto closeEnough = [](Point a, Point b) { return std::abs(a.X-b.X) < .00001 && std::abs(a.Y-b.Y) < .00001; };
+    assert(closeEnough(mainland.ToUV(MainlandPortal), {0.25631999855476, 0.42419898608810}));
+    assert(closeEnough(scorned.ToUV(ScornedPortal), {0.7620233596, 0.8557505899}));
+    for (const auto& [projection, world] : std::array{
+            std::pair{mainland, MainlandPortal}, std::pair{scorned, ScornedPortal},
+            std::pair{overview, MainlandPortal}, std::pair{overview, ScornedPortal}}) {
+        const auto uv = projection.ToUV(world);
+        assert(closeEnough(projection.ToWorld(uv), world));
+        PS::MapProjection::Viewport view{1040, 420, projection.HalfWidth/projection.HalfHeight};
+        view.Zoom = view.FitZoom();
+        view.Clamp();
+        const auto pixel = view.ToPixel(uv);
+        assert(closeEnough(projection.ToWorld(view.ToUV(pixel)), world));
+        view.ZoomAt(2, pixel);
+        view.Pan({-23, 18});
+        assert(closeEnough(projection.ToWorld(view.ToUV(view.ToPixel(uv))), world));
+    }
+    assert(RegionAt(ScornedPortal) == ScornedTab);
+    assert(RegionNameAt(ScornedPortal) == "Rasthin's Rest");
+    assert(RegionNameAt({-797000, 688000}) == "Scorned Wilderness");
+    assert(RegionNameAt({-848000, 610000}).empty());
+    assert(RegionAt({-797000, 688000}) == ScornedTab);
+    assert(RegionAt({-848000, 610000}) == OverviewTab); // Art padding is outside the native polygons.
+    assert(RegionAt(MainlandPortal) >= FirstRegionTab);
+    assert(ScornedDisplayOnly({-1500,-21950}));
+    assert(!ScornedDisplayOnly(MainlandPortal));
+    assert(!ScornedDisplayOnly(ScornedPortal));
+    for (size_t tab = 0; tab < TabCount; ++tab) {
+        const auto frame = Frame(tab);
+        const auto projection = frame.Project(-90000, 90000);
+        assert(projection.Valid());
+        const auto w = frame.Max.X - frame.Min.X, h = frame.Max.Y - frame.Min.Y;
+        if (tab >= FirstRegionTab) {
+            for (const auto point : SurfaceAreas[tab - FirstRegionTab].Shape) {
+                assert(frame.Contains(point));
+                assert(closeEnough(projection.ToUV(point), {(point.X-frame.Min.X)/w, (point.Y-frame.Min.Y)/h}));
+            }
+        }
+        for (const auto size : std::array{Point{1040, 420}, Point{360, 540}}) {
+            PS::MapProjection::Viewport fit{size.X, size.Y, w/h};
+            fit.Zoom = fit.FitZoom();
+            fit.Clamp();
+            assert(!fit.WorldAt(projection, {-1, size.Y/2}));
+            assert(!fit.WorldAt(projection, {size.X+1, size.Y/2}));
+            if (std::abs(size.X/size.Y-w/h)>.01) assert(!fit.WorldAt(projection, {0,0}));
+            const Point world{frame.Min.X+.56*w, frame.Min.Y+.43*h}, uv{.56,.43};
+            const auto before = fit.WorldAt(projection, fit.ToPixel(uv));
+            assert(before && closeEnough(*before, world));
+            fit.ZoomAt(fit.FitZoom()*2, fit.ToPixel(uv));
+            fit.Pan({13,-18});
+            const auto after = fit.WorldAt(projection, fit.ToPixel(uv));
+            assert(after && closeEnough(*after, world));
+        }
+    }
+    PS::MapProjection::Viewport view{1000, 500, overview.HalfWidth/overview.HalfHeight};
+    view.Zoom = view.FitZoom();
+    view.Clamp();
+    RasterClip clip;
+    assert(ClipRaster(overview, view, Mainland, clip));
+    assert(closeEnough(clip.RasterMin, {0, 0}) && closeEnough(clip.RasterMax, {1, 1}));
+    assert(closeEnough(clip.ScreenMin, view.ToPixel(overview.ToUV(Mainland.Min))));
+    assert(closeEnough(clip.ScreenMax, view.ToPixel(overview.ToUV(Mainland.Max))));
+    view.ZoomAt(6, view.ToPixel(overview.ToUV(ScornedPortal)));
+    view.Center = overview.ToUV(ScornedPortal);
+    view.Clamp();
+    assert(!ClipRaster(overview, view, Mainland, clip));
+    assert(ClipRaster(overview, view, Scorned, clip));
+    assert(clip.ScreenMin.X >= -.00001 && clip.ScreenMin.Y >= -.00001);
+    assert(clip.ScreenMax.X <= view.Width + .00001 && clip.ScreenMax.Y <= view.Height + .00001);
+
+    TabState tabs;
+    tabs.Following = true;
+    tabs.Track(ScornedPortal);
+    assert(tabs.Requested == ScornedTab);
+    tabs.Show(ScornedTab);
+    assert(tabs.Following && tabs.Active == ScornedTab);
+    tabs.Show(MainlandTab);
+    tabs.Track(ScornedPortal);
+    assert(!tabs.Following && tabs.Active == MainlandTab && tabs.Requested == MainlandTab);
+}
+
 int main(){
+    CheckAtlas();
     using Json=nlohmann::json;
     Json party={{"World","/World"},{"CanBuildAndTeleport",true},{"PartyTravelVersion",2},{"Players",Json::array({
         {{"Path","host"},{"Name","Same name"},{"Guid","host-guid"},{"IsLocal",true}},

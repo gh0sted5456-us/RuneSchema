@@ -400,7 +400,8 @@ const bool missing=std::any_of(Rows.begin(),Rows.end(),[](const auto& row){retur
     PreviewPlacards=0;PreviewNativeBadges=0;PreviewArtCards=0;PreviewBadgeOrders.clear();PreviewBadgeTints.clear();
 #endif
     ImGui::BeginDisabled(Worker.valid()&&WorkerMutates);
-    if(HelpyImGuiTheme::BeginPanel("mods-list",{0,std::max(theme.Y(100),ImGui::GetContentRegionAvail().y-theme.Y(70))},ImGuiChildFlags_Borders)){
+    const float actionsHeight=ImGui::GetFrameHeightWithSpacing()+ImGui::GetTextLineHeightWithSpacing()+theme.Y(8);
+    if(HelpyImGuiTheme::BeginPanel("mods-list",{0,std::max(theme.Y(100),ImGui::GetContentRegionAvail().y-actionsHeight)},ImGuiChildFlags_Borders)){
         const bool table=theme.modsCompact&&ImGui::BeginTable("mods-compact",5,ImGuiTableFlags_RowBg|ImGuiTableFlags_BordersInnerH|ImGuiTableFlags_ScrollY|ImGuiTableFlags_ScrollX|ImGuiTableFlags_Resizable,
             ImGui::GetContentRegionAvail(),std::max(ImGui::GetContentRegionAvail().x,theme.X(560)));
         if(table){

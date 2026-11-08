@@ -23,7 +23,16 @@ private:
     Json m_status=Json::object();uint32_t m_pid=0,m_requestPid=0;bool m_bound=false,m_seenBound=false,m_wanted=false,m_notifications=false,m_showing=false,m_failed=false,m_verified=false,m_openInteractive=false;
     unsigned m_attempts=0;std::chrono::steady_clock::time_point m_next{},m_openDeadline{};
     HelpyOverlayGpu::Producer m_surface;HWND m_game=nullptr;
-    bool m_changeAdapter=false;LUID m_adapter{};
+    bool m_changeAdapter=false,m_recoveredDevice=false;LUID m_adapter{};
+    bool RecoverDevice(HRESULT reason){
+        if(SUCCEEDED(reason)||m_recoveredDevice)return false;
+        m_recoveredDevice=true;
+        Hide(true);
+        m_surface.Reset();
+        m_changeAdapter=true;
+        Status="Rebuilding Helpy's native overlay graphics device";
+        return true;
+    }
     void Request(Json payload){if(m_request.valid()||!m_remote)return;m_requestPid=m_pid;m_action=payload.value("Action",std::string{});if(m_action=="Open")m_openInteractive=payload.at("Interactive").get<bool>();const auto remote=m_remote;
         m_request=std::async(std::launch::async,[remote,payload=std::move(payload)]{Json result;if(!remote({{"Action","HelpyNativeOverlay"},{"Payload",payload}},result))result={{"Ready",false},{"Failed",true},{"Error","The installed RuneSchema bridge does not provide native overlay presentation"}};return result;});}
 public:
@@ -49,14 +58,14 @@ public:
         if(m_surface.Page&&notify)InterlockedExchange(&m_surface.Page->Visible,0);
         if(notify&&m_game){DWORD owner=0;GetWindowThreadProcessId(m_game,&owner);if(owner==m_pid)PostMessageW(m_game,WM_APP+0x5a1,0,0);}
     }
-    void Show(){m_wanted=true;m_notifications=false;m_showing=false;m_failed=false;m_verified=false;m_attempts=0;m_next={};}
+    void Show(){m_wanted=true;m_notifications=false;m_showing=false;m_failed=false;m_recoveredDevice=false;m_verified=false;m_attempts=0;m_next={};}
     void Notifications(bool enabled){
         enabled=enabled&&!m_wanted&&!m_failed&&m_status.value("PassivePresentation",false);if(enabled==m_notifications)return;
         if(!enabled){Hide();return;}m_notifications=true;m_showing=false;m_verified=false;
     }
     void Tick(Remote remote,uint32_t pid,bool enabled,ID3D11Device* device,float size,float opacity,Hud hud=Hud::None,const std::function<RECT(int,int)>& hudBounds={},HWND foreground=GetForegroundWindow()){
         m_remote=std::move(remote);
-        if(pid!=m_pid){const bool opening=m_wanted&&enabled;Hide();m_surface.Reset();m_bound=false;m_game=nullptr;m_failed=false;m_changeAdapter=false;m_attempts=0;m_status=Json::object();m_requestPid=0;m_pid=pid;m_next={};if(opening)Show();}
+        if(pid!=m_pid){const bool opening=m_wanted&&enabled;Hide();m_surface.Reset();m_bound=false;m_game=nullptr;m_failed=false;m_changeAdapter=false;m_recoveredDevice=false;m_attempts=0;m_status=Json::object();m_requestPid=0;m_pid=pid;m_next={};if(opening)Show();}
         if(m_request.valid()&&m_request.wait_for(std::chrono::milliseconds(0))==std::future_status::ready){
             try{auto result=m_request.get();if(pid&&m_requestPid==pid){m_status=std::move(result);Status=m_status.value("Error",std::string{});m_failed=m_status.value("Failed",false);
                 if(Status.empty())Status=m_status.value("Pending",false)?m_status.value("Status",std::string("Waiting for previous overlay frames to finish")):m_status.value("Ready",false)?"Native "+m_status.value("Api",std::string("game"))+" presentation is ready":"Detecting the game's active renderer";
@@ -104,7 +113,10 @@ public:
                 GUID id{};if(FAILED(CoCreateGuid(&id)))throw std::runtime_error("Cannot reserve native overlay surface");char nonce[33]{};const auto* bytes=reinterpret_cast<const unsigned char*>(&id);for(unsigned i=0;i<16;++i)std::snprintf(nonce+i*2,3,"%02x",bytes[i]);m_nonce=nonce;
                 m_surface.Create(device,pid,m_nonce,bounds.right-bounds.left,bounds.bottom-bounds.top);m_surface.Page->Left=bounds.left;m_surface.Page->Top=bounds.top;m_surface.Page->ViewportWidth=width;m_surface.Page->ViewportHeight=height;
                 m_openDeadline=now+std::chrono::seconds(5);Request({{"Action","Open"},{"AppPid",GetCurrentProcessId()},{"Nonce",m_nonce},{"Interactive",m_wanted}});
-            }catch(const std::exception& error){Status=error.what();m_wanted=false;m_failed=true;}
+            }catch(const std::exception& error){
+                if(RecoverDevice(device->GetDeviceRemovedReason()))return;
+                Fail(error.what());m_surface.Reset();
+            }
         }else if(Presenting()&&!m_showing&&foreground==m_game&&!IsIconic(m_game)){
             InterlockedExchange64(&m_surface.Page->Heartbeat,GetTickCount64());InterlockedExchange(&m_surface.Page->Visible,m_notifications?2:1);m_showing=true;Request({{"Action","Show"}});
         }else if(Presenting()&&m_showing&&!m_verified&&HelpyOverlayFrames::Read(m_surface.Page->Reading)>=0){
@@ -113,6 +125,7 @@ public:
     }
     void Shutdown(){Hide();if(m_request.valid()){try{m_request.get();}catch(...){}}m_surface.Reset();m_bound=false;m_remote={};}
 #if defined(HELPY_PREVIEW)
+    bool PreviewDeviceRemoved(LUID adapter){m_adapter=adapter;return RecoverDevice(DXGI_ERROR_DEVICE_REMOVED);}
     void PreviewSurface(ID3D11Device* device,uint32_t width,uint32_t height,bool notifications=false){
         char nonce[33]{};std::snprintf(nonce,sizeof(nonce),"%032llx",static_cast<unsigned long long>(GetTickCount64())*GetCurrentProcessId());
         m_surface.Create(device,GetCurrentProcessId(),nonce,width,height);m_surface.Page->Bound=1;m_surface.Page->Visible=notifications?2:1;m_surface.Page->Heartbeat=GetTickCount64();m_notifications=notifications;m_wanted=!notifications;m_bound=true;m_showing=true;

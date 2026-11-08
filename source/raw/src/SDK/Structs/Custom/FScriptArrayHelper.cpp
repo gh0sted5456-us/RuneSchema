@@ -58,9 +58,8 @@ namespace UECustom {
     void FScriptArrayHelper::InitializeValue(UECustom::FManagedValue& OutValuePtr)
     {
         auto InnerProperty = GetInner();
-        void* ValuePtr = FMemory::Malloc(InnerProperty->GetElementSize());
-        InnerProperty->InitializeValue(ValuePtr);
-        OutValuePtr.Copy(ValuePtr);
+        OutValuePtr.Initialize(InnerProperty->GetElementSize(), InnerProperty->GetMinAlignment(),
+                               *InnerProperty);
     }
 
     RC::Unreal::int32 FScriptArrayHelper::GetElementSize()

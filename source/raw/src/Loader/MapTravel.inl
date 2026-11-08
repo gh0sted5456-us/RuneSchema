@@ -5,7 +5,7 @@ namespace {
         PS::MapProjection::Projection Projection;PS::MapProjection::Point Point;
         PS::MapLanding::Position Landing;PS::MapTravel::Gate Gate;
         PS::MapTravel::LandingProbe GroundProbe;
-        std::optional<double> TerrainReference;
+        std::optional<double> TerrainReference,AuthoredFloor;
         std::vector<PS::WeakObjectHandle> TerrainIgnored;
         double Radius=0,HalfHeight=0,GroundZ=0;bool NearMarker=false;
         uint64_t Generation=0;std::chrono::steady_clock::time_point Next{},NextProgress{};
@@ -51,16 +51,34 @@ namespace {
         }
         ToolMapTravelReset();PS::SpawnToolRequests::Publish(std::move(result));
     }
-    UFunction* ToolMapTravelContract(UObject* service){
+    UFunction* ToolMapTravelContract(UObject* service,bool named){
         using namespace DragonWilds::ReflectedContract;
-        auto* function=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,TEXT("/Script/Dominion.TeleportationSubsystem:TeleportWithParams"),false);
-        if(!service||!function||Count(function)!=4)throw std::runtime_error("The native teleport service contract is unavailable; no teleport attempted");
-        auto* player=CastField<FObjectProperty>(function->FindProperty(FName(TEXT("PlayerCharacter"),FNAME_Find)));
-        auto* params=CastField<FStructProperty>(function->FindProperty(FName(TEXT("TeleportParams"),FNAME_Find)));
-        auto* callback=CastField<FDelegateProperty>(function->FindProperty(FName(TEXT("TeleportSuccessCallbackDelegate"),FNAME_Find)));
+        const auto* path=named?TEXT("/Script/Dominion.TeleportationSubsystem:TeleportToNamedLocation")
+            :TEXT("/Script/Dominion.TeleportationSubsystem:TeleportWithParams");
+        auto* function=UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr,nullptr,path,false);
+        if(!service||!function||Count(function)!=(named?7:4))throw std::runtime_error("The native teleport service contract is unavailable; no teleport attempted");
+        const auto field=[&](const TCHAR* name){return function->FindProperty(FName(name,FNAME_Find));};
+        auto* player=CastField<FObjectProperty>(field(TEXT("PlayerCharacter")));
+        auto* callback=CastField<FDelegateProperty>(field(TEXT("TeleportSuccessCallbackDelegate")));
         auto* returned=CastField<FBoolProperty>(function->GetReturnProperty());
-        if(!Input(player,function)||!Input(params,function)||!Input(callback,function)||!Output(returned,function)
-            ||!params->GetStruct()||params->GetStruct()->GetPathName()!=TEXT("/Script/Dominion.PlayerTeleportParams"))
+        if(!Input(player,function)||!Input(callback,function)||!Output(returned,function))
+            throw std::runtime_error("The native teleport parameters changed; no teleport attempted");
+        if(named){
+            auto* name=CastField<FNameProperty>(field(TEXT("LocationName")));
+            auto* loading=CastField<FBoolProperty>(field(TEXT("bShowLoadingScreen")));
+            auto* graveyard=CastField<FObjectProperty>(field(TEXT("OptionalGraveyard")));
+            auto* type=field(TEXT("OptionalTeleportType"));
+            UEnum* enumeration=nullptr;
+            if(auto* value=CastField<FEnumProperty>(type))enumeration=value->GetEnum();
+            else if(auto* value=CastField<FByteProperty>(type))enumeration=value->GetEnum().Get();
+            if(!Input(name,function)||name->GetElementSize()!=sizeof(FName)||!Input(loading,function)
+                ||!Input(graveyard,function)||!Input(type,function)||!enumeration
+                ||enumeration->GetPathName()!=TEXT("/Script/Dominion.ETeleportationType"))
+                throw std::runtime_error("The native Dragon Gate travel parameters changed; no teleport attempted");
+            return function;
+        }
+        auto* params=CastField<FStructProperty>(field(TEXT("TeleportParams")));
+        if(!Input(params,function)||!params->GetStruct()||params->GetStruct()->GetPathName()!=TEXT("/Script/Dominion.PlayerTeleportParams"))
             throw std::runtime_error("The native teleport parameters changed; no teleport attempted");
         auto* structure=params->GetStruct().Get();
         for(const auto* name:{TEXT("TargetLocation"),TEXT("TargetRotation"),TEXT("bShowLoadingScreen"),TEXT("bNoCheck"),TEXT("bIsATest"),TEXT("TeleportationType")}){
@@ -76,7 +94,7 @@ namespace {
             ||rotation->GetStruct()->GetPathName()!=TEXT("/Script/CoreUObject.Rotator"))throw std::runtime_error("Native teleport coordinate types changed");
         return function;
     }
-    void ToolMapTravelBegin(UWorld* world,UObject* controller,AActor* pawn,const PS::MapProjection::Projection& projection,PS::MapProjection::Point point,bool nearby,std::optional<double> groundHint={}){
+    void ToolMapTravelBegin(UWorld* world,UObject* controller,AActor* pawn,const PS::MapProjection::Projection& projection,PS::MapProjection::Point point,bool nearby,std::optional<double> groundHint={},std::optional<double> authoredFloor={}){
         if(g_mapTravel)throw std::runtime_error("A map journey is already active");
         if(!world||!controller||!pawn||!projection.Contains(point)||pawn->GetWorld()!=world)throw std::runtime_error("Map travel has no valid player/world");
         auto* playerClass=ActorHelper::ResolveClass(TEXT("/Script/Dominion.DominionPlayerCharacter"));
@@ -92,16 +110,16 @@ namespace {
         if(!type||!library)throw std::runtime_error("Native world-subsystem lookup is unavailable; no teleport attempted");
         ActorHelper::FunctionCall get(library,TEXT("/Script/Engine.SubsystemBlueprintLibrary:GetWorldSubsystem"));get.Arg(TEXT("ContextObject"),static_cast<UObject*>(world)).Arg(TEXT("Class"),type).Invoke();
         auto* service=get.Result<UObject*>();if(!type||!service||!service->IsA(type))throw std::runtime_error("Native teleport service is not available in this world");
-        ToolMapTravelContract(service);
+        ToolMapTravelContract(service,authoredFloor.has_value());
         auto* anchorClass=ActorHelper::ResolveClass(TEXT("/Script/Engine.TargetPoint"));
         auto* sourceClass=ActorHelper::ResolveClass(TEXT("/Script/Engine.WorldPartitionStreamingSourceComponent"));
         if(!anchorClass||!sourceClass)throw std::runtime_error("Destination streaming support is unavailable");
         ToolMapTravelJob job;job.World=PS::WeakObject(world);job.Controller=PS::WeakObject(controller);job.Pawn=PS::WeakObject(pawn);job.Service=PS::WeakObject(service);
-        job.Point=point;job.Projection=projection;job.Radius=radius;job.HalfHeight=halfHeight;job.NearMarker=nearby;
+        job.Point=point;job.Projection=projection;job.Radius=radius;job.HalfHeight=halfHeight;job.NearMarker=nearby;job.AuthoredFloor=authoredFloor;
         job.Gate=PS::MapTravel::Gate(ToolMapTravelTime());job.Generation=PS::SpawnToolRequests::Generation.load();g_mapTravel=std::move(job);
         try{
             const auto origin=ActorHelper::GetActorLocation(pawn);
-            auto* anchor=ActorHelper::SpawnActor(world,anchorClass,FVector(point.X,point.Y,std::clamp(groundHint.value_or(origin.Z()),projection.MinZ,projection.MaxZ)),FRotator{},[](AActor* actor){
+            auto* anchor=ActorHelper::SpawnActor(world,anchorClass,FVector(point.X,point.Y,std::clamp(authoredFloor.value_or(groundHint.value_or(origin.Z())),projection.MinZ,projection.MaxZ)),FRotator{},[](AActor* actor){
                 actor->SetFlags(RF_Transient);ActorHelper::FunctionCall replicate(actor,TEXT("/Script/Engine.Actor:SetReplicates"));replicate.Arg(TEXT("bInReplicates"),false).Invoke();
             });
             if(!anchor)throw std::runtime_error("Could not create a destination streaming anchor");g_mapTravel->Anchor=PS::WeakObject(anchor);
@@ -139,13 +157,15 @@ namespace {
             const bool cancelled=PS::SpawnToolRequests::CancelRequested.exchange(false);
             if(cancelled&&!job.Gate.Committed){ToolMapTravelFinish("Map travel cancelled before departure; the player was not moved.");return true;}
             ActorHelper::FunctionCall completed(source,TEXT("/Script/Engine.WorldPartitionStreamingSourceComponent:IsStreamingCompleted"));completed.Invoke();
-            const auto step=job.Gate.Poll(ToolMapTravelTime(),valid,completed.Result<bool>());
+            const bool streamingReady=completed.Result<bool>();
+            const auto step=job.Gate.Poll(ToolMapTravelTime(),valid,streamingReady);
             if(step==PS::MapTravel::Gate::Step::Expired){ToolMapTravelFinish(job.Gate.Committed?"Native map travel did not confirm arrival within 60 seconds. Check the player in game before retrying; no second teleport was issued.":"Destination did not become collision-ready within 30 seconds; the player was not moved. "+job.LastGroundError);return true;}
             if(step==PS::MapTravel::Gate::Step::Invalidated){ToolMapTravelFinish("Map travel was invalidated before completion.");return true;}
             if(job.Gate.Committed){
                 ToolMapTravelProgress("Travelling","Native travel in progress; waiting for confirmed arrival...");
                 const auto at=ActorHelper::GetActorLocation(pawn);
-                if(!ToolMapTravelTeleporting(pawn)&&PS::MapTravel::Arrived(job.Landing,{at.X(),at.Y(),at.Z()},job.HalfHeight))
+                if((!job.AuthoredFloor||streamingReady)&&!ToolMapTravelTeleporting(pawn)
+                    &&PS::MapTravel::Arrived(job.Landing,{at.X(),at.Y(),at.Z()},job.HalfHeight))
                     ToolMapTravelFinish(std::format("Teleported the selected player via native travel to X {:.0f}, Y {:.0f}, Z {:.0f}.",at.X(),at.Y(),at.Z()),true);
                 return true;
             }
@@ -153,12 +173,16 @@ namespace {
             ToolMapTravelProgress("Checking ground","Checking safe landing and player clearance...");
             bool groundContractFailed=false;
             try{
-                const auto candidates=PS::MapLanding::TravelCandidates(job.Point,job.NearMarker);
-                const auto candidate=candidates[job.Candidate%candidates.size()];
+                auto candidate=job.Point;
+                if(!job.AuthoredFloor){
+                    const auto candidates=PS::MapLanding::TravelCandidates(job.Point,job.NearMarker);
+                    candidate=candidates[job.Candidate%candidates.size()];
+                }
                 const auto deadline=std::chrono::steady_clock::now()+std::chrono::milliseconds(2);bool queried=false;
                 job.Landing=job.GroundProbe.Resolve(job.Projection,candidate,job.Radius,job.HalfHeight,[&](PS::MapProjection::Point sample,double top,double bottom,std::optional<double> reference){
                     if(queried&&std::chrono::steady_clock::now()>=deadline)throw PS::MapTravel::LandingProbe::Yield{};
                     queried=true;FVector hit{};std::string error;
+                    if(!reference)reference=job.AuthoredFloor;
                     // Discover one terrain obstruction per slice, rather than
                     // running up to sixteen full-height queries in one tick.
                     if(!reference){
@@ -192,10 +216,12 @@ namespace {
                     return PS::MapLanding::Position{hit.X(),hit.Y(),hit.Z()};
                 });
                 if(queried&&std::chrono::steady_clock::now()>=deadline)return true;
+                // The named call lands at the authored capsule, above the verified floor.
+                if(job.AuthoredFloor)job.Landing.Z=*job.AuthoredFloor;
                 std::string clearanceError;
                 const bool blocked=UECustom::UKismetSystemLibrary::CapsuleBlocked(activeWorld,FVector(job.Landing.X,job.Landing.Y,job.Landing.Z),job.Radius,job.HalfHeight,{pawn},clearanceError);
                 if(!clearanceError.empty()){groundContractFailed=true;throw std::runtime_error(clearanceError);}
-                if(blocked)throw std::runtime_error("Player clearance blocked; checking nearby ground");
+                if(blocked)throw std::runtime_error(job.AuthoredFloor?"Player clearance blocked at the Dragon Gate arrival point":"Player clearance blocked; checking nearby ground");
                 job.GroundZ=job.GroundProbe.Hits[0].Z;
             }catch(const PS::MapTravel::LandingProbe::Yield&){return true;}
             catch(const std::exception& error){
@@ -205,18 +231,28 @@ namespace {
             }
             PS::SpawnToolRequests::Progress("Ground verified; starting native travel...",{{"MapPoint",{{"GroundAvailable",true},{"Location",{job.Landing.X,job.Landing.Y,job.GroundZ}}}}});
             if(ToolMapTravelTeleporting(pawn)){ToolMapTravelFinish("Another native journey started while preparing this destination; no additional teleport issued.");return true;}
-            ActorHelper::FunctionCall rotation(pawn,TEXT("/Script/Engine.Actor:K2_GetActorRotation"));rotation.Invoke();const auto facing=rotation.Result<FRotator>();
             auto* service=job.Service.Get();if(!ToolMapTravelAlive(service))throw std::runtime_error("Native teleport service changed before departure");
-            ActorHelper::FunctionCall teleport(service,ToolMapTravelContract(service));
-            // This destination is already activated and collision-checked; a
-            // second loading overlay can conceal native travel failures.
-            teleport.Arg(TEXT("PlayerCharacter"),pawn).JsonArg(TEXT("TeleportParams"),{{"LocationName","None"},{"TargetLocation",{{"X",job.Landing.X},{"Y",job.Landing.Y},{"Z",job.Landing.Z}}},
-                {"TargetRotation",{{"Pitch",facing.GetPitch()},{"Yaw",facing.GetYaw()},{"Roll",facing.GetRoll()}}},{"bShowLoadingScreen",false},{"bNoCheck",false},{"bIsATest",false},{"TeleportationType","Teleport"},
-                {"bVFXOnTeleportStart",true},{"bVFXOnTeleportEnd",true},{"bDropAnyLoadoutExclusiveEquipment",false}});
+            const bool named=job.AuthoredFloor.has_value();
+            ActorHelper::FunctionCall teleport(service,ToolMapTravelContract(service,named));
+            teleport.Arg(TEXT("PlayerCharacter"),pawn);
+            if(named){
+                // Match the cooked Dragon Gate call and let the game own its loading screen.
+                const FName entrance(PS::ScornedTravel::NativeTarget,FNAME_Find);
+                if(entrance.IsNone())throw std::runtime_error("The native Dragon Gate destination disappeared before departure");
+                teleport.Arg(TEXT("LocationName"),entrance).Arg(TEXT("bShowLoadingScreen"),true)
+                    .JsonArg(TEXT("OptionalTeleportType"),"Teleport");
+            }else{
+                ActorHelper::FunctionCall rotation(pawn,TEXT("/Script/Engine.Actor:K2_GetActorRotation"));rotation.Invoke();
+                const auto facing=rotation.Result<FRotator>();
+                teleport.JsonArg(TEXT("TeleportParams"),{{"LocationName","None"},{"TargetLocation",{{"X",job.Landing.X},{"Y",job.Landing.Y},{"Z",job.Landing.Z}}},
+                    {"TargetRotation",{{"Pitch",facing.GetPitch()},{"Yaw",facing.GetYaw()},{"Roll",facing.GetRoll()}}},{"bShowLoadingScreen",false},{"bNoCheck",false},{"bIsATest",false},{"TeleportationType","Teleport"},
+                    {"bVFXOnTeleportStart",true},{"bVFXOnTeleportEnd",true},{"bDropAnyLoadoutExclusiveEquipment",false}});
+            }
             if(!job.Gate.Commit(ToolMapTravelTime()))throw std::runtime_error("Map travel preparation expired before departure");
             // The unbound dynamic result delegate is a valid zero-initialized
             // native delegate. Completion is verified from pawn state/location,
             // never inferred from this acceptance Boolean alone.
+            if(named)ToolMapTravelProgress("Travelling","Dragon Gate travel in progress; waiting for confirmed arrival...");
             teleport.Invoke();if(!teleport.Result<bool>()){ToolMapTravelFinish("The game's native travel service rejected this destination; no fallback position jump was attempted.");return true;}
             ToolMapTravelProgress("Travelling","Native travel in progress; waiting for confirmed arrival...");
         }catch(const std::exception& error){ToolMapTravelFinish(std::string("Map travel stopped: ")+error.what());}

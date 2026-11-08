@@ -14,6 +14,17 @@ promote_to: CHANGELOG-0.8.1.0.md
     follow-ups below. Older entries retain their original test-stage wording;
     their historical “unpublished” labels are superseded by this dated package.
 
+## 2026-11-08 candidate refresh
+
+- Release nested allocations from temporary reflected map pairs and array
+  elements, including partially initialized values and failed imports.
+- Use shared sidebar navigation and contextual controller, mouse, and keyboard
+  hints. Make cart drops visible and keep compact server actions in reach.
+- Add surface atlas area pickers, coordinate overlay, player centering, and
+  named Dragon Gate travel to Rasthin's Rest.
+- Rotate platform and themed RuneSchema logos on the welcome screen, with
+  adjustable timing and optional artwork crossfades.
+
 ## 2026-11-06 complete refresh
 
 - Controller pointer/click/drag and multi-selection updates.

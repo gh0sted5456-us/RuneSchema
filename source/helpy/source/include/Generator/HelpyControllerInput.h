@@ -229,36 +229,94 @@ inline bool PhysicalDown(uint32_t button){
     if(button==XINPUT_GAMEPAD_RIGHT_THUMB)return (PhysicalPad.wButtons&button)||std::abs(int(PhysicalPad.sThumbRX))>8689||std::abs(int(PhysicalPad.sThumbRY))>8689;
     return button&&(PhysicalPad.wButtons&button)!=0;
 }
-struct Hint {std::string Label;std::vector<uint32_t> Buttons;bool Active=false;};
-inline std::vector<Hint> HintItems(std::string_view shortcut){
-    constexpr ImGuiKey keys[]{ImGuiKey_GamepadFaceDown,ImGuiKey_GamepadFaceRight,ImGuiKey_GamepadFaceLeft,ImGuiKey_GamepadFaceUp};const char* labels[]{PointerMode?"Left-click / drag":"Select / toggle","Back",PointerMode?"Right-click":"Actions",NavigationCanvas&&ImGui::GetCurrentContext()->NavId==NavigationCanvas?"Zoom out":"Search"};std::vector<Hint> hints;
-    for(size_t i=0;i<4;++i)hints.push_back({labels[i],{ActiveBindings[i]},PointerMode&&(i==0||i==2)?PhysicalDown(ActiveBindings[i]):ImGui::IsKeyDown(keys[i])});
-    if(!PointerMode&&NavigationCanvas&&ImGui::GetCurrentContext()->NavId==NavigationCanvas)
-        hints.push_back({"Pan / zoom in",{XINPUT_GAMEPAD_LEFT_THUMB},PhysicalDown(XINPUT_GAMEPAD_LEFT_THUMB)});
-    else if(ItemBayFrame!=ImGui::GetFrameCount())
-        hints.push_back({"Scroll",{XINPUT_GAMEPAD_LEFT_THUMB},PhysicalDown(XINPUT_GAMEPAD_LEFT_THUMB)});
-    hints.push_back({"Navigate",{0},ImGui::IsKeyDown(ImGuiKey_GamepadDpadLeft)||ImGui::IsKeyDown(ImGuiKey_GamepadDpadRight)||ImGui::IsKeyDown(ImGuiKey_GamepadDpadUp)||ImGui::IsKeyDown(ImGuiKey_GamepadDpadDown)});
-    hints.push_back({"Panels",{ActiveBindings[4],ActiveBindings[5]},ImGui::IsKeyDown(ImGuiKey_GamepadL1)||ImGui::IsKeyDown(ImGuiKey_GamepadR1)});
-    hints.push_back({"Sections",{ActiveBindings[6],ActiveBindings[7]},ImGui::IsKeyDown(ImGuiKey_GamepadL2)||ImGui::IsKeyDown(ImGuiKey_GamepadR2)});
-    if(HelpyImGuiTheme::Current.controllerCursor)hints.push_back({"Pointer / grab / drop",{XINPUT_GAMEPAD_RIGHT_THUMB},StickUsing||DragLatched});
-    if(ItemBayFrame==ImGui::GetFrameCount()){
-        hints.push_back({"Scroll / multi-select",{XINPUT_GAMEPAD_LEFT_THUMB},ItemBayMultiSelect||PhysicalDown(XINPUT_GAMEPAD_LEFT_THUMB)});
-        hints.push_back({"Send to cart",{XINPUT_GAMEPAD_START},PhysicalDown(XINPUT_GAMEPAD_START)});
+enum class MouseHint { None, Left, Right, Wheel };
+struct Hint {
+    std::string Label;
+    std::vector<uint32_t> Buttons;
+    bool Active=false;
+    std::string Key;
+    MouseHint Mouse=MouseHint::None;
+};
+inline std::vector<Hint> HintItems(std::string_view shortcut,bool welcome,bool itemBay){
+    const bool map=!PointerMode&&NavigationCanvas&&ImGui::GetCurrentContext()->NavId==NavigationCanvas;
+    std::vector<Hint> hints;
+    const auto face=[&](const char* label,size_t index){hints.push_back({label,{ActiveBindings[index]},PhysicalDown(ActiveBindings[index])});};
+    face(welcome?"Enter":PointerMode?"Click / drag":"Select",0);
+    if(!welcome){
+        face("Back",1);
+        face(PointerMode?"Right-click":"Actions",2);
+        if(map||itemBay)face(map?"Zoom out":"Search",3);
+        hints.push_back({map?"Pan / zoom in":itemBay?"Scroll / multi-select":"Scroll",
+            {XINPUT_GAMEPAD_LEFT_THUMB},PhysicalDown(XINPUT_GAMEPAD_LEFT_THUMB)||(itemBay&&ItemBayMultiSelect)});
+        hints.push_back({"Navigate",{0},ImGui::IsKeyDown(ImGuiKey_GamepadDpadLeft)||ImGui::IsKeyDown(ImGuiKey_GamepadDpadRight)||ImGui::IsKeyDown(ImGuiKey_GamepadDpadUp)||ImGui::IsKeyDown(ImGuiKey_GamepadDpadDown)});
+        hints.push_back({"Panels",{ActiveBindings[4],ActiveBindings[5]},ImGui::IsKeyDown(ImGuiKey_GamepadL1)||ImGui::IsKeyDown(ImGuiKey_GamepadR1)});
+        hints.push_back({"Sections",{ActiveBindings[6],ActiveBindings[7]},ImGui::IsKeyDown(ImGuiKey_GamepadL2)||ImGui::IsKeyDown(ImGuiKey_GamepadR2)});
+        if(HelpyImGuiTheme::Current.controllerCursor)hints.push_back({DragLatched?"Drop held item":"Pointer / grab",{XINPUT_GAMEPAD_RIGHT_THUMB},StickUsing||DragLatched});
+        if(itemBay)hints.push_back({"Send to cart",{XINPUT_GAMEPAD_START},PhysicalDown(XINPUT_GAMEPAD_START)});
     }
     const auto mask=InputBindings::ParsePad(shortcut);if(mask){Hint hint{"Helpy",{},false};for(const auto& token:InputBindings::PadButtons)if(mask&token.Bit)hint.Buttons.push_back(token.Bit);if(hint.Buttons.size()>3)hint.Buttons.resize(3);hint.Active=std::any_of(hint.Buttons.begin(),hint.Buttons.end(),[](uint32_t button){return PhysicalDown(button);});hints.push_back(std::move(hint));}
-    if(ReportedGlyphs==HelpyControllerDevice::PlayStation)hints.push_back({"Pointer / actions",{InputBindings::Touchpad},TouchUsing});return hints;
+    if(!welcome&&HelpyImGuiTheme::Current.controllerTouchpad&&ReportedGlyphs==HelpyControllerDevice::PlayStation)
+        hints.push_back({"Touch pointer",{InputBindings::Touchpad},TouchUsing});
+    return hints;
 }
-inline float HintWidth(const Hint& hint){return ImGui::GetFrameHeight()*float(hint.Buttons.size())+ImGui::CalcTextSize(hint.Label.c_str()).x+ImGui::GetStyle().ItemSpacing.x*2;}
-inline float HintsHeight(float width,std::string_view shortcut="Guide"){
-    float used=0;int rows=1;for(const auto& hint:HintItems(shortcut)){const auto size=HintWidth(hint);if(used&&used+size>width){++rows;used=0;}used+=size;}return rows*ImGui::GetFrameHeightWithSpacing();
+inline std::vector<Hint> DesktopHints(std::string_view shortcut,bool welcome,bool itemBay,bool map,bool mapActions){
+    using Mouse=MouseHint;
+    std::vector<Hint> hints;
+    const auto mouse=[&](const char* label,Mouse glyph,bool active,std::string key={}){
+        hints.push_back({label,{},active,std::move(key),glyph});
+    };
+    const bool left=ImGui::IsMouseDown(ImGuiMouseButton_Left),right=ImGui::IsMouseDown(ImGuiMouseButton_Right);
+    mouse(welcome?"Enter":map?"Drag to pan":"Select",Mouse::Left,left);
+    if(map){
+        mouse("Zoom",Mouse::Wheel,ImGui::GetIO().MouseWheel!=0);
+        if(mapActions)mouse("Map actions",Mouse::Right,right);
+    }else if(itemBay){
+        mouse("Drag to cart",Mouse::Left,ImGui::GetDragDropPayload()!=nullptr);
+        mouse("Multi-select",Mouse::Left,left&&ImGui::GetIO().KeyCtrl,"Ctrl");
+        mouse("Item actions",Mouse::Right,right);
+    }
+    hints.push_back({"Move focus",{},ImGui::IsKeyDown(ImGuiKey_Tab),"Tab"});
+    if(!shortcut.empty()&&shortcut!="None")hints.push_back({"Helpy",{},false,std::string(shortcut)});
+    return hints;
 }
-inline void Hints(int style,std::string_view shortcut="Guide"){
+inline float KeyHintWidth(const Hint& hint){return hint.Key.empty()?0.f:ImGui::CalcTextSize(hint.Key.c_str()).x+ImGui::GetFrameHeight()*.5f;}
+inline float HintGlyphWidth(const Hint& hint){
+    return KeyHintWidth(hint)+ImGui::GetFrameHeight()*float(hint.Buttons.size()+(hint.Mouse!=MouseHint::None));
+}
+inline float HintWidth(const Hint& hint){return HintGlyphWidth(hint)+ImGui::CalcTextSize(hint.Label.c_str()).x+ImGui::GetStyle().ItemSpacing.x*2;}
+inline void DrawDesktopGlyph(const Hint& hint,ImVec2 at,float size){
+    auto* draw=ImGui::GetWindowDrawList();
+    const auto color=HintColor(hint.Active);
+    const float keyWidth=KeyHintWidth(hint);
+    if(keyWidth){
+        const auto text=ImGui::CalcTextSize(hint.Key.c_str());
+        draw->AddRect({at.x,at.y+size*.15f},{at.x+keyWidth,at.y+size*.85f},color,3.f);
+        draw->AddText({at.x+(keyWidth-text.x)*.5f,at.y+(size-text.y)*.5f},color,hint.Key.c_str());
+        at.x+=keyWidth;
+    }
+    if(hint.Mouse==MouseHint::None)return;
+    const ImVec2 min{at.x+size*.19f,at.y+size*.08f},max{at.x+size*.81f,at.y+size*.92f};
+    const float middle=at.x+size*.5f,split=at.y+size*.45f;
+    draw->AddRect(min,max,color,size*.23f);
+    draw->AddLine({min.x,split},{max.x,split},color);
+    draw->AddLine({middle,min.y},{middle,split},color);
+    if(hint.Mouse==MouseHint::Wheel)draw->AddRectFilled({middle-size*.06f,min.y+size*.08f},{middle+size*.06f,split-size*.05f},color,2.f);
+    else{
+        const float x=hint.Mouse==MouseHint::Left?min.x:middle;
+        draw->AddRectFilled({x+size*.07f,min.y+size*.12f},{x+size*.24f,split-size*.06f},color,2.f);
+    }
+}
+inline float HintsHeight(float width,const std::vector<Hint>& hints){
+    float used=0;int rows=1;for(const auto& hint:hints){const auto size=HintWidth(hint);if(used&&used+size>width){++rows;used=0;}used+=size;}return rows*ImGui::GetFrameHeightWithSpacing();
+}
+inline void Hints(int style,const std::vector<Hint>& hints){
     const float width=ImGui::GetContentRegionAvail().x;float used=0;
-    for(const auto& hint:HintItems(shortcut)){
+    for(const auto& hint:hints){
         const float cell=HintWidth(hint);if(used&&used+cell>width){used=0;}else if(used)ImGui::SameLine(0,ImGui::GetStyle().ItemSpacing.x);
         const auto at=ImGui::GetCursorScreenPos();const float size=ImGui::GetFrameHeight();
-        for(size_t i=0;i<hint.Buttons.size();++i)DrawPhysicalGlyph({at.x+size*(float(i)+.5f),at.y+size*.5f},size*.31f,hint.Buttons[i],style,hint.Buttons[i]?(PhysicalDown(hint.Buttons[i])||(hint.Buttons[i]==XINPUT_GAMEPAD_RIGHT_THUMB&&DragLatched)||(hint.Buttons[i]==XINPUT_GAMEPAD_LEFT_THUMB&&ItemBayFrame==ImGui::GetFrameCount()&&ItemBayMultiSelect)):hint.Active);
-        ImGui::Dummy({size*float(hint.Buttons.size()),size});ImGui::SameLine(0,ImGui::GetStyle().ItemSpacing.x);ImGui::AlignTextToFramePadding();ImGui::TextColored(hint.Active?HelpyImGuiTheme::Current.accent:HelpyImGuiTheme::Current.textDisabled,"%s",hint.Label.c_str());used+=cell;
+        for(size_t i=0;i<hint.Buttons.size();++i)DrawPhysicalGlyph({at.x+size*(float(i)+.5f),at.y+size*.5f},size*.31f,hint.Buttons[i],style,hint.Buttons.size()==1?hint.Active:PhysicalDown(hint.Buttons[i]));
+        if(hint.Buttons.empty())DrawDesktopGlyph(hint,at,size);
+        ImGui::Dummy({HintGlyphWidth(hint),size});ImGui::SameLine(0,ImGui::GetStyle().ItemSpacing.x);ImGui::AlignTextToFramePadding();ImGui::TextColored(hint.Active?HelpyImGuiTheme::Current.accent:HelpyImGuiTheme::Current.textDisabled,"%s",hint.Label.c_str());used+=cell;
     }
 }
 inline bool DrawPointer(){

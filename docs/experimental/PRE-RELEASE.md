@@ -10,7 +10,7 @@ promote_to: RELEASE-0.8.1.0.md
     **0.8.1.0 prerelease** and have not been promoted to the stable guides.
 
 <div class="rs-actions">
-  <a class="md-button md-button--primary" href="https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0-pre.20261107.2/RuneSchema-0.8.1.0-complete-20261107-ux.zip">Download complete 0.8.1.0</a>
+  <a class="md-button md-button--primary" href="https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0-pre.20261108/RuneSchema-0.8.1.0-complete-20261108.zip">Download complete 0.8.1.0</a>
   <a class="md-button" href="../INSTALLATION/">Installation</a>
 </div>
 
@@ -20,11 +20,20 @@ separately; preserve your settings, mods and saves when updating.
 
 ## Complete candidate refresh
 
-The complete 2026-11-07 package includes the current core, Helpy, bundled plugins and
-matching Lua adapters. It retains the maintainer-assembled package layout; UE4SS
-is installed separately. The complete 68-file refresh is published under
-[`0.8.1.0-pre.20261107.2`](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0-pre.20261107.2).
-Earlier tags and downloads are retained for reference. Use the complete package above.
+The complete 2026-11-08 package includes the updated core and Helpy, bundled
+plugins, and matching Lua adapters. See [`0.8.1.0-pre.20261108`](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0-pre.20261108)
+for the ZIP and checksums. Earlier candidates remain available.
+
+- **Reflected values:** Temporary map entries and array elements now release
+  nested allocations on success and failure.
+- **Helpy:** A shared footer shows mouse, keyboard, or controller hints.
+  Item Bay has a visible cart drop target, and compact menus keep actions in reach.
+- **Map:** The surface atlas groups areas under Overview, Mainland, and Scorned
+  Wilderness. Find player centers your pin. Rasthin's Rest uses named Dragon Gate travel.
+- **Welcome splash:** Rotating platform and theme-colored logos. Background
+  crossfades use optional artwork when available.
+
+Created using intellectual property belonging to Jagex Limited under the terms of Jagex's [Fan Content Policy](https://legal.jagex.com/docs/policies/fan-content-policy).
 
 - **Runtime layout:** Core plugins live in `dlls/plugins`; Helpy and its native
   plugins live in `Helpy`. Existing user settings and mod folders are preserved.
@@ -71,11 +80,11 @@ and earlier test-stage notes.
 
 ## Testing and feedback
 
-The previous candidate verified redirected save folders. This refresh adds
-virtual Xbox, PlayStation and Nintendo controller checks, three rendered window
-sizes, and an import check against the pinned and installed UE4SS builds.
-The save editor and controller changes still need live game coverage.
-See the [release verification files](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0-pre.20261107.2)
+Rendered checks cover three window sizes and all 32 atlas views. Six focused
+core tests cover reflected cleanup and related journal and raw-table behavior.
+The core's UE4SS imports matched the checked Steam and Game Pass hosts. Live
+Rasthin's Rest arrival and the cleanup change remain to be verified in game.
+See the [release verification files](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0-pre.20261108)
 for checks and file hashes.
 
 Proton/Wine, every physical controller/driver and full multiplayer restart

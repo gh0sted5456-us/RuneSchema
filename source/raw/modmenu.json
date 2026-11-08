@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "RuneSchema",
   "name": "RuneSchema",
-  "version": "0.8.0.3",
+  "version": "0.8.1.0",
   "minModMenu": "1.1.0",
   "description": "Core quick settings shared with Helpy through RuneSchema/settings/settings.ini. Cleanup follows its activation choice. Helpy cache, layout and FPS preferences remain in Helpy.",
   "runsOn": "yours",

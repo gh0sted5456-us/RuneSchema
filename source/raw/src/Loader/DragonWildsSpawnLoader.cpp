@@ -7,6 +7,7 @@
 #include "Core/PlayerCoordinates.h"
 #include "Core/SpawnFootprint.h"
 #include "Core/MapTravel.h"
+#include "ScornedTravel.h"
 #include "SDK/Helper/PlayerVitals.h"
 #include "Core/PartyStatWire.h"
 #include "SDK/Helper/EquipmentDelivery.h"

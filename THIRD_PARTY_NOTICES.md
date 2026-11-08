@@ -99,6 +99,11 @@ transition is third-party game artwork, not RuneSchema MIT-licensed artwork.
 RuneScape and Dragonwilds names and marks remain with their respective owners;
 this presentation does not imply affiliation or endorsement.
 
+The Helpy map atlas includes an adapted Scorned Wilderness inset from the
+Dragonwilds map. Artwork © Jagex. [Atlas attribution and provenance](resources/map-atlas/PROVENANCE.md).
+
+Created using intellectual property belonging to Jagex Limited under the terms of Jagex's [Fan Content Policy](https://legal.jagex.com/docs/policies/fan-content-policy).
+
 ## Khronos graphics declarations
 
 Helpy's optional native adapters use the Vulkan C headers from

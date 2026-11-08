@@ -23,6 +23,14 @@ int main(int argc,char** argv){try{
     Check(tools.contains("Party travel world or moving character changed")&&tools.contains("Party destination disconnected or changed character")&&tools.contains("request->value(\"PartyPoint\",false)"),"Party travel must revalidate world and identities for player and map destinations");
     Check(tools.contains("ActorHelper::GetActorLocation(static_cast<AActor*>(targetPawn))")&&tools.contains("map[\"PartyTravelVersion\"]=2"),"Party travel must resolve the current native destination and advertise capability");
     Check(ui.contains("destinationReady=Data.Operation==2||groundReady"),"Only teleport may prepare unloaded ground; spawn/build retain ground gates");
+    Check(tools.contains("ScornedTravel::Matches(RC::to_string(world->GetPathName()),point)")&&tools.contains("ToolScornedEntrance(world)")&&
+        travel.contains("if(!reference)reference=job.AuthoredFloor")&&travel.contains("job.GroundProbe.Resolve"),
+        "Scorned travel must verify the authored destination and keep the landing probe");
+    Check(travel.contains("TeleportationSubsystem:TeleportToNamedLocation")&&
+        travel.contains(R"(teleport.Arg(TEXT("LocationName"),entrance).Arg(TEXT("bShowLoadingScreen"),true))")&&
+        travel.find("if(job.AuthoredFloor)job.Landing.Z=*job.AuthoredFloor")<travel.find("CapsuleBlocked")&&
+        travel.contains("(!job.AuthoredFloor||streamingReady)&&!ToolMapTravelTeleporting(pawn)"),
+        "Scorned travel must use the named Dragon Gate with loading and clearance at the authored capsule");
     Check(ui.contains("Data.ProbeWanted=Data.Operation!=2")&&ui.contains("previewReady=Data.Operation==2||"),"Repeated teleport selection still waits for a placement-only preview");
     Check(ui.contains("const bool context=ImGui::IsMouseReleased(ImGuiMouseButton_Right)")
         &&ui.contains("if(context||(ImGui::IsMouseReleased(ImGuiMouseButton_Left)&&!Data.Dragged)||(controllerMap&&ImGui::IsKeyPressed(ImGuiKey_GamepadFaceDown,false)))")

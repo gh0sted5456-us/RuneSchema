@@ -7,6 +7,7 @@ IDR_NEXUS_ICON RCDATA "../../../../resources/helpy-ui/v1/nexus.png"
 IDR_RUNESCHEMA_REPAIR RCDATA "../../../../resources/tools/repair-runeschema.ps1"
 IDR_MOD_MENU_LICENSE RCDATA "../../../../licenses/ModMenu-MIT.txt"
 IDR_LOADING_WHEEL RCDATA "../../../../resources/helpy-ui/v1/loading-ring.png"
+IDR_SCORNED_ART RCDATA "../../../../resources/map-atlas/Scorned-Art.png"
 #endif
 
 VS_VERSION_INFO VERSIONINFO

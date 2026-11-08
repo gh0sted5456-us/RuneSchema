@@ -1,9 +1,20 @@
 #include "Core/MapTravel.h"
+#include "ScornedTravel.h"
 #include <limits>
 #include <stdexcept>
 static void Check(bool value){if(!value)throw std::runtime_error("Map travel regression");}
 int main(){
     using Probe=PS::MapTravel::LandingProbe;
+    using namespace PS::ScornedTravel;
+    Check(Matches(World,Entrance)&&!Matches("/Game/Other.Other",Entrance));
+    Check(!Matches(World,{Entrance.X+50,Entrance.Y}));
+    Check(!Matches(World,{std::numeric_limits<double>::quiet_NaN(),Entrance.Y}));
+    const auto scorned=LandingArea(Entrance,EntranceZ);
+    Check(scorned.Contains(Entrance)&&scorned.MinZ<EntranceZ&&scorned.MaxZ>EntranceZ);
+    Check(!scorned.Contains({Entrance.X+800,Entrance.Y}));
+    bool moved=false;
+    try{(void)LandingArea(Entrance,EntranceZ+500);}catch(const std::runtime_error&){moved=true;}
+    Check(moved);
     const PS::MapProjection::Projection map{{0,0},{1,0},{0,1},10000,10000,-1000,1000};
     Probe probe;unsigned queries=0;bool finished=false;
     const auto floor=[&](PS::MapProjection::Point point,double top,double bottom,std::optional<double> reference){

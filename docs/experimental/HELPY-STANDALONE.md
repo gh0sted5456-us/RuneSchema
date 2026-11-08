@@ -17,6 +17,22 @@ Helpy runs as `Helpy.exe` from
 AppData holds settings, caches, profiles and logs. Keep all components from one
 matching runtime package.
 
+## Welcome splash and map
+
+In **Settings → Backgrounds → Welcome splash**, choose which logos rotate,
+set seconds per logo, or turn off the artwork crossfade. The RuneSchema logo
+uses your theme accent. Backgrounds crossfade when optional artwork is
+available. Windows reduced motion holds a static splash.
+
+The footer follows the active input mode. Item Bay shows mouse buttons,
+keyboard shortcuts, or controller glyphs. Drag one card or a selected group
+onto the cart or the **Drop into cart** target above the results.
+
+In **World → Map**, choose **Overview**, **Mainland** or **Scorned Wilderness**.
+Mainland areas are grouped in the two pickers. **Find player** opens the
+player's area and centers their pin. **Fit map** resets the current view.
+
+
 ## Cache updates and notifications
 
 | Action | Where |

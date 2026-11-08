@@ -119,13 +119,13 @@ inline bool GearRow(const nlohmann::json& row,ImVec2 start,float width,int64_t n
         }++lineIndex;
     }return hovered;
 }
-inline float CardHeight(const nlohmann::json& row,float width){
+inline float CardHeight(const nlohmann::json& row,float width,std::string_view region={}){
     const auto& t=HelpyImGuiTheme::Current;const auto& p=PlayerPortraitPicker::Choices;
     const auto now=Now();
     float height=BodyHeight(row,width,p.Equipment)+t.Y(12);
     const auto equipment=row.value("Equipment",nlohmann::json::object());
     if(!p.CompactParty&&p.Skills&&SkillsFresh(row,now)){const auto skills=equipment.value("Skills",nlohmann::json::object()).value("Items",nlohmann::json::array());const int columns=std::max(1,int((width+ImGui::GetStyle().ItemSpacing.x)/(t.Y(24)+ImGui::GetStyle().ItemSpacing.x)));height+=std::max(t.Y(18),float((std::min<size_t>(32,skills.size())+columns-1)/columns)*(t.Y(37)+ImGui::GetStyle().ItemSpacing.y))+ImGui::GetStyle().ItemSpacing.y;}
-    return height+t.Y(4);
+    return height+t.Y(region.empty()?4:19);
 }
 inline void Skills(const nlohmann::json& row,int64_t now){
     if(!SkillsFresh(row,now)){ImGui::TextDisabled("Skill levels unavailable");return;}const auto& t=HelpyImGuiTheme::Current;const auto& items=row["Equipment"]["Skills"]["Items"];const float side=t.Y(24);ImGui::PushID("skills");
@@ -139,8 +139,10 @@ inline void Advanced(){
     auto& p=PlayerPortraitPicker::Choices;bool changed=false;changed|=HelpyImGuiTheme::Toggle("Party placards",&p.CompactParty);changed|=HelpyImGuiTheme::Toggle("Vital meters",&p.Meters);changed|=HelpyImGuiTheme::Toggle("Equipped gear icons",&p.Equipment);changed|=HelpyImGuiTheme::Toggle("Skill icons in expanded rows",&p.Skills);changed|=HelpyImGuiTheme::Toggle("Native power level",&p.Power);changed|=HelpyImGuiTheme::Toggle("Host / role badge",&p.Roles);
     if(changed)PlayerPortraitPicker::SaveWanted=true;ImGui::TextWrapped("Double-click a portrait or use Change portrait in the member's right-click menu.");ImGui::EndPopup();
 }
-inline void Details(const nlohmann::json& row,int64_t now){
-    HelpyImGuiTheme::BeginDetailsTooltip();PS::HelpyImGuiTheme::DetailsTextUnformatted(RuneSchemaProfile::Name(row).c_str());ImGui::Separator();
+inline void Details(const nlohmann::json& row,int64_t now,std::string_view region={}){
+    HelpyImGuiTheme::BeginDetailsTooltip();PS::HelpyImGuiTheme::DetailsTextUnformatted(RuneSchemaProfile::Name(row).c_str());
+    if(!region.empty())PS::HelpyImGuiTheme::DetailsTextDisabled("%.*s",int(region.size()),region.data());
+    ImGui::Separator();
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::PartyDetailSections.clear();
 #endif
@@ -161,12 +163,13 @@ inline void Details(const nlohmann::json& row,int64_t now){
     HelpyImGuiTheme::EndDetailsTooltip();
 }
 // One player-card design for map party members and item recipients.
-inline bool Row(const nlohmann::json& row,bool selected,bool keepPopup=false,bool withEquipment=false){
+inline bool Row(const nlohmann::json& row,bool selected,bool keepPopup=false,bool withEquipment=false,std::string_view region={}){
     GearContext=false;
     const auto& t=HelpyImGuiTheme::Current;const auto start=ImGui::GetCursorScreenPos();const float side=t.Y(28);
     const auto& display=PlayerPortraitPicker::Choices;const float width=std::max(1.0f,ImGui::GetContentRegionAvail().x);
     const bool gear=withEquipment&&display.Equipment;auto columns=Columns(width);if(display.CompactParty)columns={false,std::min(width,t.X(260)),width,0};const float statsWidth=gear?columns.Stats:width;
-    const float height=BodyHeight(row,width,gear);const auto now=Now();
+    const float subtitle=region.empty()?0.f:t.Y(15);
+    const float height=BodyHeight(row,width,gear)+subtitle;const auto now=Now();
     const bool clicked=ImGui::Selectable("##member",selected,keepPopup?ImGuiSelectableFlags_NoAutoClosePopups:ImGuiSelectableFlags_None,{0,height});
     if(InspectorOpen&&ItemPresentation::Text(Inspector,"Path")==ItemPresentation::Text(row,"Path"))Inspector=row;
     const auto icon=PlayerPortraitPicker::Icon(row);bool ready=false;
@@ -199,6 +202,11 @@ inline bool Row(const nlohmann::json& row,bool selected,bool keepPopup=false,boo
     const ImVec4 clip{textX,start.y,nameRight,start.y+height};
     auto name=RuneSchemaProfile::Name(row);if(name.empty())name="Unnamed player";if(row.value("IsLocal",false))name+=" (you)";
     draw->AddText(ImGui::GetFont(),ImGui::GetFontSize(),{textX,start.y+t.Y(3)},ImGui::GetColorU32(t.text),name.c_str(),nullptr,0,&clip);
+    if(!region.empty()){
+        const ImVec4 regionClip{textX,start.y,right,start.y+height};
+        draw->AddText(ImGui::GetFont(),t.Y(11),{textX,start.y+t.Y(19)},ImGui::GetColorU32(t.accentHover),
+            region.data(),region.data()+region.size(),0,&regionClip);
+    }
     const ImVec2 badge{std::min(nameRight,textX+ImGui::CalcTextSize(name.c_str()).x)+t.X(10),start.y+t.Y(10)};
     if(haveRole)PlayerBadges::Draw(draw,badge,t.Y(14),role);
     if(power&&width>side*3){
@@ -212,7 +220,7 @@ inline bool Row(const nlohmann::json& row,bool selected,bool keepPopup=false,boo
     }
     const char* keys[]{"Health","Stamina","SpecialPower"};const char* glyphs[]{"health","stamina","special"};
     const ImVec4 colors[]{ImVec4(.82f,.27f,.27f,1),ImVec4(.29f,.74f,.39f,1),ImVec4(.40f,.62f,.96f,1),ImVec4(.90f,.65f,.29f,1),ImVec4(.24f,.72f,.84f,1),ImVec4(.74f,.65f,.91f,1)};
-    if(display.Meters)for(int i=0;i<3;++i){const float y=start.y+t.Y(26+i*13);const auto gauge=PartyStats::Read(row,keys[i],now);
+    if(display.Meters)for(int i=0;i<3;++i){const float y=start.y+subtitle+t.Y(26+i*13);const auto gauge=PartyStats::Read(row,keys[i],now);
         const float columnX=textX,barX=columnX+t.X(23),barRight=right,barWidth=std::max(0.0f,barRight-barX);
 #if defined(HELPY_PREVIEW)
         HelpyPreviewHooks::PartyMeters[ItemPresentation::Text(row,"Path")+":"+keys[i]]={barX,y,barRight,y+t.Y(12)};
@@ -224,10 +232,10 @@ inline bool Row(const nlohmann::json& row,bool selected,bool keepPopup=false,boo
             const ImVec4 barClip{barX,y,barRight,y+t.Y(12)};draw->AddText(ImGui::GetFont(),t.Y(10),{barX+t.X(4),y},ImGui::GetColorU32(t.text),value,nullptr,0,&barClip);
         }
     }
-    const bool gearHovered=gear&&GearRow(row,columns.Beside?ImVec2{start.x+columns.Stats+columns.Gap,start.y}:ImVec2{start.x,start.y+StatsHeight(statsWidth)+t.Y(8)},columns.Equipment,now);
+    const bool gearHovered=gear&&GearRow(row,columns.Beside?ImVec2{start.x+columns.Stats+columns.Gap,start.y}:ImVec2{start.x,start.y+subtitle+StatsHeight(statsWidth)+t.Y(8)},columns.Equipment,now);
     if(platformHovered){const auto account=ItemPresentation::Text(row,"PlatformAccountName");const auto text=known?("Platform: "+platform+(account.empty()?"\nAccount name unavailable":"\nGame-reported account: "+account)):std::string("Platform not reported");HelpyImGuiTheme::TooltipAt(platformMin,platformMax,text.c_str());}
     else if(!gearHovered&&haveRole&&ImGui::IsWindowHovered()&&ImGui::IsMouseHoveringRect({badge.x-t.X(8),badge.y-t.Y(8)},{badge.x+t.X(8),badge.y+t.Y(8)}))HelpyImGuiTheme::TooltipAt({badge.x-t.X(8),badge.y-t.Y(8)},{badge.x+t.X(8),badge.y+t.Y(8)},PlayerBadges::Tooltip(*role).c_str());
-    else if(!gearHovered&&!GearContext&&ImGui::IsItemHovered()&&!ImGui::IsMouseDown(ImGuiMouseButton_Right))Details(row,now);
+    else if(!gearHovered&&!GearContext&&ImGui::IsItemHovered()&&!ImGui::IsMouseDown(ImGuiMouseButton_Right))Details(row,now,region);
     return clicked&&!gearHovered;
 }
 inline bool ProfileOpen=false;inline nlohmann::json ProfilePlayer;inline uint64_t ProfileGeneration=0;

@@ -26,11 +26,18 @@ int main()try{
         if(Format(0)!="0 ms"||Format(999)!="999 ms"||Format(1000)!="1 s"||Format(26327)!="26.3 s"||Format(90000)!="1.5 min"||Format(-1)!="Not available"||Format(26327,Unit::Milliseconds)!="26327 ms"||Format(26327,Unit::Seconds)!="26.327 s"||Format(26327,Unit::Minutes)!="0.439 min"||Format(1,Unit::Seconds)!="0.001 s"||Format(60000,Unit::Minutes)!="1 min")throw std::runtime_error("Startup durations must support readable automatic and explicit units");
     }
     using PS::HelpySplash::Blend;
+    using PS::HelpySplash::Logos;
     const auto near=[](float a,float b){return std::abs(a-b)<.0001f;};
     if(!near(Blend(0),0)||!near(Blend(3.9),0)||!near(Blend(6),.5f)||!near(Blend(8),1)||!near(Blend(11.9),1)||!near(Blend(14),.5f)||!near(Blend(16),0)||!near(Blend(22),.5f))throw std::runtime_error("Splash must repeat four-second hold, slow four-second crossfade, hold, crossfade");
     for(int step=0;step<=200;++step){const auto time=4.0+step*.02;const auto forward=Blend(time),back=Blend(time+8.0);
         if(forward<0||forward>1||back<0||back>1||!near(forward+back,1)|| (step&&forward<Blend(time-.02)))throw std::runtime_error("Splash crossfade must be smooth, monotonic and complementary");
     }
+    if(Logos(6,true,true,true,8)!=std::array<float,3>{.5f,.5f,0.f}
+        ||Logos(14,true,true,true,8)!=std::array<float,3>{0.f,.5f,.5f}
+        ||Logos(22,true,true,true,8)!=std::array<float,3>{.5f,0.f,.5f}
+        ||Logos(4,true,false,true,4)!=std::array<float,3>{0.f,0.f,1.f}
+        ||Logos(0,false,true,true,8)!=std::array<float,3>{0.f,1.f,0.f})
+        throw std::runtime_error("Welcome carousel must honor platform and game choices, timing and reduced motion");
     if(Blend(-1)!=0||Blend(0,false)!=1||Blend(14,false)!=1)throw std::runtime_error("Reduced-motion splash must hold the RuneSchema logo");
     {
         using namespace PS::HelpySplash;Exit exit;

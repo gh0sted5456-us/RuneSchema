@@ -40,7 +40,7 @@ int main(int argc,char** argv)try{
     SetEnvironmentVariableW(L"SteamGameId",previousSize?previous:nullptr);
     for(int i=0;i<200&&!fs::exists(report);++i)Sleep(25);assert(fs::is_regular_file(report));
     const auto result=HelpyDesktop::Json::parse(ConfigFiles::Read(report));assert(result.at("PackageResult")==APPMODEL_ERROR_NO_PACKAGE&&!result.at("InheritedSteamContext").get<bool>());
-    fs::create_directories(root/"Helpy");fs::copy_file(source,root/"Helpy/Helpy.exe");fs::copy_file(source.parent_path()/"SDL3.dll",root/"Helpy/SDL3.dll");
+    fs::create_directories(root/"Helpy");fs::copy_file(executable,root/"Helpy/Helpy.exe");fs::copy_file(source.parent_path()/"SDL3.dll",root/"Helpy/SDL3.dll");
     assert(Application(root)==root/"Helpy/Helpy.exe"&&InstanceName(root)==name);
     assert(RuntimePaths::ModFromBinary(Application(root))==root);
     std::cout<<"Desktop launch is outside the game package and does not inherit Steam session state.\n";

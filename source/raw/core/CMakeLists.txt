@@ -75,6 +75,13 @@ if(PROJECT_IS_TOP_LEVEL)
     target_include_directories(array-copy BEFORE PRIVATE ../tests/array-copy-stubs)
     target_link_libraries(array-copy PRIVATE RuneSchemaJsonCore)
     add_test(NAME array-copy COMMAND array-copy)
+    add_executable(map-storage ../tests/map-storage.cpp
+        ../src/SDK/Structs/Custom/FManagedValue.cpp
+        ../src/SDK/Structs/Custom/FScriptMapHelper.cpp
+        ../src/SDK/Structs/Custom/FScriptArrayHelper.cpp)
+    target_include_directories(map-storage BEFORE PRIVATE ../tests/stubs)
+    target_link_libraries(map-storage PRIVATE RuneSchemaJsonCore)
+    add_test(NAME map-storage COMMAND map-storage)
     add_executable(event-contract-integration ../tests/event-contract-integration.cpp)
     add_executable(structured-diagnostic-production ../tests/structured-diagnostic-production.cpp ../src/Utility/StructuredDiagnostics.cpp)
     target_link_libraries(structured-diagnostic-production PRIVATE RuneSchemaJsonCore)
