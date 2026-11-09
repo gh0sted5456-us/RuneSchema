@@ -19,13 +19,14 @@ inline RuntimeHealth::LuaActivity Lua;
 inline RuntimeHealth::PlayTime Play;
 inline uint32_t CurrentPid=~uint32_t{},InventoryPid=~uint32_t{};
 inline double Next=0,EventWindow=0;inline unsigned EventCount=0,Suppressed=0;
-inline std::vector<RuntimeHealth::Event> PendingLogs;
+struct PendingLog {RuntimeHealth::Event Event;SYSTEMTIME Timestamp;};
+inline std::vector<PendingLog> PendingLogs;
 inline std::function<void(const RuntimeHealth::Event&)> OnEvent;
 inline std::string Status;
 inline bool InventoryReady=false;
-inline bool Write(const std::filesystem::path& root,const RuntimeHealth::Event& event){
+inline bool Write(const std::filesystem::path& root,const PendingLog& log){
     try{const auto path=DiagnosticLogPaths::Directory(root)/"RuneSchema.log";CacheBundleIO::Safe(path);
-        const auto& code=Diagnostics::Get(event.Code);SYSTEMTIME time{};GetSystemTime(&time);char stamp[48]{};
+        const auto& event=log.Event;const auto& code=Diagnostics::Get(event.Code);const auto& time=log.Timestamp;char stamp[48]{};
         std::snprintf(stamp,sizeof(stamp),"%04u-%02u-%02uT%02u:%02u:%02u.%03uZ",time.wYear,time.wMonth,time.wDay,time.wHour,time.wMinute,time.wSecond,time.wMilliseconds);
         auto message=event.Message.substr(0,2048);for(auto& c:message)if(c=='\r'||c=='\n'||c=='\0')c=' ';
         const std::string line="["+std::string(stamp)+"] [RuneSchema] ["+std::string(code.Severity)+"] ["+std::string(code.Code)+"] "+std::string(code.Title)+": "+message+"\n";
@@ -36,7 +37,8 @@ inline bool Write(const std::filesystem::path& root,const RuntimeHealth::Event& 
 inline void Emit(RuntimeHealth::Event event,double now=WindowsResourceSample::Now()){
     if(now-EventWindow>=5){EventWindow=now;EventCount=0;}
     if(EventCount>=8||PendingLogs.size()>=128){++Suppressed;return;}++EventCount;
-    if(OnEvent)OnEvent(event);PendingLogs.push_back(std::move(event));
+    SYSTEMTIME time{};GetSystemTime(&time);
+    if(OnEvent)OnEvent(event);PendingLogs.push_back({std::move(event),time});
 }
 inline void ObserveUE4SS(const std::string& line,bool live,const RuntimeHealth::Settings& settings){
     if(settings.UE4SS)if(auto event=Lua.Observe(line,WindowsResourceSample::Now(),live))Emit(std::move(*event));

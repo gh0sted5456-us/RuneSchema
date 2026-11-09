@@ -640,7 +640,7 @@ inline void PlacardTitle(const std::string& name,const ImVec2& min,const ImVec2&
 }
 // All item surfaces (browser, recipe nodes, creation slots, cart) share this
 // renderer. Compact cards keep the same artwork, title, badge and border rules.
-inline void DrawPlacard(const json& row,const ImVec2& min,const ImVec2& max,bool selected=false,bool hovered=false,float footerLeftInset=0) {
+inline void DrawPlacard(const json& row,const ImVec2& min,const ImVec2& max,bool selected=false,bool hovered=false,float footerLeftInset=0,bool controllerFocused=false) {
     const auto& theme=HelpyImGuiTheme::Current;auto* draw=ImGui::GetWindowDrawList();
     const auto path=ItemPresentation::Text(row,"Path");const auto* details=ItemDetails::Find(path);
     const auto name=ItemPresentation::Name(row,HelpyImGuiTheme::Current.itemInternalNames);
@@ -658,7 +658,7 @@ inline void DrawPlacard(const json& row,const ImVec2& min,const ImVec2& max,bool
     const auto border=masterwork?HelpyImGuiTheme::Mix(theme.border,theme.accentHover,0.42f):theme.border;
     draw->AddRectFilled(min,max,ImGui::GetColorU32(HelpyImGuiTheme::Mix(selected?theme.selection:theme.panelAlt,theme.controlHover,fade*0.7f)),theme.X(theme.childRounding));
     const auto& item=ImGui::GetCurrentContext()->LastItemData;
-    const bool focused=ImGui::IsItemFocused()&&ImGui::GetIO().NavVisible&&item.Rect.Min.x==min.x&&item.Rect.Min.y==min.y&&item.Rect.Max.x==max.x&&item.Rect.Max.y==max.y;
+    const bool focused=controllerFocused||(ImGui::IsItemFocused()&&ImGui::GetIO().NavVisible&&item.Rect.Min.x==min.x&&item.Rect.Min.y==min.y&&item.Rect.Max.x==max.x&&item.Rect.Max.y==max.y);
     HelpyFocusHighlight::Draw(draw,min,max,ImGui::GetColorU32(focused?theme.accent:selected?theme.accentHover:HelpyImGuiTheme::Mix(border,theme.accent,fade*0.75f)),theme.X(theme.childRounding),focused,theme.X(selected?2.0f:1.0f));
     const float extent=std::max(1.0f,std::min({theme.Y(theme.gridIconSize),width-theme.X(20),height-footer-theme.Y(12)}));
     const ImVec2 artMin(compact?min.x+theme.X(6):min.x+(width-extent)*0.5f,min.y+(height-footer-extent)*0.5f),artMax(artMin.x+extent,artMin.y+extent);
@@ -937,7 +937,8 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
 #if defined(HELPY_PREVIEW)
                         HelpyPreviewHooks::ItemFocus[path]={ImGui::GetItemID(),ImGui::GetCurrentWindow()->ID};
 #endif
-                        DrawPlacard(row,cardMin,cardMax,selectedThis,ImGui::IsItemHovered()||ImGui::IsItemFocused(),quickActions&&allowMulti?ImGui::GetFrameHeight()+theme.X(12):0.f);
+                        const bool controllerFocused=fits&&ImGui::IsItemFocused()&&HelpyControllerInput::Selection.Controller&&!HelpyControllerInput::PointerMode;
+                        DrawPlacard(row,cardMin,cardMax,selectedThis,ImGui::IsItemHovered()||ImGui::IsItemFocused(),quickActions&&allowMulti?ImGui::GetFrameHeight()+theme.X(12):0.f,controllerFocused);
                         const bool check=quickActions&&allowMulti&&SelectionCheck({cardMin.x+theme.X(6),cardMax.y-theme.Y(42)+std::max(0.f,(theme.Y(42)-ImGui::GetFrameHeight())*.5f)},selectedThis);
                         if(clicked&&fits){const bool additive=ImGui::GetIO().KeyCtrl||ImGui::GetIO().KeyShift||state.MultiSelect||check||(quickActions&&allowMulti&&ControllerConfirm());if(ApplySelection(state,path,selected,selectedCapacity,additive,allowMulti,&row,!(quickActions&&allowMulti&&additive))){out.Changed=true;}}
                         if(fits)DragItem(row,quickActions&&allowMulti?&state.SelectedPaths:nullptr);

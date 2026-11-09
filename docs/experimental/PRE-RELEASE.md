@@ -78,6 +78,13 @@ These changes are available in the candidate and await stable promotion.
 [Detailed development history](CHANGELOG-0.8.1.0.md) retains the individual changes
 and earlier test-stage notes.
 
+## Controller and schema follow-up
+
+The pre-release source includes fixes for desktop overlay input, controller
+navigation, Mod Menu 2 discovery, and session diagnostics and shutdown. See the
+[follow-up changelog](CHANGELOG-0.8.1.0.md#2026-11-08-controller-and-schema-follow-up)
+for the specific changes. The complete download above is the November 8 package.
+
 ## Testing and feedback
 
 Rendered checks cover three window sizes and all 32 atlas views. Six focused

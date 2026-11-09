@@ -551,7 +551,7 @@ inline bool SearchIconButton(const char* id,float logicalSize=0.0f) {
 }
 
 inline bool ControllerNavigation=false,EnterNextSection=false;
-struct PaneNavigationScope {ImGuiWindow* Source=nullptr;ImGuiNavItemData Saved;bool Section=false;};
+struct PaneNavigationScope {ImGuiWindow* Source=nullptr;ImGuiNavItemData Saved;bool Section=false;ImGuiWindow* PreviousFocus=nullptr;};
 inline std::vector<PaneNavigationScope> PaneNavigationStack;
 inline ImGuiContext* PaneNavigationContext=nullptr;inline int PaneNavigationFrame=-1;
 inline ImGuiWindow* PaneNavigationSource=nullptr;inline ImGuiNavItemData PaneNavigationBest;
@@ -563,7 +563,10 @@ inline bool BeginPanel(const char* id,const ImVec2& size=ImVec2(0,0),ImGuiChildF
     const bool visible=ImGui::BeginChild(id,size,contained?childFlags:childFlags|ImGuiChildFlags_NavFlattened,windowFlags);
     PaneNavigationScope scope;scope.Section=contained;auto* window=ImGui::GetCurrentWindow();
     if(contained&&visible)HelpyControllerPanes::Register(window);
-    if(contained&&EnterNextSection){EnterNextSection=false;ImGui::FocusWindow(window);ImGui::NavInitWindow(window,false);ImGui::SetNavCursorVisible(true);}
+    if(contained&&EnterNextSection){
+        EnterNextSection=false;scope.PreviousFocus=context.NavWindow;
+        ImGui::FocusWindow(window);ImGui::NavInitWindow(window,false);ImGui::SetNavCursorVisible(true);
+    }
     if(context.NavWindow&&window->RootWindowForNav==context.NavWindow->RootWindowForNav&&window!=context.NavWindow&&context.NavMoveScoringItems&&!(context.NavMoveFlags&(ImGuiNavMoveFlags_IsTabbing|ImGuiNavMoveFlags_AlsoScoreVisibleSet))&&ImGui::IsWindowChildOf(window,context.NavWindow,false)){
         scope.Source=context.NavWindow;scope.Saved=context.NavMoveResultOther;context.NavMoveResultOther.Clear();
     }
@@ -581,7 +584,12 @@ inline void EndPanel(){
         }
         if(Nearer(scope.Saved,context.NavMoveResultOther))context.NavMoveResultOther=scope.Saved;
     }
-    if(scope.Section&&context.NavWindow&&context.NavWindow->RootWindowForNav==ImGui::GetCurrentWindow()&&context.NavInputSource==ImGuiInputSource_Gamepad){const auto* window=ImGui::GetCurrentWindow();const auto a=window->Pos,b=ImVec2(a.x+window->Size.x,a.y+window->Size.y);HelpyFocusHighlight::Draw(window->DrawList,a,b,ImGui::GetColorU32(Current.accent),Current.X(Current.childRounding),false,Current.X(2));}
+    auto* pane=ImGui::GetCurrentWindow();
+    if(scope.PreviousFocus&&context.NavWindow==pane&&!pane->DC.NavLayersActiveMaskNext){
+        ImGui::FocusWindow(scope.PreviousFocus,ImGuiFocusRequestFlags_UnlessBelowModal);
+        ImGui::SetNavCursorVisible(true);
+    }
+    if(scope.Section&&context.NavWindow&&context.NavWindow->RootWindowForNav==pane&&context.NavInputSource==ImGuiInputSource_Gamepad){const auto* window=ImGui::GetCurrentWindow();const auto a=window->Pos,b=ImVec2(a.x+window->Size.x,a.y+window->Size.y);HelpyFocusHighlight::Draw(window->DrawList,a,b,ImGui::GetColorU32(Current.accent),Current.X(Current.childRounding),false,Current.X(2));}
     ImGui::EndChild();
 }
 inline bool BeginScroll(const char* id,const ImVec2& size=ImVec2(0,0),bool border=false,bool section=false) {

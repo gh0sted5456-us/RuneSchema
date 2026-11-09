@@ -11,8 +11,8 @@ int main(int argc,char** argv)try{
     AssignedRoot=root;OfflineEnvironment={{"ExternalDesktop",true}};
     PS::ConfigFiles::Write(root/"settings/settings.ini",PS::EncodeIniDocument(PS::SettingsDocument(PS::PSConfigSettings{})));
     const auto desktopArgs=PS::HelpyDesktopLaunch::Arguments(root,"steam",false);
-    const auto gameArgs=PS::HelpyDesktopLaunch::Arguments(root,"steam",true,true);
-    assert(!desktopArgs.contains(L"--game-started")&&gameArgs.contains(L"--game-started")&&gameArgs.contains(L"--start-hidden"));
+    const auto gameArgs=PS::HelpyDesktopLaunch::Arguments(root,"steam",true,321);
+    assert(!desktopArgs.contains(L"--game-pid")&&gameArgs.contains(L"--game-pid 321")&&gameArgs.contains(L"--start-hidden"));
     auto before=PS::RuneSchemaSettingsEditor::Read(root/"settings");
     auto request=Json{{"Action","SettingsSave"},{"ExpectedContents",before.at("ExpectedContents")},{"Patch",{{"/helpyHotkey","F4"}}}};
     uint32_t size=0;auto input=request.dump();

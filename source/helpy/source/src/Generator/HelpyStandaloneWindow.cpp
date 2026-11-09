@@ -1,5 +1,6 @@
 #include "Core/ProcessExitFuture.h"
 #include "Generator/HelpyStandaloneWindow.h"
+#include "Runtime/HelpyGuideReservation.h"
 #include "Runtime/HelpyModManager.h"
 #include <optional>
 #include "Generator/HelpyImGuiTheme.h"
@@ -54,6 +55,7 @@
 #include "Generator/LiveLogPanel.h"
 #include "Generator/DiagnosticsPanel.h"
 #include "Generator/StructuredLogFeed.h"
+#include "Core/DiagnosticSession.h"
 #include "Generator/HelpyDiagnosticOverlay.h"
 #include "Generator/ModsPanel.h"
 #include "Generator/NotificationsPanel.h"
@@ -473,7 +475,7 @@ bool NavItem(Page page,const HelpyImGuiTheme::Theme& t,const std::vector<int>& s
     }return clicked;
 }
 
-void RenderWorkspaceTabs(const HelpyImGuiTheme::Theme& t){
+void RenderWorkspaceTabs(const HelpyImGuiTheme::Theme& t,bool arriving){
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::WorkspaceTabs.clear();
 #endif
@@ -486,7 +488,13 @@ void RenderWorkspaceTabs(const HelpyImGuiTheme::Theme& t){
     const auto tab=[&](Page page){
         if(!HelpyNavigation::Available(page,t.workspaces,HelpyEnvironment::Server()))return;
         const auto label=HelpyNavigation::TabTitle(page);
-        const bool clicked=HelpyMenu::Tab(label,CurrentPage==page,used,width);
+        bool down=false;
+        const bool map=page==Page::Map&&!DetachedWorkspaces[0];
+        const bool clicked=HelpyMenu::Tab(label,CurrentPage==page,used,width,map?&down:nullptr,arriving);
+        if(down){
+            MapPanel::FocusCanvas=true;
+            CurrentPage=page;
+        }
 #if defined(HELPY_PREVIEW)
         HelpyPreviewHooks::WorkspaceTabs[label]=HelpyPreviewHooks::LastRect();
 #endif
@@ -830,7 +838,8 @@ void RenderHome(const HelpyImGuiTheme::Theme& theme){
         PreviewHomeQuickPopup=HelpyPreviewHooks::WindowRect();
 #endif
         ImGui::Separator();
-        if(HelpyImGuiTheme::SoftButton("Close",{ImGui::GetContentRegionAvail().x,0}))ImGui::CloseCurrentPopup();
+        const bool back=!HelpyMenu::WidgetActiveAtFrameStart&&HelpyMenu::PopupDepthAtFrameStart==1&&ImGui::GetCurrentContext()->OpenPopupStack.Size==1&&ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight,false);
+        if(HelpyImGuiTheme::SoftButton("Close",{ImGui::GetContentRegionAvail().x,0})||back)ImGui::CloseCurrentPopup();
 #if defined(HELPY_PREVIEW)
         HelpyPreviewHooks::AuthoringButtons["Close quick settings"]=HelpyPreviewHooks::LastRect();
 #endif
@@ -2004,12 +2013,13 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
     HelpyImGuiTheme::BeginPanel("##helpy-content",ImVec2(0,0),false,ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse);
     static std::optional<Page> navigationPage;static bool navigationPending=false;
     if(navigationPage!=CurrentPage){navigationPage=CurrentPage;navigationPending=true;}
-    if(CurrentPage!=Page::Home&&navigationPending&&HelpyControllerInput::Selection.Controller&&!ImGui::IsAnyItemActive()&&!ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId)){
+    const bool controllerArrival=navigationPending&&HelpyControllerInput::Selection.Controller;
+    if(CurrentPage!=Page::Home&&controllerArrival&&!ImGui::IsAnyItemActive()&&!ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId)){
         auto* window=ImGui::GetCurrentWindow();ImGui::FocusWindow(window,ImGuiFocusRequestFlags_UnlessBelowModal);
         if(ImGui::GetCurrentContext()->NavWindow==window){ImGui::NavInitWindow(window,true);ImGui::SetNavCursorVisible(true);navigationPending=false;}
     }
     RenderInformationBar(t,false);
-    RenderWorkspaceTabs(t);
+    RenderWorkspaceTabs(t,controllerArrival&&!navigationPending);
     static HelpyUiMotion::PageFade pageFade;
     float pageAlpha=pageFade.Alpha(static_cast<int>(CurrentPage),ImGui::GetTime(),ClientAreaAnimations!=FALSE);
 #if defined(HELPY_PREVIEW)
@@ -2071,7 +2081,9 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
                     ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Spawns"))CurrentPage=Page::Spawns;
                     ServerControlPanel::Render([]{RenderServerAccess(HelpyEnvironment::Server()||RuntimeConnectionPanel::Read().Host);});
                     break;
-                case Page::Settings:RenderSettingsPage(t);break;
+                case Page::Settings:
+                    if(controllerArrival&&!navigationPending)HelpyControllerInput::EnterSection();
+                    RenderSettingsPage(t);break;
                 case Page::Authoring:AuthoringPanel::SessionTools=[] {SpawnToolsPanel::RenderSessionCleanup();};AuthoringPanel::OpenSpawns=[] {CurrentPage=Page::Spawns;};AuthoringPanel::Render();break;
                 case Page::Spawns:{
 #if defined(HELPY_PREVIEW)
@@ -2103,10 +2115,11 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
                         HelpyPreviewHooks::MenuTabs["cache-return"]=HelpyPreviewHooks::LastRect();
 #endif
                     }
+                    if(controllerArrival&&!navigationPending&&!ImGui::GetCurrentContext()->NavId)HelpyControllerInput::EnterSection();
                     HelpyMenu::Categories("utilities",labels,section);CurrentTool=routes[section];
                     auto surface=t.panel;surface.w=std::max(.94f,surface.w);ImGui::PushStyleColor(ImGuiCol_ChildBg,surface);
                     ImGui::PushID(section);
-                    const bool details=HelpyImGuiTheme::BeginPanel("##tool-details",{0,0},true,ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse,true);
+                    const bool details=HelpyImGuiTheme::BeginPanel("##tool-details",{0,0},true,ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse);
                     if(details&&HelpyMenu::BeginBody("Utility body",section))switch(CurrentTool){
                     case Tool::CacheBuilder:
                         RenderAuthorToolsDownload();
@@ -2265,6 +2278,15 @@ void HelpyStandaloneWindow::ThreadMain() {
     WNDCLASSEXW wc{sizeof(wc),CS_CLASSDC,WndProc,0,0,m_module,nullptr,LoadCursorW(nullptr,IDC_ARROW),nullptr,nullptr,L"RuneSchema.Helpy.Window",nullptr};
     wc.hIcon=static_cast<HICON>(LoadImageW(m_module,MAKEINTRESOURCEW(IDI_RSMK),IMAGE_ICON,32,32,LR_SHARED));
     wc.hIconSm=static_cast<HICON>(LoadImageW(m_module,MAKEINTRESOURCEW(IDI_RSMK),IMAGE_ICON,16,16,LR_SHARED));
+    std::string diagnosticStart;
+    DWORD diagnosticPid=0;
+    uint64_t nextDiagnosticAttach=0;
+    const auto diagnosticOwner=[](){
+        return PluginRuntimeServices::ExternalDesktop?PluginRuntimeServices::GameProcessId.load():GetCurrentProcessId();
+    };
+    const auto currentDiagnostic=[&](std::string_view record){
+        return diagnosticPid&&diagnosticPid==diagnosticOwner()&&DiagnosticSession::Includes(diagnosticStart,record);
+    };
     const auto cleanup=[&](void*){
         try{nlohmann::json ignored;if(RuneSchemaSettingsPanel::Remote)RuneSchemaSettingsPanel::Remote({{"Action","HelpyNativeOverlay"},{"Payload",{{"Action","GuideReservation"},{"Enabled",false}}}},ignored);}catch(...){}
         try{nlohmann::json ignored;if(RuneSchemaSettingsPanel::Remote)RuneSchemaSettingsPanel::Remote({{"Action","HelpyVisibility"},{"Visible",false}},ignored);}catch(...){}
@@ -2274,7 +2296,8 @@ void HelpyStandaloneWindow::ThreadMain() {
         ModMetadataPanel::Shutdown();
         ModSaveFilesPanel::Shutdown();
         ModMenu2Panel::Shutdown();
-        DiagnosticHistory.Queue(DiagnosticStore,true);DiagnosticHistory.Close();
+        if(!DiagnosticStore.Events().empty())DiagnosticHistory.Queue(DiagnosticStore,true);
+        DiagnosticHistory.Close();
         DiagnosticOverlay.Close();CoordinatesOverlay.Close();StartupOverlay.Close();HelpyCoordinates::Shutdown();HelpyStartupProgress::Shutdown();StructuredLogFeed::Shutdown();DiagnosticsPanel::Shutdown();
         LiveLogPanel::OnEntry={};LiveLogPanel::OnBackfillEntry={};LiveLogPanel::OnUE4SSEntry={};
         if(ImGui::GetCurrentContext()){
@@ -2327,23 +2350,35 @@ void HelpyStandaloneWindow::ThreadMain() {
     const auto lane=kind==HelpyEnvironment::Kind::Steam?"steam":kind==HelpyEnvironment::Kind::Epic?"epic":kind==HelpyEnvironment::Kind::GamePass?"gamepass":HelpyEnvironment::Server()?"server":"unknown";
     const auto diagnosticRoot=RuneSchemaData::PlatformDirectory(lane)/"diagnostics";
     const auto& diagnosticTheme=HelpyImGuiTheme::Current;
+    DiagnosticStore.Clear();DiagnosticFeed.Clear();
     DiagnosticHistory.Open(diagnosticRoot,{diagnosticTheme.diagnosticHistoryDays,diagnosticTheme.diagnosticHistorySessions,diagnosticTheme.diagnosticHistoryMB});
     DiagnosticMutes.Open(diagnosticRoot);
-    StructuredLogFeed::OnRecord=[](const StructuredDiagnostic::Record& record){
+    StructuredLogFeed::OnRecord=[&](const StructuredDiagnostic::Record& record){
+        if(!currentDiagnostic(record.Timestamp))return;
         if(record.Code==Diagnostics::Get(Diagnostics::Id::SlowWork).Code)HelpyRuntimeMonitor::SlowWork();
         const auto id=DiagnosticStore.AcceptStructured(record);if(!id)return;
         const auto* group=DiagnosticStore.FindGroup(id);if(!group||DiagnosticMutes.SuppressStructured(*group))return;
         auto toast=LiveLog::Parse(std::string("[RuneSchema] [")+(record.Severity=="Error"?"error":record.Severity=="Warning"?"warning":"info")+"] ["+record.Code+"] "+record.Title+": "+record.Message);
         toast.Scope=record.Source;DiagnosticFeed.Accept(toast,DiagnosticOptions());
     };
-    LiveLogPanel::OnBackfillEntry=[](const LiveLog::Entry& entry){DiagnosticStore.Accept(entry);};
-    LiveLogPanel::OnEntry=[](const LiveLog::Entry& entry){
+    LiveLogPanel::OnBackfillEntry=[&](const LiveLog::Entry& entry){
+        if(currentDiagnostic(entry.Text))DiagnosticStore.Accept(entry);
+    };
+    LiveLogPanel::OnEntry=[&](const LiveLog::Entry& entry){
+        if(!currentDiagnostic(entry.Text))return;
         if(entry.ReportedCode==Diagnostics::Get(Diagnostics::Id::SlowWork).Code)HelpyRuntimeMonitor::SlowWork();
         DiagnosticStore.Accept(entry);if(DiagnosticLegacyIntake::Eligible(entry)&&DiagnosticLegacyIntake::MirrorReference(entry).empty()&&!DiagnosticMutes.Suppress(entry))DiagnosticFeed.Accept(entry,DiagnosticOptions());
     };
     LiveLogPanel::OnUE4SSEntry=[](const LiveLog::Entry& entry,bool live){HelpyRuntimeMonitor::ObserveUE4SS(entry.Text,live,HealthSettings());};
-    HelpyRuntimeMonitor::OnEvent=[](const RuntimeHealth::Event& event){const auto& code=Diagnostics::Get(event.Code);
-        if(code.Severity=="info"){const auto entry=LiveLog::Parse("[RuneSchema] [info] ["+std::string(code.Code)+"] "+std::string(code.Title)+": "+event.Message);if(!DiagnosticMutes.Suppress(entry))DiagnosticFeed.Accept(entry,DiagnosticOptions());}};
+    HelpyRuntimeMonitor::OnEvent=[&](const RuntimeHealth::Event& event){
+        const auto& code=Diagnostics::Get(event.Code);
+        const bool offline=!diagnosticOwner();
+        if(offline||code.Severity=="info"){
+            const auto entry=LiveLog::Parse("[RuneSchema] ["+std::string(code.Severity)+"] ["+std::string(code.Code)+"] "+std::string(code.Title)+": "+event.Message);
+            if(offline)DiagnosticStore.Accept(entry);
+            if(!DiagnosticMutes.Suppress(entry))DiagnosticFeed.Accept(entry,DiagnosticOptions());
+        }
+    };
     m_ready=true;m_started=true;
     // Opt-in only, once after the renderer is ready. No recurring reopen or
     // game-thread polling; dedicated servers retain their existing entry page.
@@ -2357,6 +2392,8 @@ void HelpyStandaloneWindow::ThreadMain() {
     std::unique_ptr<void,decltype(closeTimer)> frameTimer(CreateWaitableTimerExW(nullptr,nullptr,CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,TIMER_MODIFY_STATE|SYNCHRONIZE),closeTimer);
     MSG msg{};bool done=false;HelpyFramePacing pacing;std::optional<bool> publishedVisibility,publishedCapture;
     uint64_t nextControllerShortcut=0,nextGuideReservation=0,nativeGuideUntil=0;uint32_t guidePid=~uint32_t{};bool previousGuide=false;
+    HelpyGuideReservation desktopGuide;
+    uint32_t desktopInputPid=0;uint64_t nextDesktopInput=0;
     const auto controllerAllowed=[&]{const auto focus=GetForegroundWindow();return HelpyPopupInput::CanToggle(GameWindow(focus),OwnsWindow(focus)||(m_nativeOverlay.Visible()&&focus==m_gameWindow));};
     const auto controllerToggle=[&]{HelpyControllerInput::ShortcutActivated=true;Toggle();};
     while(!done&&!m_stop.load()) {
@@ -2382,7 +2419,7 @@ void HelpyStandaloneWindow::ThreadMain() {
             if(msg.message==WM_QUIT){done=true;break;}
             if(msg.hwnd==nullptr&&msg.message==HelpyControllerShortcut::GuideMessage){
                 const auto now=GetTickCount64(),sent=uint64_t(msg.lParam);
-                if(uint32_t(msg.wParam)==PluginRuntimeServices::GameProcessId.load()&&sent<=now&&now-sent<=1000&&controllerAllowed()&&!HelpyBindingPicker::NativeGuide())nativeGuideUntil=now+120;
+                if((uint32_t(msg.wParam)==PluginRuntimeServices::GameProcessId.load()||(desktopGuide.Active()&&uint32_t(msg.wParam)==GetCurrentProcessId()))&&sent<=now&&now-sent<=1000&&controllerAllowed()&&!HelpyBindingPicker::NativeGuide())nativeGuideUntil=now+120;
                 continue;
             }
             if(msg.hwnd==nullptr&&msg.message==ToggleMessage) {
@@ -2427,8 +2464,26 @@ void HelpyStandaloneWindow::ThreadMain() {
         }
         HelpyBindingPicker::Tick(controllerAllowed());
         const auto shortcutPid=PluginRuntimeServices::GameProcessId.load();
+#if !defined(HELPY_PREVIEW)
+        const auto owner=diagnosticOwner();
+        if(!owner){diagnosticPid=0;nextDiagnosticAttach=0;}
+        else if(owner!=diagnosticPid&&shortcutNow>=nextDiagnosticAttach){
+            if(auto start=DiagnosticSession::ProcessStart(owner);!start.empty()){
+                diagnosticPid=owner;
+                if(start!=diagnosticStart){
+                    const bool haveHistory=!DiagnosticStore.Events().empty();
+                    if(haveHistory)DiagnosticHistory.Queue(DiagnosticStore,true);
+                    if(haveHistory||!diagnosticStart.empty())DiagnosticHistory.Open(diagnosticRoot,DiagnosticHistory.Limits());
+                    diagnosticStart=std::move(start);
+                    DiagnosticStore.Clear();DiagnosticFeed.Clear();DiagnosticMutes.ResetSession();
+                    LiveLogPanel::RestartRuneSchemaRead();StructuredLogFeed::Restart();
+                }
+            }else nextDiagnosticAttach=shortcutNow+1000;
+        }
+#endif
         const bool reserve=PluginRuntimeServices::ExternalDesktop&&!HelpyEnvironment::Server()&&shortcutPid&&(InputBindings::ParsePad(HelpyBindingActions::Controller())&InputBindings::Guide)&&shortcutTheme.reserveControllerGuide;
         if(guidePid!=shortcutPid||previousGuide!=reserve||(reserve&&shortcutNow>=nextGuideReservation)){
+            if(reserve)desktopGuide.Start(GetCurrentProcessId(),GetCurrentThreadId(),m_hwnd);else desktopGuide.Stop();
             guidePid=shortcutPid;previousGuide=reserve;nextGuideReservation=shortcutNow+2000;
             if(shortcutPid&&RuneSchemaSettingsPanel::Remote){
                 nlohmann::json reply;const bool ok=RuneSchemaSettingsPanel::Remote({{"Action","HelpyNativeOverlay"},{"Payload",{{"Action","GuideReservation"},{"Enabled",reserve},{"AppPid",GetCurrentProcessId()},{"Thread",GetCurrentThreadId()},{"Window",uint64_t(reinterpret_cast<uintptr_t>(m_hwnd))}}}},reply);
@@ -2455,7 +2510,18 @@ void HelpyStandaloneWindow::ThreadMain() {
         if(wasNative&&!m_nativeOverlay.Wanted()){const bool failed=m_nativeOverlay.Failed();const auto status=m_nativeOverlay.Status;ClosePopup();if(failed){SetError(status);PushToast("Overlay is unavailable: "+status+". Overlay mode is retained. Retry the shortcut, or choose Open as a separate window from the tray.",10.0);}}
         const bool renderable=m_visible.load()&&(m_nativeOverlay.Visible()||(!m_nativeOverlay.Wanted()&&!IsIconic(m_hwnd)&&IsWindowVisible(m_hwnd)));
         if(HelpyImGuiTheme::Current.gameOverlay||m_gameOverlay.Active())SyncGameOverlay();
-        const bool captureInput=renderable&&(m_nativeOverlay.Visible()||m_gameOverlay.Active());
+        const bool desktopOverlay=renderable&&m_gameOverlay.Active();
+        const bool captureInput=renderable&&(m_nativeOverlay.Visible()||desktopOverlay);
+        const auto desktopPid=desktopOverlay?shortcutPid:0;
+        if(desktopPid!=desktopInputPid||(desktopPid&&shortcutNow>=nextDesktopInput)){
+            if(shortcutPid&&RuneSchemaSettingsPanel::Remote){
+                nlohmann::json reply;
+                const auto payload=nlohmann::json{{"Action","DesktopInput"},{"Enabled",desktopPid!=0},{"AppPid",GetCurrentProcessId()},{"Window",uint64_t(reinterpret_cast<uintptr_t>(m_hwnd))}};
+                const bool accepted=RuneSchemaSettingsPanel::Remote({{"Action","HelpyNativeOverlay"},{"Payload",payload}},reply)&&reply.value("Accepted",false);
+                if(desktopPid&&!accepted&&!desktopInputPid)PushToast("Helpy could not reserve desktop overlay input. Check the installed RuneSchema HUD plugin.",6.0);
+            }
+            desktopInputPid=desktopPid;nextDesktopInput=shortcutNow+2000;
+        }
         if(publishedVisibility&&*publishedVisibility&&!renderable)HelpyControllerInput::Suspend();
         if(!publishedVisibility||*publishedVisibility!=renderable||!publishedCapture||*publishedCapture!=captureInput){
             publishedVisibility=renderable;publishedCapture=captureInput;nlohmann::json ignored;
@@ -2476,7 +2542,8 @@ void HelpyStandaloneWindow::ThreadMain() {
         const bool gameToasts=gameFocused&&!renderable;
         const bool diagnosticBackground=!renderable||CurrentPage!=Page::LiveLog;
         if(renderable||(gameToasts&&HelpyImGuiTheme::Current.diagnosticToastsEnabled)){
-            LiveLogPanel::Poll(0,diagnosticBackground);StructuredLogFeed::Poll(diagnosticBackground);
+            LiveLogPanel::Poll(0,diagnosticBackground);
+            if(diagnosticPid&&diagnosticPid==diagnosticOwner())StructuredLogFeed::Poll(diagnosticBackground);
         }
         DiagnosticFeed.Tick(DiagnosticOptions());DiagnosticHistory.Queue(DiagnosticStore);
         const auto& performance=HelpyImGuiTheme::Current;
@@ -3686,6 +3753,14 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 HelpyImGuiTheme::Current.showGameFps=overlayBefore;
                 click(Hooks::AuthoringButtons.at("Close quick settings"));
                 if(ImGui::IsPopupOpen("Home quick settings",ImGuiPopupFlags_AnyPopupId))throw std::runtime_error("Quick settings panel did not close");
+                click(PreviewHomeQuick);
+                {const auto read=HelpyControllerInput::DeviceRead;const auto mode=HelpyImGuiTheme::Current.inputMode;
+                    HelpyImGuiTheme::Current.inputMode=2;HelpyControllerInput::DeviceRead=+[](bool){return HelpyControllerInput::PreviewReading;};
+                    Hooks::MouseEnabled=false;HelpyControllerInput::PreviewReading={true,{},HelpyControllerDevice::Xbox};RenderFrame();
+                    HelpyControllerInput::PreviewReading.Pad.wButtons=XINPUT_GAMEPAD_B;RenderFrame();
+                    HelpyControllerInput::PreviewReading={};HelpyControllerInput::DeviceRead=read;HelpyImGuiTheme::Current.inputMode=mode;RenderFrame();
+                    if(ImGui::IsPopupOpen("Home quick settings",ImGuiPopupFlags_AnyPopupId))throw std::runtime_error("Controller Back did not close Quick settings");
+                }
                 HelpyImGuiTheme::Current.showFps=true;HelpyPerformance::Next={};
                 PreviewCapture=output/"helpy-fps.png";RenderFrame();PreviewCapture.clear();
                 if(HelpyPerformance::GameFps!=60.0)throw std::runtime_error("FPS counter did not read the cached game sample");
@@ -3936,6 +4011,10 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 if(authoringFixture.Last["Operation"]!="AssetSearch"||authoringFixture.Last["Arguments"]["Query"]!="iron ore"||AuthoringClient::Result("AssetSearch")["AssetMatches"].size()!=1)throw std::runtime_error("Authoring search wire failed");
                 if(width>=1200&&height>=850){
                     click("Asset:/Preview/Items/IronOre.IronOre");if(AuthoringPanel::Entry.empty())throw std::runtime_error("Asset selection did not capture fields");
+                    // Theme and viewport changes can leave this control submitted but clipped.
+                    for(auto* window:ImGui::GetCurrentContext()->Windows)if(window->Active&&std::strstr(window->Name,"Authoring body")){
+                        const auto r=Hooks::AuthoringButtons.at("Build preview");ImGui::ScrollToRectEx(window,{{r.x,r.y},{r.z,r.w}},ImGuiScrollFlags_KeepVisibleEdgeY);RenderFrame();break;
+                    }
                     AuthoringPanel::Copy(AuthoringPanel::Fields,sizeof(AuthoringPanel::Fields),"{");click("Build preview");
                     if(AuthoringClient::Error.empty()||!PageErrors[static_cast<size_t>(Page::Authoring)].empty())throw std::runtime_error("Malformed draft did not stay inside the authoring form. Local error: "+AuthoringClient::Error+"; page error: "+PageErrors[static_cast<size_t>(Page::Authoring)]);
                     AuthoringPanel::Copy(AuthoringPanel::Fields,sizeof(AuthoringPanel::Fields),"{\"PowerLevel\":9}");click("Build preview");
@@ -4769,8 +4848,14 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                     };
                     for(const auto page:HelpyNavigation::Pages){
                         if(page==Page::Home||!HelpyNavigation::Available(page,HelpyImGuiTheme::Current.workspaces,HelpyEnvironment::Server()))continue;
-                        routeTrace.clear();CurrentPage=Page::Home;frame();ImGui::ClearActiveID();CurrentPage=page;frame();frame();frame();
-                        for(int step=0;step<24&&!insideContent();++step)press(categoryFocused()||sectionEntryFocused()?XINPUT_GAMEPAD_A:XINPUT_GAMEPAD_DPAD_DOWN);
+                        routeTrace.clear();CurrentPage=Page::Home;frame();ImGui::ClearActiveID();
+                        if(page==Page::Mods)ModsPanel::Tab=0;
+                        CurrentPage=page;frame();frame();frame();
+                        for(int step=0;step<24&&!insideContent();++step){
+                            const auto firstMod=HelpyPreviewHooks::MenuFocus.find("mod-manager-sections/RuneSchema mods");
+                            if(page==Page::Mods&&categoryFocused()&&firstMod!=HelpyPreviewHooks::MenuFocus.end()&&GImGui->NavId!=firstMod->second.first)press(XINPUT_GAMEPAD_DPAD_UP);
+                            else press(categoryFocused()||sectionEntryFocused()?XINPUT_GAMEPAD_A:XINPUT_GAMEPAD_DPAD_DOWN);
+                        }
                         if(!insideContent()){
                             CapturePreview(m_device,m_context,m_swapChain,output/"controller-pane-failure.png");
                             std::ofstream debug(output/"controller-pane-debug.txt");debug<<routeTrace;
@@ -4793,6 +4878,9 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                     if(!ItemGridPicker::IsSelected(ItemGridPicker::Bay.Picker,item.first))throw std::runtime_error("Controller confirm did not select the Item Bay card");
                     press(XINPUT_GAMEPAD_A);if(ItemGridPicker::IsSelected(ItemGridPicker::Bay.Picker,item.first))throw std::runtime_error("Controller confirm did not deselect the Item Bay card");
                     ItemGridPicker::Bay.Picker.MultiSelect=savedMulti;
+                    CurrentPage=Page::Tools;frame();frame();
+                    for(int attempt=0;attempt<5&&(!GImGui->NavWindow||!std::strstr(GImGui->NavWindow->Name,"/utilities_"));++attempt)press(XINPUT_GAMEPAD_LEFT_SHOULDER);
+                    if(!GImGui->NavWindow||!std::strstr(GImGui->NavWindow->Name,"/utilities_"))throw std::runtime_error("Controller could not reach the Tools categories with a bumper");
                     const auto oldSettingsCategory=SettingsCategory;
                     constexpr std::array settingsLabels{"Helpy","Server access","RuneSchema","Appearance","Diagnostics","Backgrounds","Updates & runtime","Workspaces"};
                     CurrentPage=Page::Settings;
@@ -4806,6 +4894,11 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                         if(!nav.NavId||!nav.NavIdIsAlive||!nav.NavWindow||!std::strstr(nav.NavWindow->Name,"##settings-details"))throw std::runtime_error("Controller is stuck entering Settings: "+std::string(settingsLabels[category])+" window="+(nav.NavWindow?nav.NavWindow->Name:"none"));
                     }
                     SettingsCategory=0;RuneSchemaSettingsPanel::QuickSection=3;ImGui::ClearActiveID();frame();frame();
+                    {const auto focus=HelpyPreviewHooks::MenuFocus.at("helpy-settings/Performance");auto* window=ImGui::FindWindowByID(focus.second);
+                        ImGui::FocusWindow(window);ImGui::SetFocusID(focus.first,window);frame();
+                        press(XINPUT_GAMEPAD_DPAD_LEFT);if(RuneSchemaSettingsPanel::QuickSection!=2)throw std::runtime_error("Settings D-pad Left did not select Cache");
+                        press(XINPUT_GAMEPAD_DPAD_RIGHT);if(RuneSchemaSettingsPanel::QuickSection!=3)throw std::runtime_error("Settings D-pad Right did not return to Performance");
+                    }
                     {const auto focus=HelpyPreviewHooks::MenuFocus.at("fps-limit");auto* window=ImGui::FindWindowByID(focus.second);const auto rect=HelpyPreviewHooks::AuthoringButtons.at("Helpy FPS limit");ImGui::FocusWindow(window);ImGui::SetFocusID(focus.first,window);window->NavRectRel[0]=ImRect({rect.x-window->Pos.x,rect.y-window->Pos.y},{rect.z-window->Pos.x,rect.w-window->Pos.y});press(XINPUT_GAMEPAD_A);
                         if(!ImGui::IsAnyItemActive())throw std::runtime_error("Controller did not enter the Settings slider");
                         m_visible=true;press(XINPUT_GAMEPAD_B);if(!m_visible.load())throw std::runtime_error("Cancelling a Settings slider hides Helpy instead of returning to navigation");m_visible=false;
@@ -4820,10 +4913,15 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                     press(XINPUT_GAMEPAD_A);if(!ItemGridPicker::Bay.Picker.SelectedPaths.empty())throw std::runtime_error("Controller confirm did not deselect the same item");press(XINPUT_GAMEPAD_A);
                     press(XINPUT_GAMEPAD_START);if(std::none_of(ItemGridPicker::SharedCart.Entries().begin(),ItemGridPicker::SharedCart.Entries().end(),[&](const auto& row){return row.Path==path;}))throw std::runtime_error("Controller Send to cart shortcut did not stage the selection");
                     if(!ItemGridPicker::Bay.Picker.SelectedPaths.empty())throw std::runtime_error("Controller Send to cart retained its old selection");
+                    if(auto* rows=GImGui->NavWindow;rows&&rows->ScrollMax.y>0){
+                        ImGui::SetScrollY(rows,0.f);frame();
+                        for(int step=0;step<10&&rows->Scroll.y==0;++step)press(XINPUT_GAMEPAD_DPAD_DOWN);
+                        if(rows->Scroll.y<=0||GImGui->NavWindow!=rows)throw std::runtime_error("Item Bay focus did not scroll the card grid");
+                    }
                     press(XINPUT_GAMEPAD_RIGHT_SHOULDER);if(!GImGui->NavWindow||!std::strstr(GImGui->NavWindow->Name,"##item-cart-dock"))throw std::runtime_error("Bumper did not move from Item Bay results to the cart");
                     PreviewCapture=output/"controller-pane-navigation.png";frame();PreviewCapture.clear();ItemGridPicker::ClearSharedCart();
                     CurrentPage=Page::Home;frame();CurrentPage=Page::Map;MapPanel::Data.Zoom=3;frame();frame();frame();
-                    for(int step=0;step<40&&ImGui::GetCurrentContext()->NavId!=HelpyPreviewHooks::MapCanvasID;++step)press(sectionEntryFocused()?XINPUT_GAMEPAD_A:XINPUT_GAMEPAD_DPAD_DOWN);
+                    press(XINPUT_GAMEPAD_DPAD_DOWN);
                     if(ImGui::GetCurrentContext()->NavId!=HelpyPreviewHooks::MapCanvasID)throw std::runtime_error("Controller cannot navigate from World tabs into the map canvas");
                     const auto center=MapPanel::Data.Center;HelpyControllerInput::PreviewReading.Pad.sThumbLX=20000;frame();HelpyControllerInput::PreviewReading.Pad={};frame();
                     if(MapPanel::Data.Center.X==center.X)throw std::runtime_error("Naturally focused map cannot pan with the controller");
@@ -5060,7 +5158,11 @@ void HelpyStandaloneWindow::RenderFrame() {
     HelpyImGuiTheme::OverlayRenderScale=(native||m_gameOverlay.Active())?HelpyImGuiTheme::Current.overlayUiScale:1.f;
     ImGui::GetIO().MouseDrawCursor=native&&!m_nativeOverlay.HardwareCursor();
     ImGui_ImplDX11_NewFrame();ImGui_ImplWin32_NewFrame();auto& frameIo=ImGui::GetIO();const auto& t=HelpyImGuiTheme::Current;SelectUiFontFamily(t.fontFamily);frameIo.FontDefault=UiRegularFont;frameIo.FontGlobalScale=std::clamp(t.Scale()*t.fontScale,0.50f,4.00f);
-    const bool controllerFocused=native?GetForegroundWindow()==m_nativeOverlay.GameWindow():OwnsWindow(GetForegroundWindow());
+    const auto foreground=GetForegroundWindow();
+    const bool controllerFocused=native?foreground==m_nativeOverlay.GameWindow():OwnsWindow(foreground)||(m_gameOverlay.Active()&&GameWindow(foreground));
+#if !defined(HELPY_PREVIEW)
+    if(native||m_gameOverlay.Active())frameIo.AddFocusEvent(controllerFocused);
+#endif
     const bool pointerInteractive=m_visible.load()&&t.inputMode!=1&&controllerFocused&&!HelpyBindingPicker::Recording();
     if(native){auto* page=m_nativeOverlay.Page();HelpyOverlayInput::Feed(*page,m_nativeOverlay.GameWindow());frameIo.DisplaySize={float(page->Width),float(page->Height)};frameIo.DisplayFramebufferScale={1,1};const auto pad=HelpyOverlayInput::FreshPad(*page);
 #if defined(HELPY_PREVIEW)
@@ -5092,7 +5194,7 @@ void HelpyStandaloneWindow::RenderFrame() {
 #endif
     const auto touchPointer=HelpyControllerInput::UpdatePointer(t.controllerTouchpad&&pointerInteractive,t.controllerCursor&&pointerInteractive);
 #if !defined(HELPY_PREVIEW)
-    if(touchPointer&&controllerFocused&&(native?GetForegroundWindow()==m_nativeOverlay.GameWindow():OwnsWindow(GetForegroundWindow()))){
+    if(touchPointer&&controllerFocused&&GetForegroundWindow()==foreground){
         POINT point{LONG(touchPointer->x),LONG(touchPointer->y)};
         if(bayVisible||cacheVisible||std::any_of(workspaceVisible.begin(),workspaceVisible.end(),[](bool visible){return visible;})){point.x+=LONG(bayCanvas.X);point.y+=LONG(bayCanvas.Y);}
         else{
@@ -5104,7 +5206,7 @@ void HelpyStandaloneWindow::RenderFrame() {
 #endif
     const bool popupAtFrameStart=ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId);
     const int popupDepthAtFrameStart=ImGui::GetCurrentContext()->OpenPopupStack.Size;HelpyMenu::PopupDepthAtFrameStart=popupDepthAtFrameStart;
-    const bool activeAtFrameStart=ImGui::IsAnyItemActive();
+    const bool activeAtFrameStart=ImGui::IsAnyItemActive();HelpyMenu::WidgetActiveAtFrameStart=activeAtFrameStart;
     ImGui::NewFrame();HelpyControllerInput::Observe(t.inputMode);HelpyWikiIcons::Poll();
     if(!RuneSchemaProfile::Initialized)RuneSchemaProfile::Load(HostServices::StateDirectory());
     if(!HelpyPersonalization::Initialized)HelpyPersonalization::Load(RuneSchemaProfile::Ready?RuneSchemaProfile::Data("labels.json"):HostServices::StateDirectory()/"personalization.json");
@@ -5183,7 +5285,7 @@ void HelpyStandaloneWindow::RenderFrame() {
         if(controller){
             if(SplashEntered&&!popupAtFrameStart&&!activeAtFrameStart&&!ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId)&&!frameIo.WantTextInput&&!ImGui::GetDragDropPayload()){
                 const int direction=ImGui::IsAnyItemActive()?0:ImGui::IsKeyPressed(ImGuiKey_GamepadR2,false)?1:ImGui::IsKeyPressed(ImGuiKey_GamepadL2,false)?-1:0;
-                if(direction){const auto pages=HelpyNavigationOrder::WorkspacePages(t.workspaces,HelpyEnvironment::Server());if(!pages.empty()){auto found=std::find(pages.begin(),pages.end(),HelpyNavigation::Parent(CurrentPage));const auto at=found==pages.end()?(direction>0?-1:0):int(found-pages.begin());OpenSidebarPage(pages[(at+direction+int(pages.size()))%int(pages.size())],t);HelpyControllerInput::EnterSection();}}
+                if(direction){const auto pages=HelpyNavigationOrder::WorkspacePages(t.workspaces,HelpyEnvironment::Server());if(!pages.empty()){auto found=std::find(pages.begin(),pages.end(),HelpyNavigation::Parent(CurrentPage));const auto at=found==pages.end()?(direction>0?-1:0):int(found-pages.begin());OpenSidebarPage(pages[(at+direction+int(pages.size()))%int(pages.size())],t);}}
             }
         }
         if(workspaceFont)ImGui::PopFont();

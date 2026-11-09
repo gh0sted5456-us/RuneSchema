@@ -91,10 +91,10 @@ int main(){
         const auto folder=std::filesystem::temp_directory_path()/("helpy-diagnostic-sink-"+std::to_string(GetTickCount64()));std::filesystem::create_directories(folder/"Mods"/"RuneSchema");
         const auto root=folder/"Mods"/"RuneSchema";const auto original=PS::DiagnosticLogPaths::UseUE4SS;
         PS::DiagnosticLogPaths::UseUE4SS=false;
-        assert(PS::HelpyRuntimeMonitor::Write(root,{PS::Diagnostics::Id::PlayTimeReminder,"one\nline"}));
+        assert(PS::HelpyRuntimeMonitor::Write(root,{{PS::Diagnostics::Id::PlayTimeReminder,"one\nline"},{2026,11,0,8,11,22,33,123}}));
         std::ifstream input(root/"RuneSchema.log");const std::string contents((std::istreambuf_iterator<char>(input)),{});input.close();
-        assert(contents.find("[RS-PLAY-001]")!=std::string::npos&&contents.find("one line")!=std::string::npos&&!std::filesystem::exists(root/"UE4SS.log"));
-        PS::DiagnosticLogPaths::UseUE4SS=true;assert(PS::HelpyRuntimeMonitor::Write(root,{PS::Diagnostics::Id::ProcessCpuHigh,"sample"}));
+        assert(contents.starts_with("[2026-11-08T11:22:33.123Z]")&&contents.find("[RS-PLAY-001]")!=std::string::npos&&contents.find("one line")!=std::string::npos&&!std::filesystem::exists(root/"UE4SS.log"));
+        PS::DiagnosticLogPaths::UseUE4SS=true;assert(PS::HelpyRuntimeMonitor::Write(root,{{PS::Diagnostics::Id::ProcessCpuHigh,"sample"},{2026,11,0,8,11,22,33,123}}));
         assert(std::filesystem::exists(folder/"RuneSchema.log")&&!std::filesystem::exists(folder/"UE4SS.log"));
         PS::DiagnosticLogPaths::UseUE4SS=original;std::filesystem::remove_all(folder);
     }
@@ -106,6 +106,14 @@ int main(){
             assert(PS::MaskBufferedGameInput(true,120,100,20,count)==count);
             assert(PS::MaskBufferedGameInput(true,100,100,20,count)==(count==UINT(-1)?count:0));
         }
+        PS::HelpyXInputCapture capture;
+        XINPUT_STATE pad{17,{XINPUT_GAMEPAD_B,0,0,0,0,23000,0}};
+        capture.Apply(pad,true);assert(!pad.Gamepad.wButtons&&!pad.Gamepad.sThumbRX&&pad.dwPacketNumber!=17);
+        pad={18,{XINPUT_GAMEPAD_B|XINPUT_GAMEPAD_A,0,0,0,0,24000,0}};
+        capture.Apply(pad,false);assert(pad.Gamepad.wButtons==XINPUT_GAMEPAD_A&&!pad.Gamepad.sThumbRX);
+        pad={19,{}};capture.Apply(pad,false);
+        pad={20,{XINPUT_GAMEPAD_B,0,0,0,0,23000,0}};capture.Apply(pad,false);
+        assert(pad.Gamepad.wButtons==XINPUT_GAMEPAD_B&&pad.Gamepad.sThumbRX==23000&&pad.dwPacketNumber==20);
         for(const auto message:{WM_LBUTTONDBLCLK,WM_RBUTTONDBLCLK,WM_MBUTTONDBLCLK}){PS::HelpyOverlayFrames::Input event;assert(PS::HelpyOverlayFrames::WindowInput(message,0,0,event));assert(event.Kind==PS::HelpyOverlayFrames::InputKind::Button&&event.Code==(message==WM_LBUTTONDBLCLK?WM_LBUTTONDOWN:message==WM_RBUTTONDBLCLK?WM_RBUTTONDOWN:WM_MBUTTONDOWN));}}
     {PS::ItemGridPicker::State selected;char primary[1025]="/Game/Previous.Previous";selected.SelectedPath=primary;selected.SelectedRevision=123;
         for(unsigned i=0;i<64;++i){const std::string path="/Game/Selected"+std::to_string(i)+".Selected";const json row={{"Path",path},{"Name","Selected"}};assert(PS::ItemGridPicker::ApplySelection(selected,path,primary,sizeof(primary),true,true,&row,false));}

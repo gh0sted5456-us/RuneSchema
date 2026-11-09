@@ -171,8 +171,8 @@ inline void QuickSettings(){
     if(ImGui::RadioButton("Open window at startup",&startup,1))HelpySettings::SetOpenOnGameStart(true);
     hint("The app runs as its own process. The system tray is beside the Windows clock; use the tray icon or your Helpy shortcut to open it. Startup changes apply next game launch.\n"+HelpySettings::Message());
     ImGui::EndDisabled();
-    if(PluginRuntimeServices::ExternalDesktop){bool exit=HelpySettings::ExitWhenGameCloses();if(HelpyImGuiTheme::Toggle("Exit game-launched Helpy when the game closes",&exit))HelpySettings::SetBool("exitWithGame",exit);
-        hint("Applies immediately. Helpy exits fully when its attached game or dedicated server process ends. A temporary bridge disconnect does not close it; starting Helpy offline still works. Off by default.\n"+HelpySettings::Message());}
+    if(PluginRuntimeServices::ExternalDesktop){bool exit=HelpySettings::ExitWhenGameCloses();if(HelpyImGuiTheme::Toggle("Exit Helpy when the attached game closes",&exit))HelpySettings::SetBool("exitWithGame",exit);
+        hint("Applies immediately. Helpy exits fully when its attached game or dedicated server process ends. A temporary bridge disconnect does not close it; starting Helpy offline still works. On by default for new settings.\n"+HelpySettings::Message());}
     bool minimize=HelpySettings::CloseToTaskbar();if(HelpyImGuiTheme::Toggle("Close to system tray",&minimize))HelpySettings::SetBool("minimizeOnClose",minimize);
     hint("X and Alt+F4 return Helpy to the system tray when enabled, or exit it when disabled. Applies immediately.\n"+HelpySettings::Message());
     auto& controllerTheme=HelpyImGuiTheme::Current;
@@ -185,7 +185,7 @@ inline void QuickSettings(){
     ImGui::BeginDisabled(!(InputBindings::ParsePad(HelpyBindingActions::Controller())&InputBindings::Guide)||HelpyEnvironment::Server());
     controllerChanged|=HelpyImGuiTheme::Toggle("Reserve Guide button in game",&controllerTheme.reserveControllerGuide);
     ImGui::EndDisabled();
-    hint("Requests exclusive Guide input from Windows GameInput while Dragonwilds has focus. Released when Helpy exits or its five-second bridge lease expires. Steam can read controllers independently; this cannot guarantee a global Guide-button lock.");
+    hint("Requests exclusive Guide input from Windows GameInput while Dragonwilds or Helpy has focus. Released when Helpy exits or its five-second bridge lease expires. Steam can read controllers independently; this cannot guarantee a global Guide-button lock.");
     if(controllerChanged)HelpyImGuiTheme::SaveCurrent();
     if(InputBindings::ParsePad(HelpyBindingActions::Controller())&InputBindings::Guide){
         ImGui::TextWrapped("If Steam or Game Bar also opens, disable its Guide-button action or choose the View + Menu shortcut. Helpy does not change their settings.");

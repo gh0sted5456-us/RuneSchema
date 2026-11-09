@@ -27,7 +27,7 @@ tile. Mouse/keyboard mode keeps the normal **Enter** label.
 | --- | --- |
 | Left / right trigger | Previous / next main section |
 | Left / right bumper | Previous / next visible panel; restore its last focused control |
-| D-pad | Move focus within the highlighted panel |
+| D-pad | Move focus within the highlighted panel. Left and Right switch focused settings tabs. Down from a Map tab enters the canvas. |
 | Left stick | Scroll the focused panel or the panel under the pointer. Pan when the map canvas has focus. |
 | Bottom face button | Select or deselect an item; enter or activate a control |
 | Right face button | Back; close the current editor before returning to its parent |
@@ -86,9 +86,8 @@ game verification.
 
 ## Open and hide Helpy from the controller
 
-Open **Settings → Helpy → Startup → Controller shortcut**. The controller
-shortcut is independent of the normal keyboard shortcut; F2 remains available
-unless you have changed it.
+Open **Settings → Helpy → Startup → Helpy shortcut → Edit bindings**. You can
+set the keyboard and controller bindings independently. The keyboard default is F2.
 
 - **Xbox / PS / Home button** is the default. It uses the controller's Guide
   button to open or hide Helpy while the assigned game or Helpy has focus.
@@ -105,12 +104,12 @@ Helpy's existing window loop, at most once every 50 ms; they do not render the
 panel, search items or scan game objects.
 
 **Reserve Guide button in game** requests Windows GameInput's
-exclusive foreground Guide policy for Dragonwilds. It works independently of
+exclusive foreground Guide policy for Dragonwilds and Helpy. It works independently of
 the game's graphics API. The matching bridge forwards Guide presses to Helpy
 without requiring the panel to be open. A small lease renews every two seconds;
 the reservation is released when Helpy exits, when disabled, or within five
-seconds of lost bridge contact. Other game controls are not reserved by this
-setting. Missing GameInput support leaves the SDL shortcut and keyboard binding
+seconds of lost bridge contact. During an interactive desktop or native overlay,
+Helpy separately blocks the game's XInput controls. Missing GameInput support leaves the SDL shortcut and keyboard binding
 available; Settings shows the bridge status.
 
 This reservation applies to applications using **GameInput**. Steam can read

@@ -114,6 +114,8 @@ inline void Render(){
     ImGui::TextDisabled("Based off Maxxfilth's Mod Menu, adapted natively for RuneSchema");
     const Json empty=Json::array();const bool ready=HelpyFeatureSettings::Key&&Available;
     const auto& pages=ready&&Snapshot.contains("Pages")&&Snapshot["Pages"].is_array()?Snapshot["Pages"]:empty;
+    const auto warning=Snapshot.value("DiscoveryWarning",std::string{});
+    if(ready&&!warning.empty())ImGui::TextColored(theme.warning,"Some RuneSchema packages could not be scanned: %s",warning.c_str());
     static int selected=0,tab=0;std::vector<const char*> names;
     for(size_t i=0;i<pages.size();++i){names.push_back(pages[i].at("Name").get_ref<const std::string&>().c_str());if(!LicenseSelected&&pages[i].at("Id")==SelectedId)selected=int(i);}
     if(names.empty())names.push_back("Setup");

@@ -15,7 +15,7 @@ inline bool Enabled=true;
 inline bool AutoOpen=false;
 inline bool StartWithGame=true;
 inline bool MinimizeOnClose=true;
-inline bool ExitWithGame=false;
+inline bool ExitWithGame=true;
 inline std::atomic<int> Hotkey=HelpyShortcut::DefaultKey;
 inline std::atomic<std::shared_ptr<const InputBindings::Keys>> HotkeyChord=std::make_shared<const InputBindings::Keys>(InputBindings::Parse("F2"));
 inline void ApplyHotkey(std::string_view name){InputBindings::Keys keys;try{keys=InputBindings::Parse(name);}catch(const std::exception&){keys=InputBindings::Parse("F2");}Hotkey=InputBindings::Primary(keys);HotkeyChord.store(std::make_shared<const InputBindings::Keys>(std::move(keys)));}
@@ -27,7 +27,7 @@ inline std::filesystem::path File;
 inline nlohmann::json Document=nlohmann::json::object();
 inline void Configure(const std::filesystem::path& pluginRoot) {
     std::lock_guard lock(Mutex);
-    File=pluginRoot/"settings"/"settings.jsonc";Loaded=false;Writable=true;Enabled=true;AutoOpen=false;StartWithGame=true;MinimizeOnClose=true;ExitWithGame=false;ApplyHotkey("F2");ExpectedContents.clear();Status.clear();Document=nlohmann::json::object();
+    File=pluginRoot/"settings"/"settings.jsonc";Loaded=false;Writable=true;Enabled=true;AutoOpen=false;StartWithGame=true;MinimizeOnClose=true;ExitWithGame=true;ApplyHotkey("F2");ExpectedContents.clear();Status.clear();Document=nlohmann::json::object();
 }
 inline void EnsureLoaded() {
     std::lock_guard lock(Mutex);if(Loaded)return;Loaded=true;
@@ -40,7 +40,7 @@ inline void EnsureLoaded() {
         AutoOpen=Document.value("openOnGameStart",false);
         StartWithGame=Document.value("startWithGame",true);
         MinimizeOnClose=Document.value("minimizeOnClose",true);
-        ExitWithGame=Document.value("exitWithGame",false);
+        ExitWithGame=Document.value("exitWithGame",true);
         // Favorites are part of Helpy; the legacy opt-in field is ignored.
         // Old Canvas hotkey fields are ignored, not rewritten on every launch.
         // Desktop shortcut input belongs to the window, not to the game's viewport.

@@ -49,7 +49,7 @@ public:
                 for(;;){const auto now=GetTickCount64(),until=LeaseUntil.load();if(now>=until||WaitForMultipleObjects(2,handles,FALSE,DWORD(std::min<uint64_t>(1000,until-now)))!=WAIT_TIMEOUT)break;}
                 Enabled=false;Input->SetFocusPolicy(GameInputDefaultFocusPolicy);
             });
-            Status="Guide reserved for focused Dragonwilds in Windows GameInput. Steam may handle its controller independently.";return true;
+            Status="Windows GameInput Guide reservation is active while this app has focus. Steam and Game Bar can handle Guide independently.";return true;
         }catch(...){Stop();Status="Guide reservation unavailable; SDL shortcut remains available";return false;}
     }
 };

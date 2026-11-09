@@ -14,6 +14,18 @@ promote_to: CHANGELOG-0.8.1.0.md
     follow-ups below. Older entries retain their original test-stage wording;
     their historical “unpublished” labels are superseded by this dated package.
 
+## 2026-11-08 controller and schema follow-up
+
+- Capture controller input in the desktop overlay and wait for held controls to
+  release before returning them to the game. Recheck the controller after focus
+  returns. Steam and Game Bar can still handle Guide independently.
+- Make Settings tabs navigable with the D-pad, take focus directly to the map
+  canvas, and improve Tools, Item Bay and Quick Settings controller navigation.
+- Keep valid Mod Menu 2 pages visible when another UE4SS mod has a schema error,
+  and show that error on its own page. The separate Mod Menu remains exclusive.
+- Reset live diagnostics for each attached session. Helpy can exit when its
+  attached client or dedicated server closes. Existing preferences are retained.
+
 ## 2026-11-08 candidate refresh
 
 - Release nested allocations from temporary reflected map pairs and array

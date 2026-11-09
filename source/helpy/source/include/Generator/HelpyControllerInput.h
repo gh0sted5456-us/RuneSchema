@@ -13,7 +13,7 @@
 namespace PS::HelpyControllerInput {
 using StateFn=DWORD(WINAPI*)(DWORD,XINPUT_STATE*);using CapsFn=DWORD(WINAPI*)(DWORD,DWORD,XINPUT_CAPABILITIES*);
 inline HMODULE Library=nullptr;inline StateFn GetState=nullptr;inline CapsFn GetCaps=nullptr;
-inline bool Initialized=false,Refresh=true;inline unsigned Connected=0;inline int Slot=0;
+inline bool Initialized=false,Refresh=true;inline uint64_t NextXInputProbe=0;inline unsigned Connected=0;inline int Slot=0;
 inline HelpyInputMode::Selection Selection;
 inline HelpyControllerDevice::Labels ReportedGlyphs=HelpyControllerDevice::Xbox;
 inline bool JustActivated=false;
@@ -47,7 +47,7 @@ inline auto DeviceRead=&HelpyControllerDevice::Read;
 #if defined(HELPY_PREVIEW)
 inline HelpyControllerDevice::Reading PreviewReading;
 #endif
-inline void Changed(){Refresh=true;}
+inline void Changed(){Refresh=true;NextXInputProbe=0;}
 inline void Initialize(){if(Initialized)return;Initialized=true;Refresh=true;Library=LoadLibraryExW(L"xinput1_4.dll",nullptr,LOAD_LIBRARY_SEARCH_SYSTEM32);if(Library){GetState=reinterpret_cast<StateFn>(GetProcAddress(Library,"XInputGetState"));GetCaps=reinterpret_cast<CapsFn>(GetProcAddress(Library,"XInputGetCapabilities"));}}
 inline XINPUT_GAMEPAD PhysicalPad{};
 inline HelpyControllerBindings::Profile ActiveBindings=HelpyControllerBindings::Defaults();
@@ -75,13 +75,14 @@ inline void Feed(const XINPUT_GAMEPAD& physical){
 inline void Poll(int mode,const XINPUT_GAMEPAD* native=nullptr,bool pointerInteractive=true){
     PointerEnabled=mode!=1&&pointerInteractive;
     if(!PointerEnabled)PointerModeTo(false,HelpyControllerBindings::Apply(PhysicalPad,ActiveBindings).wButtons);
-    PointerReading={};auto& io=ImGui::GetIO();if(mode==1){Feed({});if(!KeepShortcuts)HelpyControllerDevice::Shutdown();io.ConfigFlags&=~ImGuiConfigFlags_NavEnableGamepad;io.BackendFlags&=~ImGuiBackendFlags_HasGamepad;return;}
+    PointerReading={};auto& io=ImGui::GetIO();if(mode==1){Feed({});io.ConfigFlags&=~ImGuiConfigFlags_NavEnableGamepad;io.BackendFlags&=~ImGuiBackendFlags_HasGamepad;return;}
     io.ConfigFlags|=ImGuiConfigFlags_NavEnableGamepad;
     const auto mapped=DeviceRead(Refresh);
     if(mapped.Connected){ControllerChanged(mapped.Id);PointerReading=mapped;ReportedGlyphs=mapped.Glyphs;Feed(mapped.Pad);Refresh=false;return;}
     ControllerChanged(0);
     if(native){Refresh=false;ReportedGlyphs=mapped.Connected?mapped.Glyphs:HelpyControllerDevice::Xbox;Feed(*native);return;}Initialize();
-    if(Refresh){Connected=0;if(GetCaps)for(unsigned i=0;i<4;++i){XINPUT_CAPABILITIES caps{};if(GetCaps(i,XINPUT_FLAG_GAMEPAD,&caps)==ERROR_SUCCESS)Connected|=1u<<i;}Refresh=false;for(int i=0;i<4;++i)if(Connected&(1u<<i)){Slot=i;break;}}
+    const auto now=GetTickCount64();
+    if(Refresh||(!Connected&&now>=NextXInputProbe)){NextXInputProbe=now+250;Connected=0;if(GetCaps)for(unsigned i=0;i<4;++i){XINPUT_CAPABILITIES caps{};if(GetCaps(i,XINPUT_FLAG_GAMEPAD,&caps)==ERROR_SUCCESS)Connected|=1u<<i;}Refresh=false;for(int i=0;i<4;++i)if(Connected&(1u<<i)){Slot=i;break;}}
     XINPUT_STATE chosen{};bool found=false;static std::array<XINPUT_GAMEPAD,4> prior{};
     for(int i=0;i<4;++i)if(Connected&(1u<<i)){XINPUT_STATE state{};
         if(!GetState||GetState(i,&state)!=ERROR_SUCCESS){Connected&=~(1u<<i);continue;}
@@ -185,7 +186,15 @@ inline void ResolvePaneNavigation(){
     auto& local=context.NavMoveResultLocal;const auto& other=HelpyImGuiTheme::PaneNavigationSource==context.NavWindow?HelpyImGuiTheme::PaneNavigationBest:context.NavMoveResultOther;
     // ImGui compares a direct flattened child; Helpy's content can be several panes deep.
     if(other.ID&&other.Window->RootWindowForNav==context.NavWindow->RootWindowForNav&&ImGui::IsWindowChildOf(other.Window,context.NavWindow,false)&&
-        (!local.ID||other.DistBox<local.DistBox||(other.DistBox==local.DistBox&&other.DistCenter<local.DistCenter)))local=other;
+        HelpyImGuiTheme::Nearer(other,local))local=other;
+    if(context.NavInputSource==ImGuiInputSource_Gamepad&&context.NavMoveDir==ImGuiDir_Down&&local.ID){
+        for(auto* pane:HelpyControllerPanes::Panes){
+            if(pane->ParentWindow!=local.Window||pane->ChildId!=local.ID||!pane->DC.NavLayersActiveMaskNext)continue;
+            HelpyControllerPanes::Pending=pane->ID;
+            HelpyControllerPanes::PendingFrame=context.FrameCount+1;
+            break;
+        }
+    }
 }
 inline bool DefaultFocus(bool arriving=false){
     auto& context=*ImGui::GetCurrentContext();auto* window=ImGui::GetCurrentWindow();
@@ -332,6 +341,6 @@ inline bool DrawPointer(){
 }
 inline void Suspend(){BlockedFaces|=HelpyControllerBindings::Apply(PhysicalPad,ActiveBindings).wButtons&(XINPUT_GAMEPAD_A|XINPUT_GAMEPAD_X);PointerModeTo(false);PointerEnabled=false;ControllerId=0;
     if(ImGui::GetCurrentContext()){auto& io=ImGui::GetIO();if(TouchMouseDown)io.AddMouseButtonEvent(ImGuiMouseButton_Left,false);if(TouchRightMouseDown)io.AddMouseButtonEvent(ImGuiMouseButton_Right,false);}TouchMouseDown=TouchRightMouseDown=false;
-    PointerReading={};TouchTap={};TouchTracking=false;TouchClickArmed=false;TouchRightArmed=false;TouchUsing=false;StickUsing=PointerUsing=StickClickArmed=StickWasDown=false;PointerUntil=0;PhysicalPad={};HelpyControllerPanes::Pending=0;if(!KeepShortcuts){HelpyControllerDevice::Shutdown();Refresh=true;}Connected=0;}
-inline void Shutdown(){KeepShortcuts=false;ShortcutActivated=false;Suspend();TouchMouseDown=TouchRightMouseDown=false;if(Library)FreeLibrary(Library);Library=nullptr;GetState=nullptr;GetCaps=nullptr;Initialized=false;}
+    PointerReading={};TouchTap={};TouchTracking=false;TouchClickArmed=false;TouchRightArmed=false;TouchUsing=false;StickUsing=PointerUsing=StickClickArmed=StickWasDown=false;PointerUntil=0;PhysicalPad={};HelpyControllerPanes::Pending=0;NextXInputProbe=0;Connected=0;}
+inline void Shutdown(){KeepShortcuts=false;ShortcutActivated=false;Suspend();HelpyControllerDevice::Shutdown();TouchMouseDown=TouchRightMouseDown=false;if(Library)FreeLibrary(Library);Library=nullptr;GetState=nullptr;GetCaps=nullptr;Initialized=false;}
 }

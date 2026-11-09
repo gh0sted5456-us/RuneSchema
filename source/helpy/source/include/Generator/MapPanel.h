@@ -654,6 +654,7 @@ inline std::optional<MapProjection::Point> AtlasPlayer(){
     return {};
 }
 
+inline bool FocusCanvas=false;
 inline void ApplyAtlasView(){
     const auto world=ItemPresentation::Text(Data.Snapshot,"World");
     const bool surface=world.empty()||world=="/Game/Maps/World/L_World"||world.starts_with("/Game/Maps/World/L_World.");
@@ -669,7 +670,7 @@ inline void ApplyAtlasView(){
         float used=0;
         ImGui::PushID("map-pages");
         for(const auto i:{MapAtlas::OverviewTab,MapAtlas::MainlandTab,MapAtlas::ScornedTab}){
-            if(HelpyMenu::Tab(MapAtlas::Title(i).data(),i==MapAtlas::PrimaryTab(tabs.Requested),used,width))choose(i);
+            if(HelpyMenu::Tab(MapAtlas::Title(i).data(),i==MapAtlas::PrimaryTab(tabs.Requested),used,width,&FocusCanvas))choose(i);
 #if defined(HELPY_PREVIEW)
             if(i==MapAtlas::OverviewTab)HelpyPreviewHooks::AtlasOverview=HelpyPreviewHooks::LastRect();
             if(i==MapAtlas::MainlandTab)HelpyPreviewHooks::AtlasMainland=HelpyPreviewHooks::LastRect();
@@ -916,6 +917,12 @@ inline void Render(){
     HelpyPreviewHooks::MapCanvasID=ImGui::GetItemID();HelpyPreviewHooks::MapCanvasWindow=ImGui::GetCurrentWindow()->ID;
 #endif
     HelpyControllerInput::NavigationCanvas=ImGui::GetItemID();
+    if(std::exchange(FocusCanvas,false)){
+        auto* window=ImGui::GetCurrentWindow();
+        ImGui::FocusWindow(window,ImGuiFocusRequestFlags_UnlessBelowModal);
+        ImGui::SetFocusID(HelpyControllerInput::NavigationCanvas,window);
+        ImGui::SetNavCursorVisible(true);ImGui::ScrollToItem();
+    }
     auto& io=ImGui::GetIO();const bool controllerMap=ImGui::IsItemFocused()&&HelpyControllerInput::Selection.Controller&&!HelpyControllerInput::PointerUsing;
     const bool hovered=ImGui::IsItemHovered()||controllerMap;const ImVec2 pointer=controllerMap?ImVec2(min.x+width*.5f,min.y+height*.5f):io.MousePos;
     if(controllerMap){

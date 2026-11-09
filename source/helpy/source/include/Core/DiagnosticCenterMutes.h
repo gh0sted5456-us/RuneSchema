@@ -50,6 +50,10 @@ public:
             }
         }catch(const std::exception& e){m_error=e.what();}
     }
+    void ResetSession(){
+        std::erase_if(m_rules,[](const Rule& rule){return rule.Lifetime==Duration::Session;});
+        for(auto& rule:m_rules)rule.Suppressed=0;
+    }
     const std::vector<Rule>& Rules()const{return m_rules;}
     const std::string& Error()const{return m_error;}
     bool Add(const DiagnosticCenterModel::Group& group,Scope kind,Duration duration){
