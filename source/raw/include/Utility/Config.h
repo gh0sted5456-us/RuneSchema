@@ -229,6 +229,7 @@ namespace PS {
         PSConfigSettings& GetMutableSettings();
 
         const PSConfigSettings& GetSettings() const;
+        std::string_view ItemDeliveryMode() const;
 
         bool Save();
         const std::string& GetStatus() const { return m_status; }

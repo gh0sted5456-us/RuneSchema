@@ -25,6 +25,9 @@ promote_to: CHANGELOG-0.8.1.0.md
   and show that error on its own page. The separate Mod Menu remains exclusive.
 - Reset live diagnostics for each attached session. Helpy can exit when its
   attached client or dedicated server closes. Existing preferences are retained.
+- Include experimental [Item Delivery](ITEM-DELIVERY.md) for host-configured items
+  from enabled mods. The core tracks deliveries by character and waits for a
+  matching save acknowledgement. Live grant and save verification are pending.
 
 ## 2026-11-08 candidate refresh
 

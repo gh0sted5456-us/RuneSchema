@@ -81,6 +81,9 @@ namespace PS {
 
     PSConfigSettings& PSConfig::GetMutableSettings() { return m_settings; }
     const PSConfigSettings& PSConfig::GetSettings() const { return m_settings; }
+    std::string_view PSConfig::ItemDeliveryMode() const {
+        return m_preserveOriginal?"off":DecodeItemDeliveryMode(m_configDocument);
+    }
 
     void PSConfig::Load()
     {

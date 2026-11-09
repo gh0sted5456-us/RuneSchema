@@ -334,7 +334,15 @@ inline void QuickSettings(){
 }
 inline void Field(const std::string& key,json& value,const std::string& path){
     ImGui::PushID(path.c_str());const auto label=path=="/persistence/cleanupOnWorldEntry"?std::string("Apply cleanup changes at next world entry"):Label(key);bool changed=false;
-    if(value.is_boolean()){bool v=value.get<bool>();if(HelpyImGuiTheme::Toggle(label.c_str(),&v)){value=v;changed=true;}}
+    if(path=="/itemDeliveryMode"){
+        constexpr std::array modes{"off","once","always"};
+        constexpr std::array choices{"Off","Deliver Once","Always Deliver"};
+        ImGui::TextUnformatted("Automatic item delivery");
+        for(std::size_t i=0;i<modes.size();++i)
+            if(ImGui::RadioButton(choices[i],value==modes[i])){value=modes[i];changed=true;}
+        ImGui::TextWrapped("The host delivers configured items from enabled RuneSchema mods after the character joins and inventory loads.");
+        ImGui::TextWrapped("Deliver Once tracks each item per character. Always Deliver repeats on a new join. A full inventory leaves items pending for the next join. Changes apply at game restart.");
+    }else if(value.is_boolean()){bool v=value.get<bool>();if(HelpyImGuiTheme::Toggle(label.c_str(),&v)){value=v;changed=true;}}
     else if(value.is_number_integer()||value.is_number_unsigned()){
         ImGui::TextWrapped("%s",label.c_str());int64_t v=value.get<int64_t>();ImGui::SetNextItemWidth(std::min(240.f,ImGui::GetContentRegionAvail().x));if(ImGui::InputScalar("##value",ImGuiDataType_S64,&v)){value=v;changed=true;}
     }else if(value.is_number()){ImGui::TextWrapped("%s",label.c_str());double v=value.get<double>();ImGui::SetNextItemWidth(std::min(240.f,ImGui::GetContentRegionAvail().x));if(ImGui::InputDouble("##value",&v)){value=v;changed=true;}}
@@ -367,13 +375,14 @@ inline int ConfigSection=0;
 inline int ConfigGroup(const std::string& key){
     const auto name=Lower(key);
     if(name=="persistence"||name=="quicklaunch"||name=="loadmode")return 1;
+    if(name=="itemdeliverymode")return 5;
     if(name.find("network")!=name.npos||name=="helpyauthority"||name.find("relay")!=name.npos)return 3;
     if(name.find("cache")!=name.npos||name.find("pak")!=name.npos||name.find("registry")!=name.npos||name=="autoupdatemappings")return 2;
     if(name=="enabled"||name=="helpyhotkey"||name=="advancedlogging"||name=="archivelogs")return 0;
     return 4;
 }
 inline void Render(){
-    constexpr std::array labels{"General","Saves","Content","Network","Advanced"};
+    constexpr std::array labels{"General","Saves","Content","Network","Advanced","Item Delivery"};
     HelpyMenu::Tabs("runeschema-settings",labels,ConfigSection);
     if(!Loaded&&Status.empty())Load();
     if(Loaded)Dirty=!Patch().empty();
@@ -410,6 +419,8 @@ inline void Render(){
         }
     };
     if(!filter.empty())ImGui::TextDisabled("Searching across every settings category");
+    if(ConfigSection==5&&filter.empty()&&!editable.contains("/itemDeliveryMode"))
+        ImGui::TextWrapped("Item Delivery requires a matching RuneSchema core build.");
     render(render,Draft,"");
     if(!Snapshot.value("Backup",std::string{}).empty())ImGui::TextWrapped("Backup: %s",Snapshot["Backup"].get_ref<const std::string&>().c_str());
     HelpyMenu::EndBody();

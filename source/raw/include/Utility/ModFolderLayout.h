@@ -162,6 +162,8 @@ inline bool LooksLikeRuneSchemaMod(const std::filesystem::path& folder) {
         current.increment(error);
     }
     if(error)return false;
+    const auto delivery=fs::symlink_status(folder/"item-delivery.json",error);
+    if(!error&&fs::is_regular_file(delivery))return true;
     std::error_code legacyError;
     return ContainsLegacyPakContent(folder,legacyError)&&!legacyError;
 }

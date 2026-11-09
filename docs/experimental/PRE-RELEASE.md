@@ -10,7 +10,7 @@ promote_to: RELEASE-0.8.1.0.md
     **0.8.1.0 prerelease** and have not been promoted to the stable guides.
 
 <div class="rs-actions">
-  <a class="md-button md-button--primary" href="https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0-pre.20261108/RuneSchema-0.8.1.0-complete-20261108.zip">Download complete 0.8.1.0</a>
+  <a class="md-button md-button--primary" href="https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0-pre.20261108.2/RuneSchema-0.8.1.0-complete-20261108.2.zip">Download complete 0.8.1.0</a>
   <a class="md-button" href="../INSTALLATION/">Installation</a>
 </div>
 
@@ -20,8 +20,8 @@ separately; preserve your settings, mods and saves when updating.
 
 ## Complete candidate refresh
 
-The complete 2026-11-08 package includes the updated core and Helpy, bundled
-plugins, and matching Lua adapters. See [`0.8.1.0-pre.20261108`](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0-pre.20261108)
+The complete November 8 follow-up includes the updated core and Helpy, bundled
+plugins, and matching Lua adapters. See [`0.8.1.0-pre.20261108.2`](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0-pre.20261108.2)
 for the ZIP and checksums. Earlier candidates remain available.
 
 - **Reflected values:** Temporary map entries and array elements now release
@@ -69,6 +69,7 @@ These changes are available in the candidate and await stable promotion.
 | [Controllers](CONTROLLER-NAVIGATION.md) | Xbox, PlayStation and Nintendo layouts, navigation, glyphs and controller shortcuts. |
 | [Item Bay](HELPY-STANDALONE.md#cache-updates-and-notifications) | Saved cache indexes for offline browsing, faster filtering, readable names, multi-selection and carts. |
 | [Mods and tools](MOD-METADATA-AND-CONTROLS.md) | Sequential cache builds, ID.txt editing, update fingerprints and opt-in UE4SS loader toggles. |
+| [Item Delivery](ITEM-DELIVERY.md) | Experimental host delivery from enabled mods, with per-character tracking and save acknowledgement. |
 | [Saves](SAVE-RECOVERY.md) | Targeted cleanup, AppData backups/recovery and readable cleanup notifications. World recovery remains opt-in. |
 | [Servers](SERVER-CONTROL.md) | Host/client mod comparisons, download links, PIN access, saved authorization and optional automatic authorization. |
 | [Diagnostics](NOTIFICATIONS-AND-HOTFIXES.md) | Cleanup notices, resource observations, play-time reminders and hotfix notifications. |
@@ -80,10 +81,10 @@ and earlier test-stage notes.
 
 ## Controller and schema follow-up
 
-The pre-release source includes fixes for desktop overlay input, controller
-navigation, Mod Menu 2 discovery, and session diagnostics and shutdown. See the
-[follow-up changelog](CHANGELOG-0.8.1.0.md#2026-11-08-controller-and-schema-follow-up)
-for the specific changes. The complete download above is the November 8 package.
+The follow-up runtime includes fixes for desktop overlay input, controller
+navigation, Mod Menu 2 discovery, and session diagnostics and shutdown. It also
+includes experimental [Item Delivery](ITEM-DELIVERY.md). See the
+[follow-up changelog](CHANGELOG-0.8.1.0.md#2026-11-08-controller-and-schema-follow-up).
 
 ## Testing and feedback
 
@@ -91,13 +92,13 @@ Rendered checks cover three window sizes and all 32 atlas views. Six focused
 core tests cover reflected cleanup and related journal and raw-table behavior.
 The core's UE4SS imports matched the checked Steam and Game Pass hosts. Live
 Rasthin's Rest arrival and the cleanup change remain to be verified in game.
-See the [release verification files](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0-pre.20261108)
+See the [release verification files](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0-pre.20261108.2)
 for checks and file hashes.
 
 Proton/Wine, every physical controller/driver and full multiplayer restart
 behavior still need live coverage. Mod Menu 2 is optional and key-gated;
-world recovery is experimental and off by default. Reported leftover Helpy
-processes remain under investigation. Use **Exit Helpy** before updating.
+world recovery is experimental and off by default. Item Delivery still needs
+live verification of grants and character save acknowledgement. Use **Exit Helpy** before updating.
 
 [Report a bug on Nexus](https://www.nexusmods.com/runescapedragonwilds/mods/570?tab=bugs)
 with the build, platform, reproduction and relevant diagnostic codes.

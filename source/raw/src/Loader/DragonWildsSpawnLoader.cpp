@@ -46,6 +46,10 @@
 #include "Loader/NiagaraAttachment.h"
 #include "Loader/Spawn/RuntimeSupport.h"
 #include "SDK/WeakObjectHandle.h"
+#include "Core/CacheBundleIO.h"
+#include "Core/ItemDelivery.h"
+#include "Generator/HelpyGrantBatch.h"
+#include "Unreal/Property/FEnumProperty.hpp"
 using namespace DragonWilds::SpawnRuntime;
 #include <algorithm>
 #include <array>
@@ -104,7 +108,6 @@ using namespace DragonWilds::SpawnRuntime;
 #include "Loader/PlayerGhost.h"
 #include "Generator/EventParameters.h"
 #include "Generator/ToolRequest.h"
-#include "Generator/HelpyGrantBatch.h"
 #include "Generator/QuickMenuDecorations.h"
 #include "Generator/QuickMenuCatalogRules.h"
 #include "Generator/SpawnAuthoring.h"
@@ -413,6 +416,8 @@ namespace {
 
 }
 
+#include "ItemDeliveryRuntime.inl"
+
 namespace DragonWilds {
 #include "BuildingPropRuntime.inl"
 #include "IconCacheBuild.inl"
@@ -420,6 +425,30 @@ namespace DragonWilds {
 #include "MapTravel.inl"
 #include "SpawnTools.inl"
 #include "SpawnAdditionalDrops.inl"
+
+    void DragonWildsSpawnLoader::RegisterItemDeliverySource(const std::filesystem::path& modPath,const RC::StringType& owner)
+    {
+        const auto path=modPath/PS::ItemDelivery::FileName;
+        const auto name=RC::to_string(owner);
+        try{
+            std::error_code error;
+            const auto type=std::filesystem::symlink_status(path,error);
+            if(error==std::errc::no_such_file_or_directory)return;
+            if(error||!std::filesystem::is_regular_file(type))
+                throw std::runtime_error("Expected a readable item-delivery.json file");
+            auto definitions=PS::ItemDelivery::Read(name,
+                nlohmann::json::parse(PS::ConfigFiles::Read(path,256*1024)));
+            if(definitions.empty())return;
+            if(m_itemDelivery){m_itemDelivery->Add(std::move(definitions));return;}
+            auto service=std::make_unique<PS::ItemDeliveryRuntime::Service>(
+                PS::PSConfig::Get()->ItemDeliveryMode()==PS::ItemDelivery::Always);
+            service->Add(std::move(definitions));
+            service->Start();
+            m_itemDelivery=std::move(service);
+        }catch(const std::exception& error){
+            PS::ItemDeliveryRuntime::Report(PS::Diagnostics::Id::ItemDeliveryUnavailable,error.what(),{name,"",PS::ItemDelivery::FileName});
+        }
+    }
 
     DragonWildsSpawnLoader::DragonWildsSpawnLoader() : DragonWildsModLoaderBase("spawns")
     {
@@ -2706,6 +2735,7 @@ namespace DragonWilds {
                 ToolMapTravelReset();
                 UpdateHelpyInputCapture(false);
                 m_readyWorld = nullptr;
+                if(m_itemDelivery)m_itemDelivery->ResetWorld();
                 if(m_inventoryMarks)m_inventoryMarks->Reset();
                 if(m_markRelay)m_markRelay->Reset();
                 MenuIconWorldCache.Reset();NextMenuIconWorldScan={};
@@ -2750,6 +2780,11 @@ namespace DragonWilds {
                 if(m_inventoryMarks)PS::SlowWork::Measure("helpy.marks",[&]{m_inventoryMarks->Tick();});
                 if(m_markRelay)m_markRelay->Tick(m_readyWorld,PS::SpawnToolRequests::Generation.load(),[this](UObject* controller){return GetPlayerCharacterGuid(controller);},ForwardHelpyAuthority);
                 PlayerGhost::Flush();
+                if(m_itemDelivery&&m_readyWorld)m_itemDelivery->Tick(m_readyWorld,
+                    [this](UObject* controller){return GetPlayerCharacterGuid(controller);},
+                    [](UObject* controller,const std::string& path,const std::function<void()>& hold){
+                        GiveToolItem(controller,path,1,false,nullptr,hold);
+                    });
                 // Alternate optional work so a continuous catalogue cannot starve icons.
                 static bool iconsFirst=false;iconsFirst=!iconsFirst;
                 if(iconsFirst)PS::SlowWork::Measure("helpy.icons",[&]{PumpItemIcons(helpyWork);});

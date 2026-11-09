@@ -1164,6 +1164,10 @@ namespace DragonWilds {
         InitializeMods(EEngineLifecyclePhase::PostEngineInit);
         LoadMods(EEngineLifecyclePhase::PostEngineInit);
         SetupLogicPakBridge();
+        if(m_spawnLoader&&PS::PSConfig::Get()->ItemDeliveryMode()!="off")
+            IterateModsFolder([&](const fs::path& path,const RC::StringType& owner){
+                m_spawnLoader->RegisterItemDeliverySource(path,owner);
+            });
         if(auto ready=std::move(m_modsReady))ready();
         PS::StartupTrace::Mark("PostEngineInit complete");
     }

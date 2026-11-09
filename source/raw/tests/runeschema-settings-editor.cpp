@@ -13,6 +13,7 @@ int main(int argc,char** argv)try{
     auto initial=RuneSchemaSettingsEditor::Read(root);Need(initial.at("Ok").get<bool>());
     Need(initial["Editable"]["/archiveLogs"]==false&&initial["Document"]["archiveLogs"]==false);
     Need(initial["Editable"]["/logsInUE4SS"]==false&&initial["Document"]["logsInUE4SS"]==false);
+    Need(initial["Editable"]["/itemDeliveryMode"]=="once"&&initial["Document"]["itemDeliveryMode"]=="once");
     Need(!initial["Editable"].contains("/futureSection/keep"));
     Need(!initial["Editable"].contains("/persistence/recovery")&&!initial["Editable"].contains("/worldSaveCleanup/backupBeforePrune"));
     Need(initial["Editable"]["/persistence/blanketCleanup"]==false
@@ -77,6 +78,12 @@ int main(int argc,char** argv)try{
     const auto hostRestart=DecodeSettings(DecodeIniDocument(ConfigFiles::Read(file)).dump()).helpyAuthority;
     Need(hostRestart.allowPinAccess&&hostRestart.accessPin=="Private-test-48219"&&hostRestart.allowClientItemGrants&&hostRestart.allowClientTeleport
         &&hostRestart.permittedPlayerGuids==std::vector<std::string>{"0123456789abcdef0123456789abcdef"});
+    for(const auto* mode:{"off","always","once"}){
+        const auto change=save(json{{"/itemDeliveryMode",mode}},ConfigFiles::Read(file));
+        Need(change.at("Ok")==true&&change.at("RestartRequired")==true);
+        Need(DecodeItemDeliveryMode(DecodeIniDocument(ConfigFiles::Read(file)))==mode);
+    }
+    Need(save(json{{"/itemDeliveryMode","typo"}},ConfigFiles::Read(file)).at("Ok")==false);
     auto explicitBlanket=seeded;explicitBlanket["persistence"]["blanketCleanup"]=true;
     ConfigFiles::Write(file,EncodeIniDocument(explicitBlanket));
     const auto seededText=ConfigFiles::Read(file);Need(RuneSchemaSettingsEditor::PrepareModMenuFields(root).at("Ok")==true&&ConfigFiles::Read(file)==seededText);

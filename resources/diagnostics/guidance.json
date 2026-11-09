@@ -215,6 +215,18 @@
     "Individual cart entries failed native validation or delivery while other entries may have succeeded.",
     "Read each placard's result and resolve only failed entries. Verify the intended recipient and availability. Never resend the entire cart to compensate for a partial failure."
   ],
+  "RS-ITEM-002": [
+    "The configured asset is missing, its provider is disabled, or the path names a different object type.",
+    "Check the full object path in item-delivery.json and the active mod list. Other paths still run."
+  ],
+  "RS-ITEM-003": [
+    "An inventory mutation, receipt write, or native save outcome could not be verified.",
+    "Keep the held receipt and inspect the character and logs. Removing a held row can cause a duplicate if the save actually succeeded."
+  ],
+  "RS-ITEM-004": [
+    "The definition file is invalid or the current game build changed a reflected save or inventory contract.",
+    "Verify the mod JSON and RuneSchema game compatibility. Correct the source and restart."
+  ],
   "RS-SRC-001": [
     "The source mod is absent, disabled, unmounted or has not completed registration.",
     "Enable/install the matching content and let registration finish, or leave its references unavailable. Downloading its pictures/cache alone cannot create its gameplay definitions."

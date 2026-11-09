@@ -44,6 +44,8 @@ namespace UECustom {
     class UWorldPartitionRuntimeLevelStreamingCell;
 }
 
+namespace PS::ItemDeliveryRuntime { class Service; }
+
 namespace DragonWilds {
     class DragonWildsSpawnLoader : public DragonWildsModLoaderBase {
         enum class ESpawnEntryType {
@@ -141,6 +143,7 @@ namespace DragonWilds {
         void ReleaseEventAdditionalDrops(RC::Unreal::UObject* actor);
         void PumpItemIcons(PS::WorkSlice& work);
         void PumpSpawnTools(PS::WorkSlice& work);
+        std::unique_ptr<PS::ItemDeliveryRuntime::Service> m_itemDelivery;
         std::vector<PS::WeakObjectHandle> m_toolActors;
         std::set<std::filesystem::path> m_toolSpawnFiles;
         std::mutex m_toolSpawnFileMutex;
@@ -157,6 +160,7 @@ namespace DragonWilds {
             const RC::StringType& modName, bool replaceExisting = false);
         void FinalizeNameplateDefinitions();
         void FinalizePlayerRules();
+        void RegisterItemDeliverySource(const std::filesystem::path& modPath,const RC::StringType& owner);
         void ClearAppearanceSources();
         void RegisterAppearanceSource(const std::filesystem::path& modPath,
             const RC::StringType& modName);

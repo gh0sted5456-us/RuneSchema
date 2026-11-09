@@ -207,7 +207,8 @@ namespace {
         PS::ConfigFiles::Write(file,draft.dump(2));
         if(nlohmann::json::parse(PS::ConfigFiles::Read(file,1024*1024))!=draft)throw std::runtime_error("Clone export verification failed");
     }
-    void GiveToolItem(UObject* controller,const std::string& path,int32_t count,bool equip=false,nlohmann::json* equipResult=nullptr) {
+    void GiveToolItem(UObject* controller,const std::string& path,int32_t count,bool equip=false,nlohmann::json* equipResult=nullptr,
+        const std::function<void()>& beforeGrant={}) {
         if(!controller || count<1 || count>10000)throw std::runtime_error("Item grant requires an authoritative player and quantity 1..10000");
         auto* item=ActorHelper::ResolveObject(RC::to_generic_string(path));
         auto* itemType=ActorHelper::ResolveClass(TEXT("/Script/Dominion.ItemData"));
@@ -243,7 +244,9 @@ namespace {
         std::set<PS::EquipmentDelivery::Guid> existing;bool captured=false;std::string captureError;
         if(equip&&equipResult)try{existing=PS::EquipmentDelivery::Capture(controller,path);captured=true;}catch(const std::exception& error){captureError=error.what();}catch(...){captureError="Equipment inventory snapshot unavailable";}
         ActorHelper::FunctionCall give(inventory,givePath);give.Arg(TEXT("ItemData"),item).Arg(TEXT("Count"),count)
-            .Arg(TEXT("DurabilityPercentage"),1.0f).JsonArg(TEXT("GameplayTags"),nlohmann::json::object()).Invoke();
+            .Arg(TEXT("DurabilityPercentage"),1.0f).JsonArg(TEXT("GameplayTags"),nlohmann::json::object());
+        if(beforeGrant)beforeGrant();
+        give.Invoke();
         ActorHelper::FunctionCall afterCall(inventory,countPath);afterCall.Arg(TEXT("ItemData"),item).Invoke();const auto after=afterCall.Result<int32_t>();
         if(!give.Result<bool>() || int64_t(after)-before!=count)throw std::runtime_error("Native inventory grant could not be confirmed");
         // Delivery is already confirmed. Equipment errors are a separate receipt
