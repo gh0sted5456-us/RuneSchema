@@ -59,7 +59,12 @@ int32_t RS_PLUGIN_CALL Call(const char* caller,const char* service,const char* i
     if(!caller||(std::string_view(caller)!="RuneSchema.Helpy"&&!FrontendPlugins.Authorized(caller))||!service||!input||!size||capacity>RUNESCHEMA_PLUGIN_MAX_MESSAGE||(!response&&capacity))return RS_PLUGIN_INVALID_ARGUMENT;
     try{
         if(strnlen_s(input,RUNESCHEMA_PLUGIN_MAX_MESSAGE+1)>RUNESCHEMA_PLUGIN_MAX_MESSAGE)return RS_PLUGIN_INVALID_ARGUMENT;
-        if(std::string_view(service)=="helpy.host")return Reply({{"Process","Helpy"},{"ApiVersion",1}},response,capacity,size);
+        if(std::string_view(service)=="helpy.host"){
+            Json identity={{"Process","Helpy"},{"ApiVersion",1}};
+            if(std::string_view(caller)=="RuneSchema.ModMenu2"&&Json::parse(input).value("ModMenuRuntime",false))
+                identity["RuntimeRoot"]=PS::RuntimeModPath::Text(AssignedRoot);
+            return Reply(identity,response,capacity,size);
+        }
         if(std::string_view(service)!="runeschema.tools"){
             Service local;{std::lock_guard lock(ServicesMutex);const auto found=Services.find(service);if(found==Services.end()){*size=0;return RS_PLUGIN_NOT_FOUND;}local=found->second;}
             return local.Callback(local.Context,input,response,capacity,size);
@@ -122,7 +127,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR,int){
             else{LocalFree(argv);throw std::runtime_error("Use --runtime-root <RuneSchema folder> and --platform steam|gamepass|epic|server");}
         }LocalFree(argv);
         const auto binding=executable.parent_path()/"runtime.json";
-        if(!explicitRoot&&std::filesystem::is_regular_file(binding)){const auto value=Json::parse(PS::ConfigFiles::Read(binding,16384));root=std::filesystem::u8path(value.at("Root").get<std::string>());if(platform.empty())platform=value.at("Platform").get<std::string>();}
+        if(!explicitRoot&&std::filesystem::is_regular_file(binding)){const auto value=Json::parse(PS::ConfigFiles::Read(binding));root=std::filesystem::u8path(value.at("Root").get<std::string>());if(platform.empty())platform=value.at("Platform").get<std::string>();}
         root=std::filesystem::weakly_canonical(root);
         AssignedRoot=root;
         const auto plugin=PS::RuntimePaths::HelpyBinary(root,"Helpy.dll");

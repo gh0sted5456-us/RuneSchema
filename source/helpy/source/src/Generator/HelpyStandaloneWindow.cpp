@@ -688,7 +688,7 @@ void DrawRuneExit(ImDrawList* draw,ImVec2 a,ImVec2 b,const HelpyImGuiTheme::Them
 constexpr std::array HomeDestinations{
     HomeDestination{Page::SaveRecovery,"Save Recovery",HelpyNavigation::Description(Page::SaveRecovery)},
     HomeDestination{Page::Mods,"Mods",HelpyNavigation::Description(Page::Mods)},
-    HomeDestination{Page::Items,"Players","Inventory, gear, clones and character saves."},
+    HomeDestination{Page::Items,"Items","Browse items, build carts and inspect gear."},
     HomeDestination{Page::Map,"World","Ashenfall map, party, spawning and journal."},
     HomeDestination{Page::Settings,"Settings","Appearance, item caches and RuneSchema settings."},
     HomeDestination{Page::Tools,"Tools",HelpyNavigation::Description(Page::Tools)},
@@ -956,8 +956,7 @@ void RenderInformationBar(const HelpyImGuiTheme::Theme& t,bool runtimeBadge=true
 #endif
 }
 bool RuneSchemaUpdateAvailable(){const auto& state=HelpyUpdates::Current();return
-    RuneSchemaUpdateInfo::Compare(HelpyEnvironment::RuneSchemaVersion,state.MainVersion)==RuneSchemaUpdateInfo::Comparison::Newer
-    ||RuneSchemaUpdateInfo::Compare(HelpyEnvironment::RuneSchemaVersion,state.ReleaseVersion)==RuneSchemaUpdateInfo::Comparison::Newer;}
+    RuneSchemaUpdateInfo::Compare(HelpyEnvironment::RuneSchemaVersion,state.ReleaseVersion)==RuneSchemaUpdateInfo::Comparison::Newer;}
 void RenderRuntimeBadge(const HelpyImGuiTheme::Theme& t,float logicalSize) {
     const float size=std::min(t.Y(logicalSize),t.X(logicalSize));
     const bool shared=HelpyEnvironment::SharedStoreBadge();
@@ -1430,10 +1429,10 @@ void RenderUpdatesAndRuntime(const HelpyImGuiTheme::Theme& t) {
     ImGui::EndDisabled();
     if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)&&HelpyUpdates::CooldownSeconds()>0)PS::HelpyImGuiTheme::Tooltip("Next manual check in %d seconds",HelpyUpdates::CooldownSeconds());
     const auto link=[&](const char* label,const wchar_t* url){if(HelpyImGuiTheme::SoftButton(label))ShellExecuteW(nullptr,L"open",url,nullptr,nullptr,SW_SHOWNORMAL);};
-    ImGui::SameLine();link("GitHub releases",L"https://github.com/gh0sted5456-us/RuneSchema/releases/latest");
+    ImGui::SameLine();link("GitHub releases",GitHubLatestUrl);
     ImGui::SameLine();link("Main branch",L"https://github.com/gh0sted5456-us/RuneSchema/tree/main");
-    link("Nexus Mods",L"https://www.nexusmods.com/runescapedragonwilds/mods/570");
-    ImGui::TextWrapped("Nexus version comparison opens the listing in your browser. Its login/anti-bot protections are not bypassed; automatic checks use GitHub.");
+    link("Nexus Mods",NexusFilesUrl);ImGui::SameLine();link("CurseForge",CurseForgeFilesUrl);
+    ImGui::TextWrapped("Automatic checks use GitHub. Download links open in your browser.");
     if(state.CheckedAt){const auto now=std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
         ImGui::TextDisabled("Last check: %lld minute(s) ago · cached between launches",std::max<std::int64_t>(0,(now-state.CheckedAt)/60));}
     if(!state.CacheError.empty())ImGui::TextWrapped("%s",state.CacheError.c_str());
@@ -1828,7 +1827,47 @@ void RenderServerAccessPrompt(){
     }
 }
 int SettingsCategory=0;
+void RenderHelpyTopics(){
+    static int topic=0;
+    constexpr std::array labels{"Items","World Tools","Diagnostics","Mods","Save Recovery"};
+    HelpyMenu::Tabs("helpy-topics",labels,topic,false);
+    auto& theme=HelpyImGuiTheme::Current;
+    bool changed=false;
+    const auto open=[&](const char* label,Page page){
+        if(HelpyImGuiTheme::SoftButton(label))OpenSidebarPage(page,theme);
+    };
+    switch(topic){
+    case 0:
+        changed|=HelpyImGuiTheme::Toggle("Show Clone tab",&theme.workspaces.Clone);
+        changed|=HelpyImGuiTheme::Toggle("Show Recipes tab",&theme.workspaces.Recipes);
+        if(HelpyImGuiTheme::SoftButton("Item cache settings"))RuneSchemaSettingsPanel::QuickSection=2;
+        break;
+    case 1:
+        changed|=HelpyImGuiTheme::Toggle("Show Journal tab",&theme.workspaces.Journal);
+        changed|=HelpyImGuiTheme::Toggle("Show session tools",&theme.workspaces.Tools);
+        if(HelpyImGuiTheme::SoftButton("Map HUD settings"))RuneSchemaSettingsPanel::QuickSection=5;
+        open("Open World",Page::Map);
+        break;
+    case 2:
+        changed|=HelpyImGuiTheme::Toggle("Show Diagnostics in navigation",&theme.workspaces.LiveLog);
+        if(HelpyImGuiTheme::SoftButton("Diagnostics settings"))SettingsCategory=4;
+        break;
+    case 3:
+        changed|=HelpyImGuiTheme::Toggle("Compact mod list",&theme.modsCompact);
+        open("Open Mods",Page::Mods);
+        break;
+    case 4:
+        if(HelpyImGuiTheme::SoftButton("Save and backup settings"))RuneSchemaSettingsPanel::QuickSection=4;
+        open("Open Save Recovery",Page::SaveRecovery);
+        break;
+    }
+    if(changed){
+        if(!theme.workspaces.Recipes){DetachedWorkspaces[1]=false;HelpyTaskbar::Current.Restore(HelpyTaskbar::Window::Recipes);}
+        HelpyImGuiTheme::SaveCurrent();
+    }
+}
 void RenderSettingsPage(const HelpyImGuiTheme::Theme& t){
+    RuneSchemaSettingsPanel::TopicSettings=RenderHelpyTopics;
     auto& selected=SettingsCategory;
     constexpr std::array labels{"Helpy","Server access","RuneSchema","Appearance","Diagnostics","Backgrounds","Updates & runtime","Workspaces"};
 #if defined(HELPY_PREVIEW)
@@ -2076,7 +2115,7 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
                 case Page::SaveEditor:SpawnToolsPanel::RefreshSnapshot(0);SaveEditorPanel::Render(SpawnToolsPanel::UiSnapshot,SpawnToolsPanel::UiRevision);break;
                 case Page::Journal:JournalPanel::Render();break;
                 case Page::DedicatedServer:
-                    if(HelpyImGuiTheme::SoftButton("Players & items"))CurrentPage=Page::Items;
+                    if(HelpyImGuiTheme::SoftButton("Items"))CurrentPage=Page::Items;
                     ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Map & teleportation"))CurrentPage=Page::Map;
                     ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Spawns"))CurrentPage=Page::Spawns;
                     ServerControlPanel::Render([]{RenderServerAccess(HelpyEnvironment::Server()||RuntimeConnectionPanel::Read().Host);});
@@ -2226,6 +2265,7 @@ bool HelpyStandaloneWindow::OpenPopup(bool desktop) {
     LazyCatalog::FirstOpen(SpawnToolRequests::CurrentGeneration());QueuePlayerRefresh(true);return true;
 }
 void HelpyStandaloneWindow::ClosePopup(){
+    HelpySupportPage::Close();
 #if defined(HELPY_PREVIEW)
     ++HelpyPreviewHooks::HideRequests;
 #endif
@@ -2529,7 +2569,8 @@ void HelpyStandaloneWindow::ThreadMain() {
         }
         const bool gameFocused=GameWindow(foreground)&&!HelpyEnvironment::Server();
 #if !defined(HELPY_PREVIEW)
-        NotificationsPanel::Poll();
+        HelpyUpdates::Tick(HelpyImGuiTheme::Current.automaticUpdateChecks,HelpyEnvironment::UpdateChecksAvailable,HelpyEnvironment::RuneSchemaVersion);
+        if(NotificationsPanel::Poll())PushToast("RuneSchema and Helpy update available. See Notifications.",6.0);
         HelpyCachedCatalog::WarmStartup(HelpyIconPacks::ReferencesRevision);
 #endif
         const auto health=HealthSettings();static double nextHealthStatus=0;static bool observedGameplay=false;static uint32_t observedPid=0;
@@ -2616,7 +2657,7 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
     SetError({});
     HelpyEnvironment::Configure({{"Storefront","Game Pass/WinGDK"},{"RuneSchemaVersion","0.8.0.0"},{"GameVersion","Preview build"}});
     HelpySourceCache::Current.Key="preview-fixture";HelpyImGuiTheme::Loaded=true;HelpyImGuiTheme::Current=HelpyImGuiTheme::Theme{};HelpyImGuiTheme::Current.autoReload=false;
-    HelpyImGuiTheme::Current.workspaces={true,true,true,true};
+    HelpyImGuiTheme::Current.workspaces={true,true,true,true,false,true,false,true,true};
     HelpyImGuiTheme::ForceReload=false; // Keep this isolated fixture's explicit options.
     HelpyImGuiTheme::NextPoll=std::chrono::steady_clock::now()+std::chrono::hours(24);
     // Exercise lazy font loading through the production path. Do not restore
@@ -2755,7 +2796,28 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
     SpawnToolsPanel::SyncCartWorld();SpawnToolsPanel::SelectedPlayer="preview-player";
     int result=0;
     try {
-        if(atlasReview){
+        if(capture&&std::getenv("RUNESCHEMA_HELPY_WEB_PREVIEW")){
+            std::filesystem::create_directories(output);
+            SetWindowPos(m_hwnd,nullptr,-20000,-20000,0,0,SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);
+            ShowWindow(m_hwnd,SW_SHOWNOACTIVATE);
+            SplashEntered=true;CurrentPage=Page::Settings;SettingsCategory=0;RuneSchemaSettingsPanel::QuickSection=8;
+            const auto pump=[&]{
+                MSG msg{};while(PeekMessageW(&msg,nullptr,0,0,PM_REMOVE)){TranslateMessage(&msg);DispatchMessageW(&msg);}
+                RenderFrame();Sleep(16);
+            };
+            const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(30);
+            while(!HelpySupportPage::BrowserReady()&&std::chrono::steady_clock::now()<deadline)pump();
+            if(!HelpySupportPage::BrowserReady())throw std::runtime_error("Embedded support page did not load");
+            const auto report=output/"web-capture.txt";
+            if(!HelpySupportPage::ProbeBrowser(report))throw std::runtime_error("Embedded support capture did not start");
+            while(!std::filesystem::exists(report)&&std::chrono::steady_clock::now()<deadline)pump();
+            std::string result;std::ifstream(report)>>result;
+            if(result!="PASS")throw std::runtime_error("Embedded support capture did not finish");
+            CurrentPage=Page::Items;pump();
+            if(HelpySupportPage::BrowserReady())throw std::runtime_error("Embedded support pane remained visible on another page");
+            HelpySupportPage::Close();
+            std::ofstream(output/"render-result.txt")<<"Embedded WebView2 rendered the support page and hid when leaving Help.\n";
+        }else if(atlasReview){
             std::filesystem::create_directories(output);
             PreviewSelectSections=true;SplashEntered=true;CurrentPage=Page::Map;MapPanel::Data.ShowParty=true;
             HelpyPreviewHooks::MouseEnabled=true;HelpyPreviewHooks::Mouse={-100,-100};
@@ -2768,15 +2830,46 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 HelpyPreviewHooks::MouseDown=false;frames();
                 HelpyPreviewHooks::Mouse={-100,-100};
             };
+            const auto rightClick=[&](ImVec4 rect){
+                HelpyPreviewHooks::Mouse={(rect.x+rect.z)*.5f,(rect.y+rect.w)*.5f};
+                RenderFrame();HelpyPreviewHooks::RightDown=true;RenderFrame();
+                HelpyPreviewHooks::RightDown=false;frames();
+                HelpyPreviewHooks::Mouse={-100,-100};
+            };
+            const auto worldPoint=[&](MapProjection::Point world){
+                const auto canvas=HelpyPreviewHooks::Map;
+                const auto p=MapPanel::MapScreen({canvas.x,canvas.y},world);
+                return ImVec4{p.x-1,p.y-1,p.x+1,p.y+1};
+            };
             frames();
             if(!MapPanel::Data.AtlasVisible||MapPanel::Data.AtlasTabs.Active!=MapAtlas::OverviewTab||
+               !MapAtlas::MatchesMainland(MapPanel::Data.Projection)||!HelpyPreviewHooks::AtlasOutlinesDrawn||
                !MapPanel::Data.Texture||MapPanel::Data.Texture->Status!=ImTextureStatus_OK)
                 throw std::runtime_error("Native mainland atlas did not render");
+            const auto atlasCanvas=HelpyPreviewHooks::Map;
+            const auto atlasParty=HelpyPreviewHooks::MapPartyWindow;
+            if(atlasParty.x>=atlasCanvas.z){
+                if(std::abs(atlasParty.y-atlasCanvas.y)>1||std::abs(atlasParty.w-atlasCanvas.w)>1)
+                    throw std::runtime_error("Party sidebar does not align with the atlas");
+            }else if(atlasParty.y<atlasCanvas.w)throw std::runtime_error("Party panel overlaps the atlas");
             PreviewCapture=output/"atlas-overview.png";RenderFrame();PreviewCapture.clear();
             if(HelpyPreviewHooks::AtlasPartyRegions["preview-player"]!="Fractured Plains")
                 throw std::runtime_error("Mainland party label did not match Fractured Plains");
-            click(HelpyPreviewHooks::AtlasMainland);
-            if(MapPanel::Data.AtlasTabs.Active!=MapAtlas::MainlandTab)throw std::runtime_error("Grouped mainland selector did not open");
+            click(HelpyPreviewHooks::AtlasTransportOutlines);
+            if(MapPanel::Data.ShowTransportOutlines||HelpyPreviewHooks::AtlasOutlinesDrawn)
+                throw std::runtime_error("Transport filter did not hide the map outlines");
+            const auto mainlandZone=MapAtlas::RegionAt(MapAtlas::MainlandPortal);
+            rightClick(worldPoint(MapAtlas::MainlandPortal));
+            if(!MapPanel::Data.Popup||MapPanel::Data.AtlasTabs.Active!=MapAtlas::OverviewTab)
+                throw std::runtime_error("Right-click with outlines hidden must open map actions without changing areas");
+            ImGui::ClosePopupToLevel(0,true);frames();
+            MapPanel::Data.HasPoint=false;
+            click(worldPoint(MapAtlas::MainlandPortal));
+            if(MapPanel::Data.AtlasTabs.Active!=mainlandZone||MapPanel::Data.HasPoint)
+                throw std::runtime_error("Left-click with outlines hidden must open the mainland zone without selecting a point");
+            PreviewCapture=output/"atlas-zone.png";RenderFrame();PreviewCapture.clear();
+            click(HelpyPreviewHooks::AtlasOverview);
+            if(MapPanel::Data.AtlasTabs.Active!=MapAtlas::OverviewTab)throw std::runtime_error("World map did not return from the zone");
             click(HelpyPreviewHooks::AtlasScorned);
             if(MapPanel::Data.AtlasTabs.Active!=MapAtlas::ScornedTab)throw std::runtime_error("Scorned tab did not select");
             scornedPlayer=true;MapPanel::Data.Next={};frames();
@@ -2789,12 +2882,9 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
             HelpyPreviewHooks::MapPlayerTints.clear();
             MapPanel::Data.HasPoint=false;
             RenderFrame();
-            if(!HelpyPreviewHooks::AtlasArtwork||MapPanel::Data.CoordinateOverlay||
-               !HelpyPreviewHooks::MapPlayerTints.empty())
-                throw std::runtime_error("Scorned artwork must start with live coordinate pins hidden");
-            click(HelpyPreviewHooks::Map);
-            if(MapPanel::Data.HasPoint||MapPanel::Data.GroundReadPending)
-                throw std::runtime_error("Artwork clicks must not select world positions");
+            if(!HelpyPreviewHooks::AtlasArtwork||MapPanel::Data.ShowTransportOutlines||
+               !HelpyPreviewHooks::MapPlayerTints.contains("preview-player"))
+                throw std::runtime_error("Scorned artwork and live pins must remain available with outlines hidden");
             MapPanel::Data.Zoom=static_cast<float>(MapPanel::Data.View.FitZoom()*1.06);
             MapPanel::Data.Center.Y=.515;
             frames();
@@ -2812,27 +2902,27 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
             const auto originalView=MapPanel::Data.View;
             if(originalView.Zoom<=originalView.FitZoom()||originalView.Center.Y==.5)
                 throw std::runtime_error("Atlas fixture did not leave the fit camera");
-            click(HelpyPreviewHooks::AtlasCoordinateOverlay);
-            if(!HelpyPreviewHooks::AtlasArtwork||!MapPanel::Data.CoordinateOverlay||
+            click(HelpyPreviewHooks::AtlasTransportOutlines);
+            if(!HelpyPreviewHooks::AtlasArtwork||!HelpyPreviewHooks::AtlasOutlinesDrawn||
                !HelpyPreviewHooks::MapPlayerTints.contains("preview-player")||!HelpyPreviewHooks::MapPlayerTints.contains("preview-raid"))
-                throw std::runtime_error("Coordinate overlay must draw live pins while preserving the game artwork");
+                throw std::runtime_error("Transport outlines must preserve the artwork and live pins");
             const auto& overlayView=MapPanel::Data.View;
             if(overlayView.Zoom!=originalView.Zoom||overlayView.Center.X!=originalView.Center.X||
                overlayView.Center.Y!=originalView.Center.Y||overlayView.Width!=originalView.Width||overlayView.Height!=originalView.Height)
-                throw std::runtime_error("Toggling the coordinate overlay changed the map camera");
+                throw std::runtime_error("Toggling transport outlines changed the map camera");
             const auto canvas=HelpyPreviewHooks::Map;
             const auto target=MapPanel::Data.View.ToPixel(MapPanel::Data.Projection.ToUV({-797000,688000}));
             const ImVec2 spot{canvas.x+float(target.X),canvas.y+float(target.Y)};
             click({spot.x-1,spot.y-1,spot.x+1,spot.y+1});
             if(!MapPanel::Data.HasPoint||std::abs(MapPanel::Data.Point.X+797000)>1||
                std::abs(MapPanel::Data.Point.Y-688000)>1)
-                throw std::runtime_error("Coordinate overlay did not select the world pin");
+                throw std::runtime_error("Scorned map did not select the world pin");
             PreviewCapture=output/"atlas-scorned-coordinates.png";RenderFrame();PreviewCapture.clear();
-            click(HelpyPreviewHooks::AtlasCoordinateOverlay);
+            click(HelpyPreviewHooks::AtlasTransportOutlines);
             HelpyPreviewHooks::MapPlayerTints.clear();RenderFrame();
-            if(!HelpyPreviewHooks::AtlasArtwork||MapPanel::Data.CoordinateOverlay||
-               !HelpyPreviewHooks::MapPlayerTints.empty())
-                throw std::runtime_error("Disabling the coordinate overlay did not return to game artwork");
+            if(!HelpyPreviewHooks::AtlasArtwork||HelpyPreviewHooks::AtlasOutlinesDrawn||
+               !HelpyPreviewHooks::MapPlayerTints.contains("preview-player"))
+                throw std::runtime_error("Hiding transport outlines also hid the artwork or player pin");
             click(HelpyPreviewHooks::AtlasOverview);
             if(MapPanel::Data.AtlasTabs.Active!=MapAtlas::OverviewTab)throw std::runtime_error("Overview tab did not select");
             click(HelpyPreviewHooks::AtlasFollow);
@@ -2841,28 +2931,21 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
             click(HelpyPreviewHooks::AtlasOverview);
             if(MapPanel::Data.AtlasTabs.Following||MapPanel::Data.AtlasTabs.Active!=MapAtlas::OverviewTab)
                 throw std::runtime_error("Manual overview selection did not pause follow");
-            click(HelpyPreviewHooks::AtlasCoordinateOverlay);
-            if(!MapPanel::Data.CoordinateOverlay)throw std::runtime_error("Overview did not enable the coordinate overlay");
+            if(MapPanel::Data.ShowTransportOutlines||HelpyPreviewHooks::AtlasOutlinesDrawn)
+                throw std::runtime_error("World map did not preserve the transport filter");
             MapPanel::Data.HasPoint=false;
-            const auto gap=MapPanel::Data.View.ToPixel(MapPanel::Data.Projection.ToUV({-300000,450000}));
-            const auto overview=HelpyPreviewHooks::Map;
-            click({overview.x+float(gap.X)-1,overview.y+float(gap.Y)-1,
-                   overview.x+float(gap.X)+1,overview.y+float(gap.Y)+1});
-            if(MapPanel::Data.HasPoint)throw std::runtime_error("Atlas gap produced a map point");
-            const auto inset=MapPanel::Data.View.ToPixel(MapPanel::Data.Projection.ToUV({-1500,-21950}));
-            click({overview.x+float(inset.X)-1,overview.y+float(inset.Y)-1,
-                   overview.x+float(inset.X)+1,overview.y+float(inset.Y)+1});
+            click(worldPoint({-1500,-21950}));
             if(MapPanel::Data.HasPoint||MapPanel::Data.AtlasTabs.Active!=MapAtlas::ScornedTab)
                 throw std::runtime_error("Baked artwork must open Scorned without selecting a mainland coordinate");
 
             for(size_t tab=0;tab<MapAtlas::TabCount;++tab){
                 const std::string title(MapAtlas::Title(tab));
                 MapPanel::Data.AtlasTabs.Requested=tab;frames();
-                if(MapPanel::Data.AtlasTabs.Active!=tab||!MapPanel::Data.CoordinateOverlay)
-                    throw std::runtime_error("Coordinate overlay did not carry to "+title);
+                if(MapPanel::Data.AtlasTabs.Active!=tab||MapPanel::Data.ShowTransportOutlines)
+                    throw std::runtime_error("Transport filter did not carry to "+title);
                 const auto frame=MapAtlas::Frame(tab);
                 const double worldWidth=frame.Max.X-frame.Min.X,worldHeight=frame.Max.Y-frame.Min.Y;
-                const auto local=tab==MapAtlas::OverviewTab||tab==MapAtlas::MainlandTab?MapAtlas::MainlandPortal:
+                const auto local=tab==MapAtlas::OverviewTab?MapAtlas::MainlandPortal:
                     tab==MapAtlas::ScornedTab?MapProjection::Point{-790000,700000}:
                     MapProjection::Point{frame.Min.X+.46*worldWidth,frame.Min.Y+.48*worldHeight};
                 MapProjection::Point hit{local.X+.08*worldWidth,local.Y+.12*worldHeight};
@@ -2889,36 +2972,60 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                     throw std::runtime_error("Coordinate test click is outside the visible map in "+title);
                 const auto span=view.Span();
                 MapPanel::Data.HasPoint=false;
-                click({area.x+float(pixel.X)-1,area.y+float(pixel.Y)-1,area.x+float(pixel.X)+1,area.y+float(pixel.Y)+1});
+                const ImVec4 target{area.x+float(pixel.X)-1,area.y+float(pixel.Y)-1,area.x+float(pixel.X)+1,area.y+float(pixel.Y)+1};
+                if(tab==MapAtlas::OverviewTab)rightClick(target);
+                else click(target);
                 if(!MapPanel::Data.HasPoint||
                    std::abs(MapPanel::Data.Point.X-hit.X)>1.1*worldWidth*span.X/view.Width||
                    std::abs(MapPanel::Data.Point.Y-hit.Y)>1.1*worldHeight*span.Y/view.Height)
                     throw std::runtime_error("Rendered click did not resolve to the expected world coordinates in "+title);
-                if(tab==MapAtlas::MainlandTab||tab==MapAtlas::FirstRegionTab){
-                    PreviewCapture=output/(tab==MapAtlas::MainlandTab?"atlas-mainland-coordinates.png":"atlas-region-coordinates.png");
-                    RenderFrame();PreviewCapture.clear();
+                if(tab==MapAtlas::OverviewTab){
+                    if(!MapPanel::Data.Popup)throw std::runtime_error("World map right-click did not open actions");
+                    ImGui::ClosePopupToLevel(0,true);frames();
+                }
+                if(tab==MapAtlas::FirstRegionTab){
+                    PreviewCapture=output/"atlas-region-coordinates.png";RenderFrame();PreviewCapture.clear();
                 }
             }
             MapPanel::Data.AtlasTabs.Requested=MapAtlas::ScornedTab;
             frames();
             MapPanel::Data.FitRequested=true;
             frames();
-            const auto mapRect=HelpyPreviewHooks::Map;
-            const auto entrance=MapPanel::MapScreen({mapRect.x,mapRect.y},MapAtlas::ScornedPortal);
-            HelpyPreviewHooks::Mouse=entrance;
-            RenderFrame();HelpyPreviewHooks::RightDown=true;RenderFrame();
-            HelpyPreviewHooks::RightDown=false;frames();
+            rightClick(worldPoint(MapAtlas::ScornedPortal));
+            if(MapPanel::Data.Popup||!ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId|ImGuiPopupFlags_AnyPopupLevel))
+                throw std::runtime_error("The Scorned map portal must open a context menu before travel");
+            click(HelpyPreviewHooks::AtlasContextTravel);
             if(!MapPanel::Data.Popup||!MapPanel::Data.ScornedEntrance)
-                throw std::runtime_error("The Scorned map portal marker must open the same travel confirmation");
+                throw std::runtime_error("The Scorned context menu must open the travel confirmation");
             ImGui::ClosePopupToLevel(0,true);frames();
-            MapPanel::Data.AtlasTabs.Requested=MapAtlas::MainlandTab;frames();
+            MapPanel::Data.AtlasTabs.Requested=MapAtlas::OverviewTab;frames();
             atlasSample=MapProjection::Point{-715800,766000};MapPanel::Data.Next={};frames();
             click(HelpyPreviewHooks::AtlasFindPlayer);
-            if(MapPanel::Data.AtlasTabs.Active!=MapAtlas::ScornedTab||!MapPanel::Data.CoordinateOverlay||
+            if(MapPanel::Data.AtlasTabs.Active!=MapAtlas::ScornedTab||MapPanel::Data.ShowTransportOutlines||
                MapPanel::Data.View.Zoom<MapPanel::Data.View.FitZoom()*1.9||!HelpyPreviewHooks::AtlasLocalPin)
                 throw std::runtime_error("Find player must open the player's atlas area and reveal the local pin");
+            const auto capturePage=[&](Page page,const char* name){
+                CurrentPage=page;HelpyPreviewHooks::Mouse={-100,-100};frames();
+                PreviewCapture=output/name;RenderFrame();PreviewCapture.clear();
+            };
+            auto& options=HelpyImGuiTheme::Current.workspaces;
+            options.Clone=options.Recipes=false;
+            capturePage(Page::Items,"support-items.png");
+            if(HelpyPreviewHooks::WorkspaceTabs.contains("Clone")||HelpyPreviewHooks::WorkspaceTabs.contains("Recipes"))
+                throw std::runtime_error("Advanced item tabs rendered with their settings off");
+            options.Clone=true;frames();
+            if(!HelpyPreviewHooks::WorkspaceTabs.contains("Clone")||HelpyPreviewHooks::WorkspaceTabs.contains("Recipes"))
+                throw std::runtime_error("Clone visibility affected another Items tab");
+            options.Clone=false;options.Recipes=true;frames();
+            if(HelpyPreviewHooks::WorkspaceTabs.contains("Clone")||!HelpyPreviewHooks::WorkspaceTabs.contains("Recipes"))
+                throw std::runtime_error("Recipes visibility affected another Items tab");
+            options.Recipes=false;
+            SettingsCategory=0;RuneSchemaSettingsPanel::QuickSection=7;capturePage(Page::Settings,"support-topics.png");
+            RuneSchemaSettingsPanel::QuickSection=8;capturePage(Page::Settings,"support-help.png");
+            NotificationsPanel::Inbox.ObserveRelease("0.8.1.0","1.0.0",NotificationsPanel::Now());
+            NotificationsPanel::Loaded=true;capturePage(Page::Notifications,"support-notifications.png");
             std::ofstream(output/"render-result.txt")<<"All "<<MapAtlas::TabCount
-                <<" atlas tabs passed rendered world-coordinate clicks and player pins after pan and zoom. Shared toggle, native Scorned art, inset routing, blank atlas gaps, follow/manual override and confirmed Rasthin's Rest requests passed.\n";
+                <<" atlas tabs passed rendered world-coordinate clicks and player pins after pan and zoom. Transport filter, world-to-zone navigation, native Scorned art, inset routing, context actions, follow/manual override and Rasthin's Rest confirmation passed.\n";
         }else if(capture){
             if(!BrandTexture||!GameBrandTexture||!SteamTexture||!EpicTexture||!XboxTexture||!LoadingRingTexture||!SplashSprites[0].Texture||!SplashSprites[1].Texture||!SplashSprites[2].Texture)throw std::runtime_error("Packaged application, split logo, loading ring or platform logo failed to load");
             HelpyDiagnosticOverlay startupFixture;
@@ -3647,7 +3754,7 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 for(auto page:HelpyNavigation::PlayerTabs){
                     if(!HelpyNavigation::Available(page,enabledWorkspaces,HelpyEnvironment::Server()))continue;
                     const auto label=HelpyNavigation::TabTitle(page);click(Hooks::WorkspaceTabs.at(label));
-                    if(CurrentPage!=page)throw std::runtime_error(std::string("Players tab did not open: ")+label);
+                    if(CurrentPage!=page)throw std::runtime_error(std::string("Items tab did not open: ")+label);
                 }
                 const auto lastPlayerTab=CurrentPage;
                 PreviewCapture=output/"players-grouped.png";RenderFrame();PreviewCapture.clear();
@@ -3659,8 +3766,8 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 }
                 const auto lastWorldTab=CurrentPage;
                 PreviewCapture=output/"world-grouped.png";RenderFrame();PreviewCapture.clear();
-                click(Hooks::Navigation.at("Players"));
-                if(CurrentPage!=lastPlayerTab)throw std::runtime_error("Players did not remember its previous workflow");
+                click(Hooks::Navigation.at("Items"));
+                if(CurrentPage!=lastPlayerTab)throw std::runtime_error("Items did not remember its previous workflow");
                 click(Hooks::Navigation.at("World"));
                 if(CurrentPage!=lastWorldTab)throw std::runtime_error("World did not remember its previous workflow");
                 if(ItemGridPicker::SharedCart.Payload()!=cartBeforeGrouping)throw std::runtime_error("Grouped navigation changed the delivery cart");
@@ -4209,7 +4316,7 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 float lastRouteBottom=0;for(auto page:HelpyNavigation::SidebarPages)if(page!=Page::Home&&page!=Page::Profile&&page!=Page::BugReport&&page!=Page::Notifications&&HelpyNavigation::Available(page,HelpyImGuiTheme::Current.workspaces,HelpyEnvironment::Server()))lastRouteBottom=std::max(lastRouteBottom,Hooks::Navigation.at(PageTitle(page)).w);
                 check(Hooks::Navigation.at("Home").y>lastRouteBottom,"Home must stay below the visible reorderable workspace routes");
                 const auto homeAtBottom=Hooks::Navigation.at("Home");check(homeAtBottom.y-lastRouteBottom<HelpyImGuiTheme::Current.Y(32),"Home must follow the draggable primary navigation divider without a bottom spacer");
-                const auto primaryRow=Hooks::Navigation.at("Players");
+                const auto primaryRow=Hooks::Navigation.at("Items");
                 check(std::abs(homeAtBottom.x-primaryRow.x)<2&&std::abs(homeAtBottom.z-primaryRow.z)<2&&std::abs((homeAtBottom.w-homeAtBottom.y)-(primaryRow.w-primaryRow.y))<2&&PageIcon(Page::Home)==HelpyImGuiTheme::Icon::Building,"Home must match the primary navigation row width, height and icon alignment");
                 const auto profileAtBottom=Hooks::Navigation.at("Profile");
                 check(std::abs(profileAtBottom.x-homeAtBottom.x)<2&&std::abs(profileAtBottom.z-homeAtBottom.z)<2&&profileAtBottom.y>=homeAtBottom.w&&profileAtBottom.w<=MainSurfacePosition.y+MainSurfaceSize.y,"Profile must be a matching full-width row below Home");
@@ -4746,7 +4853,7 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 click(H::NavigationCollapse);if(!H::NavigationCollapsed||H::NavigationRail.z-H::NavigationRail.x>=expanded)throw std::runtime_error("Mouse collapse did not reclaim sidebar space");PreviewCapture=output/"navigation-collapsed.png";RenderFrame();PreviewCapture.clear();
                 click(H::NavigationCollapse);if(H::NavigationCollapsed||std::abs(H::NavigationRail.z-H::NavigationRail.x-expanded)>1)throw std::runtime_error("Expanding navigation did not restore its width");
                 click(H::NavigationPin);theme.inputMode=2;H::MouseEnabled=false;for(unsigned i=0;i<3;++i)RenderFrame();if(!theme.navigationPinned||H::NavigationCollapsed)throw std::runtime_error("Pinned navigation folded in controller mode");
-                click(H::NavigationPin);if(!H::NavigationCollapsed)throw std::runtime_error("Unpinned controller navigation did not fold");click(H::NavigationCollapse);if(H::NavigationCollapsed)throw std::runtime_error("Controller navigation could not be expanded temporarily");click(H::Navigation.at("Players"));if(!H::NavigationCollapsed)throw std::runtime_error("Choosing a page did not fold unpinned controller navigation");
+                click(H::NavigationPin);if(!H::NavigationCollapsed)throw std::runtime_error("Unpinned controller navigation did not fold");click(H::NavigationCollapse);if(H::NavigationCollapsed)throw std::runtime_error("Controller navigation could not be expanded temporarily");click(H::Navigation.at("Items"));if(!H::NavigationCollapsed)throw std::runtime_error("Choosing a page did not fold unpinned controller navigation");
                 theme.inputMode=mode;theme.navigationCollapsed=savedCollapsed;theme.navigationPinned=savedPinned;Sidebar={};H::MouseEnabled=false;HelpyImGuiTheme::SaveCurrent();RenderFrame();
             }
             {
@@ -4812,7 +4919,7 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 {
                     const auto animations=ClientAreaAnimations;ClientAreaAnimations=FALSE;
                     const auto selectSections=PreviewSelectSections;PreviewSelectSections=false;
-                    const auto workspaces=HelpyImGuiTheme::Current.workspaces;HelpyImGuiTheme::Current.workspaces={true,true,true,true,true,true};
+                    const auto workspaces=HelpyImGuiTheme::Current.workspaces;HelpyImGuiTheme::Current.workspaces={true,true,true,true,true,true,false,true,true};
                     HelpyPreviewHooks::MouseEnabled=true;HelpyPreviewHooks::Mouse={-1000,-1000};HelpyPreviewHooks::MouseDown=false;
                     HelpyPreviewHooks::RightDown=false;HelpyPreviewHooks::ControlDown=false;HelpyTextInput::Clear();ImGui::ClearActiveID();ImGui::ClosePopupsOverWindow(nullptr,false);ImGui::GetIO().ClearInputKeys();ImGui::GetIO().ClearInputMouse();
                     HelpyControllerInput::PreviewReading={true,{},HelpyControllerDevice::PlayStation};
@@ -5054,6 +5161,12 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
 #endif
 
 void HelpyStandaloneWindow::RenderFrame() {
+#if defined(HELPY_PREVIEW)
+    const bool helpBrowser=std::getenv("RUNESCHEMA_HELPY_WEB_PREVIEW")!=nullptr;
+#else
+    const bool helpBrowser=PluginRuntimeServices::ExternalDesktop;
+#endif
+    HelpySupportPage::Frame support(m_hwnd,m_module,m_device,helpBrowser&&!m_gameOverlay.Active()&&!m_nativeOverlay.Presenting()&&!m_nativeOverlay.NotificationsVisible());
     HelpyFeatureSettings::Load();const bool modMenuLoaded=ModMenu2Panel::Loaded();HelpyImGuiTheme::Current.workspaces.ModMenu=HelpyFeatureSettings::Key&&modMenuLoaded;RuneSchemaSettingsPanel::ModMenuSettings=modMenuLoaded?ModMenu2Panel::Settings:std::function<void()>{};
     HudViewport={};HudOrigin={};
 #if defined(HELPY_PREVIEW)
@@ -5133,8 +5246,6 @@ void HelpyStandaloneWindow::RenderFrame() {
     SourceBanners::Pump();
 #if !defined(HELPY_PREVIEW)
     HelpyIconPacks::PollPackaged();
-    if(HelpyUpdates::Tick(HelpyImGuiTheme::Current.automaticUpdateChecks,HelpyEnvironment::UpdateChecksAvailable,HelpyEnvironment::RuneSchemaVersion))
-        PushToast("RuneSchema update available. See Settings > Updates & runtime.",6.0);
 #endif
     ApplyCaptionTheme(m_hwnd,HelpyImGuiTheme::Current,false,m_gameOverlay.Active(),&m_composition);
     PlayerPortraitPicker::Pump();SpawnBrowserSettings::Pump();
@@ -5247,7 +5358,7 @@ void HelpyStandaloneWindow::RenderFrame() {
         const bool itemBay=SplashEntered&&(CurrentPage==Page::Items||bayVisible)&&HelpyControllerInput::ItemBayFrame>=ImGui::GetFrameCount()-1;
         const bool map=SplashEntered&&CurrentPage==Page::Map&&!DetachedWorkspaces[0];
         const auto hints=controller?HelpyControllerInput::HintItems(HelpyBindingActions::Controller(),!SplashEntered,itemBay)
-            :HelpyControllerInput::DesktopHints(HelpyBindingActions::Keyboard(),!SplashEntered,itemBay,map,!MapPanel::Data.AtlasVisible||MapPanel::Data.CoordinateOverlay);
+            :HelpyControllerInput::DesktopHints(HelpyBindingActions::Keyboard(),!SplashEntered,itemBay,map,true);
         const float footer=HelpyControllerInput::HintsHeight(ImGui::GetContentRegionAvail().x,hints);
         MainSurfaceSize.y=std::max(1.f,MainSurfaceSize.y-footer);
         ItemGridPicker::DetailsSurfaceSize=MainSurfaceSize;HelpyWindowChrome::Bounds(MainSurfacePosition,MainSurfaceSize);
@@ -5502,7 +5613,7 @@ void HelpyStandaloneWindow::RebindNativeDevice(const LUID& adapter){
     if(!mapFile.empty())try{MapPanel::LoadImage({{"File",mapFile},{"Status","Ready"}},false);}catch(const std::exception& error){SetError(std::string("Map image reload: ")+error.what());}
     if(!aligned)m_nativeOverlay.Fail("The game's graphics adapter is unavailable; desktop presentation remains available");
 }
-void HelpyStandaloneWindow::DestroyDevice(){DestroyTarget();m_composition.Reset();if(m_swapChain){m_swapChain->Release();m_swapChain=nullptr;}if(m_context){m_context->Release();m_context=nullptr;}if(m_device){m_device->Release();m_device=nullptr;}}
+void HelpyStandaloneWindow::DestroyDevice(){HelpySupportPage::ReleaseImages();DestroyTarget();m_composition.Reset();if(m_swapChain){m_swapChain->Release();m_swapChain=nullptr;}if(m_context){m_context->Release();m_context=nullptr;}if(m_device){m_device->Release();m_device=nullptr;}}
 void HelpyStandaloneWindow::CreateTarget(){if(!m_swapChain)return;ID3D11Texture2D* backBuffer{};if(SUCCEEDED(m_swapChain->GetBuffer(0,IID_PPV_ARGS(&backBuffer)))){m_device->CreateRenderTargetView(backBuffer,nullptr,&m_target);backBuffer->Release();}}
 void HelpyStandaloneWindow::DestroyTarget(){if(m_target){m_target->Release();m_target=nullptr;}}
 

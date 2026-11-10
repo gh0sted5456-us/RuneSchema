@@ -17,6 +17,12 @@ int main(int argc,char** argv) {
     require(loader.find("HelpyNpcGuards::VerifyExcluded(actor);")!=loader.npos);
     require(loader.find("words[0]!=VendorIdentity::Magic")!=loader.npos);
     require(loader.find("QueueLegacyPersistentNpc(actor)")!=loader.npos);
+    const auto sweepGate=loader.find("if(m_legacyNpcSweepElapsed>=0.5f)");
+    const auto sweepProbe=loader.find("if(auto* world=FindLoadedWorld();world && world!=m_legacyNpcSweepWorld)");
+    require(sweepGate<sweepProbe && sweepProbe!=loader.npos);
+    const auto timeRetry=loader.find("if(now>=m_nextNpcTimeCheck)");
+    require(timeRetry<loader.find("ReconcileNpcTimeOfDay();")
+        && loader.find("m_nextNpcTimeCheck=now+std::chrono::milliseconds(250);",timeRetry)!=loader.npos);
     require(loader.find("FindSpawnedVendor")!=loader.npos);
     require(loader.find("PumpNpcCleanup(deltaSeconds);")<loader.find("if (m_definitions.empty() || m_scanBudget.Exhausted()) return;"));
     require(cleanup.find("m_pendingNpcCleanup.empty()")!=cleanup.npos);

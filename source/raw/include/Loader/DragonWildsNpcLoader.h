@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include "Generator/HelpyNodes.h"
 #include <functional>
 #include "Loader/QuestService.h"
@@ -439,6 +440,8 @@ namespace DragonWilds {
         void QueueLegacyPersistentNpc(RC::Unreal::AActor* actor);
         void ScanLegacyPersistentNpcs(RC::Unreal::UWorld* world);
         RC::Unreal::UWorld* m_legacyNpcSweepWorld = nullptr; // compared only; cleared on travel
+        float m_legacyNpcSweepElapsed = 0.5f;
+        std::chrono::steady_clock::time_point m_nextNpcTimeCheck{};
         void QueueClientReplica(RC::Unreal::AActor* actor);
         bool PrepareClientReplica(RC::Unreal::AActor* actor);
         VendorDefinition* FindClientDefinition(RC::Unreal::AActor* actor);

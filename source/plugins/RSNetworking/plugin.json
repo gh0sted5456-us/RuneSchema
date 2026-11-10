@@ -4,6 +4,7 @@
   "Name": "RSNetworking",
   "Version": "0.8.1.0",
   "BuiltForRuneSchema": "0.8.1.0",
+  "EntryPoint": "RuneSchema.Multiplayer.dll",
   "ConsoleMessage": "RuneSchema networking bridge content is available.",
   "Capabilities": [
     "bridge.registry",
@@ -14,7 +15,8 @@
     "bridge.plugin-presentation",
     "presentation.dialogue-cue",
     "presentation.registry",
-    "presentation.world-state"
+    "presentation.world-state",
+    "multiplayer.policy"
   ],
   "CookedObjects": [
     "/RuneSchema/Networking/BPC_RuneSchemaRegistryBridge",

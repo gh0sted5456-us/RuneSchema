@@ -1320,6 +1320,20 @@ namespace DragonWilds {
     void DragonWildsMainLoader::SetupGameInstanceInitLoaders()
     {
         PS::StartupTrace::Mark("GameInstanceInit loaders begin");
+        {
+            PS::AssetPreload::Plan<RC::StringType> plan;
+            const auto* config=PS::PSConfig::Get();
+            if(config->IsLoaderEnabled("recipes"))for(auto& loader:m_loaders)if(loader->GetModFolderType()=="recipes"){
+                auto& recipes=static_cast<DragonWildsRecipeModLoader&>(*loader);
+                recipes.ImportCookedDefinitions();
+                for(const auto& path:recipes.CookedReferencePaths())plan.Add(path);
+            }
+            if(config->IsLoaderEnabled("assets"))for(auto& loader:m_loaders)if(loader->GetModFolderType()=="assets")
+                for(const auto& path:static_cast<DragonWildsAssetModLoader*>(loader.get())->CookedReferencePaths())plan.Add(path);
+            PS::StartupTrace::Mark("cooked asset prefetch begin");
+            try {PrefetchCookedAssets(plan);}catch(const std::exception& error){PS::Log<LogLevel::Normal>(STR("[PERF][ASSETS] Native prefetch unavailable: {}. Required-asset loading continues normally.\n"),PS::ToWideSafe(error.what()));}
+            PS::StartupTrace::Mark("cooked asset prefetch complete");
+        }
         InitializeMods(EEngineLifecyclePhase::GameInstanceInit);
         LoadMods(EEngineLifecyclePhase::GameInstanceInit);
 
@@ -1850,7 +1864,6 @@ namespace DragonWilds {
     {
         bool buildingOwnershipComplete=true;
         if(engineLifecyclePhase==EEngineLifecyclePhase::GameInstanceInit){
-            PS::AssetPreload::Plan<RC::StringType> plan;
             for(auto& loader:m_loaders){
                 const auto& kind=loader->GetModFolderType();
                 if(!PS::PSConfig::Get()->IsLoaderEnabled(kind)){
@@ -1864,18 +1877,9 @@ namespace DragonWilds {
                     }
                     continue;
                 }
-                if(kind=="recipes")static_cast<DragonWildsRecipeModLoader*>(loader.get())->ImportCookedDefinitions();
                 if(kind=="buildings")static_cast<DragonWildsBuildingModLoader*>(loader.get())->ImportCookedDefinitions();
                 if(kind=="journal"||kind=="lore")static_cast<DragonWildsJournalModLoader*>(loader.get())->ImportCookedDefinitions();
-                if(kind=="recipes")for(const auto& path:static_cast<DragonWildsRecipeModLoader*>(loader.get())->CookedReferencePaths())plan.Add(path);
             }
-            // Recipes are the next blocking consumer. Other assets use the
-            // remaining prefetch budget after those references are queued.
-            if(PS::PSConfig::Get()->IsLoaderEnabled("assets"))for(auto& loader:m_loaders)if(loader->GetModFolderType()=="assets")
-                for(const auto& path:static_cast<DragonWildsAssetModLoader*>(loader.get())->CookedReferencePaths())plan.Add(path);
-            PS::StartupTrace::Mark("cooked asset prefetch begin");
-            try {PrefetchCookedAssets(plan);}catch(const std::exception& error){PS::Log<LogLevel::Normal>(STR("[PERF][ASSETS] Native prefetch unavailable: {}. Required-asset loading continues normally.\n"),PS::ToWideSafe(error.what()));}
-            PS::StartupTrace::Mark("cooked asset prefetch complete");
         }
         if (engineLifecyclePhase == EEngineLifecyclePhase::GameInstanceInit
             && PS::PSConfig::Get()->IsLoaderEnabled("recipes")) {

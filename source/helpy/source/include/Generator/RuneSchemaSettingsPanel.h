@@ -2,6 +2,7 @@
 #include "RuntimePaths.h"
 #include "Generator/HelpyBindingActions.h"
 #pragma once
+#include "Generator/HelpySupportPage.h"
 #include "Generator/HelpyTextInput.h"
 #include "Generator/HelpyImGuiTheme.h"
 #include "Generator/HelpyMenu.h"
@@ -91,16 +92,18 @@ inline void CachePreferences(){
     if(HelpyImGuiTheme::Status.starts_with("[RS-CFG-003]"))ImGui::TextWrapped("%s",HelpyImGuiTheme::Status.c_str());
 }
 inline int QuickSection=0;
-inline std::function<void()> ModMenuSettings;
+inline std::function<void()> ModMenuSettings,TopicSettings;
 inline void QuickSettings(){
-    HelpyFeatureSettings::Load();constexpr std::array allLabels{"Display","Startup","Cache","Performance","Saves","HUD","Controllers","Mod Menu 2"};
-    const auto labels=std::span(allLabels).first(HelpyFeatureSettings::Key&&ModMenuSettings?8:7);
+    HelpyFeatureSettings::Load();constexpr std::array allLabels{"Display","Startup","Cache","Performance","Saves","HUD","Controllers","Topics","Help","Mod Menu 2"};
+    const auto labels=std::span(allLabels).first(HelpyFeatureSettings::Key&&ModMenuSettings?10:9);
     HelpyMenu::Tabs("helpy-settings",labels,QuickSection);
     const bool body=HelpyMenu::BeginBody("Quick settings body",QuickSection);
     if(body){
     if(QuickSection==5)HelpyHudPanel::Render();
     if(QuickSection==6)ControllerSettingsPanel::Render([]{QuickSection=1;});
-    if(QuickSection==7&&ModMenuSettings)ModMenuSettings();
+    if(QuickSection==7&&TopicSettings)TopicSettings();
+    if(QuickSection==8)HelpySupportPage::Render();
+    if(QuickSection==9&&ModMenuSettings)ModMenuSettings();
     const auto hint=[](const std::string& text){if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)){
         PS::HelpyImGuiTheme::Tooltip("%s",text.c_str());}};
     if((QuickSection==1||QuickSection==4)&&!Loaded&&Status.empty())Load();

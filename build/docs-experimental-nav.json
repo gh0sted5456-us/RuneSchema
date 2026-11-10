@@ -22,6 +22,9 @@
     ]
   },
   {
+    "Helpy support": "experimental/HELPY-SUPPORT.md"
+  },
+  {
     "Helpy & controllers": [
       {
         "Desktop, overlay & settings": "experimental/HELPY-STANDALONE.md"
@@ -43,6 +46,12 @@
       },
       {
         "Item Delivery": "experimental/ITEM-DELIVERY.md"
+      },
+      {
+        "Multiplayer plugin": "experimental/MULTIPLAYER-PLUGIN.md"
+      },
+      {
+        "Network bridge capacity": "experimental/NETWORK-CAPACITY.md"
       },
       {
         "Mod-owned save files": "experimental/MOD-SAVE-FILES.md"

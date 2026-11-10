@@ -31,8 +31,7 @@ struct State {
     Json Snapshot=Json::object(),Definition=Json::object(),Building=Json::object(),Ground=Json::object(),Buildings=Json::array();
     MapProjection::Projection NativeProjection,Projection;
     MapAtlas::TabState AtlasTabs;
-    size_t AtlasGroup=0;
-    bool AtlasVisible=false,CoordinateOverlay=false,FocusPlayer=false;
+    bool AtlasVisible=false,ShowTransportOutlines=true,FocusPlayer=false;
     MapProjection::Viewport View;
     MapProjection::Point Center{0.5,0.5},Point{},ProbePoint{};
     float Zoom=1,Radius=300,Yaw=0;int Kind=2,Count=1,Operation=0,SpawnType=0;
@@ -435,14 +434,16 @@ inline std::optional<MapProjection::Point> SurfacePosition(const Json& player){
     if(location==player.end()||!location->is_array()||location->size()!=3||
        !(*location)[0].is_number()||!(*location)[1].is_number()||!(*location)[2].is_number())return {};
     const double x=(*location)[0].get<double>(),y=(*location)[1].get<double>(),z=(*location)[2].get<double>();
-    if(!std::isfinite(x)||!std::isfinite(y)||!std::isfinite(z)||z<Data.NativeProjection.MinZ||
-       z>Data.NativeProjection.MaxZ||player.value("NativeFloorActive",false))return {};
+    if(!std::isfinite(x)||!std::isfinite(y)||!std::isfinite(z)||player.value("NativeFloorActive",false))return {};
+    if(!MapAtlas::Scorned.Contains({x,y})&&(z<Data.NativeProjection.MinZ||z>Data.NativeProjection.MaxZ))return {};
     return MapProjection::Point{x,y};
 }
 
 inline std::string_view PartyRegion(const Json& row){
     const auto point=Data.AtlasVisible?SurfacePosition(row):std::nullopt;
-    return point?MapAtlas::RegionNameAt(*point):std::string_view{};
+    if(!point)return {};
+    const auto region=MapAtlas::RegionNameAt(*point);
+    return region.empty()&&MapAtlas::Scorned.Contains(*point)?MapAtlas::Title(MapAtlas::ScornedTab):region;
 }
 
 inline void SelectPartyMember(const Json& player){
@@ -452,10 +453,9 @@ inline void SelectPartyMember(const Json& player){
     if(Data.AtlasVisible&&!SurfacePosition(player))return;
     if(Data.AtlasVisible)Data.AtlasTabs.Pause();
     if(Data.Projection.Contains(point))Data.Center=Data.Projection.ToUV(point);
-    else if(Data.AtlasVisible&&MapAtlas::RegionAt(point)!=MapAtlas::OverviewTab)
-        Data.AtlasTabs.Requested=MapAtlas::RegionAt(point);
+    else if(Data.AtlasVisible&&MapAtlas::ContainsSurface(point))
+        Data.AtlasTabs.Requested=MapAtlas::CoordinateTab(point);
     else return;
-    if(Data.AtlasVisible)Data.CoordinateOverlay=true;
     Data.Point=point;Data.HasPoint=true;Data.SelectionName=RuneSchemaProfile::Name(player);Data.NearMarker=false;
 }
 inline void PlanPartyTravel(const std::string& moving,const std::string& destination,bool map=false,bool picking=false){
@@ -463,14 +463,13 @@ inline void PlanPartyTravel(const std::string& moving,const std::string& destina
     const auto* from=MapParty::Find(Data.Snapshot,moving);const auto* to=MapParty::Find(Data.Snapshot,destination);
     Data.PartyMovingGuid=from?ItemPresentation::Text(*from,"Guid"):"";Data.PartyDestinationGuid=to?ItemPresentation::Text(*to,"Guid"):"";
     Data.PartyPicking=picking?moving:"";Data.PartyConfirmWanted=!picking;
-    if(picking&&Data.AtlasVisible)Data.CoordinateOverlay=true;
 }
 inline Json PartyRequest(){
     const auto* from=MapParty::Find(Data.Snapshot,Data.PartyMoving);const auto* to=MapParty::Find(Data.Snapshot,Data.PartyDestination);
     if(!from||ItemPresentation::Text(*from,"Guid")!=Data.PartyMovingGuid||(!Data.PartyToMap&&(!to||ItemPresentation::Text(*to,"Guid")!=Data.PartyDestinationGuid)))throw std::runtime_error("The selected party character changed; choose the member again.");
     return Data.PartyToMap?MapParty::ToPoint(Data.Snapshot,Data.PartyMoving,Data.Projection,Data.PartyMapPoint,Data.Generation,Data.Sequence+1):MapParty::Between(Data.Snapshot,Data.PartyMoving,Data.PartyDestination,Data.Generation,Data.Sequence+1);
 }
-inline void Party(ImVec2 mapMin,ImVec2 mapMax,bool detached=false){
+inline void Party(ImVec2 mapMin,ImVec2 mapMax,bool detached=false,ImVec2 dockSize={}){
     const auto& t=HelpyImGuiTheme::Current;
     if(!Data.ShowParty||HelpyTaskbar::Current.Contains(HelpyTaskbar::Window::Party)||Data.PartyDetached!=detached)return;
 #if defined(HELPY_PREVIEW)
@@ -485,19 +484,19 @@ inline void Party(ImVec2 mapMin,ImVec2 mapMax,bool detached=false){
         ImGui::PopStyleColor();
     }else{
         // A bounded in-flow section, never an overlay or auto-sized window.
-        const float height=std::clamp(ImGui::GetContentRegionAvail().y,t.Y(100),t.Y(240));
+        if(dockSize.y<=0)dockSize.y=std::clamp(ImGui::GetContentRegionAvail().y,t.Y(100),t.Y(240));
         ImGui::PushStyleColor(ImGuiCol_ChildBg,ImVec4(.025f,.028f,.025f,1));
-        expanded=HelpyImGuiTheme::BeginPanel("Party##helpy-map-party",{0,height},ImGuiChildFlags_Borders|ImGuiChildFlags_AlwaysUseWindowPadding);
+        expanded=HelpyImGuiTheme::BeginPanel("Party##helpy-map-party",dockSize,ImGuiChildFlags_Borders|ImGuiChildFlags_AlwaysUseWindowPadding);
         ImGui::PopStyleColor();
     }
     const auto position=ImGui::GetWindowPos(),size=ImGui::GetWindowSize();
     if(expanded){
         ImGui::TextUnformatted("Party");ImGui::SameLine();
-        if(!HelpyImGuiTheme::NativePresentation&&HelpyImGuiTheme::SoftButton(detached?"Dock below map":"Detach Party"))Data.PartyDetached=!detached;
+        if(!HelpyImGuiTheme::NativePresentation&&HelpyImGuiTheme::SoftButton(detached?"Dock with map":"Detach Party"))Data.PartyDetached=!detached;
 #if defined(HELPY_PREVIEW)
         HelpyPreviewHooks::PartyDetach=HelpyPreviewHooks::LastRect();
 #endif
-        ImGui::SameLine();PartyMemberView::Advanced();ImGui::Separator();
+        HelpyMenu::NextControl("Advanced");PartyMemberView::Advanced();ImGui::Separator();
         if(!PlayerInventoryPanel::RepairStatus.empty())ImGui::TextWrapped("%s",PlayerInventoryPanel::RepairStatus.c_str());
     }
 #if defined(HELPY_PREVIEW)
@@ -669,40 +668,27 @@ inline void ApplyAtlasView(){
         const float width=ImGui::GetContentRegionAvail().x;
         float used=0;
         ImGui::PushID("map-pages");
-        for(const auto i:{MapAtlas::OverviewTab,MapAtlas::MainlandTab,MapAtlas::ScornedTab}){
+        for(const auto i:{MapAtlas::OverviewTab,MapAtlas::ScornedTab}){
             if(HelpyMenu::Tab(MapAtlas::Title(i).data(),i==MapAtlas::PrimaryTab(tabs.Requested),used,width,&FocusCanvas))choose(i);
 #if defined(HELPY_PREVIEW)
             if(i==MapAtlas::OverviewTab)HelpyPreviewHooks::AtlasOverview=HelpyPreviewHooks::LastRect();
-            if(i==MapAtlas::MainlandTab)HelpyPreviewHooks::AtlasMainland=HelpyPreviewHooks::LastRect();
             if(i==MapAtlas::ScornedTab)HelpyPreviewHooks::AtlasScorned=HelpyPreviewHooks::LastRect();
 #endif
         }
         ImGui::PopID();
-        if(MapAtlas::PrimaryTab(tabs.Requested)==MapAtlas::MainlandTab){
-            const auto& theme=HelpyImGuiTheme::Current;
-            auto& group=Data.AtlasGroup;
-            if(tabs.Requested>=MapAtlas::FirstRegionTab)
-                group=MapAtlas::SurfaceAreas[tabs.Requested-MapAtlas::FirstRegionTab].Group;
-            const float groupWidth=std::min(theme.X(156),width);
-            const float areaWidth=std::min(theme.X(214),width);
-            ImGui::SetNextItemWidth(groupWidth);
-            if(ImGui::BeginCombo("##map-region-group",MapAtlas::Groups[group])){
-                for(size_t i=0;i<MapAtlas::Groups.size();++i)
-                    if(ImGui::Selectable(MapAtlas::Groups[i],i==group)&&i!=group){group=i;choose(MapAtlas::MainlandTab);}
-                ImGui::EndCombo();
-            }
-            if(ImGui::IsItemHovered()||ImGui::IsItemFocused())HelpyImGuiTheme::Tooltip("Choose a mainland region group");
-            if(width>=groupWidth+areaWidth+ImGui::GetStyle().ItemSpacing.x)ImGui::SameLine();
+        if(tabs.Requested!=MapAtlas::ScornedTab){
+            const float areaWidth=std::min(HelpyImGuiTheme::Current.X(214),width);
+            if(used+areaWidth+ImGui::GetStyle().ItemSpacing.x<=width)ImGui::SameLine();
             ImGui::SetNextItemWidth(areaWidth);
-            const auto label=tabs.Requested==MapAtlas::MainlandTab?"All mainland":MapAtlas::Title(tabs.Requested).data();
-            if(ImGui::BeginCombo("##map-area",label)){
-                if(ImGui::Selectable("All mainland",tabs.Requested==MapAtlas::MainlandTab))choose(MapAtlas::MainlandTab);
-                for(size_t i=MapAtlas::FirstRegionTab;i<MapAtlas::TabCount;++i)
-                    if(MapAtlas::SurfaceAreas[i-MapAtlas::FirstRegionTab].Group==group&&
-                       ImGui::Selectable(MapAtlas::Title(i).data(),tabs.Requested==i))choose(i);
+            if(ImGui::BeginCombo("##map-area",tabs.Requested==MapAtlas::OverviewTab?"Choose a zone":MapAtlas::Title(tabs.Requested).data())){
+                for(size_t group=0;group<MapAtlas::Groups.size();++group){
+                    ImGui::SeparatorText(MapAtlas::Groups[group]);
+                    for(size_t i=MapAtlas::FirstRegionTab;i<MapAtlas::TabCount;++i)
+                        if(MapAtlas::SurfaceAreas[i-MapAtlas::FirstRegionTab].Group==group&&
+                           ImGui::Selectable(MapAtlas::Title(i).data(),tabs.Requested==i))choose(i);
+                }
                 ImGui::EndCombo();
             }
-            if(ImGui::IsItemHovered()||ImGui::IsItemFocused())HelpyImGuiTheme::Tooltip("Open an area within this group");
         }
         tabs.Show(tabs.Requested);
         if(HelpyImGuiTheme::Toggle("Follow player",&tabs.Following)&&!tabs.Following)tabs.Pause();
@@ -741,32 +727,31 @@ inline void DrawAtlas(ImDrawList* draw,ImVec2 origin,bool mainlandReady,ImTextur
     };
     if(mainlandReady)tile(Data.Texture->GetTexRef(),MapAtlas::Mainland,IM_COL32_WHITE);
     const auto active=Data.AtlasTabs.Active;
-    const bool containsScorned=active==MapAtlas::OverviewTab||active==MapAtlas::ScornedTab;
-    if(containsScorned&&scornedArt.GetTexID()&&
-       tile(scornedArt,MapAtlas::Scorned,IM_COL32(255,255,255,Data.CoordinateOverlay?170:255))){
+    const bool scorned=active==MapAtlas::ScornedTab;
+    if(scorned&&scornedArt.GetTexID()&&tile(scornedArt,MapAtlas::Scorned,IM_COL32_WHITE)){
 #if defined(HELPY_PREVIEW)
         HelpyPreviewHooks::AtlasArtwork=true;
 #endif
     }
-    if(!Data.CoordinateOverlay)return;
+    if(!Data.ShowTransportOutlines)return;
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::AtlasOutlinesDrawn=true;
+#endif
 
-    const auto outline=[&](std::span<const MapProjection::Point> shape,ImU32 fill=0){
-        std::array<ImVec2,64> vertices{};
-        std::transform(shape.begin(),shape.end(),vertices.begin(),screen);
-        if(fill)draw->AddConcavePolyFilled(vertices.data(),static_cast<int>(shape.size()),fill);
-        draw->AddPolyline(vertices.data(),static_cast<int>(shape.size()),IM_COL32(224,196,127,205),
-            ImDrawFlags_Closed,t.X(1.2f));
+    const auto outline=[&](std::span<const MapProjection::Point> shape,const auto& toScreen){
+        for(const auto point:shape)draw->PathLineTo(toScreen(point));
+        draw->PathStroke(IM_COL32(224,196,127,180),ImDrawFlags_Closed,t.X(1.2f));
     };
-    if(active==MapAtlas::OverviewTab||active==MapAtlas::MainlandTab)
-        for(const auto& area:MapAtlas::SurfaceAreas)outline(area.Shape);
-    else if(active>=MapAtlas::FirstRegionTab)outline(MapAtlas::SurfaceAreas[active-MapAtlas::FirstRegionTab].Shape);
-    if(containsScorned){
-        const int opacity=scornedArt.GetTexID()?100:200;
-        outline(MapAtlas::ScornedRaid,IM_COL32(87,62,55,opacity));
-        outline(MapAtlas::ScornedHub,IM_COL32(116,90,57,opacity));
-        if(active==MapAtlas::ScornedTab)
-            draw->AddText(screen({-797000,688000}),IM_COL32(255,220,164,255),"Raid area");
-    }
+    if(active==MapAtlas::OverviewTab){
+        for(const auto& area:MapAtlas::SurfaceAreas)outline(area.Shape,screen);
+        const auto insetScreen=[&](MapProjection::Point uv){return screen(Data.NativeProjection.ToWorld(uv));};
+        outline(MapAtlas::ScornedDisplayRaid,insetScreen);
+        outline(MapAtlas::ScornedDisplayHub,insetScreen);
+    }else if(scorned){
+        outline(MapAtlas::ScornedRaid,screen);
+        outline(MapAtlas::ScornedHub,screen);
+        draw->AddText(screen({-797000,688000}),IM_COL32(255,220,164,255),"Raid area");
+    }else outline(MapAtlas::SurfaceAreas[active-MapAtlas::FirstRegionTab].Shape,screen);
 }
 
 inline void DrawAtlasLandmarks(ImDrawList* draw,ImVec2 origin){
@@ -796,16 +781,15 @@ inline void Render(){
     const auto artwork=scorned&&LoadScornedArtwork?LoadScornedArtwork():ImTextureRef{};
     if(Data.AtlasVisible){
         inlineIfRoom(t.X(180));
-        HelpyImGuiTheme::Toggle("Coordinate overlay",&Data.CoordinateOverlay);
+        HelpyImGuiTheme::Toggle("Transport outlines",&Data.ShowTransportOutlines);
 #if defined(HELPY_PREVIEW)
-        HelpyPreviewHooks::AtlasCoordinateOverlay=HelpyPreviewHooks::LastRect();
+        HelpyPreviewHooks::AtlasTransportOutlines=HelpyPreviewHooks::LastRect();
 #endif
         if(ImGui::IsItemHovered()||ImGui::IsItemFocused())
-            HelpyImGuiTheme::Tooltip("Draw surveyed region outlines and live pins over the game artwork.");
+            HelpyImGuiTheme::Tooltip("Show region boundaries and portal landmarks over the game map.");
     }
-    const bool artworkOnly=Data.AtlasVisible&&!Data.CoordinateOverlay;
 #if defined(HELPY_PREVIEW)
-    HelpyPreviewHooks::AtlasArtwork=false;
+    HelpyPreviewHooks::AtlasArtwork=false;HelpyPreviewHooks::AtlasOutlinesDrawn=false;
     HelpyPreviewHooks::AtlasLocalPin.reset();
 #endif
     if(HelpyImGuiTheme::SoftButton("Fit map")){
@@ -813,12 +797,12 @@ inline void Render(){
     }
     if(Data.AtlasVisible){
         const auto player=AtlasPlayer();
-        const bool available=player&&MapAtlas::Overview.Contains(*player);
+        const bool available=player&&MapAtlas::ContainsSurface(*player);
         inlineIfRoom(t.X(85));
         ImGui::BeginDisabled(!available);
         if(HelpyImGuiTheme::SoftButton("Find player")&&available){
-            Data.AtlasTabs.Pause();Data.AtlasTabs.Requested=MapAtlas::RegionAt(*player);
-            Data.CoordinateOverlay=true;Data.FocusPlayer=true;
+            Data.AtlasTabs.Pause();Data.AtlasTabs.Requested=MapAtlas::CoordinateTab(*player);
+            Data.FocusPlayer=true;
         }
         ImGui::EndDisabled();
 #if defined(HELPY_PREVIEW)
@@ -829,9 +813,12 @@ inline void Render(){
     auto& mapCache=HelpyMapCache::Current();
     const auto refreshDetails=std::string("Refresh loaded world markers and player positions.\nNative markers: ")+(Data.Snapshot.value("MarkersScanning",false)?"checking loaded areas":"current snapshot")+"\n"+mapCache.Status+"\nInstalled game: "+HelpyEnvironment::GameVersion+"\nOnline filter data changes only after a confirmed installed game build change. Cached locations remain visible. No world or save edits.";
     if(HelpyLoadingIndicator::RefreshButton("Refresh",Data.Pending||Data.Snapshot.value("MarkersScanning",false)||HelpyMapCache::Busy(),refreshDetails)){Data.Next={};Data.Error.clear();if(HelpyMapCache::RefreshEligible())HelpyMapCache::Refresh();}
-    inlineIfRoom(t.X(160));ImGui::SetNextItemWidth(t.X(120));ImGui::SliderFloat("Zoom",&Data.Zoom,static_cast<float>(Data.View.FitZoom()),32,"%.1fx",ImGuiSliderFlags_Logarithmic);
+    inlineIfRoom(t.X(160));ImGui::SetNextItemWidth(t.X(120));
+    const float fit=static_cast<float>(Data.View.FitZoom());
+    float zoom=std::clamp(Data.Zoom/fit,1.f,32.f/fit);
+    if(ImGui::SliderFloat("Zoom",&zoom,1.f,32.f/fit,"%.1fx",ImGuiSliderFlags_Logarithmic))Data.Zoom=zoom*fit;
     if(!scorned||Data.BuildingPick){
-        inlineIfRoom(t.X(70));if(HelpyImGuiTheme::SoftButton(Data.BuildingPick?"Cancel build":"Build...")){Data.BuildingPick=!Data.BuildingPick;if(Data.BuildingPick){if(Data.AtlasVisible)Data.CoordinateOverlay=true;Data.Operation=1;Data.Permanent=true;Data.Status="Click the map to choose a building or prefab position.";}}
+        inlineIfRoom(t.X(70));if(HelpyImGuiTheme::SoftButton(Data.BuildingPick?"Cancel build":"Build...")){Data.BuildingPick=!Data.BuildingPick;if(Data.BuildingPick){Data.Operation=1;Data.Permanent=true;Data.Status="Click the map to choose a building or prefab position.";}}
     }
     if(scorned){
         inlineIfRoom(t.X(165));
@@ -847,23 +834,18 @@ inline void Render(){
     }
     inlineIfRoom(t.X(60));if(HelpyMenu::BeginMore("map-actions")){
         HelpyImGuiTheme::Toggle("Party",&Data.ShowParty);
-        if(!artworkOnly){
-            if(HelpyImGuiTheme::Toggle("Players",&Data.ShowPlayers))SaveNativeFilters();
-            if(HelpyImGuiTheme::Toggle("Chests",&Data.ShowChests)){SaveNativeFilters();Data.Next={};}
-        }
-        ImGui::TextWrapped("%s",artworkOnly?"Mouse: drag to pan, scroll to zoom.":"Mouse: select, drag to pan, scroll to zoom. Right-click for actions.");
+        if(HelpyImGuiTheme::Toggle("Players",&Data.ShowPlayers))SaveNativeFilters();
+        if(HelpyImGuiTheme::Toggle("Chests",&Data.ShowChests)){SaveNativeFilters();Data.Next={};}
+        ImGui::TextWrapped("Click a zone to open it. Drag to pan, scroll to zoom, or right-click for actions.");
         ImGui::EndPopup();
     }
-    ImGui::BeginDisabled(artworkOnly);
     Filters();ImGui::SameLine();ImGui::SetNextItemWidth(std::min(t.X(300),ImGui::GetContentRegionAvail().x));HelpyTextInput::InputTextWithHint("##map-marker-search","Find iron, oak, chest, lore...",Data.MarkerSearch,sizeof(Data.MarkerSearch));
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::MapMarkerSearch=HelpyPreviewHooks::LastRect();
 #endif
-    ImGui::EndDisabled();
     if(!scorned&&Data.Snapshot.value("MarkersScanning",false))ImGui::TextDisabled("Discovering loaded map markers...");
-    if(artworkOnly)ImGui::TextDisabled("Game map artwork");
-    else if(Data.HasPoint)ImGui::TextDisabled("Selected: X %.0f   Y %.0f",Data.Point.X,Data.Point.Y);
-    else if(Data.AtlasVisible)ImGui::TextDisabled("Pins follow surveyed region outlines");
+    if(Data.HasPoint)ImGui::TextDisabled("Selected: X %.0f   Y %.0f",Data.Point.X,Data.Point.Y);
+    else if(Data.AtlasVisible&&Data.AtlasTabs.Active==MapAtlas::OverviewTab)ImGui::TextDisabled("Click a zone to open it. Right-click for actions.");
     else ImGui::TextDisabled("Select a map location or party member.");
     if(!Data.PartyPicking.empty()){ImGui::TextWrapped("Select the member's destination with LMB. Dragging still pans; no teleport occurs before confirmation.");ImGui::SameLine();if(ImGui::SmallButton("Cancel destination"))Data.PartyPicking.clear();}
     if(!Data.Error.empty())ImGui::TextWrapped("%s",Data.Error.c_str());
@@ -895,8 +877,13 @@ inline void Render(){
     if(!Data.Status.empty())ImGui::TextWrapped("%s",Data.Status.c_str());
     const auto available=ImGui::GetContentRegionAvail();
     const bool dockParty=Data.ShowParty&&!Data.PartyDetached&&!HelpyTaskbar::Current.Contains(HelpyTaskbar::Window::Party);
-    const float partyHeight=dockParty?std::clamp(available.y*.36f,t.Y(180),t.Y(240))+ImGui::GetStyle().ItemSpacing.y:0;
-    const float width=std::max(t.X(160),available.x),height=std::max(t.Y(160),available.y-t.Y(24)-partyHeight);
+    const auto spacing=ImGui::GetStyle().ItemSpacing;
+    const float partyWidth=dockParty&&Data.AtlasVisible&&available.x>=t.X(640)
+        ?std::clamp(available.x*.31f,t.X(228),t.X(300)):0;
+    const float partyHeight=dockParty&&partyWidth==0
+        ?(Data.AtlasVisible?std::clamp(available.y*.24f,t.Y(100),t.Y(180)):std::clamp(available.y*.36f,t.Y(180),t.Y(240)))+spacing.y:0;
+    const float width=std::max(t.X(160),available.x-(partyWidth>0?partyWidth+spacing.x:0));
+    const float height=std::max(t.Y(160),available.y-t.Y(24)-partyHeight);
     const auto min=ImGui::GetCursorScreenPos();const ImVec2 max(min.x+width,min.y+height);
     Data.View={width,height,Data.Projection.Valid()?Data.Projection.HalfWidth/Data.Projection.HalfHeight:1,Data.Zoom,Data.Center,HelpyControllerInput::Selection.Controller};
     if(Data.FitRequested){Data.View.Zoom=Data.View.FitZoom();Data.FitRequested=false;}
@@ -907,7 +894,7 @@ inline void Render(){
         }
         Data.FocusPlayer=false;
     }
-    if(!artworkOnly&&Data.AtlasVisible&&Data.AtlasTabs.Following){
+    if(Data.AtlasVisible&&Data.AtlasTabs.Following){
         if(const auto player=AtlasPlayer();player&&Data.Projection.Contains(*player))Data.View.Center=Data.Projection.ToUV(*player);
     }
     Data.View.Clamp();
@@ -927,14 +914,14 @@ inline void Render(){
     const bool hovered=ImGui::IsItemHovered()||controllerMap;const ImVec2 pointer=controllerMap?ImVec2(min.x+width*.5f,min.y+height*.5f):io.MousePos;
     if(controllerMap){
         const auto motion=HelpyControllerPointer::Motion(HelpyControllerInput::PhysicalPad.sThumbLX,HelpyControllerInput::PhysicalPad.sThumbLY,io.DeltaTime,600);
-        if(!artworkOnly&&(motion.X!=0||motion.Y!=0))Data.AtlasTabs.Pause();
+        if(motion.X!=0||motion.Y!=0)Data.AtlasTabs.Pause();
         Data.View.Pan({-motion.X,-motion.Y});
         if(ImGui::IsKeyPressed(ImGuiKey_GamepadL3,false))Data.View.ZoomAt(Data.View.Zoom*1.25,{width*.5,height*.5});
         if(ImGui::IsKeyPressed(ImGuiKey_GamepadFaceUp,false))Data.View.ZoomAt(Data.View.Zoom/1.25,{width*.5,height*.5});
     }
     if(hovered&&ImGui::IsMouseClicked(ImGuiMouseButton_Left))Data.Dragged=false;
     if(hovered&&io.MouseWheel!=0)Data.View.ZoomAt(Data.View.Zoom*std::pow(1.2,io.MouseWheel),{pointer.x-min.x,pointer.y-min.y});
-    if(ImGui::IsItemActive()&&ImGui::IsMouseDragging(ImGuiMouseButton_Left)){Data.Dragged=true;if(!artworkOnly)Data.AtlasTabs.Pause();Data.View.Pan({io.MouseDelta.x,io.MouseDelta.y});}
+    if(ImGui::IsItemActive()&&ImGui::IsMouseDragging(ImGuiMouseButton_Left)){Data.Dragged=true;Data.AtlasTabs.Pause();Data.View.Pan({io.MouseDelta.x,io.MouseDelta.y});}
     Data.Zoom=static_cast<float>(Data.View.Zoom);Data.Center=Data.View.Center;
     const auto span=Data.View.Span();const ImVec2 uvMin(static_cast<float>(Data.Center.X-span.X/2),static_cast<float>(Data.Center.Y-span.Y/2)),uvMax(static_cast<float>(Data.Center.X+span.X/2),static_cast<float>(Data.Center.Y+span.Y/2));
     auto* draw=ImGui::GetWindowDrawList();draw->AddRectFilled(min,max,ImGui::GetColorU32(t.panelAlt));
@@ -946,10 +933,10 @@ inline void Render(){
         draw->AddImage(texture,{min.x+static_cast<float>(start.X),min.y+static_cast<float>(start.Y)},
             {min.x+static_cast<float>(end.X),min.y+static_cast<float>(end.Y)}, {static_cast<float>(a.X),static_cast<float>(a.Y)},{static_cast<float>(b.X),static_cast<float>(b.Y)},tint);
     };
-    if(Data.AtlasVisible&&(imageReady||artwork.GetTexID()||!artworkOnly))DrawAtlas(draw,min,imageReady,artwork);
+    if(Data.AtlasVisible)DrawAtlas(draw,min,imageReady,artwork);
     else if(imageReady)drawRaster(Data.Texture->GetTexRef(),IM_COL32_WHITE);
     else draw->AddText(ImVec2(min.x+t.X(14),min.y+t.Y(14)),ImGui::GetColorU32(t.textDisabled),SpawnToolRequests::IsAvailable()?"Loading the native world map...":"Load a world to view the map.");
-    if(!artworkOnly&&RiskOverlayActive()&&Data.Projection.Valid()){
+    if(RiskOverlayActive()&&Data.Projection.Valid()){
         // Unchecked space is yellow. Colored points represent recent measured
         // footprints, not a fabricated whole-map safety classification.
         draw->AddRectFilled(min,max,IM_COL32(235,185,45,24));const auto [player,guid]=RiskIdentity();const auto now=PartyMemberView::Now();
@@ -979,9 +966,9 @@ inline void Render(){
         const ImVec4 clip{min.x,min.y,max.x,max.y};
         draw->AddText(ImGui::GetFont(),ImGui::GetFontSize(),label,ImGui::GetColorU32(t.text),text,nullptr,wrap,&clip);
     }
-    if(!artworkOnly&&Data.AtlasVisible)DrawAtlasLandmarks(draw,min);
+    if(Data.AtlasVisible&&Data.ShowTransportOutlines)DrawAtlasLandmarks(draw,min);
     const Json* hoveredPlayer=nullptr;float playerDistance=t.X(11)*t.X(11);
-    if(!artworkOnly&&Data.ShowPlayers&&Data.Projection.Valid()&&Data.Snapshot.contains("Players")&&Data.Snapshot["Players"].is_array())for(const auto& player:Data.Snapshot["Players"]){
+    if(Data.ShowPlayers&&Data.Projection.Valid()&&Data.Snapshot.contains("Players")&&Data.Snapshot["Players"].is_array())for(const auto& player:Data.Snapshot["Players"]){
         if(!player.is_object()||!player.contains("Location")||!player["Location"].is_array()||player["Location"].size()!=3)continue;
         const auto& location=player["Location"];if(!location[0].is_number()||!location[1].is_number())continue;
         if(Data.AtlasVisible&&!SurfacePosition(player))continue;
@@ -1005,7 +992,7 @@ inline void Render(){
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::MapReferenceMatches=0;HelpyPreviewHooks::MapReferenceClusters=0;
 #endif
-    if(!artworkOnly&&mapCache.Data&&mapCache.Filters.ShowCached&&Data.Projection.Valid()){
+    if(mapCache.Data&&mapCache.Filters.ShowCached&&Data.Projection.Valid()){
         if(Data.FilteredData!=mapCache.Data.get()||Data.FilterRevision!=mapCache.Revision||Data.FilteredQuery!=query){
             Data.FilteredData=mapCache.Data.get();Data.FilterRevision=mapCache.Revision;Data.FilteredQuery=query;Data.FilteredMarkers.clear();
             for(size_t i=0;i<mapCache.Data->Markers.size();++i){const auto& marker=mapCache.Data->Markers[i];if(mapCache.Filters.Shows(mapCache.Data->Categories[marker.Category])&&MapFilters::MatchesFolded(marker.Search,query))Data.FilteredMarkers.push_back(i);}
@@ -1027,7 +1014,7 @@ inline void Render(){
         HelpyPreviewHooks::MapReferenceMatches=Data.FilteredMarkers.size();HelpyPreviewHooks::MapReferenceClusters=clusters.size();
 #endif
     }
-    if(!artworkOnly&&Data.Projection.Valid()&&Data.Snapshot.contains("Markers"))for(const auto& marker:Data.Snapshot["Markers"]){
+    if(Data.Projection.Valid()&&Data.Snapshot.contains("Markers"))for(const auto& marker:Data.Snapshot["Markers"]){
         const auto kind=ItemPresentation::Text(marker,"Kind");const bool placed=marker.value("Managed",false);
         if(!(kind=="Chest"?Data.ShowChests:kind=="Lodestone"?Data.ShowLodestones:placed?Data.ShowPlaced:kind=="Resource"?Data.ShowResources:Data.ShowAI))continue;
         if(!MapFilters::MatchesFolded(MapFilters::Fold(ItemPresentation::Text(marker,"Name")+" "+kind),query))continue;
@@ -1045,7 +1032,7 @@ inline void Render(){
         if(kind=="Chest")HelpyPreviewHooks::MapChest={at.x-t.X(10),at.y-t.Y(10),at.x+t.X(10),at.y+t.Y(10)};
 #endif
     }
-    if(!artworkOnly&&Data.HasPoint&&Data.Projection.Contains(Data.Point)){
+    if(Data.HasPoint&&Data.Projection.Contains(Data.Point)){
         const auto at=screen(Data.Point);const float r=t.X(9);const auto gold=ImGui::GetColorU32(t.accentHover);
         draw->AddCircleFilled(at,r+3,IM_COL32(0,0,0,210));draw->AddCircle(at,r,gold,24,2);
         draw->AddLine({at.x-r-5,at.y},{at.x+r+5,at.y},gold,2);draw->AddLine({at.x,at.y-r-5},{at.x,at.y+r+5},gold,2);
@@ -1054,20 +1041,31 @@ inline void Render(){
 #endif
     }
     const auto hit=hovered?Data.View.WorldAt(Data.Projection,{pointer.x-min.x,pointer.y-min.y}):std::nullopt;
+    const auto released=[&](ImGuiMouseButton button){
+        return ImGui::IsMouseReleased(button)&&ImRect(min,max).Contains(io.MouseClickedPos[button]);
+    };
+    const bool select=(released(ImGuiMouseButton_Left)&&!Data.Dragged)||
+        (controllerMap&&ImGui::IsKeyPressed(ImGuiKey_GamepadFaceDown,false));
+    const bool context=released(ImGuiMouseButton_Right)||
+        (controllerMap&&ImGui::IsKeyPressed(ImGuiKey_GamepadFaceLeft,false));
     const bool displayInset=hit&&Data.AtlasVisible&&imageReady&&MapAtlas::ScornedDisplayOnly(*hit);
-    if(displayInset&&!Data.Popup&&!Data.BuildingPick&&Data.PartyPicking.empty()){
-        const bool select=(ImGui::IsMouseReleased(ImGuiMouseButton_Left)&&!Data.Dragged)||
-            (controllerMap&&ImGui::IsKeyPressed(ImGuiKey_GamepadFaceDown,false));
-        if(select){
-            Data.AtlasTabs.Pause();
-            Data.AtlasTabs.Requested=MapAtlas::ScornedTab;
-        }else HelpyImGuiTheme::Tooltip("Scorned Wilderness illustration. Select to open its map.");
-    }
-    const bool mapped=hit&&!artworkOnly&&!displayInset&&(Data.AtlasVisible
-        ? (imageReady&&MapAtlas::Mainland.Contains(*hit))||
-          (MapAtlas::Scorned.Contains(*hit)&&(MapAtlas::Contains(MapAtlas::ScornedHub,*hit)||MapAtlas::Contains(MapAtlas::ScornedRaid,*hit)))
+    const auto active=Data.AtlasTabs.Active;
+    const auto zone=displayInset?MapAtlas::ScornedTab:
+        (hit&&Data.AtlasVisible&&imageReady&&active==MapAtlas::OverviewTab?MapAtlas::RegionAt(*hit):MapAtlas::OverviewTab);
+    const bool openZone=zone!=MapAtlas::OverviewTab&&!Data.Popup&&!Data.BuildingPick&&Data.PartyPicking.empty();
+    const bool scornedPoint=hit&&scorned&&MapAtlas::Scorned.Contains(*hit);
+    const bool mapped=hit&&!displayInset&&(Data.AtlasVisible
+        ? (imageReady&&MapAtlas::Mainland.Contains(*hit))||scornedPoint
         : imageReady);
-    if(mapped){
+    if(openZone&&select&&!context){
+        Data.AtlasTabs.Pause();
+        Data.AtlasTabs.Requested=zone;
+    }else if(context&&displayInset){
+        ImGui::OpenPopup("##atlas-travel-actions");
+    }else if(context&&scornedPoint&&!Data.NativeProjection.Contains(*hit)){
+        Data.Point=*hit;Data.HasPoint=true;Data.NearMarker=false;Data.SelectionName.clear();Data.Ground=Json::object();Data.ProbeWanted=false;
+        ImGui::OpenPopup("##atlas-travel-actions");
+    }else if(mapped){
         const auto point=*hit;const auto now=Clock::now();
         if(!Data.HoverActive||Data.HoverPoint.X!=point.X||Data.HoverPoint.Y!=point.Y){Data.HoverActive=true;Data.HoverPoint=point;Data.HoverStableAt=now+std::chrono::milliseconds(120);Data.HoverGround=Json::object();if(!Data.GroundReadSelected)Data.GroundReadPending=0;}
         const bool nativeActions=Data.NativeProjection.Contains(point);
@@ -1078,34 +1076,28 @@ inline void Render(){
         else std::snprintf(label,sizeof(label),"X %.0f   Y %.0f   Z: %s",point.X,point.Y,
             !nativeActions?"unavailable in this region":Data.GroundReadPending?"tracing...":ground.empty()?"pause to trace":"ground unavailable");
         draw->AddRectFilled({min.x+4,max.y-t.Y(32)},{max.x-4,max.y-4},IM_COL32(0,0,0,220));draw->AddText(ImVec2(min.x+t.X(10),max.y-t.Y(24)),ImGui::GetColorU32(t.accentHover),label);
-        const bool context=ImGui::IsMouseReleased(ImGuiMouseButton_Right)||(controllerMap&&ImGui::IsKeyPressed(ImGuiKey_GamepadFaceLeft,false));
-        if(context||(ImGui::IsMouseReleased(ImGuiMouseButton_Left)&&!Data.Dragged)||(controllerMap&&ImGui::IsKeyPressed(ImGuiKey_GamepadFaceDown,false))){
-            const auto entrance=MapScreen(min,MapAtlas::ScornedPortal);
-            const bool entranceClick=context&&Data.AtlasVisible&&Data.Projection.Contains(MapAtlas::ScornedPortal)
-                &&Data.Snapshot.value("ScornedTravel",false)&&SpawnToolRequests::IsAvailable()&&!Data.SpawnPending
-                &&!Data.BuildingPick&&Data.PartyPicking.empty()&&std::hypot(pointer.x-entrance.x,pointer.y-entrance.y)<t.X(14);
-            if(entranceClick)OpenScornedEntrance();
-            else{
-                const bool resourceClick=!context&&!Data.BuildingPick&&Data.PartyPicking.empty()&&(!hoveredPlayer||playerDistance>nearest);
-                if(resourceClick&&hoveredMarker&&ItemPresentation::Text(*hoveredMarker,"Kind")=="Chest")PlayerInventoryPanel::RequestContainer(*hoveredMarker);
-                if(resourceClick&&hoveredReference&&referenceCount==1){const auto& category=mapCache.Data->Categories[hoveredReference->Category];Data.ResourceDetails={{"Name",hoveredReference->Name},{"WikiName",category.Name},{"Note",hoveredReference->Note},{"X",hoveredReference->X},{"Y",hoveredReference->Y}};Data.ResourceDetailsWanted=true;}
-                if(resourceClick&&hoveredMarker&&ItemPresentation::Text(*hoveredMarker,"Kind")=="Resource"){Data.ResourceDetails=*hoveredMarker;Data.ResourceDetails["X"]=(*hoveredMarker)["Location"][0];Data.ResourceDetails["Y"]=(*hoveredMarker)["Location"][1];Data.ResourceDetailsWanted=true;}
-                Data.Point=point;Data.NearMarker=false;Data.SelectionName.clear();
-                if(hoveredReference&&referenceCount==1){Data.Point={hoveredReference->X,hoveredReference->Y};Data.SelectionName=hoveredReference->Name+" (cached reference)";}
-                if(hoveredMarker){const auto& loc=hoveredMarker->at("Location");Data.Point={loc[0].get<double>(),loc[1].get<double>()};Data.SelectionName=ItemPresentation::Text(*hoveredMarker,"Name");if(ItemPresentation::Text(*hoveredMarker,"Kind")=="Lodestone"){Data.Operation=2;Data.NearMarker=true;}}
-                if(hoveredPlayer&&playerDistance<=nearest){const auto& loc=hoveredPlayer->at("Location");Data.Point={loc[0].get<double>(),loc[1].get<double>()};Data.SelectionName=RuneSchemaProfile::Name(*hoveredPlayer);Data.PartySelection=ItemPresentation::Text(*hoveredPlayer,"Path");Data.NearMarker=false;}
-                const bool samePoint=haveZ&&Data.Point.X==Data.HoverPoint.X&&Data.Point.Y==Data.HoverPoint.Y;
-                Data.HasPoint=true;Data.Ground=samePoint?Data.HoverGround:Json::object();Data.GroundReadPending=0;Data.GroundReadSelected=true;Data.NextGroundRead={};Data.ProbeWanted=Data.Operation!=2&&context&&!samePoint;
-                if(!nativeActions&&(context||Data.BuildingPick||!Data.PartyPicking.empty())){
-                    Data.Status="Map actions are available within the native mainland map.";
-                    Data.ProbeWanted=false;
-                }else{
-                    if(!context&&!Data.PartyPicking.empty()){Data.PartyMapPoint=Data.Point;Data.PartyPicking.clear();Data.PartyConfirmWanted=true;Data.ProbeWanted=false;}
-                    if(context||Data.BuildingPick){Data.ProbeWanted=Data.Operation!=2&&!samePoint;Data.MapPopupAnchor=pointer;Data.Popup=true;Data.BuildingPick=false;ImGui::OpenPopup("##map-place");}
-                }
+        if(context||select){
+            const bool resourceClick=!context&&!Data.BuildingPick&&Data.PartyPicking.empty()&&(!hoveredPlayer||playerDistance>nearest);
+            if(resourceClick&&hoveredMarker&&ItemPresentation::Text(*hoveredMarker,"Kind")=="Chest")PlayerInventoryPanel::RequestContainer(*hoveredMarker);
+            if(resourceClick&&hoveredReference&&referenceCount==1){const auto& category=mapCache.Data->Categories[hoveredReference->Category];Data.ResourceDetails={{"Name",hoveredReference->Name},{"WikiName",category.Name},{"Note",hoveredReference->Note},{"X",hoveredReference->X},{"Y",hoveredReference->Y}};Data.ResourceDetailsWanted=true;}
+            if(resourceClick&&hoveredMarker&&ItemPresentation::Text(*hoveredMarker,"Kind")=="Resource"){Data.ResourceDetails=*hoveredMarker;Data.ResourceDetails["X"]=(*hoveredMarker)["Location"][0];Data.ResourceDetails["Y"]=(*hoveredMarker)["Location"][1];Data.ResourceDetailsWanted=true;}
+            Data.Point=point;Data.NearMarker=false;Data.SelectionName.clear();
+            if(hoveredReference&&referenceCount==1){Data.Point={hoveredReference->X,hoveredReference->Y};Data.SelectionName=hoveredReference->Name+" (cached reference)";}
+            if(hoveredMarker){const auto& loc=hoveredMarker->at("Location");Data.Point={loc[0].get<double>(),loc[1].get<double>()};Data.SelectionName=ItemPresentation::Text(*hoveredMarker,"Name");if(ItemPresentation::Text(*hoveredMarker,"Kind")=="Lodestone"){Data.Operation=2;Data.NearMarker=true;}}
+            if(hoveredPlayer&&playerDistance<=nearest){const auto& loc=hoveredPlayer->at("Location");Data.Point={loc[0].get<double>(),loc[1].get<double>()};Data.SelectionName=RuneSchemaProfile::Name(*hoveredPlayer);Data.PartySelection=ItemPresentation::Text(*hoveredPlayer,"Path");Data.NearMarker=false;}
+            const bool samePoint=haveZ&&Data.Point.X==Data.HoverPoint.X&&Data.Point.Y==Data.HoverPoint.Y;
+            Data.HasPoint=true;Data.Ground=samePoint?Data.HoverGround:Json::object();Data.GroundReadPending=0;Data.GroundReadSelected=true;Data.NextGroundRead={};Data.ProbeWanted=Data.Operation!=2&&context&&!samePoint;
+            if(!nativeActions&&(context||Data.BuildingPick||!Data.PartyPicking.empty())){
+                Data.Status="Map actions are available within the native mainland map.";
+                Data.ProbeWanted=false;
+            }else{
+                if(!context&&!Data.PartyPicking.empty()){Data.PartyMapPoint=Data.Point;Data.PartyPicking.clear();Data.PartyConfirmWanted=true;Data.ProbeWanted=false;}
+                if(context||Data.BuildingPick){Data.ProbeWanted=Data.Operation!=2&&!samePoint;Data.MapPopupAnchor=pointer;Data.Popup=true;Data.BuildingPick=false;ImGui::OpenPopup("##map-place");}
             }
         }
     }else{Data.HoverActive=false;Data.HoverGround=Json::object();if(!Data.GroundReadSelected)Data.GroundReadPending=0;}
+    if(openZone&&!select&&!context&&!ImGui::IsMouseDown(ImGuiMouseButton_Left)&&!hoveredPlayer&&!hoveredMarker&&!hoveredReference)
+        HelpyImGuiTheme::Tooltip((std::string("Open ")+std::string(MapAtlas::Title(zone))).c_str());
     if(hoveredPlayer&&playerDistance<=nearest){
         auto label=RuneSchemaProfile::Name(*hoveredPlayer);
         if(const auto region=PartyRegion(*hoveredPlayer);!region.empty())label+=" · "+std::string(region);
@@ -1121,14 +1113,35 @@ inline void Render(){
     else if(hoveredReference){const auto& category=mapCache.Data->Categories[hoveredReference->Category];const auto label=hoveredReference->Name+" · "+category.Name+" · cached reference"+(referenceCount>1?" ("+std::to_string(referenceCount)+" nearby; zoom in)":"");draw->AddRectFilled({min.x+4,min.y+4},{max.x-4,min.y+t.Y(30)},IM_COL32(0,0,0,225));draw->AddText({min.x+t.X(10),min.y+t.Y(8)},ImGui::GetColorU32(t.text),label.c_str());}
     if(controllerMap){const auto color=ImGui::GetColorU32(t.accentHover);draw->AddCircle(pointer,t.X(8),color,24,2);
         draw->AddLine({pointer.x-t.X(13),pointer.y},{pointer.x+t.X(13),pointer.y},color,2);draw->AddLine({pointer.x,pointer.y-t.Y(13)},{pointer.x,pointer.y+t.Y(13)},color,2);
-        const char* help=artworkOnly?"Left stick: pan | Left stick click: zoom in | North: zoom out":"Left stick: pan | Left stick click: zoom in | North: zoom out | Confirm: select | West: actions";const float wrap=std::max(1.f,width-t.X(16));const auto size=ImGui::CalcTextSize(help,nullptr,false,wrap);const ImVec2 at{min.x+t.X(8),max.y-t.Y(42)-size.y};draw->AddRectFilled({at.x-t.X(3),at.y-t.Y(3)},{std::min(max.x,at.x+size.x+t.X(3)),at.y+size.y+t.Y(3)},IM_COL32(0,0,0,220));draw->AddText(nullptr,0,at,color,help,nullptr,wrap);}
-    draw->PopClipRect();draw->AddRect(min,max,ImGui::GetColorU32(controllerMap?t.accentHover:t.border));PlacePopup();
+        const char* help="Left stick: pan | Left stick click: zoom in | North: zoom out | Confirm: open or select | West: actions";const float wrap=std::max(1.f,width-t.X(16));const auto size=ImGui::CalcTextSize(help,nullptr,false,wrap);const ImVec2 at{min.x+t.X(8),max.y-t.Y(42)-size.y};draw->AddRectFilled({at.x-t.X(3),at.y-t.Y(3)},{std::min(max.x,at.x+size.x+t.X(3)),at.y+size.y+t.Y(3)},IM_COL32(0,0,0,220));draw->AddText(nullptr,0,at,color,help,nullptr,wrap);}
+    draw->PopClipRect();draw->AddRect(min,max,ImGui::GetColorU32(controllerMap?t.accentHover:t.border));
+    bool travel=false;
+    if(ImGui::BeginPopup("##atlas-travel-actions")){
+        if(scorned&&Data.HasPoint&&MapAtlas::Scorned.Contains(Data.Point)&&ImGui::MenuItem("Copy coordinates")){
+            char coordinates[96];std::snprintf(coordinates,sizeof(coordinates),"X %.0f   Y %.0f",Data.Point.X,Data.Point.Y);
+            ImGui::SetClipboardText(coordinates);
+        }
+        if(!scorned&&ImGui::MenuItem("Open Scorned Wilderness")){
+            Data.AtlasTabs.Pause();
+            Data.AtlasTabs.Requested=MapAtlas::ScornedTab;
+        }
+        const bool available=Data.Snapshot.value("ScornedTravel",false)&&SpawnToolRequests::IsAvailable()&&!Data.SpawnPending;
+        travel=ImGui::MenuItem("Travel to Rasthin's Rest...",nullptr,false,available);
+#if defined(HELPY_PREVIEW)
+        HelpyPreviewHooks::AtlasContextTravel=HelpyPreviewHooks::LastRect();
+#endif
+        ImGui::EndPopup();
+    }
+    if(travel)OpenScornedEntrance();
+    PlacePopup();
+    if(partyWidth>0){ImGui::SameLine();Party(min,max,false,{partyWidth,height});}
     if(artwork.GetTexID())ImGui::TextDisabled("Map artwork © Jagex");
-    if(!artworkOnly&&mapCache.Data&&mapCache.Filters.ShowCached){
+    if(mapCache.Data&&mapCache.Filters.ShowCached){
         if(artwork.GetTexID())inlineIfRoom(ImGui::CalcTextSize("Wiki / Wildsforge map data - CC BY-NC-SA 3.0").x);
         ImGui::TextLinkOpenURL("Wiki / Wildsforge map data - CC BY-NC-SA 3.0",MapFilters::SourceUrl);
     }
-    Party(min,max);ResourceDetails();
+    if(partyWidth==0)Party(min,max);
+    ResourceDetails();
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::Map={min.x,min.y,max.x,max.y};
 #endif

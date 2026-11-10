@@ -127,7 +127,7 @@ persistence.
 
 Preview slider motion stays local. JBM publishes only on explicit Submit;
 Cancel, profile loading and received network state never publish. Payloads must
-fit the route's limit, up to 4,096 bytes, and the existing
+fit the route's limit, which defaults to 4,096 bytes. Matching updated runtimes can opt into 16 KiB through the [network capacity candidate](NETWORK-CAPACITY.md). Generic requests retain the existing
 generic request object's 32 top-level fields. Put extensible controls inside a
 `values` object. Versions and schemas inside the payload are owned by the mod.
 

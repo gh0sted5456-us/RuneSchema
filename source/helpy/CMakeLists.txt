@@ -26,13 +26,47 @@ add_library(helpy_imgui STATIC vendor/imgui/imgui.cpp vendor/imgui/imgui_draw.cp
   vendor/imgui/imgui_tables.cpp vendor/imgui/imgui_widgets.cpp
   vendor/imgui/backends/imgui_impl_win32.cpp vendor/imgui/backends/imgui_impl_dx11.cpp)
 target_compile_definitions(helpy_imgui PRIVATE RUNESCHEMA_HELPY_FOCUS=1)
-set(HELPY_UI_SOURCES source/src/Generator/HelpyStandaloneWindow.cpp source/src/Generator/HelpyControllerDevice.cpp
+FetchContent_Declare(helpy_webview2
+  URL https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/1.0.3405.78/microsoft.web.webview2.1.0.3405.78.nupkg
+  URL_HASH SHA256=d035807b2aaba871e8c014759626f566e96934e6ce6f0587056ee81d5228c373
+  DOWNLOAD_NAME webview2-sdk.zip
+  DOWNLOAD_EXTRACT_TIMESTAMP FALSE)
+FetchContent_Declare(helpy_md4c
+  URL https://codeload.github.com/mity/md4c/tar.gz/refs/tags/release-0.5.2
+  URL_HASH SHA256=55d0111d48fb11883aaee91465e642b8b640775a4d6993c2d0e7a8092758ef21
+  DOWNLOAD_EXTRACT_TIMESTAMP FALSE
+  SOURCE_SUBDIR unused)
+FetchContent_MakeAvailable(helpy_webview2 helpy_md4c)
+set(HELPY_MD4C "${helpy_md4c_SOURCE_DIR}/src")
+add_library(helpy_support_dependencies STATIC
+  "${HELPY_MD4C}/md4c.c" "${HELPY_MD4C}/md4c-html.c" "${HELPY_MD4C}/entity.c")
+target_include_directories(helpy_support_dependencies PUBLIC
+  "${HELPY_MD4C}" "${helpy_webview2_SOURCE_DIR}/build/native/include")
+target_link_libraries(helpy_support_dependencies PUBLIC
+  "${helpy_webview2_SOURCE_DIR}/build/native/x64/WebView2LoaderStatic.lib"
+  shlwapi version ole32 oleaut32 advapi32)
+
+set(HELPY_SUPPORT_DOCS "${CMAKE_CURRENT_SOURCE_DIR}/../../docs/experimental")
+set(HELPY_SUPPORT_RESOURCE "${CMAKE_CURRENT_BINARY_DIR}/HelpySupport.rc")
+set(HELPY_SUPPORT_INPUTS "${HELPY_SUPPORT_DOCS}/HELPY-SUPPORT.md")
+foreach(image IN ITEMS help items notifications scorned topics world)
+  list(APPEND HELPY_SUPPORT_INPUTS "${HELPY_SUPPORT_DOCS}/assets/helpy-support/${image}.png")
+endforeach()
+set(HELPY_SUPPORT_RC "")
+set(HELPY_SUPPORT_ID 401)
+foreach(input IN LISTS HELPY_SUPPORT_INPUTS)
+  string(APPEND HELPY_SUPPORT_RC "${HELPY_SUPPORT_ID} RCDATA \"${input}\"\n")
+  math(EXPR HELPY_SUPPORT_ID "${HELPY_SUPPORT_ID} + 1")
+endforeach()
+file(GENERATE OUTPUT "${HELPY_SUPPORT_RESOURCE}" CONTENT "${HELPY_SUPPORT_RC}")
+set_source_files_properties("${HELPY_SUPPORT_RESOURCE}" PROPERTIES OBJECT_DEPENDS "${HELPY_SUPPORT_INPUTS}")
+set(HELPY_UI_SOURCES source/src/Generator/HelpyStandaloneWindow.cpp source/src/Generator/HelpyControllerDevice.cpp source/src/Generator/HelpySupportPage.cpp
   source/src/Generator/ToolRequestState.cpp source/src/Generator/HelpyUpdates.cpp source/src/Generator/HelpyDownloads.cpp source/src/Generator/HelpyModCacheBuilder.cpp source/src/Generator/HelpyMapCache.cpp source/src/Generator/HelpyWikiIcons.cpp source/src/Core/ConfigFiles.cpp source/src/HelpyPaths.cpp ../raw/src/Core/ModOrderState.cpp)
 set_source_files_properties(source/src/Generator/HelpyStandaloneWindow.cpp PROPERTIES COMPILE_OPTIONS /bigobj)
 add_library(helpy_ui STATIC ${HELPY_UI_SOURCES})
 target_include_directories(helpy_ui PUBLIC ../raw/include)
 target_compile_definitions(helpy_ui PRIVATE RUNESCHEMA_PLUGIN_CLIENT=1)
-target_link_libraries(helpy_ui PUBLIC SDL3::SDL3 helpy_imgui d3d11 dxgi dcomp d3dcompiler dwmapi shell32 windowscodecs ole32 winhttp bcrypt pdh)
+target_link_libraries(helpy_ui PUBLIC helpy_support_dependencies SDL3::SDL3 helpy_imgui d3d11 dxgi dcomp d3dcompiler dwmapi shell32 windowscodecs ole32 winhttp bcrypt pdh)
 if(NOT TARGET safetyhook)
   include(FetchContent)
   FetchContent_Declare(safetyhook GIT_REPOSITORY https://github.com/cursey/safetyhook.git GIT_TAG 8a975dee560c424329dcb0e151f3649fa4b19146)
@@ -46,7 +80,23 @@ add_library(RuneSchemaHudPlugin SHARED source/plugins/helpy/HudPlugin.cpp source
 target_link_libraries(RuneSchemaHudPlugin PRIVATE safetyhook d3d11 d3d12 dxgi d3dcompiler opengl32 advapi32 shell32 ole32 bcrypt delayimp)
 set_target_properties(RuneSchemaHudPlugin PROPERTIES OUTPUT_NAME RuneSchema.HUD RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 target_link_options(RuneSchemaHudPlugin PRIVATE /OPT:REF /OPT:ICF /INCREMENTAL:NO /PDBALTPATH:RuneSchema.HUD.pdb /DELAYLOAD:opengl32.dll /DELAYLOAD:d3d11.dll /DELAYLOAD:d3d12.dll /DELAYLOAD:dxgi.dll /DELAYLOAD:d3dcompiler_47.dll)
-add_library(RuneSchemaModMenuPlugin SHARED source/plugins/modmenu2/ModMenuPlugin.cpp)
+FetchContent_Declare(helpy_lua
+  URL https://codeload.github.com/lua/lua/tar.gz/refs/tags/v5.4.9
+  URL_HASH SHA256=76def9b3b100e029bfbe37c985d869d0ed993a0cf1a157df282d6dcd9d6a4e15
+  DOWNLOAD_EXTRACT_TIMESTAMP FALSE)
+FetchContent_MakeAvailable(helpy_lua)
+file(GLOB HELPY_LUA_SOURCES "${helpy_lua_SOURCE_DIR}/l*.c")
+list(FILTER HELPY_LUA_SOURCES EXCLUDE REGEX "/(lua|luac|ltests)\\.c$")
+add_library(helpy_lua_runtime STATIC ${HELPY_LUA_SOURCES})
+target_include_directories(helpy_lua_runtime PUBLIC "${helpy_lua_SOURCE_DIR}")
+set(HELPY_MOD_MENU_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/../ue4ss/scripts/helpy-mod-menu.lua")
+set(HELPY_MOD_MENU_RESOURCE "${CMAKE_CURRENT_BINARY_DIR}/ModMenu2.rc")
+file(GENERATE OUTPUT "${HELPY_MOD_MENU_RESOURCE}" CONTENT "101 RCDATA \"${HELPY_MOD_MENU_SCRIPT}\"\n")
+set_source_files_properties("${HELPY_MOD_MENU_RESOURCE}" PROPERTIES OBJECT_DEPENDS "${HELPY_MOD_MENU_SCRIPT}")
+add_library(RuneSchemaModMenuPlugin SHARED source/plugins/modmenu2/ModMenuPlugin.cpp
+  source/src/Core/ConfigFiles.cpp ../raw/src/Core/ModOrderState.cpp "${HELPY_MOD_MENU_RESOURCE}")
+target_include_directories(RuneSchemaModMenuPlugin PRIVATE ../raw/include)
+target_link_libraries(RuneSchemaModMenuPlugin PRIVATE helpy_lua_runtime bcrypt shell32 ole32)
 set_target_properties(RuneSchemaModMenuPlugin PROPERTIES OUTPUT_NAME RuneSchema.ModMenu2 RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 target_link_options(RuneSchemaModMenuPlugin PRIVATE /OPT:REF /OPT:ICF /INCREMENTAL:NO)
 
@@ -61,7 +111,7 @@ set_target_properties(HelpyVulkanBootstrap PROPERTIES OUTPUT_NAME RuneSchema.Hel
 target_link_options(HelpyVulkanBootstrap PRIVATE /OPT:REF /OPT:ICF /INCREMENTAL:NO)
 
 target_link_options(RuneSchemaHelpyPlugin PRIVATE /OPT:REF /OPT:ICF /INCREMENTAL:NO /PDBALTPATH:RuneSchema.Helpy.pdb)
-add_executable(HelpyDesktop WIN32 source/src/HelpyDesktopMain.cpp source/plugins/helpy/HelpyPlugin.cpp source/resources/RSMK.rc)
+add_executable(HelpyDesktop WIN32 source/src/HelpyDesktopMain.cpp source/plugins/helpy/HelpyPlugin.cpp source/resources/RSMK.rc "${HELPY_SUPPORT_RESOURCE}")
 target_compile_definitions(HelpyDesktop PRIVATE RUNESCHEMA_PLUGIN_CLIENT=1 RSMK_EXECUTABLE=1)
 target_include_directories(HelpyDesktop PRIVATE ../raw/include)
 if(TARGET glaze::glaze)
@@ -436,13 +486,13 @@ target_link_libraries(helpy-transport PRIVATE helpy_ui)
 add_test(NAME helpy-transport COMMAND helpy-transport)
 
 # Same production renderer with a synthetic host; never shipped as the plugin.
-add_executable(HelpyPreview WIN32 source/tests/HelpyPreview.cpp ${HELPY_UI_SOURCES} source/resources/RSMK.rc)
+add_executable(HelpyPreview WIN32 source/tests/HelpyPreview.cpp ${HELPY_UI_SOURCES} source/resources/RSMK.rc "${HELPY_SUPPORT_RESOURCE}")
 target_include_directories(HelpyPreview PRIVATE ../raw/include)
 set_target_properties(HelpyPreview PROPERTIES OUTPUT_NAME RSMK.Preview)
 target_compile_definitions(HelpyPreview PRIVATE HELPY_PREVIEW=1 RSMK_EXECUTABLE=1)
 target_compile_options(HelpyPreview PRIVATE /bigobj)
 target_include_directories(HelpyPreview PRIVATE ../raw/include)
-target_link_libraries(HelpyPreview PRIVATE SDL3::SDL3 helpy_imgui d3d11 dxgi dcomp d3dcompiler dwmapi shell32 windowscodecs ole32 winhttp bcrypt pdh)
+target_link_libraries(HelpyPreview PRIVATE helpy_support_dependencies SDL3::SDL3 helpy_imgui d3d11 dxgi dcomp d3dcompiler dwmapi shell32 windowscodecs ole32 winhttp bcrypt pdh)
 add_test(NAME helpy-render-workspaces COMMAND HelpyPreview --capture "${CMAKE_CURRENT_BINARY_DIR}/preview" --assets "${CMAKE_CURRENT_SOURCE_DIR}/../plugins/RuneSchema.Helpy")
 add_test(NAME helpy-preview-art COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/source/tests/prepare-preview-art.ps1" -Source "${CMAKE_CURRENT_SOURCE_DIR}/../../resources/helpy-ui/v1" -Destination "${CMAKE_CURRENT_BINARY_DIR}/test-user/RSDragonwilds/RuneSchema/core/HELPY/ui-assets/1")
 set_tests_properties(helpy-preview-art PROPERTIES FIXTURES_SETUP optional-art)

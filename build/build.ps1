@@ -14,9 +14,9 @@ $BuildRoot = [IO.Path]::GetFullPath($PSScriptRoot)
 if (-not (Test-Path -LiteralPath (Join-Path $BuildRoot 'source\raw\CMakeLists.txt') -PathType Leaf)) {
     $BuildRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 }
-$releaseVersionPattern = '^\d+\.\d+\.\d+(?:\.\d+(?:[bem]|-alpha(?:\.\d+)?)?)?$'
+$releaseVersionPattern = '^(?:\d+\.\d+\.\d+(?:\.\d+(?:[bem]|-alpha(?:\.\d+)?)?)?|1\.0\.0\.J0[0-9A-Z]{4})$'
 if ($Version -cnotmatch $releaseVersionPattern) {
-    throw "Expected a three- or four-part RuneSchema version, optionally using a lowercase b bugfix or legacy channel suffix: $Version"
+    throw "Expected a RuneSchema version such as 0.8.1.0 or 1.0.0.J00001. $Version"
 }
 $releaseBranch = $env:GITHUB_REF_NAME
 if ([string]::IsNullOrWhiteSpace($releaseBranch) -and (Test-Path -LiteralPath (Join-Path $BuildRoot '.git'))) {
@@ -446,7 +446,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         )
         $configureArgs += '-DRUNESCHEMA_BUILD_MANAGED_UE4SS_HOST=OFF'
         Ensure-CMakeConfigured $RawSource $build $configureArgs 'universal RuneSchema'
-        $targets = if ($OnlyPlugin) { @('RuneSchemaHelpyPlugin','RuneSchemaHudPlugin','HelpyDesktop','HelpyVulkanBootstrap','RuneSchemaModMenuPlugin','RuneSchemaDeveloperPlugin') } else { @('RuneSchema', 'RuneSchemaHelpyPlugin','RuneSchemaHudPlugin','HelpyDesktop','HelpyVulkanBootstrap','RuneSchemaModMenuPlugin','RuneSchemaDeveloperPlugin') }
+        $targets = if ($OnlyPlugin) { @('RuneSchemaHelpyPlugin','RuneSchemaHudPlugin','HelpyDesktop','HelpyVulkanBootstrap','RuneSchemaModMenuPlugin','RuneSchemaDeveloperPlugin') } else { @('RuneSchema', 'RuneSchemaMultiplayerPlugin','RuneSchemaHelpyPlugin','RuneSchemaHudPlugin','HelpyDesktop','HelpyVulkanBootstrap','RuneSchemaModMenuPlugin','RuneSchemaDeveloperPlugin') }
         Write-Host $(if ($OnlyPlugin) { '=== Compile Helpy plugin only (RuneSchema.dll is untouched) ===' } else { '=== Compile universal RuneSchema ===' }) -ForegroundColor Cyan
         Write-Host 'Ninja auto-regeneration is disabled; build.ps1 owns all CMake reconfiguration.' -ForegroundColor DarkGray
 
@@ -643,6 +643,11 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
                 Copy-Item -LiteralPath $_.FullName -Destination $payloadPlugins -Recurse -Force
             }
         }
+        $multiplayerDll = Join-Path (Split-Path -Parent $CoreDll) 'RuneSchema.Multiplayer.dll'
+        if (-not (Test-Path -LiteralPath $multiplayerDll -PathType Leaf)) { throw 'The RSNetworking policy DLL is missing.' }
+        $multiplayerRoot = Join-Path $payloadPlugins 'RSNetworking/dll'
+        New-Item -ItemType Directory -Path $multiplayerRoot -Force | Out-Null
+        Copy-Item -LiteralPath $multiplayerDll -Destination $multiplayerRoot
         New-Item -ItemType Directory -Path (Join-Path $payload 'plugins\RuneSchema.Helpy\dll') -Force | Out-Null
         & (Join-Path $BuildRoot 'build/package-optional-art.ps1') -PayloadRoot (Join-Path $payload 'plugins/RuneSchema.Helpy') -StagingRoot $DistRoot -RepositoryRoot $BuildRoot
 

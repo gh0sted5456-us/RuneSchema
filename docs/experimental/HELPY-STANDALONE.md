@@ -12,6 +12,8 @@ promote_to: HELPY-STANDALONE.md
 
 # Helpy desktop app
 
+For screenshots and troubleshooting, open the [Helpy support guide](HELPY-SUPPORT.md).
+
 Helpy runs as `Helpy.exe` from
 `RuneSchema/Helpy/`, beside its bridge and `SDL3.dll`.
 AppData holds settings, caches, profiles and logs. Keep all components from one
@@ -28,9 +30,7 @@ The footer follows the active input mode. Item Bay shows mouse buttons,
 keyboard shortcuts, or controller glyphs. Drag one card or a selected group
 onto the cart or the **Drop into cart** target above the results.
 
-In **World → Map**, choose **Overview**, **Mainland** or **Scorned Wilderness**.
-Mainland areas are grouped in the two pickers. **Find player** opens the
-player's area and centers their pin. **Fit map** resets the current view.
+In **World → Map**, click a world map zone for its close-up, or choose a zone from the picker. **Transport outlines** toggles the zone and portal guides. **Scorned Wilderness** uses a separate coordinate view. **Find player** opens the player's area, and **Fit map** resets the current view.
 
 
 ## Cache updates and notifications
@@ -40,7 +40,7 @@ player's area and centers their pin. **Fit map** resets the current view.
 | Build caches for enabled mods sequentially | **Home → Build enabled mod caches**, or **Mods → Cache enabled mods** |
 | Pause, resume or stop a build | The Tools progress view |
 | Review cache changes and job results | **Notifications**, below Report a bug |
-| Resync vanilla files after a game update | The **i Game cache update** action on Players |
+| Resync vanilla files after a game update | The **i Game cache update** action on Items |
 | Switch display/internal item names immediately | Item Bay's settings cog |
 
 The read-only PAK builder works with the assigned game open or closed. Existing

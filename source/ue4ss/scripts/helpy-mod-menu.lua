@@ -2,6 +2,8 @@
 -- Adapted for RuneSchema's process bridge; see licenses/ModMenu-MIT.txt.
 -- No UMG widgets, input hooks or pause-menu hooks are installed by this adapter.
 if type(RuneSchemaModMenuExchange)~="function" then return end
+local offline=RuneSchemaModMenuOffline==true
+if not offline then
 local ok,other=pcall(function() return ModRef:GetSharedVariable("ModMenu.version") end)
 if ok and type(other)=="string" and other~="" then
     RuneSchemaModMenuExchange('{"Op":"stop","Reason":"Separate Mod Menu was already loaded. Restart after disabling it."}')
@@ -10,6 +12,7 @@ end
 if type(ExecuteInGameThreadWithDelay)~="function" then
     RuneSchemaModMenuExchange('{"Op":"stop","Reason":"UE4SS game-thread delayed actions are unavailable"}')
     return
+end
 end
 local function HMencode(value)
     local kind=type(value)
@@ -154,10 +157,10 @@ local function readFile(path)
     local reply=exchange("read",{Path=path});baselines[path]=reply
     return reply.Exists and reply.Text or nil
 end
-local function writeFile(path,text)
+local function writeFile(path,text,jsonPatch)
     local previous=baselines[path];if not previous then return false end
-    local reply=exchange("write",{Path=path,Exists=previous.Exists,Expected=previous.Text,Text=text})
-    if reply.Saved then baselines[path]={Exists=true,Text=text};return true end
+    local reply=exchange("write",{Path=path,Exists=previous.Exists,Expected=previous.Text,Text=text,JsonPatch=jsonPatch})
+    if reply.Saved then return true end
     return false
 end
 
@@ -414,8 +417,10 @@ local function loadValues(m)
 end
 
 local function saveValues(m)
+    local before=baselines[m.cfgPath]
+    local text=before and before.Exists and before.Text or nil
     if m.format == "json" then
-        local text = readFile(m.cfgPath)
+        if offline then return writeFile(m.cfgPath,HMencode(m.values),true) end
         local obj = (text and json.decode(text)) or {}
         if type(obj) ~= "table" then obj = {} end
         local order, seenK = {}, {}
@@ -425,7 +430,7 @@ local function saveValues(m)
         for k in pairs(obj) do if not seenK[k] and type(obj[k]) ~= "table" then order[#order + 1] = k end end
         return writeFile(m.cfgPath, json.encodeFlat(obj, order))
     end
-    local text = readFile(m.cfgPath) or ""
+    text = text or ""
     local nl = text:find("\r\n", 1, true) and "\r\n" or "\n"
     if m.format == "lua" then
         if text == "" then return false end
@@ -487,6 +492,7 @@ end
 -- value of every mod again.
 local sent = {}
 local function share(name, v)
+    if offline then return end
     if v ~= nil and sent[name] == v then return end
     local ok, e = pcall(function() ModRef:SetSharedVariable(name, v) end)
     if ok then sent[name] = v
@@ -531,6 +537,7 @@ local function templateContext(m)
     local definition=m.helpy and m.helpy.templates
     local variable=definition and definition.contextVariable
     if not variable then return "" end
+    if offline then return nil end
     local ok,value=pcall(function()return ModRef:GetSharedVariable(variable)end)
     if ok and type(value)=="string" and #value>0 and #value<=256 then return value end
     return nil
@@ -657,7 +664,7 @@ end
 
 
 local openN,openId,openRow,lastStatus,lastOpen,lastSet=0,"","","","",""
-local running,hostAuthority=true,false
+local running,hostAuthority=true,offline
 local discoveryWarning=""
 local function publish()
     local pages=setmetatable({},{__json_array=true})
@@ -749,6 +756,19 @@ local function command(c)
     elseif c.Op=="reset" then change(c.Id,nil,nil,nil,true)
     elseif c.Op=="button" then change(c.Id,nil,nil,nil,false,c.Action)
     elseif c.Op=="page" then share("ModMenu.page",c.Id or "");share("ModMenu.rect",c.Rect or "");share("ModMenu.quick","") end
+end
+if offline then
+    refresh()
+    publish()
+    return function(input)
+        local c,issue=json.decode(input)
+        if not c then error(issue or "Invalid Mod Menu command") end
+        assert(c.Op=="set" or c.Op=="reset" or c.Op=="refresh" or c.Op=="template_apply","This action requires a running game.")
+        local ok,problem=pcall(command,c)
+        if not ok then refresh() end
+        lastStatus=ok and (c.Op=="refresh" and "" or "Saved for the next game launch") or tostring(problem)
+        publish()
+    end
 end
 local function tick()
     local version=ModRef:GetSharedVariable("ModMenu.version")

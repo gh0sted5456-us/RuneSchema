@@ -368,6 +368,7 @@ namespace DragonWilds {
             std::string Key;
             std::string Name;
             std::string Guid;
+            PS::WeakObjectHandle Controller;
         };
 
         struct LiveAIBinding {

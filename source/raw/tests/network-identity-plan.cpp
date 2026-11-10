@@ -41,6 +41,12 @@ int main()
             != PS::NetworkIdentityPlan::Fingerprint(changed),
         "ordered fingerprint did not detect a peer mapping mismatch");
 
+    std::vector<std::string> compatibilityRows;
+    for (std::size_t index = 0; index < 13; ++index)
+        compatibilityRows.push_back("/Game/Test/Asset_" + std::to_string(index));
+    Need(PS::NetworkIdentityPlan::Fingerprint(compatibilityRows) == "e95d98b5e0dce574",
+        "fingerprint wire format changed across a multi-digit row index");
+
     bool duplicateRejected = false;
     try
     {

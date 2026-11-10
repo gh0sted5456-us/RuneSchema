@@ -7,7 +7,7 @@ using Json=nlohmann::json;
 inline bool Tag(const std::string& tag,const std::string& installed) {
     if(tag.find('+')!=std::string::npos||std::count(tag.begin(),tag.end(),'.')!=3)return false;
     const auto remote=RuneSchemaUpdateInfo::Parse(tag),local=RuneSchemaUpdateInfo::Parse(installed);
-    if(!remote||!local||remote->Parts!=local->Parts)return false;
+    if(!remote||!local||remote->Parts!=local->Parts||remote->Serial!=local->Serial)return false;
     auto suffix=remote->Suffix;for(auto& c:suffix)if(c>='A'&&c<='Z')c+=32;
     return suffix=="hf"||suffix=="-hf";
 }

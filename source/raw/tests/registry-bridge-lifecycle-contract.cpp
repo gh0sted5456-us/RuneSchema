@@ -94,7 +94,7 @@ int main(int argc,char** argv) {
     require(source.find("identity.ObjectSerialNumber")!=std::string::npos
         &&source.find("m_modDataRelay.Receive(peer,payload,local.Result<bool>()")!=std::string::npos
         &&source.find("channel!=\"mod.data\"&&revision<=window.Revision")!=std::string::npos
-        &&source.find("m_modDataRelay.Drain(4,")!=std::string::npos&&source.find("m_modDataRelay.Remove(at->first)")!=std::string::npos
+        &&source.find("m_modDataRelay.Drain(PS::ModDataRelay::MaxDrainPackets,")!=std::string::npos&&source.find("m_modDataRelay.Remove(at->first)")!=std::string::npos
         &&source.find("m_modDataRelay.Reset();m_relayPeers.clear();")!=std::string::npos,
         "relay native sender/authority, independent channel sequences, bounded drain or session cleanup is missing");
 }

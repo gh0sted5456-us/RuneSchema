@@ -1,5 +1,5 @@
-#include "RuntimePaths.h"
 #pragma once
+#include "RuntimePaths.h"
 #include "HelpyDesktopTransport.h"
 #include "Core/ConfigFiles.h"
 #include "Core/RuneSchemaDataRoot.h"
@@ -22,7 +22,8 @@ inline fs::path Application(const fs::path& root){
     const auto directory=RuntimePaths::HelpyBinary(fs::weakly_canonical(root),"Helpy.exe").parent_path();RuneSchemaData::Safe(directory);
     for(const auto* name:{"SDL3.dll","Helpy.exe"}){
         const auto file=directory/name;RuneSchemaData::Safe(file);
-        if(!fs::is_regular_file(file)||fs::file_size(file)==0||fs::file_size(file)>8*1024*1024)throw std::runtime_error(std::string("Helpy runtime file unavailable: ")+name);
+        if(!fs::is_regular_file(file))throw std::runtime_error(std::string("Helpy runtime file unavailable: ")+name);
+        if(fs::file_size(file)==0)throw std::runtime_error(std::string("Helpy runtime file is empty: ")+name);
     }
     return directory/"Helpy.exe";
 }

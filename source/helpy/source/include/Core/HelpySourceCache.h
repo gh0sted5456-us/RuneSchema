@@ -319,7 +319,7 @@ inline bool PollSaved(){
     // Both the native host and desktop can display saved references before the
     // live census completes. Provisional sources never publish a live contract.
     if(!CachedSourcesAttempted){CachedSourcesAttempted=true;if(Current.Key.empty()){const auto file=Directory(false)/"sources.json";
-            CachedSourcesWorker=std::async(std::launch::async,[file]{try{if(std::filesystem::file_size(file)>2*1024*1024)return nlohmann::json{};std::ifstream input(file);return nlohmann::json::parse(input);}catch(...){return nlohmann::json{};}});}
+            CachedSourcesWorker=std::async(std::launch::async,[file]{try{std::ifstream input(file);return nlohmann::json::parse(input);}catch(...){return nlohmann::json{};}});}
     }
     if(CachedSourcesWorker.valid()&&CachedSourcesWorker.wait_for(std::chrono::seconds(0))==std::future_status::ready){
         try{auto value=CachedSourcesWorker.get();if(Current.Key.empty()&&AcceptRemote(value)){

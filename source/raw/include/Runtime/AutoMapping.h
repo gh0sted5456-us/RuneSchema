@@ -26,7 +26,7 @@ inline void Safe(const fs::path& path){for(auto current=fs::absolute(path);!curr
     auto parent=current.parent_path();if(parent==current)break;current=parent;
 }}
 inline MappingBackbone::Mapping Validate(const fs::path& file){
-    Safe(file);const auto bytes=fs::file_size(file);if(bytes<16||bytes>32*1024*1024)throw std::runtime_error("Automatic mapping exceeds size bounds");
+    Safe(file);const auto bytes=fs::file_size(file);Usmap::ValidateFileSize(bytes);
     const auto stamp=fs::last_write_time(file);const auto fingerprint=MappingBackbone::Fingerprint(file);
     for(const char* type:{"/Script/Dominion.ItemData","/Script/Dominion.RecipeData","/Script/Dominion.JournalComponent"}){
         const auto result=Usmap::Index::Shared().Handle(file,fingerprint,Root/"index",{{"Action","DescribeType"},{"Type",type}});
@@ -71,8 +71,8 @@ inline void Prepare()noexcept{try{
         ConsolidatedLog<RC::LogLevel::Normal>(STR("[RuneSchema] [MAPPINGS][UNAVAILABLE] No matching cached mapping; automatic capture is disabled. Live reflection remains active.\n"));return;
     }
     fs::create_directories(Root/"requests");Nonce=Key(Build+"|"+std::to_string(GetCurrentProcessId())+"|"+std::to_string(GetTickCount64()));Request=Root/"requests"/(Nonce+".request");Safe(Request);
-    size_t count=0;for(const auto& entry:fs::directory_iterator(Host))if(entry.is_regular_file()&&entry.path().extension()==L".usmap"){
-        if(++count>64)throw std::runtime_error("Automatic mapping candidate limit exceeded");Safe(entry.path());Before[entry.path()]={entry.file_size(),entry.last_write_time()};
+    for(const auto& entry:fs::directory_iterator(Host))if(entry.is_regular_file()&&entry.path().extension()==L".usmap"){
+        Safe(entry.path());Before[entry.path()]={entry.file_size(),entry.last_write_time()};
     }
     ConfigFiles::Write(Request,Nonce+"\n");
     const auto utf8=Request.u8string();const std::string requestPath(utf8.begin(),utf8.end());
@@ -90,9 +90,9 @@ inline void Start(){if(!Pending)return;
             const fs::path resultFile=Request.wstring()+L".result";Safe(resultFile);
             if(!fs::is_regular_file(resultFile)){if(Elapsed>180)throw std::runtime_error("Native Lua mapping dump did not complete within three minutes");return;}
             const auto result=ConfigFiles::Read(resultFile,1024);if(result!=Nonce+"\nok\n")throw std::runtime_error("Native DumpUSMAP capability unavailable or dump failed");
-            fs::path source;size_t changed=0,count=0;
+            fs::path source;size_t changed=0;
             for(const auto& entry:fs::directory_iterator(Host))if(entry.is_regular_file()&&entry.path().extension()==L".usmap"){
-                if(++count>64)throw std::runtime_error("Mapping candidate limit exceeded");Safe(entry.path());const auto old=Before.find(entry.path());
+                Safe(entry.path());const auto old=Before.find(entry.path());
                 if(old==Before.end()||old->second!=std::pair{entry.file_size(),entry.last_write_time()}){source=entry.path();++changed;}
             }
             if(changed!=1)throw std::runtime_error("Native mapping output is missing or ambiguous");

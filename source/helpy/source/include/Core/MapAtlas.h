@@ -21,7 +21,6 @@ struct Bounds {
 };
 inline constexpr Bounds Mainland{{-12000, -118550}, {408000, 301450}};
 inline constexpr Bounds Scorned{{-850000, 608000}, {-660000, 798000}};
-inline constexpr Bounds Overview{{Scorned.Min.X, Mainland.Min.Y}, {Mainland.Max.X, Scorned.Max.Y}};
 inline constexpr Point MainlandPortal{95654.399393, 59613.574157};
 inline constexpr Point ScornedPortal=ScornedTravel::Entrance;
 
@@ -33,11 +32,11 @@ struct Area {
 #include "Core/MapAtlasData.inl"
 #include "Core/MapAtlasInset.inl"
 
-inline constexpr size_t OverviewTab = 0, ScornedTab = 1, MainlandTab = 2, FirstRegionTab = 3;
+inline constexpr size_t OverviewTab = 0, ScornedTab = 1, FirstRegionTab = 2;
 inline constexpr size_t TabCount = FirstRegionTab + SurfaceAreas.size();
 inline constexpr std::array Groups{"Brynmoor", "Ghornfell", "Fellhollow", "Dowdun Reach", "Umbral Sands"};
 
-inline constexpr size_t PrimaryTab(size_t tab) { return tab >= FirstRegionTab ? MainlandTab : tab; }
+inline constexpr size_t PrimaryTab(size_t tab) { return tab >= FirstRegionTab ? OverviewTab : tab; }
 
 inline Bounds Extent(std::span<const Point> shape) {
     Bounds bounds{shape.front(), shape.front()};
@@ -49,9 +48,8 @@ inline Bounds Extent(std::span<const Point> shape) {
 }
 
 inline Bounds Frame(size_t tab) {
-    if (tab == OverviewTab) return Overview;
+    if (tab == OverviewTab) return Mainland;
     if (tab == ScornedTab) return Scorned;
-    if (tab == MainlandTab) return Mainland;
     auto bounds = Extent(SurfaceAreas[tab - FirstRegionTab].Shape);
     const double pad = std::max(4000.0, std::max(bounds.Max.X - bounds.Min.X, bounds.Max.Y - bounds.Min.Y) * .07);
     return {{std::max(Mainland.Min.X, bounds.Min.X - pad), std::max(Mainland.Min.Y, bounds.Min.Y - pad)},
@@ -59,9 +57,8 @@ inline Bounds Frame(size_t tab) {
 }
 
 inline std::string_view Title(size_t tab) {
-    if (tab == OverviewTab) return "Overview";
+    if (tab == OverviewTab) return "World map";
     if (tab == ScornedTab) return "Scorned Wilderness";
-    if (tab == MainlandTab) return "Mainland";
     return SurfaceAreas[tab - FirstRegionTab].Name;
 }
 
@@ -88,7 +85,7 @@ inline size_t RegionAt(Point point) {
         return result;
     }();
     double smallest = std::numeric_limits<double>::infinity();
-    size_t tab = MainlandTab;
+    size_t tab = OverviewTab;
     for (size_t i = 0; i < SurfaceAreas.size(); ++i) {
         const auto& b = extents[i];
         const double area = (b.Max.X - b.Min.X) * (b.Max.Y - b.Min.Y);
@@ -106,7 +103,15 @@ inline bool ScornedDisplayOnly(Point point) {
         (point.Y-Mainland.Min.Y)/(Mainland.Max.Y-Mainland.Min.Y)};
     if (uv.X>.32 || uv.Y<.18 || uv.Y>.49) return false;
     // Native mainland polygons take precedence where the painted inset overlaps them.
-    return (Contains(ScornedDisplayHub,uv)||Contains(ScornedDisplayRaid,uv))&&RegionAt(point)==MainlandTab;
+    return (Contains(ScornedDisplayHub,uv)||Contains(ScornedDisplayRaid,uv))&&RegionAt(point)==OverviewTab;
+}
+
+inline size_t CoordinateTab(Point point) {
+    return Scorned.Contains(point) ? ScornedTab : RegionAt(point);
+}
+
+inline bool ContainsSurface(Point point) {
+    return Mainland.Contains(point) || Scorned.Contains(point);
 }
 
 inline std::string_view RegionNameAt(Point point) {
@@ -142,7 +147,7 @@ struct TabState {
     bool Following = false;
 
     void Track(Point point) {
-        if (Following) Requested = RegionAt(point);
+        if (Following) Requested = CoordinateTab(point);
     }
     void Pause() {
         Following = false;

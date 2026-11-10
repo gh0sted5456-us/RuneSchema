@@ -340,16 +340,16 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
     if(action=="Players") {
         nlohmann::json roster=nlohmann::json::array();
         for(const auto& connected:GetConnectedPlayersInLoadOrder()) {
-            bool ambiguous=false;auto* target=FindPlayerControllerByGuid(connected.Guid,ambiguous);
-            if(!target||ambiguous||target->GetWorld()!=player->GetWorld())continue;
+            auto* target=connected.Controller.Get();
+            if(!target||target->GetWorld()!=player->GetWorld())continue;
             roster.push_back({{"Name",connected.Name},{"Guid",connected.Guid},
                 {"PlayerId",PS::PlayerStatusRuntime::PlayerId(ActorHelper::GetObjectRef(target,TEXT("PlayerState")))},
                 {"Platform",PS::PlayerStatusRuntime::ControllerPlatform(target)},{"PlatformAccountName",PS::PlayerStatusRuntime::ControllerAccountName(target)},
                 {"RoleStatus",PS::PlayerStatusRuntime::Read(target)}});
             PS::PlayerStatusRuntime::Color(ActorHelper::GetObjectRef(target,TEXT("PlayerState")),roster.back());
+            if(auto* pawn=ActorHelper::GetObjectRef(target,TEXT("Pawn")))
+                roster.back()["StatWire"]=PS::PartyStatWire::Encode(PS::PlayerVitals::Details(pawn,true),PS::PlayerVitals::Now());
         }
-        for(auto& row:roster){bool ambiguous=false;auto* target=FindPlayerControllerByGuid(row.at("Guid").get<std::string>(),ambiguous);
-            if(target&&!ambiguous)if(auto* pawn=ActorHelper::GetObjectRef(target,TEXT("Pawn")))row["StatWire"]=PS::PartyStatWire::Encode(PS::PlayerVitals::Details(pawn,true),PS::PlayerVitals::Now());}
         // The bridge has a bounded envelope; preserve the roster if a very large
         // server exceeds it, rather than sending a truncated stat message.
         auto response=nlohmann::json{{"Kind","HelpyPlayers1"},{"Players",roster}};
@@ -572,8 +572,9 @@ void DragonWildsSpawnLoader::PumpSpawnTools(PS::WorkSlice& work) {
         }else if(GetGameMode(m_readyWorld)) {
             auto rows=nlohmann::json::array();
             for(const auto& connected:GetConnectedPlayersInLoadOrder()) {
-                if(rows.size()>=256)break;bool ambiguous=false;auto* controller=FindPlayerControllerByGuid(connected.Guid,ambiguous);
-                if(!controller||ambiguous||controller->GetWorld()!=m_readyWorld)continue;
+                if(rows.size()>=256)break;
+                auto* controller=connected.Controller.Get();
+                if(!controller||controller->GetWorld()!=m_readyWorld)continue;
                 bool isLocal=false;try{ActorHelper::FunctionCall local(controller,TEXT("/Script/Engine.Controller:IsLocalController"));local.Invoke();isLocal=local.Result<bool>();}catch(...){}
                 rows.push_back({{"Name",connected.Name},{"Path",RC::to_string(controller->GetPathName())},{"Guid",connected.Guid},
                     {"IsLocal",isLocal},
@@ -581,9 +582,13 @@ void DragonWildsSpawnLoader::PumpSpawnTools(PS::WorkSlice& work) {
                     {"Platform",PS::PlayerStatusRuntime::ControllerPlatform(controller)},{"PlatformAccountName",PS::PlayerStatusRuntime::ControllerAccountName(controller)},
                     {"RoleStatus",PS::PlayerStatusRuntime::Read(controller)}});
                 PS::PlayerStatusRuntime::Color(ActorHelper::GetObjectRef(controller,TEXT("PlayerState")),rows.back());
+                if(auto* pawn=ActorHelper::GetObjectRef(controller,TEXT("Pawn"))){
+                    auto& row=rows.back();
+                    row["Stats"]=PS::PlayerVitals::Details(pawn,true);
+                    row["Health"]=row["Stats"]["Health"];
+                    row["Equipment"]=PS::PlayerLoadoutPresentation::Cached(controller,connected.Guid,PS::SpawnToolRequests::CurrentGeneration());
+                }
             }
-            for(auto& row:rows){bool ambiguous=false;auto* target=FindPlayerControllerByGuid(row.at("Guid").get<std::string>(),ambiguous);
-                if(target&&!ambiguous)if(auto* pawn=ActorHelper::GetObjectRef(target,TEXT("Pawn"))){row["Stats"]=PS::PlayerVitals::Details(pawn,true);row["Health"]=row["Stats"]["Health"];row["Equipment"]=PS::PlayerLoadoutPresentation::Cached(target,row.value("Guid",std::string{}),PS::SpawnToolRequests::CurrentGeneration());}}
             auto roles=PS::PlayerStatus::Snapshot(rows,PS::SpawnToolRequests::Generation.load());
             PS::NetworkStatus::Current.Publish(networkRole,PS::SpawnToolRequests::Generation.load(),rows.size());
             PS::SpawnToolRequests::CatalogProgress({{"Players",std::move(rows)},{"PlayerRoles",std::move(roles)}});

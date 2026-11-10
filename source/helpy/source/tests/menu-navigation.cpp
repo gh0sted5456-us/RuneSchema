@@ -3,6 +3,10 @@
 #include <stdexcept>
 namespace PS::HelpyControllerDevice {Reading Read(bool){return {};}void Shutdown(){}}
 int main()try{
+    using namespace PS::HelpyNavigation;
+    static_assert(Visible(Page::Items)&&!Visible(Page::Creation)&&!Visible(Page::Recipes));
+    static_assert(Visible(Page::Creation,Workspaces{.Clone=true})&&!Visible(Page::Recipes,Workspaces{.Clone=true}));
+    static_assert(Visible(Page::Recipes,Workspaces{.Recipes=true})&&!Visible(Page::Creation,Workspaces{.Recipes=true}));
     ImGui::CreateContext();auto& io=ImGui::GetIO();io.DisplaySize={700,450};io.DeltaTime=1.f/60;io.IniFilename=nullptr;io.Fonts->Build();
     io.ConfigFlags|=ImGuiConfigFlags_NavEnableGamepad|ImGuiConfigFlags_NavEnableKeyboard;io.BackendFlags|=ImGuiBackendFlags_HasGamepad;PS::HelpyControllerInput::Selection.Controller=true;
     PS::HelpyImGuiTheme::ControllerNavigation=true;

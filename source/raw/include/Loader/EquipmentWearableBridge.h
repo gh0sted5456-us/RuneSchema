@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cstring>
 #include <stdexcept>
 #include <vector>
@@ -163,12 +164,17 @@ inline void Install() {
         &&!std::memcmp(reinterpret_cast<void*>(base+profile->BuilderRva),profile->BuilderBytes.data(),profile->BuilderBytes.size())
         &&!std::memcmp(reinterpret_cast<void*>(base+profile->EvaluatorRva),profile->EvaluatorBytes.data(),profile->EvaluatorBytes.size())) {
         builder=reinterpret_cast<void*>(base+profile->BuilderRva);evaluator=reinterpret_cast<void*>(base+profile->EvaluatorRva);
-    } else if(lane==PS::Storefront::NativeLane::GamePassNative) {
-        builder=PS::NativeExecutableDiscovery::Resolve(PS::NativeHookPatterns::GamePassWearableBuilder);
-        evaluator=PS::NativeExecutableDiscovery::Resolve(PS::NativeHookPatterns::GamePassWearableEvaluator);
-    } else if(lane==PS::Storefront::NativeLane::SteamNative) {
-        builder=PS::NativeExecutableDiscovery::Resolve(PS::NativeHookPatterns::SteamWearableBuilder);
-        evaluator=PS::NativeExecutableDiscovery::Resolve(PS::NativeHookPatterns::SteamWearableEvaluator);
+    } else if(lane==PS::Storefront::NativeLane::GamePassNative||lane==PS::Storefront::NativeLane::SteamNative) {
+        const bool gamePass=lane==PS::Storefront::NativeLane::GamePassNative;
+        const auto started=std::chrono::steady_clock::now();
+        builder=PS::NativeExecutableDiscovery::Resolve(gamePass?PS::NativeHookPatterns::GamePassWearableBuilder:PS::NativeHookPatterns::SteamWearableBuilder);
+        const auto builderDone=std::chrono::steady_clock::now();
+        evaluator=PS::NativeExecutableDiscovery::Resolve(gamePass?PS::NativeHookPatterns::GamePassWearableEvaluator:PS::NativeHookPatterns::SteamWearableEvaluator);
+        const auto finished=std::chrono::steady_clock::now();
+        PS::Log<RC::LogLevel::Normal>(TEXT("[PERF][WEARABLE-BRIDGE][SIGNATURES] builder_us={} evaluator_us={} builder_rva={:x} evaluator_rva={:x}.\n"),
+            std::chrono::duration_cast<std::chrono::microseconds>(builderDone-started).count(),
+            std::chrono::duration_cast<std::chrono::microseconds>(finished-builderDone).count(),
+            builder?reinterpret_cast<uintptr_t>(builder)-base:0,evaluator?reinterpret_cast<uintptr_t>(evaluator)-base:0);
     }
     if(!builder||!evaluator) {
         PS::Log<RC::LogLevel::Warning>(TEXT("[WEARABLE-BRIDGE][INACTIVE] compatible native cache functions could not be uniquely identified; item registration remains available.\n"));

@@ -11,7 +11,7 @@ stable RuneSchema. Features marked as investigations still need live acceptance.
 | Area | Guide |
 | --- | --- |
 | Install or update | [Installation](INSTALLATION.md) and [Vortex](VORTEX-INSTALLATION.md) |
-| Desktop, settings and offline browsing | [Helpy](HELPY-STANDALONE.md) |
+| Helpy support | [Illustrated walkthrough](HELPY-SUPPORT.md) and [desktop and overlay setup](HELPY-STANDALONE.md) |
 | Overlay and controllers | [Native overlay](NATIVE-OVERLAY.md) and [controller navigation](CONTROLLER-NAVIGATION.md) |
 | Caches and authoring | [Tools](AUTHORING-AND-REPAIR.md) and [cache bundles](CACHE-BUNDLES.md) |
 | Mod metadata and UE4SS controls | [Metadata and loaders](MOD-METADATA-AND-CONTROLS.md) |
