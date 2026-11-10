@@ -9,10 +9,57 @@ promote_to: CHANGELOG-0.8.1.0.md
 
 # RuneSchema 0.8.1.0 — experimental
 
-!!! info "Complete candidate published · 2026-11-06"
+!!! info "Complete candidate published · 2026-11-09"
     The [complete candidate](PRE-RELEASE.md) includes the runtime, Helpy and plugin
     follow-ups below. Older entries retain their original test-stage wording;
     their historical “unpublished” labels are superseded by this dated package.
+
+## 2026-11-09 preview
+
+- Remove the Helpy executable ceiling and matching limits on settings, saved
+  sources, plugin metadata and bundled tool scripts.
+- Add the in-app [Help guide](https://github.com/gh0sted5456-us/RuneSchema/blob/pre-release/docs/experimental/HELPY-SUPPORT.md), offline editing for supported
+  Mod Menu 2 controls, and stable-release notifications.
+- Refine the world map, keyboard glyph alignment and settings organization.
+- Reduce registry and recipe preparation work and refine wearable bridge
+  signature searches.
+
+## 2026-11-08 controller and schema follow-up
+
+- Capture controller input in the desktop overlay and wait for held controls to
+  release before returning them to the game. Recheck the controller after focus
+  returns. Steam and Game Bar can still handle Guide independently.
+- Make Settings tabs navigable with the D-pad, take focus directly to the map
+  canvas, and improve Tools, Item Bay and Quick Settings controller navigation.
+- Keep valid Mod Menu 2 pages visible when another UE4SS mod has a schema error,
+  and show that error on its own page. The separate Mod Menu remains exclusive.
+- Reset live diagnostics for each attached session. Helpy can exit when its
+  attached client or dedicated server closes. Existing preferences are retained.
+- Include experimental [Item Delivery](https://github.com/gh0sted5456-us/RuneSchema/blob/pre-release/docs/experimental/ITEM-DELIVERY.md) for host-configured items
+  from enabled mods. The core tracks deliveries by character and waits for a
+  matching save acknowledgement. Live grant and save verification are pending.
+
+## 2026-11-08 candidate refresh
+
+- Release nested allocations from temporary reflected map pairs and array
+  elements, including partially initialized values and failed imports.
+- Use shared sidebar navigation and contextual controller, mouse, and keyboard
+  hints. Make cart drops visible and keep compact server actions in reach.
+- Add surface atlas area pickers, coordinate overlay, player centering, and
+  named Dragon Gate travel to Rasthin's Rest.
+- Rotate platform and themed RuneSchema logos on the welcome screen, with
+  adjustable timing and optional artwork crossfades.
+
+## 2026-11-07 redirected saves and Helpy follow-up
+
+- Follow redirected character-save folders for copy, import and export. Keep
+  nested profile redirects and imports outside the resolved root blocked.
+- Share Compact view between RuneSchema and UE4SS, scroll and pan with the
+  left stick, and move a selected group to the cart with the right-stick pointer.
+- Keep Helpy open when it was started from the desktop. Resolve runtime
+  junctions and report bridge errors once per outage.
+- Report known older and newer UE4SS versions and use the capabilities
+  RuneSchema can verify.
 
 ## 2026-11-06 complete refresh
 
