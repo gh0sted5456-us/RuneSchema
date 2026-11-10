@@ -72,19 +72,22 @@ inline bool Token(const std::string& value) {
         return std::isalnum(c)||c=='.'||c=='_'||c=='-';
     });
 }
-inline std::vector<OrderEntry> ReadOrder(const fs::path& root) {
+inline std::vector<OrderEntry> ReadOrder(const fs::path& root,std::vector<std::string>* diagnostics) {
     const auto path=root/"plugins.txt";std::vector<OrderEntry> result;if(!fs::is_regular_file(path))return result;
-    if(fs::file_size(path)>256*1024)throw std::runtime_error("plugins.txt exceeds 256 KiB");
-    std::ifstream stream(path);std::string line;size_t position=0;std::unordered_set<std::string> seen;
+    std::ifstream stream(path);
+    if(!stream){if(diagnostics)diagnostics->push_back("Cannot open plugins.txt: "+path.string());return result;}
+    std::string line;size_t position=0,lineNumber=0;std::unordered_set<std::string> seen;
+    const auto invalid=[&]{if(diagnostics)diagnostics->push_back("Ignoring invalid plugins.txt entry on line "+std::to_string(lineNumber)+": "+path.string());};
     while(std::getline(stream,line)) {
+        if(++lineNumber==1&&line.starts_with("\xEF\xBB\xBF"))line.erase(0,3);
         const auto first=line.find_first_not_of(" \t\r\n");if(first==std::string::npos||line[first]=='#'||line[first]==';')continue;
-        const auto colon=line.find(':',first);if(colon==std::string::npos)throw std::runtime_error("Invalid plugins.txt entry: "+line);
+        const auto colon=line.find(':',first);if(colon==std::string::npos){invalid();continue;}
         auto id=line.substr(first,colon-first),value=line.substr(colon+1);
         const auto idLast=id.find_last_not_of(" \t\r\n");id.resize(idLast==std::string::npos?0:idLast+1);
         const auto valueFirst=value.find_first_not_of(" \t\r\n"),valueLast=value.find_last_not_of(" \t\r\n");
         value=valueFirst==std::string::npos?std::string{}:value.substr(valueFirst,valueLast-valueFirst+1);
         if(id=="RuneSchema.Networking")id="RSNetworking";
-        if(!Token(id)||(value!="0"&&value!="1"))throw std::runtime_error("Invalid plugins.txt entry: "+id);
+        if(!Token(id)||(value!="0"&&value!="1")){invalid();continue;}
         if(!seen.emplace(id).second) {
             for(auto& existing:result)if(existing.Id==id){existing.Enabled=value=="1";break;}
             continue;
@@ -102,7 +105,6 @@ inline std::vector<Plugin> Discover(const fs::path& root,std::vector<std::string
     for(const auto& folder:folders) {
         const auto manifest=folder/"plugin.json";if(!fs::is_regular_file(manifest)||fs::is_symlink(fs::symlink_status(manifest)))continue;
         try {
-        if(fs::file_size(manifest)>256*1024)throw std::runtime_error("Plugin manifest exceeds 256 KiB: "+manifest.string());
         std::ifstream stream(manifest);nlohmann::json data;stream>>data;
         for(const auto* field:{"Id","Version"})
             if(!data.contains(field))throw std::runtime_error(std::string("Plugin manifest missing ")+field+": "+manifest.string());
@@ -115,21 +117,21 @@ inline std::vector<Plugin> Discover(const fs::path& root,std::vector<std::string
         plugin.MountPaks=data.value("MountPaks",true);plugin.Root=folder;
         if(runtime&&ids.contains(plugin.Id)){if(diagnostics)diagnostics->push_back(plugin.Id+": duplicate location ignored; canonical plugin already selected");continue;}
         if(!Token(plugin.Id)||!Token(plugin.Version)||(!plugin.BuiltForRuneSchema.empty()&&!Token(plugin.BuiltForRuneSchema))
-            ||plugin.Name.empty()||plugin.Name.size()>128||plugin.ConsoleMessage.size()>512
+            ||plugin.Name.empty()
             ||plugin.ConsoleMessage.find_first_of("\r\n")!=std::string::npos||!ids.emplace(plugin.Id).second)
             throw std::runtime_error("Invalid or duplicate plugin identity/wording: "+plugin.Id);
         if(data.contains("Capabilities")) {
-            if(!data.at("Capabilities").is_array()||data.at("Capabilities").size()>64)throw std::runtime_error("Invalid plugin capabilities: "+plugin.Id);
+            if(!data.at("Capabilities").is_array())throw std::runtime_error("Invalid plugin capabilities: "+plugin.Id);
             for(const auto& capability:data.at("Capabilities")){auto value=capability.get<std::string>();if(!Token(value))throw std::runtime_error("Invalid plugin capability: "+plugin.Id);plugin.Capabilities.push_back(std::move(value));}
         }
         if(data.contains("Connections")) {
-            if(!data.at("Connections").is_array()||data.at("Connections").size()>32)throw std::runtime_error("Invalid plugin connections: "+plugin.Id);
+            if(!data.at("Connections").is_array())throw std::runtime_error("Invalid plugin connections: "+plugin.Id);
             for(const auto& connection:data.at("Connections")){auto value=connection.get<std::string>();if(!Token(value))throw std::runtime_error("Invalid plugin connection: "+plugin.Id);plugin.Connections.push_back(std::move(value));}
         }
         if(data.contains("Dependencies")) {
-            if(!data.at("Dependencies").is_object()||data.at("Dependencies").size()>32)throw std::runtime_error("Invalid plugin dependencies: "+plugin.Id);
+            if(!data.at("Dependencies").is_object())throw std::runtime_error("Invalid plugin dependencies: "+plugin.Id);
             for(const auto& [id,version]:data.at("Dependencies").items()) {
-                if(!Token(id)||!version.is_string()||version.get_ref<const std::string&>().size()>32)throw std::runtime_error("Invalid plugin dependency: "+plugin.Id);
+                if(!Token(id)||!version.is_string())throw std::runtime_error("Invalid plugin dependency: "+plugin.Id);
                 plugin.Dependencies.emplace_back(id,version.get<std::string>());
             }
         }
@@ -153,7 +155,7 @@ inline std::vector<Plugin> Discover(const fs::path& root,std::vector<std::string
     // ignore the retired copy instead of registering duplicate capabilities.
     const bool hasRsNetworking=std::any_of(result.begin(),result.end(),[](const auto& plugin){return plugin.Id=="RSNetworking";});
     if(hasRsNetworking)std::erase_if(result,[](const auto& plugin){return plugin.Id=="RuneSchema.Networking";});
-    const auto requested=ReadOrder(runtime?RuntimePaths::PluginOrder(root):root);std::unordered_map<std::string,OrderEntry> requestedById;
+    const auto requested=ReadOrder(runtime?RuntimePaths::PluginOrder(root):root,diagnostics);std::unordered_map<std::string,OrderEntry> requestedById;
     for(const auto& entry:requested)requestedById.emplace(entry.Id,entry);
     for(auto& plugin:result)if(const auto found=requestedById.find(plugin.Id);found!=requestedById.end()) {
         if(plugin.Required&&!found->second.Enabled&&diagnostics)

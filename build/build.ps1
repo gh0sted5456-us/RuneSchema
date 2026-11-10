@@ -14,9 +14,9 @@ $BuildRoot = [IO.Path]::GetFullPath($PSScriptRoot)
 if (-not (Test-Path -LiteralPath (Join-Path $BuildRoot 'source\raw\CMakeLists.txt') -PathType Leaf)) {
     $BuildRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 }
-$releaseVersionPattern = '^\d+\.\d+\.\d+(?:\.\d+(?:[bem]|-alpha(?:\.\d+)?)?)?$'
+$releaseVersionPattern = '^(?:\d+\.\d+\.\d+(?:\.\d+(?:[bem]|-alpha(?:\.\d+)?)?)?|1\.0\.0\.J0[0-9A-Z]{4})$'
 if ($Version -cnotmatch $releaseVersionPattern) {
-    throw "Expected a three- or four-part RuneSchema version, optionally using a lowercase b bugfix or legacy channel suffix: $Version"
+    throw "Expected a RuneSchema version such as 0.8.1.0 or 1.0.0.J00001. $Version"
 }
 $releaseBranch = $env:GITHUB_REF_NAME
 if ([string]::IsNullOrWhiteSpace($releaseBranch) -and (Test-Path -LiteralPath (Join-Path $BuildRoot '.git'))) {

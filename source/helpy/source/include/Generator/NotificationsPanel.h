@@ -102,7 +102,21 @@ inline void Jobs(){
         else Inbox.Result(id,job.SourceId,job.Owner,false,"Cache built; AppData import needs attention. "+HelpyIconPacks::Status,Now());
     }
 }
-inline void Poll(){DiskPoll();Observe();Hotfixes();if(Loaded)Jobs();DiskPoll();}
+inline bool Poll(){
+    DiskPoll();Observe();Hotfixes();
+    bool release=false;
+    if(Loaded){
+        static std::string installed,latest;
+        const auto& version=HelpyEnvironment::RuneSchemaVersion;
+        const auto& candidate=HelpyUpdates::Current().ReleaseVersion;
+        if(version!=installed||candidate!=latest){
+            installed=version;latest=candidate;
+            release=Inbox.ObserveRelease(installed,latest,Now());
+        }
+        Jobs();
+    }
+    DiskPoll();return release;
+}
 inline void Shutdown(){Watch.Close();if(Disk.valid()){auto r=Disk.get();Storage=std::move(r.Storage);if(r.Loading)Inbox=std::move(r.Data);if(!r.Error.empty())Storage.Ready=false;Saved=r.Revision;}if(Loaded&&Storage.Ready&&Inbox.Revision!=Saved)try{Storage.Save(Inbox);}catch(...){};}
 inline void Prompt(){
     if(HotfixPrompt){HotfixPrompt=false;ImGui::OpenPopup("RuneSchema emergency hotfix");}
@@ -132,7 +146,7 @@ inline void Prompt(){
 inline void Render(){
     static int category=0;constexpr std::array labels{"Updates","Cache jobs","History"};HelpyMenu::Categories("notifications",labels,category);
     if(HelpyMenu::BeginBody("Notification details",category)){
-        ImGui::TextWrapped("Updates use ID.txt versions and this platform's game version. Unversioned mods do not generate version-change alerts. Disabled or missing sources are hidden from active updates.");
+        ImGui::TextWrapped("See stable RuneSchema releases, game changes, and updates for enabled mods.");
         const auto columns=std::clamp(int(ImGui::GetContentRegionAvail().x/HelpyImGuiTheme::Current.X(172)),1,3);
         if(ImGui::BeginTable("Notification actions",columns,ImGuiTableFlags_SizingStretchSame)){
             ImGui::TableNextColumn();ImGui::BeginDisabled(!Loaded||Inbox.Notices.empty());
@@ -153,16 +167,27 @@ inline void Render(){
             ImGui::EndTable();
         }
         if(!Status.empty())ImGui::TextWrapped("%s",Status.c_str());if(!Loaded)ImGui::TextDisabled("Loading notification history...");
-        size_t shown=0;for(auto it=Inbox.Notices.rbegin();it!=Inbox.Notices.rend();++it){const auto& n=*it;const bool update=n.Kind=="mod-update"||n.Kind=="game-update"||n.Kind=="hotfix";
+        size_t shown=0;for(auto it=Inbox.Notices.rbegin();it!=Inbox.Notices.rend();++it){const auto& n=*it;const bool update=n.Kind=="mod-update"||n.Kind=="game-update"||n.Kind=="hotfix"||n.Kind=="schema-update";
             if(category!=2&&(n.Dismissed||n.Resolved||!n.Active||update!=(category==0)))continue;++shown;ImGui::PushID(n.Id.c_str());ImGui::Separator();
             ImGui::TextColored(n.Read?HelpyImGuiTheme::Current.text:HelpyImGuiTheme::Current.accent,"%s",n.Title.c_str());ImGui::TextWrapped("%s",n.Detail.c_str());
             if(n.Resolved)ImGui::TextDisabled("Updated");else if(!n.Active)ImGui::TextDisabled("Source disabled, missing, or superseded");
+            const bool release=n.Kind=="schema-update";
+            if(release&&n.Active&&!n.Resolved&&!n.Dismissed&&ImGui::BeginTable("Release downloads",columns,ImGuiTableFlags_SizingStretchSame)){
+                const auto link=[&](const char* label,const wchar_t* url){
+                    ImGui::TableNextColumn();
+                    if(HelpyImGuiTheme::SoftButton(label,{-1,0}))ShellExecuteW(nullptr,L"open",url,nullptr,nullptr,SW_SHOWNORMAL);
+                };
+                link("Nexus Mods",RuneSchemaUpdateInfo::NexusFilesUrl);
+                link("CurseForge",RuneSchemaUpdateInfo::CurseForgeFilesUrl);
+                link("GitHub",RuneSchemaUpdateInfo::GitHubLatestUrl);
+                ImGui::EndTable();
+            }
             if(ImGui::BeginTable("Notification buttons",columns,ImGuiTableFlags_SizingStretchSame)){
-                if(n.Active&&!n.Resolved&&!n.Action.empty()){ImGui::TableNextColumn();ImGui::BeginDisabled(Busy()||ModsPanel::Dirty);if(HelpyImGuiTheme::SoftButton(n.Action=="hotfix"?"Review hotfix":n.Action=="build-mod"?"Create / update cache":"Resync vanilla files",{-1,0}))Act(n);ImGui::EndDisabled();}
+                if(!release&&n.Active&&!n.Resolved&&!n.Action.empty()){ImGui::TableNextColumn();ImGui::BeginDisabled(Busy()||ModsPanel::Dirty);if(HelpyImGuiTheme::SoftButton(n.Action=="hotfix"?"Review hotfix":n.Action=="build-mod"?"Create / update cache":"Resync vanilla files",{-1,0}))Act(n);ImGui::EndDisabled();}
                 ImGui::TableNextColumn();ImGui::BeginDisabled(n.Read);if(HelpyImGuiTheme::SoftButton("Mark read",{-1,0}))Inbox.Read(n.Id);ImGui::EndDisabled();
                 if(!n.Dismissed){ImGui::TableNextColumn();if(HelpyImGuiTheme::SoftButton("Dismiss",{-1,0}))Inbox.Dismiss(n.Id);}ImGui::EndTable();
             }ImGui::PopID();
-        }if(!shown)ImGui::TextDisabled(category==0?"No pending cache updates.":category==1?"No cache jobs yet.":"Your notification history is empty.");
+        }if(!shown)ImGui::TextDisabled(category==0?"No pending updates.":category==1?"No cache jobs yet.":"Your notification history is empty.");
     }HelpyMenu::EndBody();
 }
 }

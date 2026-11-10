@@ -14,6 +14,16 @@ promote_to: CHANGELOG-0.8.1.0.md
     follow-ups below. Older entries retain their original test-stage wording;
     their historical “unpublished” labels are superseded by this dated package.
 
+## 2026-11-09 preview
+
+- Remove the Helpy executable ceiling and matching limits on settings, saved
+  sources, plugin metadata and bundled tool scripts.
+- Add the in-app [Help guide](HELPY-SUPPORT.md), offline editing for supported
+  Mod Menu 2 controls, and stable-release notifications.
+- Refine the world map, keyboard glyph alignment and settings organization.
+- Reduce registry and recipe preparation work and refine wearable bridge
+  signature searches.
+
 ## 2026-11-08 controller and schema follow-up
 
 - Capture controller input in the desktop overlay and wait for held controls to

@@ -20,6 +20,8 @@ namespace RC::Unreal {
     class UFunction;
     class UWorld;
     class FString;
+    class FMapProperty;
+    class FArrayProperty;
 }
 
 namespace DragonWilds {
@@ -115,7 +117,8 @@ namespace DragonWilds {
             std::size_t* addedCount = nullptr,
             RegistrationStats* stats = nullptr);
         int32_t EnsureNetworkIdentity(
-            RC::Unreal::UObject* dataAsset, RC::Unreal::UObject* subsystem);
+            RC::Unreal::UObject* dataAsset, RC::Unreal::UObject* subsystem,
+            RC::Unreal::FMapProperty* reverseProperty, RC::Unreal::FArrayProperty* arrayProperty);
         RC::Unreal::UObject* FindSubsystemInstance(RC::Unreal::UClass* subsystemClass);
         bool InsertIntoMap(RC::Unreal::UObject* subsystem, const RC::StringType& mapName,
             const RC::Unreal::FString& key, RC::Unreal::UObject* value);

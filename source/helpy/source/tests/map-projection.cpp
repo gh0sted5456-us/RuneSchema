@@ -13,14 +13,16 @@ static void CheckAtlas() {
     rotated.Right = {0, 1};
     rotated.Up = {1, 0};
     assert(rotated.Valid() && !MatchesMainland(rotated));
-    const auto overview = Overview.Project(-90000, 90000);
+    const auto overview = Frame(OverviewTab).Project(-90000, 90000);
+    assert(MatchesMainland(overview));
+    assert(!overview.Contains(ScornedPortal));
     const auto scorned = Scorned.Project(-90000, 90000);
     const auto closeEnough = [](Point a, Point b) { return std::abs(a.X-b.X) < .00001 && std::abs(a.Y-b.Y) < .00001; };
     assert(closeEnough(mainland.ToUV(MainlandPortal), {0.25631999855476, 0.42419898608810}));
     assert(closeEnough(scorned.ToUV(ScornedPortal), {0.7620233596, 0.8557505899}));
     for (const auto& [projection, world] : std::array{
             std::pair{mainland, MainlandPortal}, std::pair{scorned, ScornedPortal},
-            std::pair{overview, MainlandPortal}, std::pair{overview, ScornedPortal}}) {
+            std::pair{overview, MainlandPortal}}) {
         const auto uv = projection.ToUV(world);
         assert(closeEnough(projection.ToWorld(uv), world));
         PS::MapProjection::Viewport view{1040, 420, projection.HalfWidth/projection.HalfHeight};
@@ -38,6 +40,10 @@ static void CheckAtlas() {
     assert(RegionNameAt({-848000, 610000}).empty());
     assert(RegionAt({-797000, 688000}) == ScornedTab);
     assert(RegionAt({-848000, 610000}) == OverviewTab); // Art padding is outside the native polygons.
+    assert(CoordinateTab({-848000, 610000}) == ScornedTab);
+    assert(ContainsSurface({-848000, 610000}));
+    const auto edge=Point{-848000,610000};
+    assert(closeEnough(edge,scorned.ToWorld(scorned.ToUV(edge))));
     assert(RegionAt(MainlandPortal) >= FirstRegionTab);
     assert(ScornedDisplayOnly({-1500,-21950}));
     assert(!ScornedDisplayOnly(MainlandPortal));
@@ -77,11 +83,8 @@ static void CheckAtlas() {
     assert(closeEnough(clip.RasterMin, {0, 0}) && closeEnough(clip.RasterMax, {1, 1}));
     assert(closeEnough(clip.ScreenMin, view.ToPixel(overview.ToUV(Mainland.Min))));
     assert(closeEnough(clip.ScreenMax, view.ToPixel(overview.ToUV(Mainland.Max))));
-    view.ZoomAt(6, view.ToPixel(overview.ToUV(ScornedPortal)));
-    view.Center = overview.ToUV(ScornedPortal);
-    view.Clamp();
-    assert(!ClipRaster(overview, view, Mainland, clip));
-    assert(ClipRaster(overview, view, Scorned, clip));
+    assert(!ClipRaster(overview, view, Scorned, clip));
+    assert(ClipRaster(scorned, view, Scorned, clip));
     assert(clip.ScreenMin.X >= -.00001 && clip.ScreenMin.Y >= -.00001);
     assert(clip.ScreenMax.X <= view.Width + .00001 && clip.ScreenMax.Y <= view.Height + .00001);
 
@@ -91,9 +94,9 @@ static void CheckAtlas() {
     assert(tabs.Requested == ScornedTab);
     tabs.Show(ScornedTab);
     assert(tabs.Following && tabs.Active == ScornedTab);
-    tabs.Show(MainlandTab);
+    tabs.Show(OverviewTab);
     tabs.Track(ScornedPortal);
-    assert(!tabs.Following && tabs.Active == MainlandTab && tabs.Requested == MainlandTab);
+    assert(!tabs.Following && tabs.Active == OverviewTab && tabs.Requested == OverviewTab);
 }
 
 int main(){

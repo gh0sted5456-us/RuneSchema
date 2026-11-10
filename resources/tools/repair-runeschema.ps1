@@ -194,7 +194,7 @@ function Invoke-RuneSchemaRepair($InputData) {
     if([IO.Path]::GetFileName($root) -ne 'RuneSchema' -or [IO.Path]::GetFileName([IO.Path]::GetDirectoryName($root)) -ne 'Mods' -or [IO.Path]::GetFileName([IO.Path]::GetDirectoryName([IO.Path]::GetDirectoryName($root))) -ne 'ue4ss'){throw 'Select a RuneSchema installation inside ue4ss/Mods.'}
     $version=[string]$InputData.Version
     $main=Join-Path $root 'dlls/main.dll'
-    $versionPattern='^\d+\.\d+\.\d+\.\d+([a-z]|-?hf)?$'
+    $versionPattern='^(?:\d+\.\d+\.\d+\.\d+(?:[a-z]|-?hf)?|1\.0\.0\.(?-i:J0[0-9A-Z]{4})(?:-?hf)?)$'
     if(Test-Path -LiteralPath $main){$reported=[Diagnostics.FileVersionInfo]::GetVersionInfo($main).ProductVersion;if($reported -match $versionPattern){$version=$reported}}
     if($version -notmatch $versionPattern){throw 'Cannot determine the installed RuneSchema version. No files changed.'}
     Write-RepairLine "RuneSchema repair: $root ($version)";Write-RepairProgress 'Running' 'Checking logs and runtime' 1
@@ -202,7 +202,7 @@ function Invoke-RuneSchemaRepair($InputData) {
     $hotfix=$InputData.PSObject.Properties['Hotfix'] -and $null -ne $InputData.Hotfix
     if($hotfix){
         $tag=[string]$InputData.Hotfix.tag_name
-        if($tag -cnotmatch '^(v|RuneSchema-)?\d+\.\d+\.\d+\.\d+(-?[hH][fF])$'){throw 'A hotfix release tag must end in hf.'}
+        if($tag -cnotmatch '^(?:v|RuneSchema-)?(?:\d+\.\d+\.\d+\.\d+|1\.0\.0\.J0[0-9A-Z]{4})-?[hH][fF]$'){throw 'A hotfix release tag must end in hf.'}
         $release=Get-RepairRelease $tag
         if($release.draft -or $release.id -ne $InputData.Hotfix.id -or $release.tag_name -cne $tag){throw 'The hotfix release changed. Check for updates again.'}
         $platform=if($root -match '(?i)[\\/]WinGDK[\\/]'){'WinGDK'}else{'Win64'}

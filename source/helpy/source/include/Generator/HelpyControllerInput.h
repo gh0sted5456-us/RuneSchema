@@ -209,6 +209,23 @@ inline bool DefaultFocus(bool arriving=false){
     ImGui::SetFocusID(context.LastItemData.ID,window);context.NavInputSource=ImGuiInputSource_Gamepad;ImGui::SetNavCursorVisible(true);return true;
 }
 inline ImU32 HintColor(bool active){return ImGui::GetColorU32(active?HelpyImGuiTheme::Current.accent:HelpyImGuiTheme::Current.textDisabled);}
+inline void DrawCenteredGlyphText(ImDrawList* draw,ImVec2 center,ImU32 color,const char* text){
+    // The font line box includes space below the visible glyphs.
+    auto* font=ImGui::GetFontBaked();
+    ImVec2 min{FLT_MAX,FLT_MAX},max{-FLT_MAX,-FLT_MAX};
+    float advance=0;
+    for(const char* at=text;*at;){
+        unsigned int codepoint=0;
+        at+=ImTextCharFromUtf8(&codepoint,at,nullptr);
+        const auto* glyph=font->FindGlyph(ImWchar(codepoint));
+        if(glyph->Visible){
+            min.x=std::min(min.x,advance+glyph->X0);min.y=std::min(min.y,glyph->Y0);
+            max.x=std::max(max.x,advance+glyph->X1);max.y=std::max(max.y,glyph->Y1);
+        }
+        advance+=glyph->AdvanceX;
+    }
+    if(min.x<=max.x)draw->AddText({std::round(center.x-(min.x+max.x)*.5f),std::round(center.y-(min.y+max.y)*.5f)},color,text);
+}
 inline void DrawPhysicalGlyph(ImVec2 center,float radius,uint32_t button,int style,bool active){
     auto* draw=ImGui::GetWindowDrawList();const auto color=HintColor(active);const auto labels=HelpyControllerDevice::Resolve(style,ReportedGlyphs);
     int face=-1;for(int i=0;i<4;++i)if(button==HelpyControllerBindings::Actions[i].Button)face=i;
@@ -218,12 +235,14 @@ inline void DrawPhysicalGlyph(ImVec2 center,float radius,uint32_t button,int sty
         else if(glyph==B::Circle)draw->AddCircle(center,r,color,24,1.5f);
         else if(glyph==B::Square)draw->AddRect({center.x-r,center.y-r},{center.x+r,center.y+r},color,0,0,1.5f);
         else if(glyph==B::Triangle)draw->AddTriangle({center.x,center.y-r},{center.x+r,center.y+r},{center.x-r,center.y+r},color,1.5f);
-        else{const char* text=glyph==B::A?"A":glyph==B::B?"B":glyph==B::X?"X":glyph==B::Y?"Y":glyph==B::South?"S":glyph==B::East?"E":glyph==B::West?"W":"N";const auto size=ImGui::CalcTextSize(text);draw->AddText({center.x-size.x*.5f,center.y-size.y*.5f},color,text);}return;
+        else{const char* text=glyph==B::A?"A":glyph==B::B?"B":glyph==B::X?"X":glyph==B::Y?"Y":glyph==B::South?"S":glyph==B::East?"E":glyph==B::West?"W":"N";DrawCenteredGlyphText(draw,center,color,text);}return;
     }
     if(button==InputBindings::Touchpad){draw->AddRect({center.x-radius,center.y-radius*.65f},{center.x+radius,center.y+radius*.65f},color,3,0,1.5f);draw->AddCircleFilled({center.x-radius*.35f,center.y},1.5f,color);draw->AddCircleFilled({center.x+radius*.35f,center.y},1.5f,color);return;}
     const bool ps=labels==HelpyControllerDevice::PlayStation,nintendo=labels==HelpyControllerDevice::Nintendo;
     const char* text=button==XINPUT_GAMEPAD_LEFT_SHOULDER?(ps?"L1":nintendo?"L":"LB"):button==XINPUT_GAMEPAD_RIGHT_SHOULDER?(ps?"R1":nintendo?"R":"RB"):button==InputBindings::LeftTrigger?(ps?"L2":nintendo?"ZL":"LT"):button==InputBindings::RightTrigger?(ps?"R2":nintendo?"ZR":"RT"):button==InputBindings::Guide?(ps?"PS":nintendo?"H":"X"):button==XINPUT_GAMEPAD_BACK?(ps?"SH":"V"):button==XINPUT_GAMEPAD_START?(ps?"OP":"M"):button==XINPUT_GAMEPAD_DPAD_LEFT?"<":button==XINPUT_GAMEPAD_DPAD_RIGHT?">":button==XINPUT_GAMEPAD_DPAD_UP?"^":button==XINPUT_GAMEPAD_DPAD_DOWN?"v":button==XINPUT_GAMEPAD_LEFT_THUMB?(ps?"L3":"LS"):button==XINPUT_GAMEPAD_RIGHT_THUMB?(ps?"R3":"RS"):button==0?"+":"R";
-    const auto size=ImGui::CalcTextSize(text);draw->AddRect({center.x-radius-2,center.y-radius},{center.x+radius+2,center.y+radius},color,4,0,1.5f);draw->AddText({center.x-size.x*.5f,center.y-size.y*.5f},color,text);
+    const float halfWidth=std::max(radius+2,ImGui::CalcTextSize(text).x*.5f+2);
+    draw->AddRect({center.x-halfWidth,center.y-radius},{center.x+halfWidth,center.y+radius},color,4,0,1.5f);
+    DrawCenteredGlyphText(draw,center,color,text);
 }
 inline void DrawGlyph(ImVec2 center,float radius,size_t button,int style,bool physical=false){
     constexpr ImGuiKey keys[]{ImGuiKey_GamepadFaceDown,ImGuiKey_GamepadFaceRight,ImGuiKey_GamepadFaceLeft,ImGuiKey_GamepadFaceUp};
@@ -288,7 +307,10 @@ inline std::vector<Hint> DesktopHints(std::string_view shortcut,bool welcome,boo
     if(!shortcut.empty()&&shortcut!="None")hints.push_back({"Helpy",{},false,std::string(shortcut)});
     return hints;
 }
-inline float KeyHintWidth(const Hint& hint){return hint.Key.empty()?0.f:ImGui::CalcTextSize(hint.Key.c_str()).x+ImGui::GetFrameHeight()*.5f;}
+inline float KeyHintWidth(const Hint& hint){
+    const float frame=ImGui::GetFrameHeight();
+    return hint.Key.empty()?0.f:std::ceil(std::max(frame,ImGui::CalcTextSize(hint.Key.c_str()).x+frame*.5f));
+}
 inline float HintGlyphWidth(const Hint& hint){
     return KeyHintWidth(hint)+ImGui::GetFrameHeight()*float(hint.Buttons.size()+(hint.Mouse!=MouseHint::None));
 }
@@ -298,9 +320,9 @@ inline void DrawDesktopGlyph(const Hint& hint,ImVec2 at,float size){
     const auto color=HintColor(hint.Active);
     const float keyWidth=KeyHintWidth(hint);
     if(keyWidth){
-        const auto text=ImGui::CalcTextSize(hint.Key.c_str());
-        draw->AddRect({at.x,at.y+size*.15f},{at.x+keyWidth,at.y+size*.85f},color,3.f);
-        draw->AddText({at.x+(keyWidth-text.x)*.5f,at.y+(size-text.y)*.5f},color,hint.Key.c_str());
+        const float left=std::round(at.x),top=std::round(at.y+size*.1f),height=std::round(size*.8f);
+        draw->AddRect({left,top},{left+keyWidth,top+height},color,3.f);
+        DrawCenteredGlyphText(draw,{left+keyWidth*.5f,top+height*.5f},color,hint.Key.c_str());
         at.x+=keyWidth;
     }
     if(hint.Mouse==MouseHint::None)return;

@@ -16,7 +16,8 @@ if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
 $RepositoryRoot = [IO.Path]::GetFullPath($RepositoryRoot)
 $required = @('LICENSE', 'AUTHORS.md', 'LICENSING.md', 'CONTRIBUTING.md', 'THIRD_PARTY_NOTICES.md',
     'licenses/PalSchema-MIT.txt', 'licenses/UE4SS-MIT.txt',
-    'licenses/nlohmann-json-MIT.txt', 'licenses/SDL3-zlib.txt', 'licenses/ModMenu-MIT.txt')
+    'licenses/nlohmann-json-MIT.txt', 'licenses/SDL3-zlib.txt', 'licenses/ModMenu-MIT.txt',
+    'licenses/WebView2-Loader.txt', 'licenses/WebView2-NOTICE.txt', 'licenses/MD4C-MIT.txt')
 foreach ($relative in $required) {
     $path = Join-Path $RepositoryRoot $relative
     if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or
@@ -209,7 +210,10 @@ function Write-ConsolidatedLicenseFile {
         @{ Name = 'UE4SS / RE-UE4SS — MIT License'; File = 'UE4SS-MIT.txt'; Upstream = 'https://github.com/UE4SS-RE/RE-UE4SS' },
         @{ Name = 'JSON for Modern C++ — MIT License'; File = 'nlohmann-json-MIT.txt'; Upstream = 'https://github.com/nlohmann/json' },
         @{ Name = 'SDL 3.4.16 — zlib License'; File = 'SDL3-zlib.txt'; Upstream = 'https://github.com/libsdl-org/SDL/tree/release-3.4.16' },
-        @{ Name = 'Maxxfilth Mod Menu — MIT License'; File = 'ModMenu-MIT.txt'; Upstream = 'https://www.curseforge.com/runescape-dragonwilds/ue4ss-mods/mod-menu' }
+        @{ Name = 'Maxxfilth Mod Menu — MIT License'; File = 'ModMenu-MIT.txt'; Upstream = 'https://www.curseforge.com/runescape-dragonwilds/ue4ss-mods/mod-menu' },
+        @{ Name = 'Microsoft WebView2 Loader — License'; File = 'WebView2-Loader.txt'; Upstream = 'https://www.nuget.org/packages/Microsoft.Web.WebView2/1.0.3405.78' },
+        @{ Name = 'Microsoft WebView2 Loader — Notices'; File = 'WebView2-NOTICE.txt'; Upstream = 'https://www.nuget.org/packages/Microsoft.Web.WebView2/1.0.3405.78' },
+        @{ Name = 'MD4C — MIT License'; File = 'MD4C-MIT.txt'; Upstream = 'https://github.com/mity/md4c/tree/release-0.5.2' }
     )
     foreach ($section in $sections) {
         $lines.Add('')
@@ -308,7 +312,7 @@ try {
     if ($FinalizeBuild) {
         $buildScript = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'build/build.ps1') -Raw
         $versionMatch = [regex]::Match($buildScript, '(?m)^\$Version\s*=\s*''([^'']+)''')
-        if (-not $versionMatch.Success -or $versionMatch.Groups[1].Value -notmatch '^\d+\.\d+\.\d+(?:\.\d+(?:[bem]|-alpha(?:\.\d+)?)?)?$') {
+        if (-not $versionMatch.Success -or $versionMatch.Groups[1].Value -cnotmatch '^(?:\d+\.\d+\.\d+(?:\.\d+(?:[bem]|-alpha(?:\.\d+)?)?)?|1\.0\.0\.J0[0-9A-Z]{4})$') {
             throw 'Could not determine the current package version from build/build.ps1.'
         }
         $version = $versionMatch.Groups[1].Value

@@ -15,13 +15,13 @@ function Assignment-Value([string]$Name) {
 }
 $version = Assignment-Value 'Version'
 $pattern = Assignment-Value 'releaseVersionPattern'
-Require ($version -eq '0.8.1.0') 'This release must be 0.8.1.0'
-$numericVersion = [regex]::Match($version, '^\d+\.\d+\.\d+(?:\.\d+)?').Value
+Require ($version -cmatch $pattern) 'The configured release version is invalid'
+$numericVersion = if ($version -cmatch '^1\.0\.0\.J0[0-9A-Z]{4}$') { '1.0.0.0' } else { [regex]::Match($version, '^\d+\.\d+\.\d+(?:\.\d+)?').Value }
 $resourceVersion = $numericVersion.Replace('.', ',')
-foreach ($valid in @('0.8.0', '0.8.0.0', '0.8.0.1', '0.8.0.1b', '1.0.0', '0.7.7.9m', '0.7.7.9e', '0.7.8.0-alpha', '0.7.8.0-alpha.2')) {
+foreach ($valid in @('0.8.0', '0.8.0.0', '0.8.0.1', '0.8.0.1b', '1.0.0', '1.0.0.J00001', '1.0.0.J00ABC', '0.7.7.9m', '0.7.7.9e', '0.7.8.0-alpha', '0.7.8.0-alpha.2')) {
     Require ($valid -cmatch $pattern) "Build rejects supported version $valid"
 }
-foreach ($invalid in @('0.8', '0.8.0garbage', '../0.8.0', '0.8.0.0.0', '0.7.7.9M', '0.8.0.1B', '0.8.0.1bb', '0.8.0b')) {
+foreach ($invalid in @('0.8', '0.8.0garbage', '../0.8.0', '0.8.0.0.0', '0.7.7.9M', '0.8.0.1B', '0.8.0.1bb', '0.8.0b', '1.0.0.j00001', '1.0.0.J0001', '1.0.0.J000001', '1.0.0.J0-001', '1.0.1.J00001')) {
     Require ($invalid -cnotmatch $pattern) "Build accepts invalid version $invalid"
 }
 $packaging = Read-Source 'build/package-licenses.ps1'
@@ -29,10 +29,10 @@ Require ($packaging.Contains("'"+$pattern+"'")) 'Package finalization version pa
 $workflow = Read-Source '.github/workflows/build-packages.yml'
 $tagPattern = [regex]::Match($workflow, '\$tagMatch = \[regex\]::Match\(\$tag, ''([^'']+)''\)').Groups[1].Value
 Require (-not [string]::IsNullOrEmpty($tagPattern)) 'Release tag validation is missing'
-foreach ($tag in @($version, ('v'+$version), '0.7.8.0-alpha', 'v0.7.7.9m')) {
+foreach ($tag in @($version, ('v'+$version), 'v1.0.0.J00001', '1.0.0.J00ABC', '0.7.8.0-alpha', 'v0.7.7.9m')) {
     Require ($tag -cmatch $tagPattern) "Publish workflow rejects supported tag $tag"
 }
-foreach ($tag in @('v0.8', 'v0.8.0-extra', '../0.8.0')) {
+foreach ($tag in @('v0.8', 'v0.8.0-extra', '../0.8.0', 'v1.0.0.j00001', '1.0.0.J000001', '1.0.1.J00001')) {
     Require ($tag -cnotmatch $tagPattern) "Publish workflow accepts invalid tag $tag"
 }
 Require ((Read-Source 'source/raw/include/Utility/BuildInfo.h').Contains('Version[] = "'+$version+'";')) 'Core runtime version differs'

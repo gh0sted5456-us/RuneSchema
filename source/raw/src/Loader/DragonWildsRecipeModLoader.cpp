@@ -996,7 +996,8 @@ namespace DragonWilds {
     void DragonWildsRecipeModLoader::RefreshNativeRecipeIndex()
     {
         m_recipeNameCounts.Clear();m_nativeRecipesByName.clear();
-        for(const auto& def:m_recipeDefs)m_recipeNameCounts.Add(def.Key);
+        for(const auto& def:m_recipeDefs)
+            if(!def.Key.starts_with(TEXT("/")))m_recipeNameCounts.Add(def.Key);
         TArray<UObject*> recipes;UECustom::UObjectGlobals::GetObjectsOfClass(m_recipeClass,recipes,true);
         for(auto* recipe:recipes)if(recipe && !recipe->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_BeginDestroyed|RF_FinishDestroyed)))
         {
@@ -1339,10 +1340,14 @@ namespace DragonWilds {
     {
         auto tableName = RC::to_string(datatable->GetName());
         auto tablePath = RC::to_string(datatable->GetPathName());
+        const auto matches = [&](const Placement& placement) {
+            return placement.DataTable.empty() ? placement.Table == tableName : placement.DataTable == tablePath;
+        };
 
         int placed = 0;
         for (auto& def : m_recipeDefs)
         {
+            if (!std::ranges::any_of(def.Placements, matches)) continue;
             const auto identity=RecipeIdentity(def.ModName,def.Key);
             if(m_invalidRecipes.contains(identity))continue;
             auto it = m_recipes.find(identity);
@@ -1353,11 +1358,8 @@ namespace DragonWilds {
 
             for (auto& placement : def.Placements)
             {
-                const bool matches = placement.DataTable.empty()
-                    ? placement.Table == tableName
-                    : placement.DataTable == tablePath;
                 bool verified = false;
-                if (matches && Place(it->second, placement, datatable, &verified))
+                if (matches(placement) && Place(it->second, placement, datatable, &verified))
                 {
                     placed++;
                 }

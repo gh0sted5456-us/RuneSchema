@@ -16,8 +16,8 @@ bool Busy();
 int Stage();
 int CooldownSeconds();
 bool Start(const std::string& installed);
-// UI thread only. Returns true once when a completed check finds a newer version.
-bool Tick(bool automatic,bool networkAllowed,const std::string& installed);
+// UI thread only.
+void Tick(bool automatic,bool networkAllowed,const std::string& installed);
 void Cancel() noexcept;
 void Shutdown() noexcept;
 }

@@ -22,6 +22,9 @@
     ]
   },
   {
+    "Helpy support": "experimental/HELPY-SUPPORT.md"
+  },
+  {
     "Helpy & controllers": [
       {
         "Desktop, overlay & settings": "experimental/HELPY-STANDALONE.md"

@@ -107,3 +107,10 @@ The GitHub release asset must expose a SHA-256 digest. See the
 [official release API](https://docs.github.com/en/rest/releases/releases) for its
 release and asset metadata. Test the exact ZIP on a disposable installation,
 including a failed replacement and rollback, before publishing it.
+
+## Stable RuneSchema and Helpy releases
+
+Helpy checks the latest published stable GitHub release. A newer release
+appears under **Notifications → Updates** with links to GitHub, Nexus Mods,
+and CurseForge. **Settings → Updates & runtime** offers a manual check.
+Preview builds and emergency hotfixes have separate release paths.

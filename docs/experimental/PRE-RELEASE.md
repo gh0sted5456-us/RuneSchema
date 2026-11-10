@@ -10,7 +10,7 @@ promote_to: RELEASE-0.8.1.0.md
     **0.8.1.0 prerelease** and have not been promoted to the stable guides.
 
 <div class="rs-actions">
-  <a class="md-button md-button--primary" href="https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0-pre.20261108.2/RuneSchema-0.8.1.0-complete-20261108.2.zip">Download complete 0.8.1.0</a>
+  <a class="md-button md-button--primary" href="https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0-pre.20261109/RuneSchema-0.8.1.0-preview-20261109.zip">Download complete 0.8.1.0</a>
   <a class="md-button" href="../INSTALLATION/">Installation</a>
 </div>
 
@@ -18,7 +18,26 @@ The downloads follow the maintainer's complete package layout. They include
 Helpy and all bundled plugins. Install UE4SS
 separately; preserve your settings, mods and saves when updating.
 
-## Complete candidate refresh
+## November 9 preview
+
+This package updates the core, Helpy and bundled plugins. See the
+[prerelease and checksums](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0-pre.20261109).
+
+- Helpy starts with the full Help guide and screenshots. The launcher accepts
+  the complete executable, and large settings and catalogs load normally.
+- [Helpy support](HELPY-SUPPORT.md) is available in the app and on the website.
+  Compatible Mod Menu 2 settings can be edited while Dragonwilds is closed.
+- Plugin discovery reports malformed order entries individually and continues
+  loading the rest of the catalog. Automatic mapping uses the parser's size limit.
+- The world map has clearer zone navigation and optional transport outlines.
+  Helpy also reports new stable builds from GitHub.
+
+Package checks and isolated desktop startup passed. Full in-game startup of
+this preview remains to be verified.
+A controller fixture reports D-pad focus crossing in both this build and
+the previous prerelease.
+
+## November 8 candidate refresh
 
 The complete November 8 follow-up includes the updated core and Helpy, bundled
 plugins, and matching Lua adapters. See [`0.8.1.0-pre.20261108.2`](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0-pre.20261108.2)

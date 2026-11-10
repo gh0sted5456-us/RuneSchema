@@ -279,3 +279,12 @@ the owning mod's implementation and publish a stable selected-target token.
 Without RuneSchema, its local defaults/config still load and ordinary Mod Menu
 settings remain compatible. Retain the included original-material and third-party
 notices when packaging it.
+
+## Edit settings with Dragonwilds closed
+
+Open **Mods → Mod Menu 2** in the desktop app. Helpy reads modmenu.json
+or modmenu.txt pages from external UE4SS mods and enabled RuneSchema Lua
+packages. Supported settings are saved to each mod's declared config file for
+its next launch. JSON files can be reformatted. Lua settings are edited as
+plain values in the file. Live actions and character-specific previews need
+a connected game. The key and Enable Mod Menu 2 setting still control access.

@@ -19,7 +19,6 @@ using json = nlohmann::json;
 constexpr uint16_t FileMagic = 0x30C4;
 constexpr uint32_t ExtensionMagic = 0x54584543;
 constexpr uint32_t PathExtension = 0x48545050;
-constexpr size_t MaximumFileBytes = 128ull * 1024 * 1024;
 constexpr size_t MaximumPayloadBytes = 192ull * 1024 * 1024;
 constexpr size_t MaximumCacheBytes = 2ull * 1024 * 1024;
 constexpr size_t MaximumCachedTypes = 128;
@@ -79,8 +78,8 @@ std::vector<uint8_t> ReadFile(const fs::path& path)
 {
     std::error_code error;
     const auto size = fs::file_size(path, error);
-    if (error || size < 12 || size > MaximumFileBytes)
-        throw std::runtime_error("USMAP file size is outside the 12-byte to 128-MiB limit");
+    if (error) throw std::runtime_error("USMAP file size could not be read");
+    ValidateFileSize(size);
     std::ifstream stream(path, std::ios::binary);
     if (!stream) throw std::runtime_error("USMAP file could not be opened");
     std::vector<uint8_t> bytes(static_cast<size_t>(size));

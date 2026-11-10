@@ -131,7 +131,9 @@ namespace PS::CookedPakRegistryManifest {
     {
         if (!document.is_object() || (!document.contains("NativeRegistries")&&!document.contains("LoaderDefinitions")))
             return std::nullopt;
-        const auto native = document.value("NativeRegistries",nlohmann::json::object());
+        static const auto emptyNative = nlohmann::json::object();
+        const auto nativeField = document.find("NativeRegistries");
+        const auto& native = nativeField == document.end() ? emptyNative : *nativeField;
         if (!native.is_object())
             throw std::runtime_error("NativeRegistries must be an object");
         static constexpr std::array<const char*, 19> Allowed{{
@@ -248,8 +250,9 @@ namespace PS::CookedPakRegistryManifest {
                 if(!entries.is_object()||entries.size()>4096)throw std::runtime_error("Cooked loader lane must be an object with at most 4096 entries");
                 std::set<std::string> unique;
                 for(const auto& [path,body]:entries.items()){
-                    if(!unique.insert(Detail::Fold(path)).second)throw std::runtime_error("Duplicate cooked loader object path (case-insensitive)");
-                    if(result.SchemaPaths.contains(Detail::Fold(path)))
+                    const auto [folded, inserted] = unique.insert(Detail::Fold(path));
+                    if(!inserted)throw std::runtime_error("Duplicate cooked loader object path (case-insensitive)");
+                    if(result.SchemaPaths.contains(*folded))
                         throw std::runtime_error("LoaderDefinitions edits existing cooked assets; use the owning loose loader for schema-created assets, and NativeRegistries to announce their runtime paths");
                     if(!Detail::ValidAssetPath(path)||path.rfind('.')==std::string::npos||path.rfind('.')<=path.rfind('/')||path.back()=='.'||!body.is_object())
                         throw std::runtime_error("Cooked loader definitions require full object-path keys and object bodies");

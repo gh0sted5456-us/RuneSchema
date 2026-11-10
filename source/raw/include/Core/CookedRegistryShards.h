@@ -3,6 +3,7 @@
 #include "Core/MountedModRegistryOwners.h"
 #include <functional>
 #include <set>
+#include <string_view>
 
 namespace PS::CookedRegistryShards {
 using Json=nlohmann::json;
@@ -20,7 +21,7 @@ struct Group {
     Json RootEntries=Json::array();
     std::size_t Bytes=0,References=0;
 };
-inline void Require(bool valid,const std::string& reason){if(!valid)throw std::runtime_error("Cooked registry shards: "+reason);}
+inline void Require(bool valid,std::string_view reason){if(!valid)throw std::runtime_error("Cooked registry shards: "+std::string(reason));}
 inline std::string Fold(std::string text){for(auto& c:text)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));return text;}
 inline std::string RootPath(const std::string& owner){
     Require(MountedModRegistryOwners::ConventionalName(owner),"root owner must match an enabled conventional mod folder");
@@ -68,7 +69,7 @@ inline Json ParseJson(const std::string& text){
     const auto check=[&](int depth,Json::parse_event_t event,Json& value){
         Require(depth<=64,"JSON nesting exceeds the safe bound");
         if(event==Json::parse_event_t::object_start)keys.emplace_back();
-        else if(event==Json::parse_event_t::key)Require(!keys.empty()&&keys.back().insert(value.get<std::string>()).second,"duplicate JSON field");
+        else if(event==Json::parse_event_t::key)Require(!keys.empty()&&keys.back().insert(value.get_ref<const std::string&>()).second,"duplicate JSON field");
         else if(event==Json::parse_event_t::object_end&&!keys.empty())keys.pop_back();
         return true;
     };
@@ -109,8 +110,8 @@ inline Group Resolve(const std::string& rootPath,const Asset& root,const std::fu
         Require(asset.Owner==root.Owner,"child RegistryOwner does not match the root");
         Require(asset.Bytes>0&&asset.Bytes<=MaxDocumentBytes&&asset.Document.dump().size()<=MaxDocumentBytes,"document byte budget is invalid");
         Require(asset.Bytes<=MaxGroupBytes-result.Bytes,"catalogue exceeds 64 MiB");result.Bytes+=asset.Bytes;
-        auto payload=asset.Document;payload.erase(child?"RegistryShard":"RegistryShards");
-        auto manifest=CookedPakRegistryManifest::Parse(payload,root.Owner,"pak:"+path);
+        // The envelope owns shard metadata. Manifest parsing reads only the declaration fields.
+        auto manifest=CookedPakRegistryManifest::Parse(asset.Document,root.Owner,"pak:"+path);
         if(child)Require(manifest.has_value(),"a shard must declare native assets or loader definitions");
         if(manifest){const auto count=References(*manifest);Require(count<=MaxGroupReferences-result.References,"catalogue exceeds 262144 references");
             result.References+=count;result.Manifests.push_back(std::move(*manifest));}

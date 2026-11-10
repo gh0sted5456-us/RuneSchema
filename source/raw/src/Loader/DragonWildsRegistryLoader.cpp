@@ -339,6 +339,7 @@ void DragonWildsRegistryLoader::LoadCookedRegistries() {
         metadataReady=registry&&registry->GetAllAssets(assets,true)&&assets.Num()>=0&&assets.Num()<=262144;
     }catch(...){metadataReady=false;}
     const auto queryComplete=std::chrono::steady_clock::now();
+    const auto ms=[](auto from,auto to){return std::chrono::duration_cast<std::chrono::milliseconds>(to-from).count();};
     if(!metadataReady) {
         (void)PS::LogStructuredFallback<RC::LogLevel::Warning>(
             PS::StructuredDiagnosticB3C::Report("RS-RGST-005","Warning","Partial","RegistryLoader",
@@ -394,9 +395,11 @@ void DragonWildsRegistryLoader::LoadCookedRegistries() {
             // Disabled content contributes neither its root nor its children,
             // even when another enabled PAK leaves metadata for it mounted.
             if(!enabledOwners.contains(root.Owner))return;
+            const auto shardStart=std::chrono::steady_clock::now();
             const auto group=PS::CookedRegistryShards::Resolve(path,root,[&](const std::string& child){
                 return readAsset(ActorHelper::ResolveObject(PS::ToWideSafe(child.c_str())),child,root.Owner);
             });
+            const auto shardResolved=std::chrono::steady_clock::now();
             auto nextEntries=m_modEntries,nextAudit=m_audit;auto previousKeys=m_keys;
             try{
                 // Unlike legacy independent presentation entries, a sharded
@@ -410,11 +413,14 @@ void DragonWildsRegistryLoader::LoadCookedRegistries() {
                 PS::CookedPakRegistryManifest::PublishBatch(group.Manifests);
                 m_modEntries.swap(nextEntries);m_audit.swap(nextAudit);
             }catch(...){m_keys.swap(previousKeys);throw;}
+            const auto shardPublished=std::chrono::steady_clock::now();
             for(const auto& manifest:group.Manifests)PS::HelpyCacheSources::DeclareManifest(manifest);
+            const auto cacheDeclared=std::chrono::steady_clock::now();
             PS::RegistryEnrollment::RecordDeclaration(group.Owner,"pak:"+path);
             for(const auto& member:group.Paths)handled.insert(PS::CookedRegistryShards::Fold(member));
-            PS::Log<RC::LogLevel::Normal>(STR("[PAK-REGISTRY][SHARDS][READY] owner='{}' documents={} references={} bytes={} root='{}'.\n"),
-                PS::ToWideSafe(group.Owner.c_str()),group.Paths.size(),group.References,group.Bytes,PS::ToWideSafe(path.c_str()));
+            PS::Log<RC::LogLevel::Normal>(STR("[PAK-REGISTRY][SHARDS][READY] owner='{}' documents={} references={} bytes={} root='{}' resolve_ms={} publish_ms={} cache_ms={}.\n"),
+                PS::ToWideSafe(group.Owner.c_str()),group.Paths.size(),group.References,group.Bytes,PS::ToWideSafe(path.c_str()),
+                ms(shardStart,shardResolved),ms(shardResolved,shardPublished),ms(shardPublished,cacheDeclared));
         }else{
             if(PS::CookedRegistryShards::ReservedShardPath(path)||(root.Document.is_object()&&root.Document.contains("RegistryShard")))
                 throw std::runtime_error("RegistryShard assets can only be enrolled through an enabled root index");
@@ -485,7 +491,6 @@ void DragonWildsRegistryLoader::LoadCookedRegistries() {
     if(conventional)PS::Log<RC::LogLevel::Normal>(STR("Registry: directly loaded {} conventional cooked declaration{} missing from Asset Registry metadata.\n"),conventional,conventional==1?TEXT(""):TEXT("s"));
     const auto finished=std::chrono::steady_clock::now();
     PS::Log<RC::LogLevel::Normal>(STR("[PERF][REGISTRY][DECLARATION-LOAD-COST] calls={} wrapper_ms={} native_ms={}; native includes engine loading and ProcessEvent callbacks.\n"),loads.Cost.Calls,loads.Cost.WrapperMs(),loads.Cost.NativeMs());
-    const auto ms=[](auto from,auto to){return std::chrono::duration_cast<std::chrono::milliseconds>(to-from).count();};
     PS::Log<RC::LogLevel::Normal>(STR("[PERF][REGISTRY][DECLARATIONS] query_ms={} roots_ms={} metadata_ms={} directories={} candidates={} census_ms={} conventional_ms={} filename_targets={} census_packages={}; conventional and legacy discovery retained.\n"),
         ms(started,queryComplete),ms(queryComplete,rootsComplete),ms(rootsComplete,finished),directoryOwners.size(),candidates,ms(queryComplete,censusComplete),ms(censusComplete,rootsComplete),registryFiles.size(),packages.Packages.size());
 }

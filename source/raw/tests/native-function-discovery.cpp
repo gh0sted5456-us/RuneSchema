@@ -18,6 +18,9 @@ static void Synthetic() {
         for(size_t i=0;i<parsed.size();++i)bytes[16+i]=parsed[i]<0?0x79:static_cast<uint8_t>(parsed[i]);
         std::vector<Discover::Region> regions{{0x1000,bytes}};const std::vector<uint32_t> entries{0x1010};
         Require(Discover::FindUnique(regions,entries,pattern)==0x1010,"unique masked body not found at function entry");
+        Require(Discover::FindUnique(regions,std::vector<uint32_t>{0x1010,0x1010},pattern)==0x1010,"repeated unwind entry counted as two matches");
+        const std::vector<Discover::Region> truncated{{0x1000,std::span<const uint8_t>(bytes).first(16+parsed.size()-1)}};
+        Require(!Discover::FindUnique(truncated,entries,pattern),"signature extending past executable region accepted");
         Require(!Discover::FindUnique(regions,std::vector<uint32_t>{0x100f},pattern),"middle-of-function match accepted");
         Require(!Discover::FindUnique({},entries,pattern),"non-executable data accepted");
         regions.push_back({0x2000,bytes});
