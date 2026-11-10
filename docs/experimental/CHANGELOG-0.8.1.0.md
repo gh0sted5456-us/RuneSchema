@@ -9,7 +9,7 @@ promote_to: CHANGELOG-0.8.1.0.md
 
 # RuneSchema 0.8.1.0 — experimental
 
-!!! info "Complete candidate published · 2026-11-06"
+!!! info "Complete candidate published · 2026-11-09"
     The [complete candidate](PRE-RELEASE.md) includes the runtime, Helpy and plugin
     follow-ups below. Older entries retain their original test-stage wording;
     their historical “unpublished” labels are superseded by this dated package.
@@ -49,6 +49,17 @@ promote_to: CHANGELOG-0.8.1.0.md
   named Dragon Gate travel to Rasthin's Rest.
 - Rotate platform and themed RuneSchema logos on the welcome screen, with
   adjustable timing and optional artwork crossfades.
+
+## 2026-11-07 redirected saves and Helpy follow-up
+
+- Follow redirected character-save folders for copy, import and export. Keep
+  nested profile redirects and imports outside the resolved root blocked.
+- Share Compact view between RuneSchema and UE4SS, scroll and pan with the
+  left stick, and move a selected group to the cart with the right-stick pointer.
+- Keep Helpy open when it was started from the desktop. Resolve runtime
+  junctions and report bridge errors once per outage.
+- Report known older and newer UE4SS versions and use the capabilities
+  RuneSchema can verify.
 
 ## 2026-11-06 complete refresh
 
