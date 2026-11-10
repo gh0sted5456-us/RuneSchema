@@ -701,6 +701,9 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         # or sample mods that could replace an existing installation's content.
         New-Item -ItemType Directory -Path $mods -Force | Out-Null
         Copy-Item -LiteralPath $CoreDll -Destination (Join-Path $payload 'dlls\main.dll') -Force
+        $sisterPlugin = Join-Path $payload 'plugins/RuneSchema.UE4SS.Bridge/dll'
+        New-Item -ItemType Directory -Path $sisterPlugin -Force | Out-Null
+        Copy-Item -LiteralPath (Join-Path (Split-Path -Parent $CoreDll) 'RuneSchema.UE4SS.Bridge.dll') -Destination $sisterPlugin -Force
         Copy-HelpyDlls $HelpyDll (Join-Path $payload 'plugins\RuneSchema.Helpy\dll')
         Copy-HudPlugin $HelpyDll (Join-Path $payload 'plugins\RuneSchema.HUD')
         foreach($id in @('RuneSchema.ModMenu2','RuneSchema.DeveloperTools')){Copy-HelpyFeaturePlugin $HelpyDll $id (Join-Path $payload ('plugins/'+$id))}

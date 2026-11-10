@@ -377,7 +377,7 @@ public:
         DragonWilds::UnrealOffsets::Initialize();
         PS::StartupTrace::Mark("offsets complete; early hooks begin");
 
-        MainLoader.PreInitialize();
+        MainLoader.PreInitialize(m_pluginHost.HasCapability("ue4ss.sister-content"));
         PS::StartupTrace::Mark("early hooks complete");
 
         PS::ConsolidatedLog<RC::LogLevel::Normal>(STR("[RuneSchema] v{} loaded | UE4SS | network role determined by game state.\n"), ModVersion);

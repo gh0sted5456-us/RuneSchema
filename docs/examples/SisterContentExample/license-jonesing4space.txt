@@ -1,0 +1,20 @@
+DRAGONWILDS MOD PERMISSIONS — JONESING4SPACE
+
+Original mod contributions: Copyright (c) 2026 Jonesing4Space.
+
+You may install and play an official release, including on a dedicated server
+you administer, under the accompanying mod license. Prior written permission
+from Jonesing4Space is required to modify or reuse the original material, upload
+or mirror the mod, distribute edited versions or patches containing that material,
+include it in a public modpack, or claim an edited release as official. Giving
+credit does not replace permission. Do not claim someone else's work as your own.
+
+Third-party assets and libraries are excluded from these restrictions and retain
+their own licenses and attribution requirements. This includes MIT components,
+Creative Commons assets, ShareAlike adaptations, CC0/public-domain material, and
+Jagex/game-owned content. See the included asset/third-party notices. The scope
+of those licenses is not changed by this mod's original-material license.
+
+Existing permissions, applicable legal exceptions, and valid platform rights
+are unaffected. Contact Jonesing4Space through the official release page to
+request written permission for a specific use.

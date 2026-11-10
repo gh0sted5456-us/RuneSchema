@@ -28,10 +28,10 @@ inline bool EqualsInsensitive(std::string_view left, std::string_view right) {
     return AsciiLower(std::string(left)) == AsciiLower(std::string(right));
 }
 
-inline constexpr std::array<std::string_view,25> ContentDirectories{{
+inline constexpr std::array<std::string_view,26> ContentDirectories{{
     "assets","blueprints","buildings","courses","dialogue","effects","enums",
     "equipment","events","journal","lore","nameplates","niagara","npc","players",
-    "quests","raw","recipes","registry","spawns","strings","ue4ss","vendors","paks","logicmods"
+    "quests","raw","raws","recipes","registry","spawns","strings","ue4ss","vendors","paks","logicmods"
 }};
 
 inline bool IsContentDirectoryName(std::string_view value) {
@@ -61,6 +61,7 @@ inline std::optional<std::filesystem::path> ResolveLoaderDirectory(
         current.increment(error);
     }
     if (error) throw std::runtime_error("loader folder scan failed: " + error.message());
+    if (!match && expected == "raw") return ResolveLoaderDirectory(modRoot, "raws");
     return match;
 }
 

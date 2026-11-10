@@ -119,6 +119,19 @@ add_library(${TARGET} SHARED
     src/Core/CharacterEntryRecovery.cpp
     src/Core/PersistencePruner.cpp)
 
+add_library(RuneSchemaUE4SSBridgePlugin SHARED plugins/SisterContentPlugin.cpp)
+target_include_directories(RuneSchemaUE4SSBridgePlugin PRIVATE include)
+set_target_properties(RuneSchemaUE4SSBridgePlugin PROPERTIES OUTPUT_NAME "RuneSchema.UE4SS.Bridge")
+add_dependencies(${TARGET} RuneSchemaUE4SSBridgePlugin)
+
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../../docs/examples/SisterContentExample/Example.cpp")
+    add_library(SisterContentExample SHARED EXCLUDE_FROM_ALL
+        ../../docs/examples/SisterContentExample/Example.cpp)
+    target_link_libraries(SisterContentExample PRIVATE UE4SS)
+    set_target_properties(SisterContentExample PROPERTIES OUTPUT_NAME main
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/examples/SisterContentExample/dlls")
+endif()
+
 add_library(RuneSchemaMultiplayerPlugin SHARED plugins/MultiplayerPlugin.cpp src/Core/ConfigFiles.cpp)
 set_target_properties(RuneSchemaMultiplayerPlugin PROPERTIES OUTPUT_NAME "RuneSchema.Multiplayer"
     MSVC_RUNTIME_LIBRARY MultiThreaded)
