@@ -1,11 +1,52 @@
 #include "Core/CharacterAppearance.h"
+#include "Core/CookedRegistryShards.h"
+#include "Core/StandaloneNetworkRegistry.h"
 #include <cassert>
 #include <stdexcept>
 #undef assert
 #define assert(value) ((value)?void():throw std::runtime_error(#value))
 template<class F>void Reject(F call){bool failed=false;try{call();}catch(...){failed=true;}assert(failed);}
 int main(){
-    namespace A=PS::CharacterAppearance;using J=A::Json;
+    namespace A=PS::CharacterAppearance;
+    namespace N=PS::StandaloneNetworkRegistry;
+    using J=A::Json;
+    const auto sibling = PS::CookedRegistryShards::ParseJson(R"({
+        // Standalone JBM opt-in
+        "Entries":[{"Id":"appearance","Kind":"CharacterAppearance","Appearance":{"MaxBytes":4096}}]
+    })", true);
+    const auto empty = J::array();
+    assert(N::Select(sibling, "JBM", true, {}, empty).at("Entries") == sibling.at("Entries"));
+    assert(N::Select(sibling, "JBM", true, {"JBM:appearance"}, empty).at("Entries").empty());
+    assert(N::Select(sibling, "Other", false, {"JBM:appearance"}, empty).at("Entries").size() == 1);
+    auto invalid = sibling;
+    invalid["Entries"][0]["Kind"] = "GameplayAuthority";
+    Reject([&] { N::Select(invalid, "JBM", false, {}, empty); });
+    invalid = sibling;
+    invalid["NativeRegistries"] = J::object();
+    Reject([&] { N::Select(invalid, "JBM", false, {}, empty); });
+    invalid = sibling;
+    invalid["SchemaVersion"] = 1.5;
+    Reject([&] { N::Select(invalid, "JBM", true, {}, empty); });
+    const auto generic = J::parse(R"({"SchemaVersion":1,"Entries":[
+        {"Id":"emote_state","Kind":"DataRelay","Relay":{"Channel":"emotes","Broadcast":true,"Snapshot":true}}
+    ]})");
+    const auto routeEntry = N::Select(generic, "ExampleMod", false, {}, empty).at("Entries").at(0);
+    const auto relay = PS::ModDataRelay::Declaration("ExampleMod", routeEntry.at("Relay"));
+    assert(relay.Key == "ExampleMod:emotes" && relay.Snapshot && !relay.ClientPublish);
+    Reject([&] { N::Select(generic, "ExampleMod", true, {}, empty); });
+    const auto merged = J::array({J{{"kind", "DataRelay"}, {"owner", "ExampleMod"}, {"relay", routeEntry.at("Relay")}}});
+    assert(N::Select(generic, "ExampleMod", false, {}, merged).at("Entries").empty());
+    assert(N::Select(generic, "Other", false, {}, merged).at("Entries").size() == 1);
+    invalid = generic;
+    invalid["Entries"][0]["Relay"]["ClientPublish"] = true;
+    Reject([&] { N::Select(invalid, "ExampleMod", false, {}, merged); });
+    const J full = std::vector<J>(PS::ModDataRelay::MaxChannels, merged[0]);
+    Reject([&] { N::Select(generic, "Other", false, {}, full); });
+    const auto& entry = sibling["Entries"][0];
+    const auto siblingRoute = A::Declaration("JBM", entry["Id"].get<std::string>(), entry["Appearance"]);
+    const auto largeAppearance = J{{"race", "human"}, {"template", std::string(4003, 'x')}}.dump();
+    assert(siblingRoute.Key == "JBM:appearance" && largeAppearance.size() == 4033);
+    assert(A::Payload(siblingRoute, largeAppearance) == largeAppearance);
     const auto route=A::Declaration("BodyMod","appearance",{{"MaxBytes",4096},{"Class","/BodyMod/BPC_Consumer.BPC_Consumer_C"}});
     assert(route.Key=="BodyMod:appearance"&&route.Limit==4096);
     assert(A::Declaration("BodyMod","native",J::object()).Class.empty());
@@ -14,7 +55,11 @@ int main(){
     Reject([&]{A::Declaration("BodyMod","appearance",{{"Class","/BodyMod/../Bad.Bad_C"}});});
     Reject([&]{A::Declaration("BodyMod","appearance",{{"Function","OnAppearance"}});});
     Reject([&]{A::Declaration("BodyMod","appearance",{{"MaxBytes",-1}});});
-    Reject([&]{A::Declaration("BodyMod","appearance",{{"MaxBytes",4097}});});
+    assert(A::Declaration("BodyMod","appearance",nlohmann::json::object()).Limit==4096);
+    const auto expanded=A::Declaration("BodyMod","appearance",{{"MaxBytes",A::MaximumBytes}});
+    const auto longPayload=std::string("{\"template\":\"")+std::string(12000,'x')+"\"}";
+    assert(A::Payload(expanded,longPayload)==longPayload);
+    Reject([&]{A::Declaration("BodyMod","appearance",{{"MaxBytes",A::MaximumBytes+1}});});
     Reject([&]{A::Payload(route,"[]");});Reject([&]{A::Payload(route,std::string(4097,' '));});
     Reject([&]{A::Payload(route,"{\"bad\":NaN}");});
     Reject([&]{A::Payload(route,std::string(34,'[')+"0"+std::string(34,']'));});

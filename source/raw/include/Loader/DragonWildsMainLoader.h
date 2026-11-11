@@ -40,7 +40,7 @@ namespace DragonWilds {
 
         ~DragonWildsMainLoader();
 
-		void PreInitialize();
+		void PreInitialize(bool sisterContentEnabled);
 
 		void Initialize();
         void SetModsReadyHandler(std::function<void()> handler){m_modsReady=std::move(handler);}

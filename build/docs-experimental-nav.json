@@ -48,6 +48,12 @@
         "Item Delivery": "experimental/ITEM-DELIVERY.md"
       },
       {
+        "Multiplayer plugin": "experimental/MULTIPLAYER-PLUGIN.md"
+      },
+      {
+        "Network bridge capacity": "experimental/NETWORK-CAPACITY.md"
+      },
+      {
         "Mod-owned save files": "experimental/MOD-SAVE-FILES.md"
       },
       {
@@ -71,6 +77,9 @@
       },
       {
         "Authoring & repair": "experimental/AUTHORING-AND-REPAIR.md"
+      },
+      {
+        "UE4SS sister content": "experimental/UE4SS-SISTER-CONTENT.md"
       },
       {
         "Cache bundles": "experimental/CACHE-BUNDLES.md"

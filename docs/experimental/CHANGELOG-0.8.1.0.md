@@ -9,10 +9,17 @@ promote_to: CHANGELOG-0.8.1.0.md
 
 # RuneSchema 0.8.1.0 — experimental
 
-!!! info "Complete candidate published · 2026-11-09"
+!!! info "Complete candidate published · 2026-11-10"
     The [complete candidate](PRE-RELEASE.md) includes the runtime, Helpy and plugin
     follow-ups below. Older entries retain their original test-stage wording;
     their historical “unpublished” labels are superseded by this dated package.
+
+## 2026-11-10 preview
+
+- Add [RuneSchema.UE4SS.Bridge](UE4SS-SISTER-CONTENT.md) for content registration from an enabled standalone UE4SS mod.
+- Support standalone appearance declarations and namespaced mod-data channels over RuneSchema's cooked networking bridge.
+- Bundle the [multiplayer policy plugin](MULTIPLAYER-PLUGIN.md) and add [larger network payloads](NETWORK-CAPACITY.md).
+- Reduce recurring network, diagnostics, and Lua relay work.
 
 ## 2026-11-09 preview
 

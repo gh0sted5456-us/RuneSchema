@@ -26,6 +26,8 @@
 #include "Runtime/SteamBuild.h"
 #include "Runtime/UE4SSCompatibility.h"
 #include "Runtime/NetworkStatus.h"
+#include "Runtime/MultiplayerPolicy.h"
+#include "Runtime/MultiplayerRuntime.h"
 #include "Runtime/GameFrameRate.h"
 #include "Core/HelpySourceCache.h"
 #include "Core/HelpyCacheOwnership.h"
@@ -66,11 +68,22 @@ int32_t JsonResponse(const nlohmann::json& value,char* response,uint32_t capacit
     if(!response||capacity<*size)return RS_PLUGIN_BUFFER_TOO_SMALL;
     std::memcpy(response,text.c_str(),*size);return RS_PLUGIN_OK;
 }
+std::mutex MultiplayerPolicyLifetime;
 int32_t RS_PLUGIN_CALL CallService(const char*,const char*,const char*,char*,uint32_t,uint32_t*);
 int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,uint32_t capacity,uint32_t* size) {
     try {
         const auto request=nlohmann::json::parse(requestJson);const auto action=request.value("Action",std::string{});
         nlohmann::json result;
+        if(action=="MultiplayerPolicyLocation")
+            return JsonResponse({{"Path",RuntimeModPath::Text(HostServices::SettingsDirectory()/"multiplayer.json")}},response,capacity,size);
+        if(action=="MultiplayerRoute")return JsonResponse(MultiplayerRuntime::Probe(request),response,capacity,size);
+        if(action=="MultiplayerTuning"){
+            if(!size)return RS_PLUGIN_INVALID_ARGUMENT;
+            if(request.value("Operation",std::string("Read"))!="Read"&&(!response||capacity<8192)){
+                *size=8192;return RS_PLUGIN_BUFFER_TOO_SMALL;
+            }
+            return JsonResponse(MultiplayerRuntime::Control(request),response,capacity,size);
+        }
         if(action=="HudCapabilities")return JsonResponse({{"InputOwnership",true},{"Extensions",true}},response,capacity,size);
         if(action=="HudInterfacesRead")return JsonResponse(HelpyHudInterfaces::Read(request.value("Revision",~uint64_t{})),response,capacity,size);
         if(action=="HudInterfacesWrite")return JsonResponse(HelpyHudInterfaces::Queue(request.at("Payload")),response,capacity,size);
@@ -283,6 +296,11 @@ int32_t RS_PLUGIN_CALL RegisterService(const char* plugin,const char* name,RuneS
 int32_t RS_PLUGIN_CALL CallService(const char* caller,const char* name,const char* request,char* response,uint32_t capacity,uint32_t* size) {
     if(!Token(caller)||!Token(name)||!request||!size||capacity>RUNESCHEMA_PLUGIN_MAX_MESSAGE
         ||(!response&&capacity)||strnlen_s(request,RUNESCHEMA_PLUGIN_MAX_MESSAGE+1)>RUNESCHEMA_PLUGIN_MAX_MESSAGE)return RS_PLUGIN_INVALID_ARGUMENT;
+    std::unique_lock policyLock(MultiplayerPolicyLifetime,std::defer_lock);
+    if(std::string_view(name)==MultiplayerPolicy::Service){
+        if(std::string_view(caller)!="RuneSchema.Core")return RS_PLUGIN_INVALID_ARGUMENT;
+        policyLock.lock();
+    }
     Service service;{std::scoped_lock lock(Gate);const auto found=Services.find(name);if(found==Services.end())return RS_PLUGIN_NOT_FOUND;service=found->second;}
     try{return service.Callback(service.Context,request,response,capacity,size);}catch(...){return RS_PLUGIN_FAILED;}
 }
@@ -353,7 +371,6 @@ void PluginHost::Load(const std::filesystem::path& root) {
     LoadCatalog(manifests);
 }
 void PluginHost::LoadOwned(const std::filesystem::path& root,const std::vector<std::filesystem::path>& enabled){
-    if(Storefront::IsDedicatedServer())return;
     auto manifests=PluginCatalog::DiscoverOwned(root,enabled,&m_state->Messages);
     // GameInstance init may precede UE4SS game-thread identification; wait for an actual tick.
     RC::Unreal::Hook::FCallbackOptions options{};options.OwnerModName=TEXT("RuneSchema");options.HookName=TEXT("ModOwnedPluginInit");
@@ -371,9 +388,9 @@ void PluginHost::LoadCatalog(const std::vector<PluginCatalog::Plugin>& manifests
         if(!manifest.Enabled||manifest.Host!="game")continue;
         auto identity=manifest.Id;std::transform(identity.begin(),identity.end(),identity.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
         if(!m_state->SelectedIds.insert(identity).second){m_state->Messages.push_back(manifest.Id+": duplicate plugin identity rejected");continue;}
-        // The desktop Helpy frontend has no Unreal imports or viewport hook.
-        // Other client plugins retain the existing dedicated-server exclusion.
-        if(Storefront::IsDedicatedServer()&&manifest.Id!="RuneSchema.Helpy")continue;
+        // The desktop bridge and networking policy are available on dedicated hosts.
+        if(Storefront::IsDedicatedServer()&&manifest.Id!="RuneSchema.Helpy"&&manifest.Id!="RSNetworking"
+            &&!(manifest.ServerCompatible&&!manifest.ModOwner.empty()))continue;
         std::vector<std::filesystem::path> packages;
         try{packages=PluginCatalog::PakDirectories(manifest);}
         catch(const std::exception& error){
@@ -517,6 +534,8 @@ void PluginHost::Shutdown() noexcept {
     if(!m_state)return;
     SpawnToolRequests::PushUpdate={};
     for(auto iterator=m_state->LoadedPlugins.rbegin();iterator!=m_state->LoadedPlugins.rend();++iterator) {
+        std::unique_lock policyLock(MultiplayerPolicyLifetime,std::defer_lock);
+        if(iterator->Manifest.Id=="RSNetworking")policyLock.lock();
         if(!ModLocalServices::Drop(iterator->Manifest.Id))continue;
         if(iterator->Shutdown)try{iterator->Shutdown(iterator->Instance);}catch(...){}
         {std::scoped_lock lock(Gate);std::erase_if(Services,[&](const auto& value){return value.second.Owner==iterator->Manifest.Id;});std::erase_if(Capabilities,[&](const auto& value){return value.second==iterator->Manifest.Id;});std::erase_if(ActiveConnections,[&](const auto& value){return value.second==iterator->Manifest.Id;});}

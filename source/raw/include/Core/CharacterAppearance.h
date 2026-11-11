@@ -1,17 +1,18 @@
 #pragma once
+#include "Core/NetworkPayloadLimits.h"
 #include "Core/ModDataRelay.h"
 #include <limits>
 
 namespace PS::CharacterAppearance {
 using Json=nlohmann::json;
-inline constexpr size_t MaximumBytes=4096,MaximumRecords=1024,SnapshotBytes=4*1024*1024;
-struct Route {std::string Key,Class,Function="OnRuneSchemaCharacterAppearance";size_t Limit=MaximumBytes;};
+inline constexpr size_t MaximumBytes=NetworkPayloadLimits::InlineBytes,MaximumRecords=2048,SnapshotBytes=16*1024*1024;
+struct Route {std::string Key,Class,Function="OnRuneSchemaCharacterAppearance";size_t Limit=NetworkPayloadLimits::LegacyAppearanceBytes;};
 inline Route Declaration(const std::string& owner,const std::string& id,const Json& value){
     using ModDataRelay::Require;
     Require(ModDataRelay::Token(owner,96)&&owner.find(':')==owner.npos&&ModDataRelay::Token(id,96)&&id.find(':')==id.npos&&value.is_object(),"Character appearance registry identity is invalid");
     for(const auto& [key,_]:value.items())Require(key=="MaxBytes"||key=="Class"||key=="Function","Unknown character appearance declaration field");
     if(value.contains("MaxBytes"))Require(value["MaxBytes"].is_number_unsigned()||(value["MaxBytes"].is_number_integer()&&value["MaxBytes"].get<int64_t>()>0),"Character appearance byte limit must be positive");
-    Route route{owner+":"+id};route.Limit=value.value("MaxBytes",MaximumBytes);
+    Route route{owner+":"+id};route.Limit=value.value("MaxBytes",route.Limit);
     Require(route.Limit>=2&&route.Limit<=MaximumBytes,"Character appearance payload exceeds the RPC limit");
     if(value.contains("Class")){
         route.Class=value.at("Class").get<std::string>();

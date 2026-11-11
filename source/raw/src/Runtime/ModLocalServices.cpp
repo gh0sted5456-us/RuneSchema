@@ -1,4 +1,6 @@
 #include "Runtime/ModLocalServices.h"
+#include "Runtime/MultiplayerRuntime.h"
+#include "Core/ModDataRelay.h"
 #include "Core/ModCompute.h"
 #include "Core/CookedPakRegistryManifest.h"
 #include "SDK/Helper/LocalServiceFrame.h"
@@ -44,6 +46,7 @@ void Warning(const std::string& detail){if(!StructuredDiagnosticB3D::Report("RS-
 struct Session {WeakObjectHandle Source,Controller,World;std::string Owner;std::map<int64_t,Json> Documents;};
 struct State {
     ModCompute::Broker Compute;std::map<std::string,RuneSchemaModApiV1> Apis;
+    std::unordered_map<void*,std::string> NetworkOwners;
     std::map<std::string,Definition> Routes;std::unordered_set<FName> ServiceNames;std::map<uint64_t,Session> Sessions;int64_t NextDocument=0;
     Hook::GlobalCallbackId Script=Hook::ERROR_ID,Tick=Hook::ERROR_ID;
     static uint64_t Key(const WeakObjectHandle& value){return (uint64_t(uint32_t(value.ObjectIndex))<<32)|uint32_t(value.ObjectSerialNumber);}
@@ -157,13 +160,30 @@ int32_t RS_MOD_CALL RegisterResource(void* owner,uint64_t provider,const RuneSch
     try{*handle=Current().Compute.RegisterResource(owner,provider,*resource);return RS_MOD_OK;}catch(...){return RS_MOD_FAILED;}
 }
 int32_t RS_MOD_CALL ReleaseResource(void* owner,uint64_t resource){if(!IsInGameThread())return RS_MOD_UNAVAILABLE;try{Current().Compute.Release(owner,resource);return RS_MOD_OK;}catch(...){return RS_MOD_FAILED;}}
+int32_t RS_MOD_CALL PublishNetworkSnapshot(void* context,const char* channel,const char* payload,uint32_t bytes){
+    if(!IsInGameThread())return RS_MOD_UNAVAILABLE;
+    if(!channel||!payload||!bytes||bytes>ModDataRelay::MaxBytes)return RS_MOD_INVALID_ARGUMENT;
+    const auto size=strnlen_s(channel,129);
+    if(!size||size>128||std::string_view(channel,size).find(':')!=std::string_view::npos)return RS_MOD_INVALID_ARGUMENT;
+    const auto& owners=Current().NetworkOwners;
+    const auto owner=owners.find(context);
+    if(owner==owners.end())return RS_MOD_UNAVAILABLE;
+    try{return MultiplayerRuntime::PublishSnapshot(owner->second,std::string(channel,size),std::string(payload,bytes))
+        ?RS_MOD_OK:RS_MOD_NOT_FOUND;}catch(...){return RS_MOD_FAILED;}
 }
-void Bind(const std::string& plugin,const std::string& owner){if(!IsInGameThread())throw std::runtime_error("Mod-owned plugins initialize on the game thread");auto& state=Current();auto* context=state.Compute.Bind(plugin,owner);state.Apis.insert_or_assign(plugin,RuneSchemaModApiV1{sizeof(RuneSchemaModApiV1),1,context,RegisterProvider,RegisterResource,ReleaseResource});}
+}
+void Bind(const std::string& plugin,const std::string& owner){
+    if(!IsInGameThread())throw std::runtime_error("Mod-owned plugins initialize on the game thread");
+    auto& state=Current();auto* context=state.Compute.Bind(plugin,owner);
+    state.NetworkOwners.insert_or_assign(context,owner);
+    state.Apis.insert_or_assign(plugin,RuneSchemaModApiV1{sizeof(RuneSchemaModApiV1),1,context,
+        RegisterProvider,RegisterResource,ReleaseResource,PublishNetworkSnapshot});
+}
 const RuneSchemaModApiV1* Api(const char* plugin){if(!plugin||!IsInGameThread())return nullptr;const auto found=Current().Apis.find(plugin);return found==Current().Apis.end()||!found->second.OwnerContext?nullptr:&found->second;}
 bool Drop(const std::string& plugin) noexcept {
     auto& state=Current();if(!state.Apis.contains(plugin)||!state.Apis.at(plugin).OwnerContext)return true;
     if(!IsInGameThread()){try{state.Compute.Pause(plugin);}catch(...){}Warning("Late teardown retained a mod-owned DLL after draining workers: game-thread resource release is unavailable");return false;}
-    try{state.Compute.Drop(plugin);state.Apis.at(plugin).OwnerContext=nullptr;return true;}catch(...){Warning("Native provider teardown could not be completed; its DLL was retained");return false;}
+    try{state.Compute.Drop(plugin);auto& api=state.Apis.at(plugin);state.NetworkOwners.erase(api.OwnerContext);api.OwnerContext=nullptr;return true;}catch(...){Warning("Native provider teardown could not be completed; its DLL was retained");return false;}
 }
 void Stop() noexcept {
     auto& state=Current();if(state.Script!=Hook::ERROR_ID)Hook::UnregisterCallback(state.Script);if(state.Tick!=Hook::ERROR_ID)Hook::UnregisterCallback(state.Tick);state.Script=state.Tick=Hook::ERROR_ID;

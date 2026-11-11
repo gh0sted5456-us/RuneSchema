@@ -56,6 +56,10 @@ int main(int argc,char** argv) {
         "building unlock delivery is not restricted to the active gameplay world");
     require(loader.find("RF_BeginDestroyed | RF_FinishDestroyed")!=std::string::npos,
         "building unlock delivery can select a destroyed transition component");
+    require(loader.find("apply(worldContext);")!=std::string::npos
+        && loader.find("if (candidate != worldContext) apply(candidate);")!=std::string::npos
+        && loader.find("unlock.ProgressComponents")!=std::string::npos,
+        "the native progress callback and world census no longer distinguish readiness from failed unlock verification");
     require(loader.find("BP_OnBuildingsUnlocked")!=std::string::npos,
         "building unlock delivery no longer notifies the native build-menu path");
     require(loader.find("[BUILDING-UNLOCK][VERIFIED]")!=std::string::npos,
@@ -64,7 +68,7 @@ int main(int argc,char** argv) {
         && loader.find("BuildingRecoveryTimeoutSeconds = 15.0f")!=std::string::npos,
         "late building readiness is not covered by a bounded one-shot recovery window");
     require(loader.find("ApplyUnlocksToWorld(worldContext, reportDeferred)")!=std::string::npos
-        && loader.find("if (!applied && reportDeferred)")!=std::string::npos,
+        && loader.find("if (!result.Applied && reportDeferred)")!=std::string::npos,
         "bounded building recovery can spam a deferred diagnostic on every retry");
     require(loader.find("[SERVER][BUILDING-UNLOCK][AWAITING-PLAYER]")!=std::string::npos
         && loader.find("std::strcmp(source, \"world-ready\") == 0")!=std::string::npos
@@ -77,7 +81,7 @@ int main(int argc,char** argv) {
     require(loader.find("/Script/Engine.PlayerController:ClientRestart")!=std::string::npos,
         "building recovery has no event-driven fallback when InitGameState delivery is missed");
     require(loader.find("[BUILDING-RECOVERY][TIMEOUT]")!=std::string::npos
-        && loader.find("Buildings remain isolated; other RuneSchema systems continue")
+        && loader.find("Recovery can retry on the next native player or progress callback")
             !=std::string::npos,
         "bounded building recovery does not report an isolated timeout");
     require(loader.find("IsFrontEndWorld(worldContext->GetWorld())")!=std::string::npos

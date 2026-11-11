@@ -1,0 +1,9 @@
+{
+  "SchemaVersion": 1,
+  "Id": "RuneSchema.UE4SS.Bridge",
+  "Name": "RuneSchema UE4SS Bridge",
+  "Version": "0.8.1.0",
+  "BuiltForRuneSchema": "0.8.1.0",
+  "EntryPoint": "RuneSchema.UE4SS.Bridge.dll",
+  "Capabilities": ["ue4ss.sister-content"]
+}

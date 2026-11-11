@@ -126,8 +126,9 @@ void DragonWildsSpawnLoader::MarkManagedBuilding(AActor* actor,const SpawnInfo& 
         throw std::runtime_error("Managed building identity or save exclusion did not round-trip");
 }
 void DragonWildsSpawnLoader::ReconcileBuildingOwnership(float deltaSeconds){
-    if(!m_buildingOwnershipReady||!m_readyWorld||!GetGameMode(m_readyWorld))return;
+    if(!m_buildingOwnershipReady||!m_readyWorld)return;
     m_buildingOwnershipElapsed+=deltaSeconds;if(m_buildingOwnershipElapsed<5.0)return;m_buildingOwnershipElapsed=0;
+    if(!GetGameMode(m_readyWorld))return;
     try{
         if(!PS::RegistryEnrollment::Healthy()||PS::RegistryEnrollment::PendingCount()!=0
             ||!BuildingOwnershipRegistryReady||!BuildingOwnershipRegistryReady())return;

@@ -17,6 +17,10 @@
 #include "Core/ModDataRelay.h"
 #include "Core/ConsumedOwnerPresentation.h"
 #include "Core/CharacterAppearance.h"
+#include "Core/StandaloneNetworkRegistry.h"
+#include "Core/UE4SSPackages.h"
+#include "UE4SSProgram.hpp"
+#include "Runtime/MultiplayerPolicy.h"
 #include "Core/LocalModProfiles.h"
 #include "SDK/Helper/ReflectedContract.h"
 #include "Runtime/HostServices.h"
@@ -76,6 +80,7 @@ json AuthorDocument(const json& source) {
             if(row.value("kind",std::string{})=="DataRelay"){entry["Relay"]=row.at("relay");entries.push_back(std::move(entry));continue;}
             if(row.value("kind",std::string{})=="LocalProfile"){entry["Profile"]=row.at("profile");entries.push_back(std::move(entry));continue;}
             if(row.value("kind",std::string{})=="CharacterAppearance"){entry["Appearance"]=row.at("appearance");entries.push_back(std::move(entry));continue;}
+            if(row.value("kind",std::string{})=="MultiplayerActor"){entry["ActorClass"]=row.at("actorClass");entries.push_back(std::move(entry));continue;}
             if(row.contains("spell"))entry["Spell"]=row["spell"];
             if(row.contains("presentation")){entry["Presentation"]=json::array();for(const auto& p:row["presentation"]){json out={{"Phase",p.value("module",std::string{})},{"Class",p.value("path",std::string{})},{"Classification",p.value("classification",std::string{})}};if(p.contains("socket"))out["Socket"]=p["socket"];if(p.contains("parameters"))out["Parameters"]=p["parameters"];entry["Presentation"].push_back(std::move(out));}}
             if(row.contains("authority")){const auto& a=row["authority"];entry["Authority"]={{"Action",a.value("action",std::string{})},{"GraphClass",a.value("graphClass",std::string{})},{"Function",a.value("function",std::string("Trigger"))},{"Bindings",a.value("bindings",json::object())}};if(a.contains("dataAsset"))entry["Authority"]["DataAsset"]=a["dataAsset"];if(a.contains("ownerPresentation")){const auto& owner=a["ownerPresentation"];entry["Authority"]["OwnerPresentation"]={{"Connection",owner.at("connection")},{"Key",owner.at("key")}};}}
@@ -137,7 +142,7 @@ bool DragonWildsRegistryLoader::OnInitialize() {
 }
 
 nlohmann::json DragonWildsRegistryLoader::NormalizeEntry(const json& entry,const std::string& owner) {
-    Fields(entry,{"Id","Kind","Spell","Presentation","Authority","Consumer","Metadata","Relay","Profile","Appearance"},"registry entry");
+    Fields(entry,{"Id","Kind","Spell","Presentation","Authority","Consumer","Metadata","Relay","Profile","Appearance","ActorClass"},"registry entry");
     const auto id=entry.value("Id",std::string{});
     const auto kind=entry.value("Kind",std::string{});
     if(!Identifier(id))throw std::runtime_error("registry Id must use letters, numbers, dot, dash or underscore");
@@ -145,11 +150,17 @@ nlohmann::json DragonWildsRegistryLoader::NormalizeEntry(const json& entry,const
         && kind!="GameplayEffectPresentation" && kind!="EquipmentPresentation"
         && kind!="PersistentEffect" && kind!="WeatherPresentation"
         && kind!="WorldPresentation" && kind!="AudioPresentation" && kind!="CosmeticWrapper"
-        && kind!="GameplayAuthority"&&kind!="DataRelay"&&kind!="LocalProfile"&&kind!="CharacterAppearance")
+        && kind!="GameplayAuthority"&&kind!="DataRelay"&&kind!="LocalProfile"&&kind!="CharacterAppearance"&&kind!="MultiplayerActor")
         throw std::runtime_error("registry Kind is unsupported");
     const auto key=owner+":"+id;
     if(m_keys.contains(key))throw std::runtime_error("duplicate registry key '"+key+"'");
     json result={{"key",key},{"owner",owner},{"id",id},{"kind",kind},{"presentation",json::array()}};
+    if(kind=="MultiplayerActor"){
+        if(!entry.contains("ActorClass")||entry.size()!=3)throw std::runtime_error("MultiplayerActor requires only Id, Kind and ActorClass");
+        const auto path=entry.at("ActorClass").get<std::string>();
+        if(!PS::MultiplayerPolicy::ActorClass(path))throw std::runtime_error("MultiplayerActor requires an exact Blueprint or native actor class path");
+        result["actorClass"]=path;m_keys.insert(key);return result;
+    }else if(entry.contains("ActorClass"))throw std::runtime_error("ActorClass declarations require Kind MultiplayerActor");
     if(kind=="CharacterAppearance"){
         if(!entry.contains("Appearance")||entry.size()!=3)throw std::runtime_error("CharacterAppearance requires only Id, Kind and Appearance");
         (void)PS::CharacterAppearance::Declaration(owner,id,entry["Appearance"]);result["appearance"]=entry["Appearance"];
@@ -495,6 +506,50 @@ void DragonWildsRegistryLoader::LoadCookedRegistries() {
         ms(started,queryComplete),ms(queryComplete,rootsComplete),ms(rootsComplete,finished),directoryOwners.size(),candidates,ms(queryComplete,censusComplete),ms(censusComplete,rootsComplete),registryFiles.size(),packages.Packages.size());
 }
 
+void DragonWildsRegistryLoader::LoadStandaloneNetworks() {
+    namespace fs = std::filesystem;
+    using Program = RC::UE4SSProgram;
+    for (const auto& root : Program::get_program().get_mods_directories()) {
+        std::error_code error;
+        fs::directory_iterator current(root, fs::directory_options::skip_permission_denied, error), end;
+        while (!error && current != end) {
+            const auto folder = current->path();
+            current.increment(error);
+            const auto registry = folder / "registry";
+            const auto network = registry / "network.jsonc";
+            const auto appearance = registry / "appearance.jsonc";
+            std::error_code statusError;
+            const bool hasNetwork = fs::is_regular_file(network, statusError);
+            const bool hasAppearance = fs::is_regular_file(appearance, statusError);
+            if (!hasNetwork && !hasAppearance) continue;
+            const auto name = folder.filename().native();
+            const auto owner = RC::to_string(name);
+            const auto folded = PS::ModFolderLayout::FoldAscii(owner);
+            if (!Identifier(owner) || folded == "fmodel" || folded == "runeschema") continue;
+            const auto* mod = Program::find_mod_by_name<RC::CppMod>(name,
+                Program::IsInstalled::Yes, Program::IsStarted::Yes);
+            if (!mod || !fs::equivalent(mod->get_path(), folder, statusError) || statusError) continue;
+            for (const auto* file : {&network, &appearance}) {
+                const bool appearanceOnly = file == &appearance;
+                if (!(appearanceOnly ? hasAppearance : hasNetwork)) continue;
+                const auto source = "ue4ss/Mods/" + owner + "/registry/" + file->filename().string();
+                try {
+                    if (PS::UE4SSPackages::Linked(folder) || PS::UE4SSPackages::Linked(registry)
+                        || PS::UE4SSPackages::Linked(*file))
+                        throw std::runtime_error("Standalone network declaration must stay in its local mod folder");
+                    const auto input = PS::CookedRegistryShards::ParseJson(
+                        PS::ConfigFiles::Read(*file, MaxCookedRegistryBytes), true);
+                    auto document = PS::StandaloneNetworkRegistry::Select(input, owner, appearanceOnly, m_keys, m_modEntries);
+                    if (!document["Entries"].empty()) LoadDocument(document, owner, source);
+                } catch (const std::exception& error) {
+                    (void)PS::StructuredDiagnosticB3C::Report("RS-RGST-002","Error","Skipped","RegistryLoader",
+                        "Standalone network declaration rejected",error.what(),owner,source,{},"Validation");
+                }
+            }
+        }
+    }
+}
+
 void DragonWildsRegistryLoader::WriteMerged() {
     json entries=m_modEntries;
     std::sort(entries.begin(),entries.end(),[](const json& left,const json& right) {
@@ -526,6 +581,11 @@ void DragonWildsRegistryLoader::OnFinalizeLoad(const EEngineLifecyclePhase& phas
             (void)PS::StructuredDiagnosticB3C::Report("RS-RGST-006","Error",PS::StructuredDiagnosticOutcomeEvidence::InterruptedAfter(retained),"RegistryLoader",
                 "Cooked registry discovery failed",error.what(),{}, {},"CookedRegistryDiscovery","Discovery");
             PS::Log<RC::LogLevel::Error>(STR("Cooked registry discovery failed; JSON registries remain active: {}.\n"),PS::ToWideSafe(error.what()));
+        }
+        try { LoadStandaloneNetworks(); }
+        catch (const std::exception& error) {
+            (void)PS::StructuredDiagnosticB3C::Report("RS-RGST-002","Error","Skipped","RegistryLoader",
+                "Standalone network discovery interrupted",error.what(),{},{},"StandaloneNetworkDiscovery","Discovery");
         }
         WriteMerged();
     }

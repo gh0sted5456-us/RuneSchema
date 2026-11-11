@@ -62,7 +62,7 @@ inline void ValidateChildPath(const std::string& path,const std::string& owner){
         &&std::all_of(name.begin(),name.end(),[](unsigned char c){return c<128&&(std::isalnum(c)||c=='_');}),
         "child name must use only letters, digits and underscores; ownership comes from its folder and RegistryOwner");
 }
-inline Json ParseJson(const std::string& text){
+inline Json ParseJson(const std::string& text, bool allowComments=false){
     Require(!text.empty()&&text.size()<=MaxDocumentBytes,"document is empty or exceeds the 512 KiB UTF-8 limit (bytes="
         +std::to_string(text.size())+", maximum="+std::to_string(MaxDocumentBytes)+")");
     std::vector<std::set<std::string>> keys;
@@ -73,7 +73,7 @@ inline Json ParseJson(const std::string& text){
         else if(event==Json::parse_event_t::object_end&&!keys.empty())keys.pop_back();
         return true;
     };
-    return Json::parse(text,check);
+    return Json::parse(text,check,true,allowComments);
 }
 inline void Envelope(const Json& document,bool shard){
     Require(document.is_object(),"declaration must be an object");

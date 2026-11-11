@@ -68,6 +68,7 @@
 #include "Runtime/WorldBuildingSavePreflight.h"
 #include "Runtime/WorldBuildingRegistryValidation.h"
 #include "Runtime/PluginCatalog.h"
+#include "Runtime/SisterContent.h"
 #include "Runtime/Storefront.h"
 #include "Runtime/NativeExecutableDiscovery.h"
 #include "Runtime/NativeHookPatterns.h"
@@ -101,6 +102,7 @@ using namespace RC::Unreal;
 namespace fs = std::filesystem;
 
 namespace {
+    std::vector<PS::SisterContent::Root> SisterContentRoots;
     PS::CleanupNotice::WorldReceipt WorldCleanupReceipt;
     PS::WeakObjectHandle WorldCleanupReceiptWorld;
     // Each world is handled independently. The complete live building registry
@@ -978,8 +980,16 @@ namespace DragonWilds {
 
     }
 
-    void DragonWildsMainLoader::PreInitialize()
+    void DragonWildsMainLoader::PreInitialize(bool sisterContentEnabled)
     {
+        SisterContentRoots.clear();
+        if (sisterContentEnabled) {
+            try { SisterContentRoots = PS::SisterContent::Discover(GetModsPath()); }
+            catch (const std::exception& error) {
+                PS::Log<LogLevel::Warning>(STR("[SISTER-CONTENT][SKIPPED] Discovery failed: {}.\n"),
+                    PS::ToWideSafe(error.what()));
+            }
+        }
         const auto& settings=PS::PSConfig::Get()->GetSettings();
         if (PS::NativePersistencePolicy::BypassRequested(PS::Storefront::IsDedicatedServer(),
                 settings.persistence.allowCorruptCharacterEntry,settings.quickLaunch.mode))
@@ -1128,6 +1138,10 @@ namespace DragonWilds {
     void DragonWildsMainLoader::IterateModsFolder(const std::function<void(const std::filesystem::path&, const RC::StringType&)>& callback)
     {
         const auto modsPath = GetModsPath();
+        const auto visit = [&](const auto& load) {
+            for (const auto& name : m_orderedMods) load(modsPath / name, name);
+            for (const auto& root : SisterContentRoots) load(root.Content, root.Name);
+        };
         if (!m_orderResolved) {
             std::vector<RC::StringType> discovered;
             if (fs::exists(modsPath))
@@ -1137,10 +1151,10 @@ namespace DragonWilds {
             m_orderedMods = ModLoadOrder::Resolve(modsPath, discovered);
             m_orderResolved = true;
             nlohmann::json enabledMods=nlohmann::json::array();
-            for(const auto& folder:m_orderedMods){
+            visit([&](const fs::path& path, const RC::StringType& folder) {
                 const auto id=RC::to_string(folder);std::string name=id,version,website,modId;
                 try{
-                    const auto metadata=PS::ModManager::Metadata(modsPath/folder);
+                    const auto metadata=PS::ModManager::Metadata(path);
                     if(metadata.contains("name")&&PS::ServerModList::Text(metadata["name"],256)&&metadata["name"]!="")name=metadata["name"].get<std::string>();
                     if(metadata.contains("version")&&PS::ServerModList::Text(metadata["version"],64))version=metadata["version"].get<std::string>();
                     if(metadata.contains("modId")&&PS::ServerModList::Text(metadata["modId"],128)&&metadata["modId"]!="")modId=metadata["modId"].get<std::string>();
@@ -1149,13 +1163,12 @@ namespace DragonWilds {
                 enabledMods.push_back({{"Id",id},{"Name",name},{"Version",version}});
                 if(!modId.empty())enabledMods.back()["ModId"]=modId;
                 if(!website.empty())enabledMods.back()["Website"]=website;
-            }
+                PS::StartupTrace::Mark("mod order: " + id);
+            });
             try{m_registryBridge.SetEnabledMods(enabledMods);}
             catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[RS-NET-005] Enabled-mod list unavailable: {}. Content loading continues.\n"),PS::ToWideSafe(error.what()));}
-            for (const auto& name : m_orderedMods)
-                PS::StartupTrace::Mark("mod order: " + RC::to_string(name));
         }
-        for (const auto& folderName : m_orderedMods) callback(modsPath / folderName, folderName);
+        visit(callback);
     }
 
     void DragonWildsMainLoader::SetupPostEngineInitLoaders()
@@ -2157,6 +2170,24 @@ namespace DragonWilds {
                 PS::Log<LogLevel::Error>(STR(
                     "Mod pak order rejected; no mod PAK directories were added (fail-closed): {}\n"),
                     PS::ToWideSafe(error.what()));
+        }
+        for (const auto& root : SisterContentRoots) {
+            try {
+                const auto directories = PS::ModFolderLayout::PakReadDirectories(root.Content);
+                const auto owner = RC::to_string(root.Name);
+                for (const auto& directory : directories) {
+                    pakRoots.push_back(directory);
+                    pakOwners[directory] = owner;
+                }
+                if (!directories.empty()) {
+                    PS::MountedModRegistryOwners::Remember(owner);
+                    PS::Log<LogLevel::Normal>(STR("[SISTER-CONTENT][PAK] {}: {} startup container directories.\n"),
+                        root.Name, directories.size());
+                }
+            } catch (const std::exception& error) {
+                PS::Log<LogLevel::Warning>(STR("[SISTER-CONTENT][PAK][SKIPPED] {}: {}.\n"),
+                    root.Name, PS::ToWideSafe(error.what()));
+            }
         }
         std::unordered_set<std::wstring> registered;
         size_t addedPakDirectories = 0;

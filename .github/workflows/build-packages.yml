@@ -6,6 +6,8 @@ on:
     tags:
       - 'v*'
       - '0.*'
+      - '!v*-pre.*'
+      - '!0.*-pre.*'
 
 permissions:
   contents: write

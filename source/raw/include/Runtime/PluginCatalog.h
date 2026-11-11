@@ -19,7 +19,7 @@ namespace fs = std::filesystem;
 struct Plugin {
     std::string Id,Name,Version,BuiltForRuneSchema,ConsoleMessage,Host="game",ModOwner;
     int ApiVersion=0;
-    bool Enabled=true,Required=false,MountPaks=true;
+    bool Enabled=true,Required=false,MountPaks=true,ServerCompatible=false;
     bool PreferSharedRegistry=false;
     fs::path Root,DllRoot,PaksRoot,ScriptsRoot,EntryPoint;
     std::vector<std::string> Capabilities,Connections;
@@ -114,6 +114,7 @@ inline std::vector<Plugin> Discover(const fs::path& root,std::vector<std::string
         plugin.ConsoleMessage=data.value("ConsoleMessage",std::string{});
         plugin.Host=data.value("Host",std::string("game"));if(plugin.Host!="game"&&plugin.Host!="helpy")throw std::runtime_error("Plugin host must be game or helpy: "+plugin.Id);
         plugin.Enabled=data.value("Enabled",true);plugin.Required=data.value("Required",false);
+        plugin.ServerCompatible=data.value("ServerCompatible",false);
         plugin.MountPaks=data.value("MountPaks",true);plugin.Root=folder;
         if(runtime&&ids.contains(plugin.Id)){if(diagnostics)diagnostics->push_back(plugin.Id+": duplicate location ignored; canonical plugin already selected");continue;}
         if(!Token(plugin.Id)||!Token(plugin.Version)||(!plugin.BuiltForRuneSchema.empty()&&!Token(plugin.BuiltForRuneSchema))

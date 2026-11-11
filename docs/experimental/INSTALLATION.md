@@ -35,7 +35,7 @@ You need:
 
 Close the game before replacing RuneSchema, UE4SS, or any PAK files.
 
-Use the complete [0.8.1.0 prerelease ZIP](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0-pre.20261109/RuneSchema-0.8.1.0-preview-20261109.zip).
+Use the complete [0.8.1.0 prerelease ZIP](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0-pre.20261110/RuneSchema-0.8.1.0-preview-20261110.zip).
 Read its [candidate notes and limits](PRE-RELEASE.md) before testing.
 There is one `RuneSchema-<version>.zip` per release, with the registry and
 networking bridges and Helpy included. No separate Core or Universal choice is

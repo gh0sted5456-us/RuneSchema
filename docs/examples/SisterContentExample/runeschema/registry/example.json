@@ -1,0 +1,14 @@
+{
+  "SchemaVersion": 1,
+  "Entries": [
+    {
+      "Id": "example",
+      "Kind": "DataRelay",
+      "Relay": {
+        "Channel": "example",
+        "Broadcast": true,
+        "Snapshot": true
+      }
+    }
+  ]
+}
