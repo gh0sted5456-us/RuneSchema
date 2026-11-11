@@ -9,16 +9,23 @@ promote_to: CHANGELOG-0.8.1.0.md
 
 # RuneSchema 0.8.1.0 — experimental
 
-!!! info "Complete candidate published · 2026-11-09"
+!!! info "Complete candidate published · 2026-11-10"
     The [complete candidate](PRE-RELEASE.md) includes the runtime, Helpy and plugin
     follow-ups below. Older entries retain their original test-stage wording;
     their historical “unpublished” labels are superseded by this dated package.
+
+## 2026-11-10 preview
+
+- Add [RuneSchema.UE4SS.Bridge](UE4SS-SISTER-CONTENT.md) for content registration from an enabled standalone UE4SS mod.
+- Support standalone appearance declarations and namespaced mod-data channels over RuneSchema's cooked networking bridge.
+- Bundle the [multiplayer policy plugin](MULTIPLAYER-PLUGIN.md) and add [larger network payloads](NETWORK-CAPACITY.md).
+- Reduce recurring network, diagnostics, and Lua relay work.
 
 ## 2026-11-09 preview
 
 - Remove the Helpy executable ceiling and matching limits on settings, saved
   sources, plugin metadata and bundled tool scripts.
-- Add the in-app [Help guide](https://github.com/gh0sted5456-us/RuneSchema/blob/pre-release/docs/experimental/HELPY-SUPPORT.md), offline editing for supported
+- Add the in-app [Help guide](HELPY-SUPPORT.md), offline editing for supported
   Mod Menu 2 controls, and stable-release notifications.
 - Refine the world map, keyboard glyph alignment and settings organization.
 - Reduce registry and recipe preparation work and refine wearable bridge
@@ -35,7 +42,7 @@ promote_to: CHANGELOG-0.8.1.0.md
   and show that error on its own page. The separate Mod Menu remains exclusive.
 - Reset live diagnostics for each attached session. Helpy can exit when its
   attached client or dedicated server closes. Existing preferences are retained.
-- Include experimental [Item Delivery](https://github.com/gh0sted5456-us/RuneSchema/blob/pre-release/docs/experimental/ITEM-DELIVERY.md) for host-configured items
+- Include experimental [Item Delivery](ITEM-DELIVERY.md) for host-configured items
   from enabled mods. The core tracks deliveries by character and waits for a
   matching save acknowledgement. Live grant and save verification are pending.
 

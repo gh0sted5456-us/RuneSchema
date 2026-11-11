@@ -6,11 +6,10 @@ promote_to: RELEASE-0.8.1.0.md
 # Pre-release · 0.8.1.0
 
 !!! info "Available for testing · pending promotion to stable"
-    The November 9 preview combines the changes from the previous 0.8.1.0
-    candidates. Stable RuneSchema is **0.8.0.3**.
+    The November 10 preview includes the standalone UE4SS bridge and multiplayer updates. Stable RuneSchema is **0.8.0.3**.
 
 <div class="rs-actions">
-  <a class="md-button md-button--primary" href="https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0-pre.20261109/RuneSchema-0.8.1.0-preview-20261109.zip">Download complete preview</a>
+  <a class="md-button md-button--primary" href="https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0-pre.20261110/RuneSchema-0.8.1.0-preview-20261110.zip">Download complete preview</a>
   <a class="md-button" href="../INSTALLATION/">Installation</a>
 </div>
 
@@ -19,6 +18,9 @@ Lua adapters. Install the pinned UE4SS build separately and preserve your
 settings, mods, and saves when updating. Use **Exit Helpy** before replacing it.
 
 ## Pending changelog
+
+- **Standalone UE4SS mods.** The bundled [RuneSchema.UE4SS.Bridge](UE4SS-SISTER-CONTENT.md) plugin lets enabled UE4SS mods register their own RuneSchema content. Standalone mods can also opt into RuneSchema networking for appearance and opaque mod data.
+- **Multiplayer.** The bundled [RSNetworking policy plugin](MULTIPLAYER-PLUGIN.md) adds host controls for opted-in actors. The [network bridge](NETWORK-CAPACITY.md) supports larger payloads within its per-route and per-peer budgets.
 
 - **Startup and registry.** Helpy accepts the full executable and large settings and source catalogs. RuneSchema loads the rest of the plugin catalog when an order line is malformed. Automatic mapping uses the parser’s file limit. Registry and recipe preparation do less repeated work, and wearable signature searches reuse discovery results. UE4SS version notices are advisory.
 - **Helpy and input.** The desktop and overlay share a two-pane layout, contextual controller and keyboard glyphs, and the in-app Help guide. The desktop overlay captures controller input while active and reacquires it after focus returns. Controller navigation covers Settings, Quick Settings, Tools, Item Bay, and the world map, with left-stick scrolling, right-stick pointer and drag, and multi-selection. Desktop-launched Helpy can stay open after the game closes. Game-launched Helpy can exit with its attached client or server.
@@ -33,18 +35,19 @@ and defaults.
 
 ## Testing and feedback
 
-The preview archive passed file and license checks, compressed-core integrity,
-and isolated Helpy startup from a clean extraction. The core's 306 UE4SS
-imports matched the checked Steam, Game Pass, and dedicated server hosts.
-[Release notes and checksums](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0-pre.20261109)
+The archive passed file and license checks, and Helpy started from a clean
+extraction. The Core and new bridge match the desktop Steam and Game Pass
+installs. Steam has loaded the new bridge in-game. A synchronized laptop
+Game Pass install reached registry, asset and recipe loading.
+[Release notes and checksums](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0-pre.20261110)
 
 [Report a bug on Nexus](https://www.nexusmods.com/runescapedragonwilds/mods/570?tab=bugs)
 with the build, platform, reproduction, and relevant diagnostic codes.
 
 ## Known limits
 
-Full in-game startup, Proton and Wine, the physical controller matrix, live
-Rasthin's Rest arrival, and multiplayer restart behavior remain unverified
+Dedicated server startup, Proton and Wine, the physical controller matrix,
+live Rasthin's Rest arrival, and multiplayer restart behavior remain unverified
 for this preview. A controller fixture still reports D-pad focus crossing.
 Item Delivery needs live checks for grants and save acknowledgement.
 Mod Menu 2 is key-gated. World recovery is opt-in.

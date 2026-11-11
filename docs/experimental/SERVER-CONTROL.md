@@ -10,7 +10,7 @@ promote_to: servers/helpy-control.md
 # Helpy server control
 
 Enable **Server / Co-op** under Settings → Workspaces. The page uses the same
-two-pane layout as Settings, with **Settings**, **Players** and **RuneSchema access**.
+two-pane layout as Settings, with **Settings**, **Players**, **RuneSchema access**, and **Multiplayer**.
 
 ## Settings
 
@@ -62,3 +62,8 @@ The native declarations examined for this candidate include
 Runtime checks validate their native reliable-server flags, parameter layout,
 `UniqueNetIdRepl` identity and `EPlayerPrivilege` enum before use. No raw
 replicated privilege bytes or admin INI tuples are edited.
+
+## Multiplayer
+
+Tune replication for enabled mods that opt in an actor class. Open Helpy on the
+host to edit or restore its range and update rate. [Multiplayer plugin](MULTIPLAYER-PLUGIN.md)
