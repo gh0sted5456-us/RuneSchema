@@ -8,6 +8,8 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 set(CMAKE_MSVC_RUNTIME_LIBRARY MultiThreaded)
+# UE4SS's custom Shipping configuration does not inherit CMake's Release optimization.
+add_compile_options("$<$<CONFIG:Game__Shipping__Win64>:/O2>")
 add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:/utf-8;/Zc:preprocessor;/EHsc;/permissive-;/Z7;/experimental:deterministic>")
 add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN UNICODE _UNICODE WINVER=0x0A00 _WIN32_WINNT=0x0A00 _CRT_SECURE_NO_WARNINGS IMGUI_IMPL_WIN32_DISABLE_GAMEPAD)
 include_directories(source/include source/resources vendor/imgui vendor/json/include ../shared vendor/khronos vendor/vulkan/include)
