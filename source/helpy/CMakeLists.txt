@@ -78,7 +78,13 @@ target_link_libraries(RuneSchemaHelpyPlugin PRIVATE shell32 ole32 oleaut32 bcryp
 set_target_properties(RuneSchemaHelpyPlugin PROPERTIES OUTPUT_NAME RuneSchema.Helpy RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 add_library(RuneSchemaHudPlugin SHARED source/plugins/helpy/HudPlugin.cpp source/plugins/helpy/HelpyNativeOverlayBridge.cpp source/resources/HUD.rc)
 target_link_libraries(RuneSchemaHudPlugin PRIVATE safetyhook d3d11 d3d12 dxgi d3dcompiler opengl32 advapi32 shell32 ole32 bcrypt delayimp)
-set_target_properties(RuneSchemaHudPlugin PROPERTIES OUTPUT_NAME RuneSchema.HUD RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+# The integrated UE4SS build can supply SafetyHook with a different MSVC runtime.
+get_target_property(HELPY_SAFETYHOOK_RUNTIME safetyhook MSVC_RUNTIME_LIBRARY)
+if(HELPY_SAFETYHOOK_RUNTIME STREQUAL "HELPY_SAFETYHOOK_RUNTIME-NOTFOUND")
+  set(HELPY_SAFETYHOOK_RUNTIME "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+endif()
+set_target_properties(RuneSchemaHudPlugin PROPERTIES OUTPUT_NAME RuneSchema.HUD
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" MSVC_RUNTIME_LIBRARY "${HELPY_SAFETYHOOK_RUNTIME}")
 target_link_options(RuneSchemaHudPlugin PRIVATE /OPT:REF /OPT:ICF /INCREMENTAL:NO /PDBALTPATH:RuneSchema.HUD.pdb /DELAYLOAD:opengl32.dll /DELAYLOAD:d3d11.dll /DELAYLOAD:d3d12.dll /DELAYLOAD:dxgi.dll /DELAYLOAD:d3dcompiler_47.dll)
 FetchContent_Declare(helpy_lua
   URL https://codeload.github.com/lua/lua/tar.gz/refs/tags/v5.4.9
@@ -420,6 +426,7 @@ set_tests_properties(overlay-vulkan PROPERTIES TIMEOUT 20 RUN_SERIAL TRUE)
 set_tests_properties(native-overlay-vulkan native-vulkan-bootstrap native-vulkan-other-process native-vulkan-legacy-bootstrap PROPERTIES TIMEOUT 20 RUN_SERIAL TRUE)
 add_executable(native-overlay-fixture source/tests/native-overlay-fixture.cpp source/plugins/helpy/HelpyNativeOverlayBridge.cpp)
 target_link_libraries(native-overlay-fixture PRIVATE safetyhook d3d11 d3d12 dxgi d3dcompiler opengl32 advapi32 shell32 ole32 bcrypt)
+set_property(TARGET native-overlay-fixture PROPERTY MSVC_RUNTIME_LIBRARY "${HELPY_SAFETYHOOK_RUNTIME}")
 add_test(NAME native-overlay-dx11 COMMAND native-overlay-fixture dx11)
 add_test(NAME native-overlay-dx12 COMMAND native-overlay-fixture dx12)
 add_test(NAME native-overlay-opengl COMMAND native-overlay-fixture opengl)

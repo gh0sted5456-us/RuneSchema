@@ -13,6 +13,7 @@
 #include "HelpyDesktopLaunch.h"
 #include "HelpyDesktopShortcut.h"
 #include <shellapi.h>
+#include <algorithm>
 #include <map>
 #include <cstring>
 #include <cstdio>
@@ -27,12 +28,18 @@ uint32_t ConnectedPid=0;
 Json OfflineEnvironment;
 std::filesystem::path AssignedRoot,AssignedCache;
 std::filesystem::path LogFile;std::mutex LogMutex;
-void RS_PLUGIN_CALL Log(uint32_t level,const char*,const char* message){
-    if(!message)return;OutputDebugStringA((std::string("[Helpy.exe] ")+message+"\n").c_str());
-    try{std::lock_guard lock(LogMutex);if(LogFile.empty())return;std::filesystem::create_directories(LogFile.parent_path());std::error_code error;
+void RS_PLUGIN_CALL Log(uint32_t level,const char* plugin,const char* message) noexcept {
+    if(!message)return;
+    try{
+        std::string line(message,strnlen_s(message,16384));
+        std::replace_if(line.begin(),line.end(),[](char c){return c=='\r'||c=='\n';},' ');
+        const std::string source(plugin?plugin:"",strnlen_s(plugin,128));
+        const auto label=PS::PluginCatalog::Token(source)?"[Helpy] [plugin="+source+"] ":"[Helpy] ";
+        OutputDebugStringA(("[Helpy.exe] "+label+line+"\n").c_str());
+        std::lock_guard lock(LogMutex);if(LogFile.empty())return;std::filesystem::create_directories(LogFile.parent_path());std::error_code error;
         if(std::filesystem::file_size(LogFile,error)>2*1024*1024&&!error){auto previous=LogFile;previous+=L".previous";std::filesystem::remove(previous,error);error.clear();std::filesystem::rename(LogFile,previous,error);}
         SYSTEMTIME time{};GetSystemTime(&time);char stamp[40]{};std::snprintf(stamp,sizeof(stamp),"%04u-%02u-%02uT%02u:%02u:%02u.%03uZ",time.wYear,time.wMonth,time.wDay,time.wHour,time.wMinute,time.wSecond,time.wMilliseconds);
-        std::ofstream output(LogFile,std::ios::app);output<<'['<<stamp<<"] ["<<(level==RS_LOG_ERROR?"error":level==RS_LOG_WARNING?"warning":"info")<<"] [Helpy] "<<std::string_view(message).substr(0,16384)<<'\n';
+        std::ofstream output(LogFile,std::ios::app);output<<'['<<stamp<<"] ["<<(level==RS_LOG_ERROR?"error":level==RS_LOG_WARNING?"warning":"info")<<"] "<<label<<line<<'\n';
     }catch(...){}
 }
 void Notify(const char* service,const Json& value){

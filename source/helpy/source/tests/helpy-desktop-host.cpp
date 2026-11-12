@@ -9,6 +9,11 @@ int main(int argc,char** argv)try{
     assert(!std::filesystem::exists(root));std::filesystem::create_directories(root/"settings");
     struct Cleanup{std::filesystem::path Root;~Cleanup(){std::error_code error;std::filesystem::remove_all(Root,error);}} cleanup{root};
     AssignedRoot=root;OfflineEnvironment={{"ExternalDesktop",true}};
+    LogFile=root/"Helpy-Desktop.log";
+    Log(RS_LOG_WARNING,"RuneSchema.ModMenu2","first line\r\nsecond line");
+    const auto log=PS::ConfigFiles::Read(LogFile);
+    assert(log.contains("[warning] [Helpy] [plugin=RuneSchema.ModMenu2] first line  second line"));
+    assert(std::count(log.begin(),log.end(),'\n')==1);
     PS::ConfigFiles::Write(root/"settings/settings.ini",PS::EncodeIniDocument(PS::SettingsDocument(PS::PSConfigSettings{})));
     const auto desktopArgs=PS::HelpyDesktopLaunch::Arguments(root,"steam",false);
     const auto gameArgs=PS::HelpyDesktopLaunch::Arguments(root,"steam",true,321);

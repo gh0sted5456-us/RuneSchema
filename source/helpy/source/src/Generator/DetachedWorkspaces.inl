@@ -39,7 +39,7 @@ bool HelpyStandaloneWindow::SyncWorkspacePanel(size_t index){
         description.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT;description.OutputWindow=panel.Window;description.SampleDesc.Count=1;description.Windowed=TRUE;description.SwapEffect=DXGI_SWAP_EFFECT_DISCARD;
         bool ready=panel.Window&&SUCCEEDED(m_device->QueryInterface(IID_PPV_ARGS(&device)))&&SUCCEEDED(device->GetAdapter(&adapter))
             &&SUCCEEDED(adapter->GetParent(IID_PPV_ARGS(&factory)))&&SUCCEEDED(factory->CreateSwapChain(m_device,&description,&panel.Swap));
-        if(ready){ComPtr<ID3D11Texture2D> buffer;ready=SUCCEEDED(panel.Swap->GetBuffer(0,IID_PPV_ARGS(&buffer)))&&SUCCEEDED(m_device->CreateRenderTargetView(buffer.Get(),nullptr,&panel.Target));}
+        if(ready)ready=SUCCEEDED(AcquireRenderTarget(m_device,panel.Swap,&panel.Target));
         if(!ready){DestroyWorkspacePanel(index);WorkspaceDetached(index)=false;PushToast("Could not detach this workspace; it remains docked.",4);return false;}
         SendMessageW(panel.Window,WM_SETICON,ICON_BIG,reinterpret_cast<LPARAM>(LoadImageW(m_module,MAKEINTRESOURCEW(IDI_RSMK),IMAGE_ICON,32,32,LR_SHARED)));
         SendMessageW(panel.Window,WM_SETICON,ICON_SMALL,reinterpret_cast<LPARAM>(LoadImageW(m_module,MAKEINTRESOURCEW(IDI_RSMK),IMAGE_ICON,16,16,LR_SHARED)));

@@ -82,6 +82,7 @@
 #include <vector>
 #include <random>
 #include <filesystem>
+#include <format>
 #include <wincodec.h>
 #include <wrl/client.h>
 
@@ -90,6 +91,33 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND,UINT,WPARAM,LP
 namespace PS {
 namespace {
 constexpr UINT ToggleMessage=WM_APP+0x521,ReloadMessage=WM_APP+0x522,StopMessage=WM_APP+0x523;
+
+HRESULT AcquireRenderTarget(ID3D11Device* device,IDXGISwapChain* swap,ID3D11RenderTargetView** target){
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> buffer;
+    const auto result=swap->GetBuffer(0,IID_PPV_ARGS(&buffer));
+    return FAILED(result)?result:device->CreateRenderTargetView(buffer.Get(),nullptr,target);
+}
+
+HRESULT ResizeRenderTarget(ID3D11Device* device,ID3D11DeviceContext* context,IDXGISwapChain* swap,
+                           ID3D11RenderTargetView*& target,UINT width,UINT height){
+    if(!width||!height)return S_OK;
+    context->OMSetRenderTargets(0,nullptr,nullptr);
+    if(target){target->Release();target=nullptr;}
+    const auto resized=swap->ResizeBuffers(0,width,height,DXGI_FORMAT_UNKNOWN,0);
+    // DXGI retains the old buffers when it rejects a resize.
+    const auto acquired=AcquireRenderTarget(device,swap,&target);
+    return FAILED(acquired)?acquired:resized;
+}
+
+std::string GraphicsFailure(const wchar_t* surface,const char* operation,HRESULT result){
+    return std::format("{} {} failed (HRESULT 0x{:08X}).",std::filesystem::path(surface).string(),
+                       operation,static_cast<uint32_t>(result));
+}
+
+void PresentSurface(IDXGISwapChain* swap,const wchar_t* surface){
+    const auto result=swap->Present(0,0);
+    if(FAILED(result))throw std::runtime_error(GraphicsFailure(surface,"presentation",result));
+}
 #if defined(HELPY_PREVIEW)
 bool PreviewUpdatesTab=false;
 bool PreviewBackgroundsTab=false;
@@ -2651,6 +2679,12 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
     if(!m_hwnd||!CreateDevice())return 3;
     ImGui::CreateContext();auto& io=ImGui::GetIO();io.ConfigFlags|=ImGuiConfigFlags_NavEnableKeyboard;io.IniFilename=nullptr;
     LoadUiFontFamilies(io);ImGui_ImplWin32_Init(m_hwnd);ImGui_ImplDX11_Init(m_device,m_context);LoadBrandTextures(m_device);
+    {
+        Microsoft::WRL::ComPtr<ID3D11Texture2D> heldBuffer;
+        if(FAILED(m_swapChain->GetBuffer(0,IID_PPV_ARGS(&heldBuffer)))||
+           SUCCEEDED(ResizeRenderTarget(m_device,m_context,m_swapChain,m_target,width,height))||!m_target)
+            throw std::runtime_error("A rejected resize did not preserve the previous render target");
+    }
     const auto beforeMissingSurface=ImGui::GetFrameCount();auto* savedTarget=m_target;m_target=nullptr;
     RenderFrame();m_target=savedTarget;
     if(ImGui::GetFrameCount()!=beforeMissingSurface||Error().empty())throw std::runtime_error("Missing render target reached rendering or lost its diagnostic");
@@ -5476,25 +5510,25 @@ void HelpyStandaloneWindow::RenderFrame() {
         m_context->OMSetRenderTargets(1,&m_bayTarget,nullptr);m_context->ClearRenderTargetView(m_bayTarget,clear);
         auto bayDraw=*ImGui::GetDrawData();bayDraw.DisplayPos={bayCanvas.Bay.X,bayCanvas.Bay.Y};bayDraw.DisplaySize={bayCanvas.Bay.Width,bayCanvas.Bay.Height};
         HelpySurfaceDraw::Filter(bayDraw);
-        ImGui_ImplDX11_RenderDrawData(&bayDraw);m_baySwapChain->Present(0,0);
+        ImGui_ImplDX11_RenderDrawData(&bayDraw);PresentSurface(m_baySwapChain,L"Item Bay");
     }
     if(cacheVisible){
         m_context->OMSetRenderTargets(1,&m_cacheTarget,nullptr);m_context->ClearRenderTargetView(m_cacheTarget,clear);
         auto cacheDraw=*ImGui::GetDrawData();cacheDraw.DisplayPos={bayCanvas.Cache.X,bayCanvas.Cache.Y};cacheDraw.DisplaySize={bayCanvas.Cache.Width,bayCanvas.Cache.Height};
         HelpySurfaceDraw::Filter(cacheDraw);
-        ImGui_ImplDX11_RenderDrawData(&cacheDraw);m_cacheSwapChain->Present(0,0);
+        ImGui_ImplDX11_RenderDrawData(&cacheDraw);PresentSurface(m_cacheSwapChain,L"Icon Cache");
     }
     for(size_t i=0;i<m_workspaces.size();++i)if(workspaceVisible[i]){
         auto& panel=m_workspaces[i];const auto rect=WorkspaceRect(i,bayCanvas);
         m_context->OMSetRenderTargets(1,&panel.Target,nullptr);m_context->ClearRenderTargetView(panel.Target,clear);
         auto draw=*ImGui::GetDrawData();draw.DisplayPos={rect.X,rect.Y};draw.DisplaySize={rect.Width,rect.Height};
         HelpySurfaceDraw::Filter(draw);
-        ImGui_ImplDX11_RenderDrawData(&draw);panel.Swap->Present(0,0);
+        ImGui_ImplDX11_RenderDrawData(&draw);PresentSurface(panel.Swap,WorkspaceCaption(i));
     }
 #if defined(HELPY_PREVIEW)
     if(!PreviewCapture.empty())CapturePreview(m_device,m_context,m_swapChain,PreviewCapture);
 #endif
-    if(FAILED(m_swapChain->Present(0,0)))throw std::runtime_error("Helpy presentation failed; its renderer was closed without stopping the game.");
+    PresentSurface(m_swapChain,L"Helpy main window");
 }
 
 bool HelpyStandaloneWindow::SyncItemBay(){
@@ -5513,7 +5547,7 @@ bool HelpyStandaloneWindow::SyncItemBay(){
         description.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT;description.OutputWindow=m_bayWindow;description.SampleDesc.Count=1;description.Windowed=TRUE;description.SwapEffect=DXGI_SWAP_EFFECT_DISCARD;
         bool ready=m_bayWindow&&SUCCEEDED(m_device->QueryInterface(IID_PPV_ARGS(&device)))&&SUCCEEDED(device->GetAdapter(&adapter))
             &&SUCCEEDED(adapter->GetParent(IID_PPV_ARGS(&factory)))&&SUCCEEDED(factory->CreateSwapChain(m_device,&description,&m_baySwapChain));
-        if(ready){ComPtr<ID3D11Texture2D> buffer;ready=SUCCEEDED(m_baySwapChain->GetBuffer(0,IID_PPV_ARGS(&buffer)))&&SUCCEEDED(m_device->CreateRenderTargetView(buffer.Get(),nullptr,&m_bayTarget));}
+        if(ready)ready=SUCCEEDED(AcquireRenderTarget(m_device,m_baySwapChain,&m_bayTarget));
         if(!ready){DestroyItemBay();ItemGridPicker::DetachedBay=false;PushToast("Could not open the separate Item Bay; it remains docked.",4);return false;}
         SendMessageW(m_bayWindow,WM_SETICON,ICON_BIG,reinterpret_cast<LPARAM>(LoadImageW(m_module,MAKEINTRESOURCEW(IDI_RSMK),IMAGE_ICON,32,32,LR_SHARED)));
         SendMessageW(m_bayWindow,WM_SETICON,ICON_SMALL,reinterpret_cast<LPARAM>(LoadImageW(m_module,MAKEINTRESOURCEW(IDI_RSMK),IMAGE_ICON,16,16,LR_SHARED)));
@@ -5551,7 +5585,7 @@ bool HelpyStandaloneWindow::SyncIconCache(){
         description.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT;description.OutputWindow=m_cacheWindow;description.SampleDesc.Count=1;description.Windowed=TRUE;description.SwapEffect=DXGI_SWAP_EFFECT_DISCARD;
         bool ready=m_cacheWindow&&SUCCEEDED(m_device->QueryInterface(IID_PPV_ARGS(&device)))&&SUCCEEDED(device->GetAdapter(&adapter))
             &&SUCCEEDED(adapter->GetParent(IID_PPV_ARGS(&factory)))&&SUCCEEDED(factory->CreateSwapChain(m_device,&description,&m_cacheSwapChain));
-        if(ready){ComPtr<ID3D11Texture2D> buffer;ready=SUCCEEDED(m_cacheSwapChain->GetBuffer(0,IID_PPV_ARGS(&buffer)))&&SUCCEEDED(m_device->CreateRenderTargetView(buffer.Get(),nullptr,&m_cacheTarget));}
+        if(ready)ready=SUCCEEDED(AcquireRenderTarget(m_device,m_cacheSwapChain,&m_cacheTarget));
         if(!ready){DestroyIconCache();HelpyIconPacks::Detached=false;PushToast("Could not detach the cache window; it remains in Helpy.",4);return false;}
         SendMessageW(m_cacheWindow,WM_SETICON,ICON_BIG,reinterpret_cast<LPARAM>(LoadImageW(m_module,MAKEINTRESOURCEW(IDI_RSMK),IMAGE_ICON,32,32,LR_SHARED)));
         SendMessageW(m_cacheWindow,WM_SETICON,ICON_SMALL,reinterpret_cast<LPARAM>(LoadImageW(m_module,MAKEINTRESOURCEW(IDI_RSMK),IMAGE_ICON,16,16,LR_SHARED)));
@@ -5614,7 +5648,7 @@ void HelpyStandaloneWindow::RebindNativeDevice(const LUID& adapter){
     if(!aligned)m_nativeOverlay.Fail("The game's graphics adapter is unavailable; desktop presentation remains available");
 }
 void HelpyStandaloneWindow::DestroyDevice(){HelpySupportPage::ReleaseImages();DestroyTarget();m_composition.Reset();if(m_swapChain){m_swapChain->Release();m_swapChain=nullptr;}if(m_context){m_context->Release();m_context=nullptr;}if(m_device){m_device->Release();m_device=nullptr;}}
-void HelpyStandaloneWindow::CreateTarget(){if(!m_swapChain)return;ID3D11Texture2D* backBuffer{};if(SUCCEEDED(m_swapChain->GetBuffer(0,IID_PPV_ARGS(&backBuffer)))){m_device->CreateRenderTargetView(backBuffer,nullptr,&m_target);backBuffer->Release();}}
+void HelpyStandaloneWindow::CreateTarget(){if(m_swapChain)AcquireRenderTarget(m_device,m_swapChain,&m_target);}
 void HelpyStandaloneWindow::DestroyTarget(){if(m_target){m_target->Release();m_target=nullptr;}}
 
 LRESULT CALLBACK HelpyStandaloneWindow::WndProc(HWND hwnd,UINT msg,WPARAM wParam,LPARAM lParam) {
@@ -5684,25 +5718,22 @@ LRESULT CALLBACK HelpyStandaloneWindow::WndProc(HWND hwnd,UINT msg,WPARAM wParam
     }
     case WM_SIZE:
         if(self&&hwnd!=self->m_hwnd){
-            IDXGISwapChain* swap=nullptr;ID3D11RenderTargetView** targetPtr=nullptr;
-            if(hwnd==self->m_cacheWindow){swap=self->m_cacheSwapChain;targetPtr=&self->m_cacheTarget;}
-            else if(hwnd==self->m_bayWindow){swap=self->m_baySwapChain;targetPtr=&self->m_bayTarget;}
-            else for(auto& panel:self->m_workspaces)if(hwnd==panel.Window){swap=panel.Swap;targetPtr=&panel.Target;break;}
-            if(!targetPtr)return 0;auto*& target=*targetPtr;
-            if(swap&&self->m_device&&wParam!=SIZE_MINIMIZED){
-                self->m_context->OMSetRenderTargets(0,nullptr,nullptr);
-                if(target){target->Release();target=nullptr;}
-                if(SUCCEEDED(swap->ResizeBuffers(0,LOWORD(lParam),HIWORD(lParam),DXGI_FORMAT_UNKNOWN,0))){
-                    ID3D11Texture2D* buffer=nullptr;if(SUCCEEDED(swap->GetBuffer(0,IID_PPV_ARGS(&buffer)))){self->m_device->CreateRenderTargetView(buffer,nullptr,&target);buffer->Release();}
-                }
+            IDXGISwapChain* swap=nullptr;ID3D11RenderTargetView** target=nullptr;
+            const wchar_t* surface=nullptr;
+            if(hwnd==self->m_cacheWindow){swap=self->m_cacheSwapChain;target=&self->m_cacheTarget;surface=L"Icon Cache";}
+            else if(hwnd==self->m_bayWindow){swap=self->m_baySwapChain;target=&self->m_bayTarget;surface=L"Item Bay";}
+            else for(size_t i=0;i<self->m_workspaces.size();++i)if(hwnd==self->m_workspaces[i].Window){
+                auto& panel=self->m_workspaces[i];swap=panel.Swap;target=&panel.Target;surface=WorkspaceCaption(i);break;
+            }
+            if(swap&&self->m_device&&self->m_context&&wParam!=SIZE_MINIMIZED){
+                const auto result=ResizeRenderTarget(self->m_device,self->m_context,swap,*target,LOWORD(lParam),HIWORD(lParam));
+                if(FAILED(result))self->SetError(GraphicsFailure(surface,"resize",result));
             }return 0;
         }
         if(self&&(HelpyEnvironment::Server()||PluginRuntimeServices::ExternalDesktop))self->m_visible=wParam!=SIZE_MINIMIZED;
         if(self&&self->m_device&&self->m_context&&self->m_swapChain&&wParam!=SIZE_MINIMIZED){
-            self->m_context->OMSetRenderTargets(0,nullptr,nullptr);self->DestroyTarget();
-            const auto resized=self->m_swapChain->ResizeBuffers(0,LOWORD(lParam),HIWORD(lParam),DXGI_FORMAT_UNKNOWN,0);
-            self->CreateTarget();
-            if(FAILED(resized)||!self->m_target)self->SetError("Helpy could not resize its display buffer; rendering is paused until the surface is available.");
+            const auto result=ResizeRenderTarget(self->m_device,self->m_context,self->m_swapChain,self->m_target,LOWORD(lParam),HIWORD(lParam));
+            if(FAILED(result))self->SetError(GraphicsFailure(L"Helpy main window","resize",result));
         }return 0;
     case WM_DPICHANGED:
         if(main){HelpyImGuiTheme::SetRuntimeDpi(static_cast<float>(HIWORD(wParam))/96.f);NativeCaption.Update(hwnd,HIWORD(wParam));}
