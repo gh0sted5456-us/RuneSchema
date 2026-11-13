@@ -555,6 +555,11 @@ inline void ContextMenu(const json& catalog,const json& row,const std::string& p
     HelpyPreviewHooks::ViewFamily=HelpyPreviewHooks::LastRect();
 #endif
     const auto provider=ItemSource::Provider(origin);
+    const bool canRefresh=HelpyCachedCatalog::Connected()&&!HelpyIconPacks::Busy()&&!HelpyIconPacks::Building();
+    if(ImGui::MenuItem("Refresh item icon from game",nullptr,false,canRefresh))
+        HelpyIconPacks::RefreshNative(path,{});
+    if(ImGui::MenuItem("Refresh this mod's icons from game",nullptr,false,canRefresh&&provider.starts_with("mods/")&&HelpyRuntimePreferences::IconCacheLimitMB.load()>0))
+        HelpyIconPacks::RefreshNative({},provider);
     if(ImGui::MenuItem("Show Mod Family",nullptr,false,!family.empty()&&origin.Group==ItemSource::Kind::Modded&&!provider.empty())){state.PendingFamilyKey=family;state.PendingFamilyProvider=provider;}
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::ViewModFamily=HelpyPreviewHooks::LastRect();

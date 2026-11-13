@@ -1,4 +1,5 @@
 #include "Core/HelpySourceCache.h"
+#include "Core/CacheBundleIO.h"
 #include "Generator/ItemIconThumbnail.h"
 #include "Generator/HelpyIconTrace.h"
 #include "Generator/HelpyRuntimePreferences.h"
@@ -362,8 +363,10 @@ namespace {
     }
     void WriteThumbnail(const std::filesystem::path& file,const std::vector<unsigned char>& rgba) {
         if(rgba.size()!=ThumbnailSize*ThumbnailSize*4)throw std::runtime_error("Item icon thumbnail byte count is invalid");
+        CacheBundleIO::Safe(file);
         std::filesystem::create_directories(file.parent_path());
-        const auto temporary=file.wstring()+L".tmp";
+        const auto temporary=file.wstring()+L"."+std::to_wstring(GetCurrentProcessId())+L".tmp";
+        CacheBundleIO::Safe(temporary);
         std::ofstream output(std::filesystem::path(temporary),std::ios::binary|std::ios::trunc);
         if(!output)throw std::runtime_error("Cannot create item icon thumbnail cache file");
         const uint32_t width=ThumbnailSize,height=ThumbnailSize,bytes=static_cast<uint32_t>(rgba.size());
@@ -371,8 +374,10 @@ namespace {
         output.write(reinterpret_cast<const char*>(&height),sizeof(height));output.write(reinterpret_cast<const char*>(&bytes),sizeof(bytes));
         output.write(reinterpret_cast<const char*>(rgba.data()),static_cast<std::streamsize>(rgba.size()));output.close();
         if(!output)throw std::runtime_error("Item icon thumbnail write failed");
-        std::error_code ec;std::filesystem::remove(file,ec);ec.clear();std::filesystem::rename(temporary,file,ec);
-        if(ec)throw std::runtime_error("Item icon thumbnail could not be committed");
+        if(!MoveFileExW(temporary.c_str(),file.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)){
+            std::error_code error;std::filesystem::remove(temporary,error);
+            throw std::runtime_error("Item icon thumbnail could not be committed");
+        }
     }
 }
 
@@ -386,19 +391,19 @@ std::optional<nlohmann::json> Cached(const std::string& iconPath) {
     return nlohmann::json{{"Icon",iconPath},{"File",file.string()},{"Width",ThumbnailSize},{"Height",ThumbnailSize},{"Status","Ready"},{"CacheHit",true},{"SourceKey",key}};
 }
 
-nlohmann::json Render(UWorld* world,const std::string& iconPath) {
+nlohmann::json Render(UWorld* world,const std::string& iconPath,bool refresh) {
     if(iconPath.empty()||iconPath.size()>1024||iconPath.front()!='/')throw std::runtime_error("Item icon request requires a canonical texture path");
     HelpySourceCache::Poll(HostServices::ModDirectory());if(!HelpySourceCache::Ready())return {{"Icon",iconPath},{"Status","Pending"}};
-    if(HelpySourceCache::Current.Provisional){if(auto saved=Cached(iconPath))return *saved;return {{"Icon",iconPath},{"Status","Pending"}};}
+    if(HelpySourceCache::Current.Provisional){if(!refresh)if(auto saved=Cached(iconPath))return *saved;return {{"Icon",iconPath},{"Status","Pending"}};}
     const auto cachedFile=OutputFile(iconPath);
     if(PendingWrite.valid()) {
         if(PendingWrite.wait_for(std::chrono::seconds(0))!=std::future_status::ready)return {{"Icon",iconPath},{"Status","Pending"}};
         auto reply=std::move(PendingWriteReply);PendingWriteReply=nlohmann::json{};
-        const bool matching=reply.value("Icon",std::string{})==iconPath&&reply.value("File",std::string{})==cachedFile.string();
+        const bool matching=reply.value("Icon",std::string{})==iconPath&&reply.value("File",std::string{})==cachedFile.string()&&reply.value("Refreshed",false)==refresh;
         try{PendingWrite.get();}catch(...){if(matching)throw;}
         if(matching){QueueCacheMaintenance(cachedFile);return reply;}
     }
-    if(PS::SlowWork::Measure("helpy.icons.cache-read",[&]{return CachedThumbnail(cachedFile);})) {ActiveCapture.reset();PS::HelpyIconTrace::Event("core-cache-hit",iconPath,"file='"+cachedFile.string()+"'");QueueCacheMaintenance(cachedFile);return {{"Icon",iconPath},{"File",cachedFile.string()},{"Width",ThumbnailSize},{"Height",ThumbnailSize},{"Status","Ready"},{"CacheHit",true},{"SourceKey",HelpySourceCache::Fingerprint(iconPath)}};}
+    if(!refresh&&PS::SlowWork::Measure("helpy.icons.cache-read",[&]{return CachedThumbnail(cachedFile);})) {ActiveCapture.reset();PS::HelpyIconTrace::Event("core-cache-hit",iconPath,"file='"+cachedFile.string()+"'");QueueCacheMaintenance(cachedFile);return {{"Icon",iconPath},{"File",cachedFile.string()},{"Width",ThumbnailSize},{"Height",ThumbnailSize},{"Status","Ready"},{"CacheHit",true},{"SourceKey",HelpySourceCache::Fingerprint(iconPath)}};}
     if(!world)throw std::runtime_error("Item icon rendering requires a loaded world");
     if(RendererWorld.Get()!=world){Reset();RendererWorld.Assign(world);}
     if(ActiveCapture&&(ActiveCapture->Icon!=iconPath||ActiveCapture->World.Get()!=world))ActiveCapture.reset();
@@ -426,7 +431,7 @@ nlohmann::json Render(UWorld* world,const std::string& iconPath) {
                 return {{"Icon",iconPath},{"Status","Pending"}};
             }
             if(alpha==0)for(std::size_t i=0;i+3<pixels.size();i+=4)pixels[i+3]=std::max({pixels[i],pixels[i+1],pixels[i+2]});
-            const auto result=nlohmann::json{{"Icon",iconPath},{"File",cachedFile.string()},{"Width",ThumbnailSize},{"Height",ThumbnailSize},{"Status","Ready"},{"CacheHit",false},{"SourceKey",HelpySourceCache::Fingerprint(iconPath)},{"ColdLoad",capture.Cold},{"ResolvedClass",capture.ResolvedClass},{"ResolvedChain",capture.ResolvedChain}};
+            const auto result=nlohmann::json{{"Icon",iconPath},{"File",cachedFile.string()},{"Width",ThumbnailSize},{"Height",ThumbnailSize},{"Status","Ready"},{"CacheHit",false},{"Refreshed",refresh},{"SourceKey",HelpySourceCache::Fingerprint(iconPath)},{"ColdLoad",capture.Cold},{"ResolvedClass",capture.ResolvedClass},{"ResolvedChain",capture.ResolvedChain}};
             PendingWriteReply=result;
             // Only owned bytes/path cross this boundary; success is published after commit.
             PendingWrite=std::async(std::launch::async,[file=cachedFile,pixels=std::move(pixels)]{

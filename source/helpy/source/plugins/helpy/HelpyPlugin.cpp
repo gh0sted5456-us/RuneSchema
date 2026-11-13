@@ -56,7 +56,7 @@ bool CallCore(State* state,const nlohmann::json& request,nlohmann::json& respons
     const auto action=request.value("Action",std::string{});
     const bool hudExtension=action=="HudExtensions";
     const bool hudRead=hudExtension&&request.at("Payload").value("Action",std::string{})=="List";
-    const bool readOnly=action=="Read"||action=="AuthoringSnapshot"||action=="SettingsRead"||action=="QuickLoadRead"||action=="AdditionalLoggingRead"||action=="ModsRead"||action=="IconCacheOwnership"||action=="IconCacheSources"||action=="CrashDumpRead"||action=="HelpyModMenuRead"||hudRead;
+    const bool readOnly=action=="Read"||action=="AuthoringSnapshot"||action=="SettingsRead"||action=="QuickLoadRead"||action=="AdditionalLoggingRead"||action=="ModsRead"||action=="IconCacheOwnership"||action=="IconCacheBuildRead"||action=="IconCacheSources"||action=="CrashDumpRead"||action=="HelpyModMenuRead"||hudRead;
     uint32_t size=0;
     thread_local std::vector<char> threadOutput;
     auto& output=readBuffer?*readBuffer:threadOutput;

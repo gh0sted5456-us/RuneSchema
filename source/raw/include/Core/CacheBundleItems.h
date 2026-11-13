@@ -145,7 +145,18 @@ public:
                             std::map<std::string,Json> merged;for(const auto& reference:records)merged[reference.at("Path").get<std::string>()]=reference;
                             for(const auto& row:doc["Rows"]){auto reference=CacheBundle::FromRow("items",row);if(!reference.is_null()&&CacheBundleStore::Browsable(reference,snapshot)){
                                 reference["Data"]["CacheSourceVerified"]=false;reference["Data"]["ObservedCurrent"]=false;
-                                const auto path=reference.at("Path").get<std::string>();if(scope[1]==snapshot.CatalogKey||!merged.contains(path)){if(merged.contains(path))reference["Data"]=ItemName::Merge(merged.at(path).at("Data"),reference.at("Data"));merged[path]=reference;}
+                                const auto path=reference.at("Path").get<std::string>();const auto existing=merged.find(path);
+                                if(existing!=merged.end()&&existing->second.at("Data").value("LiveLearned",false)&&existing->second.at("Owner")==reference.at("Owner")){
+                                    auto& saved=existing->second;auto& data=saved.at("Data");
+                                    if(saved.value("PersistenceID",std::string{}).empty()&&!reference.value("PersistenceID",std::string{}).empty()){
+                                        saved["PersistenceID"]=reference.at("PersistenceID");
+                                        data["PersistenceID"]=saved.at("PersistenceID");data["PersistenceIDKnown"]=true;
+                                    }
+                                    data=ItemName::Merge(reference.at("Data"),data);
+                                }else if(scope[1]==snapshot.CatalogKey||existing==merged.end()){
+                                    if(existing!=merged.end())reference["Data"]=ItemName::Merge(existing->second.at("Data"),reference.at("Data"));
+                                    merged[path]=std::move(reference);
+                                }
                                 else if(!ItemName::Resolved(merged.at(path).at("Data"))&&ItemName::Resolved(reference.at("Data"))){
                                     auto& data=merged.at(path).at("Data");data["Name"]=reference.at("Data").at("Name");data["DisplayName"]=data.at("Name");
                                 }

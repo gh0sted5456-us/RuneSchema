@@ -175,7 +175,11 @@ int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,ui
         else if(action=="IconCacheSources")result=HelpySourceCache::ForClient();
         else if(action=="IconCacheOwnership")result=HelpyCacheOwnership::Page(HelpySourceCache::OwnershipSnapshot(),request);
         else if(action=="IconCacheBuildRead")result=IconCacheBuild::Read(request.value("IncludeManifest",false));
-        else if(action=="IconCacheBuildStart"){HelpySourceCache::Requested=true;result={{"Accepted",!Storefront::IsDedicatedServer()&&IconCacheBuild::Start(request.value("Source",std::string{}))}};}
+        else if(action=="IconCacheBuildStart"||action=="IconCacheRefreshStart"){
+            HelpySourceCache::Requested=true;
+            const bool refresh=action=="IconCacheRefreshStart";
+            result={{"Accepted",!Storefront::IsDedicatedServer()&&IconCacheBuild::Start(request.value("Source",std::string{}),refresh,refresh?request.value("Item",std::string{}):std::string{})}};
+        }
         else if(action=="IconCacheBuildCancel"){IconCacheBuild::Cancel();result={{"Accepted",true}};}
         else if(action=="IconCacheResetAccounting"){HelpyRuntimePreferences::IconCacheEpoch.fetch_add(1);result={{"Accepted",true}};}
         else if(action=="CacheBundleImported"){AssetSearch::NotifyImportedCache();++MapPresentationCache::Revision;result={{"Accepted",true}};}

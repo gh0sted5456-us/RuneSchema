@@ -551,18 +551,26 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
     const auto familyFilter=ItemFamily::TakeFilter(searchQuery);
     if(searchQuery.size()>256)throw std::runtime_error("Catalog search text exceeds 256 characters.");
     if(!searchQuery.empty()){std::istringstream words(searchQuery);std::string word;while(words>>word){word=AssetTemplate::Fold(std::move(word));if(!word.empty())queryTokens.push_back(std::move(word));}}
-    const auto matchesTokens=[&](const std::string& candidate){if(queryTokens.empty())return true;const auto folded=AssetTemplate::Fold(candidate);for(const auto& token:queryTokens)if(folded.find(token)==std::string::npos)return false;return true;};
+    const auto matchesFolded=[&](std::string_view text){
+        return std::all_of(queryTokens.begin(),queryTokens.end(),[&](const auto& token){return text.find(token)!=text.npos;});
+    };
+    const auto matchesTokens=[&](std::string candidate){return queryTokens.empty()||matchesFolded(AssetTemplate::Fold(std::move(candidate)));};
     auto* itemType=Class("assets");if(!itemType)throw std::runtime_error("ItemData class is not ready.");
     const auto objectCount=FUObjectArray::GetNumElements();
     if(objectCount<0||objectCount>4'000'000)throw std::runtime_error("Global object roster exceeds the safe catalog bound.");
     static std::string mountedScope;static bool mountedReady=false;static std::vector<CookedAssets::Record> mountedItems;
+    struct MountedHint {std::string Name,Search;};
+    static std::vector<std::optional<MountedHint>> mountedHints;
+    static std::chrono::steady_clock::time_point nextMetadataRefresh{};
+    const auto now=std::chrono::steady_clock::now();
     const auto generation=SpawnToolRequests::Generation.load();
     // A verified content census change may reflect a newly mounted package.
     // Re-query live ItemData metadata once for that scope, not on every poll or
     // thumbnail update. This observes mounts; it does not mount/re-register them.
     const auto metadataScope=json::array({generation,HelpySourceCache::PublishedCatalogKey(),HelpySourceCache::Current.Authoritative,HelpySourceCache::Current.Provisional}).dump();
-    if(refreshMounted||!mountedReady||mountedScope!=metadataScope) {
-        if(mountedScope!=metadataScope){mountedReady=false;mountedItems.clear();}
+    if(mountedScope!=metadataScope||((refreshMounted||!mountedReady)&&now>=nextMetadataRefresh)) {
+        nextMetadataRefresh=now+(mountedReady?std::chrono::seconds(30):std::chrono::seconds(2));
+        if(mountedScope!=metadataScope){mountedScope=metadataScope;mountedReady=false;mountedItems.clear();}
         bool classMetadataReady=false;
         try {
             // Ask the native registry for ItemData (including subclasses),
@@ -587,6 +595,8 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
         std::unordered_set<std::string> known;for(const auto& record:mountedItems)known.insert(F2Catalog::Lower(record.path));
         for(const auto& candidate:ContainerItemMetadata())if(known.insert(F2Catalog::Lower(candidate.path)).second)
             mountedItems.push_back({candidate.path,candidate.name,{}});
+        mountedHints.clear();mountedHints.resize(mountedItems.size());
+        if(!mountedReady)nextMetadataRefresh=now+std::chrono::seconds(2);
     }
     const bool mountedFirst=!queryTokens.empty()||!familyFilter.empty()||!providerFilter.empty();
     static const std::vector<std::string> noPriority;
@@ -594,10 +604,12 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
     const std::unordered_set<std::string> prioritySet(priorityPaths.begin(),priorityPaths.end());
     static std::string indexedScope;static std::vector<WeakObjectHandle> indexedItems;
     static std::unordered_map<std::string,WeakObjectHandle> indexedPaths;
+    static std::chrono::steady_clock::time_point nextLoadedRefresh{};
     const bool useClassIndex=classIndex&&FUObjectHashTables::IsAvailable();
     if(useClassIndex){
         const auto scope=json::array({generation,HelpySourceCache::Current.CatalogKey,AssetProvenance::Revision(),mountedFirst}).dump();
-        if(scope!=indexedScope||(mountedFirst&&offset==0)){
+        if(scope!=indexedScope||(mountedFirst&&offset==0&&now>=nextLoadedRefresh)){
+            nextLoadedRefresh=now+std::chrono::seconds(2);
             TArray<UObject*> items;UECustom::UObjectGlobals::GetObjectsOfClass(itemType,items,true);
             if(items.Num()<0||items.Num()>AlphabeticalItemCatalog::Cache::MaxRows)throw std::runtime_error("Native item class index exceeds its safe bound");
             indexedItems.clear();indexedItems.reserve(items.Num());indexedPaths.clear();
@@ -620,9 +632,14 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
         ++visited;++scanned;
         if(segment==2) {
             const auto& record=mountedItems[localIndex];
+            auto& cachedHint=mountedHints[localIndex];
             if(mountedFirst){
-                const auto hint=QuickDecorations::ReadableAssetName(record.path);
-                if(!matchesTokens(record.path+" "+hint)||!ItemFamily::Matches(familyFilter,hint))continue;
+                if(!cachedHint){
+                    auto name=QuickDecorations::ReadableAssetName(record.path);
+                    auto searchable=AssetTemplate::Fold(record.path+" "+name);
+                    cachedHint=MountedHint{std::move(name),std::move(searchable)};
+                }
+                if(!matchesFolded(cachedHint->Search)||!ItemFamily::Matches(familyFilter,cachedHint->Name))continue;
                 if(!ItemSource::Matches(sourceFilter,ItemSource::Describe(record.path,sourcePlan,nativePlugins),providerFilter))continue;
             }
             object=UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,RC::to_generic_string(record.path).c_str(),false);
@@ -631,11 +648,11 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
                 // Loading after the class snapshot must not make an item disappear from both slices.
                 if(!mountedFirst&&(prioritySet.contains(record.path)||!useClassIndex||(captured!=indexedPaths.end()&&captured->second.Get()==object)))continue;
             }else{
-            const auto name=QuickDecorations::ReadableAssetName(record.path),category=HelpyBroadItemCategory(nullptr,record.path,name,{},record.type);
+            const auto name=cachedHint?cachedHint->Name:QuickDecorations::ReadableAssetName(record.path);
+            const auto category=HelpyBroadItemCategory(nullptr,record.path,name,{},record.type);
             if(!categoryFilter.empty()&&AssetTemplate::Fold(category)!=categoryFilter)continue;
             const auto source=ItemSource::Describe(record.path,sourcePlan,nativePlugins);
             if(!ItemSource::Matches(sourceFilter,source,providerFilter)||!ItemFamily::Matches(familyFilter,name))continue;
-            if(!matchesTokens(record.path+" "+name+" "+record.type+" "+category))continue;
             auto entry=json{{"StableId",HelpyStableId(record.path)},{"Path",record.path},{"Name",name},{"Class",record.type},{"Category",category},
                 {"Cooked",true},{"Mounted",true},{"Loaded",false},{"Available",true},{"Reason","Mounted ItemData candidate; native fields and inventory compatibility are checked when loaded"}};
             entry.update(ItemSource::Fields(source));rows.push_back(std::move(entry));
@@ -650,6 +667,7 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
         if(segment==1&&prioritySet.contains(path))continue;
         const auto internal=CheapText(object,"InternalName");const auto name=CachedItemName(object);const auto tags=ItemTags(object);const auto broadCategory=HelpyBroadItemCategory(object,path,name,internal,tags);
         if(!categoryFilter.empty()&&AssetTemplate::Fold(broadCategory)!=categoryFilter)continue;
+        if(!queryTokens.empty()&&!matchesTokens(path+" "+internal+" "+name+" "+tags+" "+broadCategory+" "+to_string(object->GetClassPrivate()->GetName())))continue;
         const auto provenance=AssetProvenance::Lookup(object);const auto declared=AssetMetadata::Lookup(object);
         const bool runtimeClone=provenance.is_object()&&provenance.value("Confirmed",false);
         auto source=ItemSource::Describe(path,sourcePlan,nativePlugins,
@@ -657,24 +675,38 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
             declared.modded.value_or(false)||runtimeClone,!runtimeClone&&AssetMetadata::IsManaged(object),AssetMetadata::Owner(object));
         if((source.Group==ItemSource::Kind::Vanilla||source.Group==ItemSource::Kind::Expansion)&&!object->HasAnyFlags(RF_WasLoaded))source.Group=ItemSource::Kind::Unknown;
         if(!ItemSource::Matches(sourceFilter,source,providerFilter)||!ItemFamily::Matches(familyFilter,name))continue;
-        if(!queryTokens.empty()&&!matchesTokens(path+" "+internal+" "+name+" "+tags+" "+broadCategory+" "+to_string(object->GetClassPrivate()->GetName())))continue;
         // Reuse this slice's source decision: copying the full mount/owner
         // census again for every schema clone made large mod lists expensive.
         auto entry=fieldSet=="Detail"||segment==0?DescribeItemWithSource(object,&source):DescribeItemBasic(object,path,name,internal,tags,broadCategory);
         if(entry.is_object()){entry["StableId"]=HelpyStableId(path);entry["Category"]=broadCategory;entry.update(ItemSource::Fields(source));rows.push_back(std::move(entry));}
     }
-    if((!queryTokens.empty()||!familyFilter.empty()||!providerFilter.empty())&&!rows.empty())LearnedItems.Observe(HelpySourceCache::Directory(false),HelpySourceCache::Current,CacheBundleStore::Locale(),rows);
+    if(mountedFirst&&!rows.empty())LearnedItems.Observe(HelpySourceCache::Directory(false),HelpySourceCache::Current,CacheBundleStore::Locale(),rows);
     return {{"Rows",std::move(rows)},{"NextOffset",visited},{"Start",start},{"HasMore",visited<total},
         {"Scanned",scanned},{"BudgetExhausted",visited<total&&scanned>=scanBudget},{"FieldSet",fieldSet},{"MountedMetadataReady",mountedReady}};
 }
 
+json RefreshItemMetadata(const std::string& path){
+    if(!F2Catalog::ValidObjectPath(path))throw std::runtime_error("Invalid item path");
+    auto* object=ActorHelper::ResolveObject(RC::to_generic_string(path));
+    auto* type=Class("assets");
+    if(!Usable(object)||!type||!object->IsA(type)||to_string(object->GetPathName())!=path)
+        throw std::runtime_error("The selected ItemData did not resolve in this game");
+    auto row=ItemMetadata(path);
+    if(!row.value("Available",true))throw std::runtime_error("The selected ItemData is unavailable");
+    return row;
+}
+
 namespace {PersistentItemCatalog::Store ItemManifest;PagedItemCatalog::Store ItemPages,ItemPreviewPages;CacheBundleItems::Store BundleItems;std::atomic<bool> ImportedCacheChanged=false;bool ItemRefreshPending=false,ItemRefreshPumping=false;HelpyBrowsePolicy::Policy BrowsePolicy;}
+void RememberRefreshedItem(const json& row){
+    LearnedItems.Observe(HelpySourceCache::Directory(false),HelpySourceCache::Current,CacheBundleStore::Locale(),json::array({row}));
+}
 HelpyBrowsePolicy::Policy ItemBrowsePolicy() noexcept {return BrowsePolicy;}
 void NotifyImportedCache() noexcept {ImportedCacheChanged.store(true);}
 void ShutdownItemCatalog() noexcept {ItemRefreshPending=false;LearnedItems.Shutdown();BundleItems.Shutdown();ItemPreviewPages.Shutdown();ItemPages.Shutdown();ItemManifest.Shutdown();}
-void PumpItemCatalog(){
-    LearnedItems.Flush();
-    if(!ItemRefreshPending||!BrowsePolicy.PassiveRefresh)return;
+bool HasPendingLearnedItems(){return LearnedItems.HasWork();}
+void PumpItemCatalog(bool passiveRefresh){
+    if(LearnedItems.Flush())BundleItems.Invalidate();
+    if(!passiveRefresh||!ItemRefreshPending||!BrowsePolicy.PassiveRefresh)return;
     static auto next=std::chrono::steady_clock::time_point{};const auto now=std::chrono::steady_clock::now();
     if(now<next)return;next=now+std::chrono::milliseconds(50);
     ItemRefreshPumping=true;

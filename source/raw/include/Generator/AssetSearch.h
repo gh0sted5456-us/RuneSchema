@@ -15,6 +15,8 @@ std::vector<std::string> IconReferences(RC::Unreal::UObject* object);
 std::string PresentationIcon(RC::Unreal::UObject* object);
 std::string PresentationName(RC::Unreal::UObject* object);
 nlohmann::json ItemMetadata(const std::string& path);
+nlohmann::json RefreshItemMetadata(const std::string& path);
+void RememberRefreshedItem(const nlohmann::json& row);
 nlohmann::json LoadoutWindow(const std::string& slot,const std::string& query,std::size_t offset);
 nlohmann::json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,std::uint64_t startSeed=0,bool randomOrder=false,
     const std::string& fieldSet="BasicRow",std::size_t scanBudget=1536,std::uint64_t timeBudgetMicros=800,bool classIndex=false,bool refreshMounted=false);
@@ -23,5 +25,6 @@ nlohmann::json AlphabeticalItemWindow(const std::string& query,const std::string
 void ShutdownItemCatalog() noexcept;
 void NotifyImportedCache() noexcept;
 // One bounded game-thread read slice; call only when no mutation/read dispatched.
-void PumpItemCatalog();
+bool HasPendingLearnedItems();
+void PumpItemCatalog(bool passiveRefresh);
 }

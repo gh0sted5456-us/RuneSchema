@@ -725,7 +725,9 @@ void DragonWildsSpawnLoader::PumpSpawnTools(PS::WorkSlice& work) {
         if(PS::HelpyQueryService::HasPending()) {
             work.Started();PS::SlowWork::Measure("helpy.catalog.query",[&]{PS::HelpyQueryService::PumpOne(false,runCatalogWindow);});
         }else if(g_quickCatalogIndex.active)PS::SlowWork::Measure("helpy.catalog.index",[&]{g_quickCatalogIndex.Tick(work);});
-        else if(PS::HelpyActivity::BackgroundAllowed()){work.Started();PS::SlowWork::Measure("helpy.catalog.passive",[&]{PS::AssetSearch::PumpItemCatalog();});}
+        else if(PS::HelpyActivity::BackgroundAllowed(PS::AssetSearch::HasPendingLearnedItems())){
+            work.Started();PS::SlowWork::Measure("helpy.catalog.passive",[]{PS::AssetSearch::PumpItemCatalog(PS::HelpyActivity::BackgroundAllowed());});
+        }
     }
     auto request=PS::SpawnToolRequests::Take();if(!request)return;
     const bool f2Spawn=request->value("_Source",std::string{}).starts_with("Helpy")&&request->value("Action",std::string{})=="Spawn";

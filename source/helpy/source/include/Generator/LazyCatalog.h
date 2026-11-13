@@ -43,14 +43,27 @@ inline uint64_t RowsClock=0;
 // UI-thread-only native icon confirmations. They never introduce items or
 // survive a world/source change. Keep query caches from restoring old artwork.
 inline std::unordered_map<std::string,std::string> NativeIcons;
-inline void RecordNativeIcon(const std::string& path,const json& icon){
-    if(path.empty()||path.size()>1024||path.front()!='/'||!icon.is_string()||icon.get_ref<const std::string&>().size()>2048)return;
-    if(NativeIcons.size()>=512&&!NativeIcons.contains(path))NativeIcons.erase(NativeIcons.begin());
-    NativeIcons[path]=icon.get<std::string>();
-    bool changed=false;const auto update=[&](json& rows){if(rows.is_array())for(auto& row:rows)if(row.is_object()&&row.value("Path",std::string{})==path&&(!row.contains("Icon")||row["Icon"]!=icon)){row["Icon"]=icon;changed=true;}};
+inline void RecordNativeIcons(const json& icons){
+    if(!icons.is_object()||icons.empty())return;
+    for(const auto& [path,icon]:icons.items()){
+        if(path.empty()||path.size()>1024||path.front()!='/'||!icon.is_string()||icon.get_ref<const std::string&>().size()>2048)continue;
+        if(NativeIcons.size()>=512&&!NativeIcons.contains(path))NativeIcons.erase(NativeIcons.begin());
+        NativeIcons[path]=icon.get<std::string>();
+    }
+    bool changed=false;
+    const auto update=[&](json& rows){
+        if(!rows.is_array())return;
+        for(auto& row:rows){
+            if(!row.is_object())continue;
+            const auto icon=icons.find(row.value("Path",std::string{}));
+            if(icon==icons.end()||!icon->is_string()||icon->get_ref<const std::string&>().size()>2048)continue;
+            if(!row.contains("Icon")||row["Icon"]!=*icon){row["Icon"]=*icon;changed=true;}
+        }
+    };
     update(Windows[0].Rows);update(Windows[0].RefreshRows);for(auto& [query,cache]:Windows[0].Cache)update(cache.Rows);
     if(changed)Windows[0].RowsRevision=++RowsClock;
 }
+inline void RecordNativeIcon(const std::string& path,const json& icon){RecordNativeIcons({{path,icon}});}
 inline uint64_t FirstOpenGeneration=0,FirstOpenPendingGeneration=0,NextRequestId=(uint64_t{1}<<62);
 // The game-thread push callback may only publish this scalar. Catalogue state
 // and JSON windows belong exclusively to the UI thread.

@@ -41,7 +41,8 @@ inline bool Browsable(const Json& value,const HelpySourceCache::Snapshot& snapsh
 inline Json Read(const fs::path& cache,const fs::path& root,const HelpySourceCache::Snapshot& snapshot,const std::string& locale,const std::string& kind={},bool stale=true){
     auto result=Json::array();std::map<std::string,size_t> seen;size_t bytes=0;
     if(stale)try{for(auto row:HelpyPresentationCache::Records(cache,locale,kind)){if(!Browsable(row,snapshot))continue;seen.emplace(row.at("Kind").get<std::string>()+"|"+row.at("Path").get<std::string>(),result.size());result.push_back(std::move(row));}}catch(...){}
-    for(const auto& folder:std::set<fs::path>{Directory(cache,root),Directory(cache,cache.parent_path())}){
+    const auto learned=Directory(cache,cache.parent_path());
+    for(const auto& folder:std::set<fs::path>{Directory(cache,root),learned}){
     const auto index=Index(folder);
     for(const auto& [route,entry]:index["Routes"].items()){
         if(!entry.is_object()||entry.value("Locale",std::string{})!=locale||(!kind.empty()&&entry.value("Kind",std::string{})!=kind))continue;
@@ -57,12 +58,30 @@ inline Json Read(const fs::path& cache,const fs::path& root,const HelpySourceCac
                 const auto identity=row.Kind+"|"+row.Path;const auto [found,inserted]=seen.emplace(identity,result.size());
                 if(!inserted){
                     auto& cached=result.at(found->second).at("Data");
-                    if(row.Kind=="items"&&ItemName::Resolved(row.Data)&&((current&&folder==Directory(cache,cache.parent_path()))||!ItemName::Resolved(cached))){
-                        const auto merged=ItemName::Merge(cached,row.Data);for(const auto* field:{"Name","DisplayName"})if(merged.contains(field))cached[field]=merged.at(field);
+                    if(row.Kind=="items"&&current&&folder==learned){
+                        auto& reference=result.at(found->second);
+                        if(reference.value("Owner",std::string{})==row.Owner){
+                            if(row.PersistenceID.empty()&&!reference.value("PersistenceID",std::string{}).empty()){
+                                row.Data.erase("PersistenceID");row.Data.erase("PersistenceIDKnown");
+                            }else reference["PersistenceID"]=row.PersistenceID;
+                            cached=ItemName::Merge(cached,row.Data);
+                            cached["CacheSourceVerified"]=true;cached["CheckingChanges"]=true;cached["LiveLearned"]=true;
+                        }
+                    }else if(row.Kind=="items"&&cached.value("LiveLearned",false)&&result.at(found->second).value("Owner",std::string{})==row.Owner){
+                        auto& reference=result.at(found->second);
+                        if(reference.value("PersistenceID",std::string{}).empty()&&!row.PersistenceID.empty()){
+                            reference["PersistenceID"]=row.PersistenceID;
+                            cached["PersistenceID"]=row.PersistenceID;cached["PersistenceIDKnown"]=true;
+                        }
+                        cached=ItemName::Merge(row.Data,cached);
+                    }else if(row.Kind=="items"&&ItemName::Resolved(row.Data)&&!ItemName::Resolved(cached)){
+                        const auto merged=ItemName::Merge(cached,row.Data);
+                        for(const auto* field:{"Name","DisplayName"})if(merged.contains(field))cached[field]=merged.at(field);
                     }
                     continue;
                 }
                 row.Data["CacheSourceVerified"]=current;row.Data["CheckingChanges"]=true;
+                if(row.Kind=="items"&&current&&folder==learned)row.Data["LiveLearned"]=true;
                 if(snapshot.ContainerAssets&&snapshot.ContainerAssets->contains(HelpyCacheSources::AssetKey(row.Path))&&CacheBundle::OriginalOwnerProven(row,Plan(snapshot),snapshot.NativePlugins)){
                     const auto fields=ItemSource::Fields(ItemSource::Describe(row.Path,Plan(snapshot),snapshot.NativePlugins));
                     for(const auto& [field,value]:fields.items())row.Data[field]=value;
@@ -90,7 +109,19 @@ inline size_t Commit(const fs::path& cache,const fs::path& root,const HelpySourc
             const auto digest=previous->value("SHA256",std::string{});
             if(CacheBundleIO::Digest(digest))try{const auto old=CacheBundleIO::Read(folder/(digest+".json"),CacheBundle::MaxMetadata);if(CacheBundleIO::Hash(old)==digest)for(const auto& row:CacheBundle::Records(Parse(old)))merged[row.Path]=CacheBundle::Document(row);}catch(...){}
         }
-        for(const auto& row:rows){auto doc=CacheBundle::Document(row);if(merged.contains(row.Path))doc["Data"]=ItemName::Merge(merged.at(row.Path).at("Data"),doc.at("Data"));if(!merged.contains(row.Path)||merged.at(row.Path)!=doc)++changed;merged[row.Path]=doc;}
+        for(const auto& row:rows){
+            auto doc=CacheBundle::Document(row);
+            if(const auto previous=merged.find(row.Path);previous!=merged.end()){
+                auto& data=doc.at("Data");
+                if(row.PersistenceID.empty()&&!previous->second.value("PersistenceID",std::string{}).empty()){
+                    doc["PersistenceID"]=previous->second.at("PersistenceID");
+                    data.erase("PersistenceID");data.erase("PersistenceIDKnown");
+                }
+                data=ItemName::Merge(previous->second.at("Data"),data);
+                if(previous->second!=doc)++changed;
+            }else ++changed;
+            merged[row.Path]=std::move(doc);
+        }
         auto data=Json::array();for(const auto& [path,row]:merged)data.push_back(row);(void)CacheBundle::Records(data);
         const auto text=data.dump(),digest=CacheBundleIO::Hash(text);
         if(!fs::exists(folder/(digest+".json")))CacheBundleIO::Publish(folder/(digest+".json"),text);
