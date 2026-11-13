@@ -9,6 +9,7 @@ namespace PS {
 struct HelpyAuthorizedPlayer {
     std::string characterGuid,characterName,accountName,platform;
     int playerId=-1; // Session alias for display, never an authorization key.
+    bool operator==(const HelpyAuthorizedPlayer&) const = default;
 };
 namespace HelpyPlayerAuthorization {
 inline std::string Guid(std::string_view value){

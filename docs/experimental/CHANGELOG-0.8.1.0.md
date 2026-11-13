@@ -14,6 +14,13 @@ promote_to: CHANGELOG-0.8.1.0.md
     follow-ups below. Older entries retain their original test-stage wording;
     their historical “unpublished” labels are superseded by this dated package.
 
+## 2026-11-12 · Dragonwilds CL260223
+
+- Verify the native dedicated-server filter binding for CL260223.
+- Push the [item grant and access policy](SERVER-ACCESS.md) to clients on connection and when the host changes it. A limit of 0 is unlimited. Existing configured limits still apply.
+- Recover Helpy render targets after resize or device changes, improve desktop diagnostics, and reduce Shipping build overhead.
+- Validation covered the core and Helpy contract tests, UE4SS export checks on Steam, Game Pass and the dedicated server, and native filter initialization in an isolated CL260223 world. Live client joins still need verification.
+
 ## 2026-11-10 preview
 
 - Add [RuneSchema.UE4SS.Bridge](UE4SS-SISTER-CONTENT.md) for content registration from an enabled standalone UE4SS mod.

@@ -57,10 +57,10 @@ private:
     }
 };
 inline Sessions Server;
-inline nlohmann::json AccessStatus(bool enabled,bool allowed,bool authenticated,bool items,bool teleport,const std::string& guid,std::string detail){
+inline nlohmann::json AccessStatus(bool enabled,bool allowed,bool authenticated,bool items,bool teleport,const std::string& guid,std::string detail,int maximumItemCount=0){
     return {{"Kind","HelpyRemoteAccess1"},{"Available",enabled},{"Allowed",allowed},{"PinRequired",enabled&&!allowed},
         {"Authenticated",allowed&&authenticated},{"ItemDelivery",allowed&&items},{"Teleport",allowed&&teleport},
-        {"CharacterGuid",guid},{"Detail",std::move(detail)}};
+        {"CharacterGuid",guid},{"Detail",std::move(detail)},{"MaximumItemCount",maximumItemCount}};
 }
 inline constexpr auto ItemLane="network:ITEM:/Script/Dominion.ItemSubsystem";
 inline bool ItemIdsMatch(const std::map<std::string,std::string>& client,const std::map<std::string,std::string>& authority,bool authorityProof){

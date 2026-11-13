@@ -74,9 +74,13 @@ int main(int argc,char** argv)try{
     const auto hostSaved=save(json{{"/helpyAuthority/allowPinAccess",true},{"/helpyAuthority/accessPin","Private-test-48219"},
         {"/helpyAuthority/allowClientItemGrants",true},{"/helpyAuthority/allowClientTeleport",true},
         {"/helpyAuthority/permittedPlayerGuids",json::array({"0123456789abcdef0123456789abcdef"})}},ConfigFiles::Read(file));
-    Need(hostSaved.at("Ok")==true&&hostSaved.at("RestartRequired")==true);
+    Need(hostSaved.at("Ok")==true&&hostSaved.at("HostPolicyChanged")==true&&hostSaved.at("RestartRequired")==false);
+    const auto mixed=save(json{{"/helpyAuthority/maximumItemCount",250},{"/advancedLogging",false}},ConfigFiles::Read(file));
+    Need(mixed.at("Ok")==true&&mixed.at("HostPolicyChanged")==true&&mixed.at("RestartRequired")==true);
+    const auto live=save(json{{"/helpyAuthority/maximumItemCount",0}},ConfigFiles::Read(file));
+    Need(live.at("Ok")==true&&live.at("HostPolicyChanged")==true&&live.at("RestartRequired")==false);
     const auto hostRestart=DecodeSettings(DecodeIniDocument(ConfigFiles::Read(file)).dump()).helpyAuthority;
-    Need(hostRestart.allowPinAccess&&hostRestart.accessPin=="Private-test-48219"&&hostRestart.allowClientItemGrants&&hostRestart.allowClientTeleport
+    Need(hostRestart.maximumItemCount==0&&hostRestart.allowPinAccess&&hostRestart.accessPin=="Private-test-48219"&&hostRestart.allowClientItemGrants&&hostRestart.allowClientTeleport
         &&hostRestart.permittedPlayerGuids==std::vector<std::string>{"0123456789abcdef0123456789abcdef"});
     for(const auto* mode:{"off","always","once"}){
         const auto change=save(json{{"/itemDeliveryMode",mode}},ConfigFiles::Read(file));

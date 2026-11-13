@@ -272,7 +272,7 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
     if(!controller || controller->GetWorld()!=player->GetWorld())
         throw std::runtime_error("Helpy authority request has no owning server controller");
 
-    const auto& policy=PS::PSConfig::Get()->GetSettings().helpyAuthority;
+    const auto& policy=PS::PSConfig::Get()->LiveHelpyAuthority();
     const auto playerGuid=GetPlayerCharacterGuid(controller);
     if(ActorHelper::GetObjectRef(controller,TEXT("Pawn"))!=player)
         throw std::runtime_error("Helpy remote request requires the current owned character");
@@ -288,17 +288,32 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
         PS::Log<LogLevel::Normal>(STR("[SERVER-CONTROL] Native administration operation '{}' completed; no account credentials were logged.\n"),PS::ToWideSafe(request.at("Operation").get<std::string>()));
         return "Native administration result sent to the requesting owner connection.";
     }
+    const auto isAllowlisted=[&]{
+        const auto normalize=[](std::string_view value){std::string out;for(const unsigned char c:value)if(std::isxdigit(c))out.push_back(static_cast<char>(std::toupper(c)));return out;};
+        const auto actual=normalize(playerGuid);
+        if(!actual.empty()&&std::ranges::any_of(policy.permittedPlayerGuids,[&](const auto& value){return normalize(value)==actual;}))return true;
+        if(policy.permittedPlayerNames.empty())return false;
+        auto* state=ActorHelper::GetObjectRef(controller,TEXT("PlayerState"));
+        if(!state)return false;
+        ActorHelper::FunctionCall getName(state,TEXT("/Script/Engine.PlayerState:GetPlayerName"));getName.Invoke();
+        const auto value=getName.Result<FString>();const auto& chars=value.GetCharArray();
+        if(chars.Num()<=1||chars.Num()>=256||!chars.GetData())return false;
+        const auto name=RC::to_string(RC::StringType(chars.GetData(),chars.Num()-1));
+        return std::find(policy.permittedPlayerNames.begin(),policy.permittedPlayerNames.end(),name)!=policy.permittedPlayerNames.end();
+    };
     if(action=="HelpyRemoteAccess"){
         if(payload.size()>256)throw std::runtime_error("Remote access request exceeds its size limit");
-        PS::HelpyPlayerAccess::Observe(controller);
+        // A client request can enroll its character. Server policy pushes only read access.
+        if(request.contains("_BridgeRevision"))PS::HelpyPlayerAccess::Observe(controller);
         const bool saved=PS::NativeServerAdminRuntime::HelpyAuthorized(controller,playerGuid);
-        const bool enabled=saved||(policy.allowPinAccess&&PS::HelpyRemoteAccess::Sessions::ValidPin(policy.accessPin));
+        const bool explicitAccess=saved||isAllowlisted();
+        const bool enabled=explicitAccess||(policy.allowPinAccess&&PS::HelpyRemoteAccess::Sessions::ValidPin(policy.accessPin));
         const auto status=[&](bool allowed,bool authenticated,std::string detail){return PS::HelpyRemoteAccess::AccessStatus(enabled,allowed,authenticated,
-            saved||policy.allowClientItemGrants,saved||policy.allowClientTeleport,playerGuid,std::move(detail)).dump();};
+            saved||policy.allowClientItemGrants,saved||policy.allowClientTeleport,playerGuid,std::move(detail),policy.maximumItemCount).dump();};
         if(request.value("Disconnect",false)){PS::HelpyRemoteAccess::Server.Revoke(peerKey);return status(false,false,"Remote access disconnected.");}
         if(request.value("Query",false)){
-            const bool allowed=saved||PS::HelpyRemoteAccess::Server.Allowed(peerKey,worldKey,policy.allowPinAccess,policy.accessPin,PS::HelpyRemoteAccess::Sessions::Clock::now(),false);
-            return status(allowed,saved,allowed?"Server authority access is active for your current character.":enabled
+            const bool allowed=explicitAccess||PS::HelpyRemoteAccess::Server.Allowed(peerKey,worldKey,policy.allowPinAccess,policy.accessPin,PS::HelpyRemoteAccess::Sessions::Clock::now(),false);
+            return status(allowed,allowed,allowed?"Server authority access is active for your current character.":enabled
                 ?"This world requires a PIN for self-service item delivery and teleportation.":"PIN self-service is disabled by this host.");
         }
         if(playerGuid.empty())throw std::runtime_error("Remote access requires an initialized character identity");
@@ -331,12 +346,6 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
             throw std::runtime_error("A player may sync only their own active character marks");
         return PS::InventoryMarkService::Call({{"Action","ReceiveMarks"},{"Batch",batch}}).dump();
     }
-    std::string playerName;
-    if(auto* state=ActorHelper::GetObjectRef(controller,TEXT("PlayerState"))) {
-        ActorHelper::FunctionCall getName(state,TEXT("/Script/Engine.PlayerState:GetPlayerName"));getName.Invoke();
-        const auto value=getName.Result<FString>();const auto& chars=value.GetCharArray();
-        if(chars.Num()>1&&chars.Num()<256&&chars.GetData())playerName=RC::to_string(RC::StringType(chars.GetData(),chars.Num()-1));
-    }
     if(action=="Players") {
         nlohmann::json roster=nlohmann::json::array();
         for(const auto& connected:GetConnectedPlayersInLoadOrder()) {
@@ -357,16 +366,10 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
         if(response.dump().size()>3900)for(auto& row:response["Players"])row.erase("PlatformAccountName");
         return response.dump();
     }
-    const auto permitted=[&]{
-        const auto normalize=[](std::string_view value){std::string out;for(const unsigned char c:value)if(std::isxdigit(c))out.push_back(static_cast<char>(std::toupper(c)));return out;};
-        const auto actual=normalize(playerGuid);
-        if(!actual.empty()&&std::ranges::any_of(policy.permittedPlayerGuids,[&](const auto& value){return normalize(value)==actual;}))return true;
-        return !playerName.empty()&&std::find(policy.permittedPlayerNames.begin(),policy.permittedPlayerNames.end(),playerName)!=policy.permittedPlayerNames.end();
-    };
     PS::HelpyPlayerAccess::Observe(controller);
     const bool savedAccess=PS::NativeServerAdminRuntime::HelpyAuthorized(controller,playerGuid);
     const bool pinAccess=PS::HelpyRemoteAccess::Server.Allowed(peerKey,worldKey,policy.allowPinAccess,policy.accessPin);
-    const bool allowlisted=permitted();
+    const bool allowlisted=isAllowlisted();
     if(!savedAccess&&!allowlisted&&!(pinAccess&&(action=="GiveItems"||action=="MapTeleport")))
         throw std::runtime_error("Remote access denied. Connect with the server's world PIN in Settings > Server access, or ask for allowlist access.");
     if((pinAccess||savedAccess)&&!allowlisted){
@@ -380,18 +383,18 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
         if(!request.contains("Items") || !request["Items"].is_array() || request["Items"].empty()
             || request["Items"].size()>PS::HelpyGrants::MaxSelection)
             throw std::runtime_error("Helpy item grant must contain 1..64 item rows");
-        int64_t total=0;
+        std::vector<PS::HelpyGrants::Grant> grants;
         for(const auto& row:request["Items"]) {
-            if(!row.is_object() || !row.contains("Item") || !row["Item"].is_string())
+            if(!row.is_object() || !row.contains("Item") || !row["Item"].is_string() ||
+                !row.contains("Count") || !row["Count"].is_number_integer())
                 throw std::runtime_error("Helpy item grant contains an invalid item row");
-            const auto item=row["Item"].get<std::string>();
-            const int count=row.value("Count",0);
-            if(item.empty() || item.size()>1024 || item.front()!='/' || count<1)
+            const auto& item=row["Item"].get_ref<const std::string&>();
+            const auto count=row["Count"].get<double>();
+            if(item.size()>1024 || count<1 || count>PS::HelpyGrants::MaxItemQuantity)
                 throw std::runtime_error("Helpy item grant contains an invalid path or quantity");
-            total+=count;
-            if(total>std::clamp(policy.maximumItemCount,1,10000))
-                throw std::runtime_error("Helpy item grant exceeds the server quantity limit");
+            grants.push_back({item,static_cast<int>(count)});
         }
+        PS::HelpyGrants::ValidateGrants(grants,policy.maximumItemCount);
     } else if(action=="MapTeleport"){
         if(!savedAccess&&!policy.allowClientTeleport)throw std::runtime_error("This server does not allow client Helpy teleportation");
         if(request.contains("TargetPlayer")||request.value("PartyPoint",false))

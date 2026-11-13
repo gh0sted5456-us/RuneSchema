@@ -67,7 +67,7 @@ inline Json Read(UObject* caller,UObject* world){
             {"Authorized",owner||HelpyPlayerAccess::Allowed(guid)},{"PlatformAccountName",identity.accountName},{"Platform",identity.platform},{"PlayerId",identity.playerId}});
     }
     return {{"Kind","RuneSchemaServerControl1"},{"WorldToken",Token(world)},{"CanManage",canManage},{"CanAuthorize",canAuthorize},
-        {"AutoAuthorize",PSConfig::Get()->GetSettings().helpyAuthority.autoAuthorizeConnectingPlayers},{"Reason",reason},{"Players",rows}};
+        {"AutoAuthorize",PSConfig::Get()->LiveHelpyAuthority().autoAuthorizeConnectingPlayers},{"Reason",reason},{"Players",rows}};
 }
 inline Json Handle(UObject* caller,UObject* world,const Json& request){
     const auto mode=world?Network::Detect(world).Mode:Network::Role::Unknown;
@@ -85,15 +85,13 @@ inline Json Handle(UObject* caller,UObject* world,const Json& request){
             for(auto* controller:Controllers(world))if(HelpyPlayerAuthorization::Guid(HelpyPlayerAccess::Identity(controller).characterGuid)==guid)targets.push_back(controller);
             if(targets.size()!=1||request.at("TargetToken")!=Token(targets.front()))throw std::runtime_error("The player connection changed. Refresh before authorizing.");
         }
-        auto* config=PSConfig::Get();auto& policy=config->GetMutableSettings().helpyAuthority;const auto before=policy;
-        try{
-            if(operation=="AutoAuthorize")policy.autoAuthorizeConnectingPlayers=request.at("Enabled").get<bool>();
-            for(auto* target:targets){const auto identity=HelpyPlayerAccess::Identity(target);
-                if(operation=="Unauthorize")std::erase_if(policy.authorizedPlayers,[&](const auto& row){return HelpyPlayerAuthorization::Guid(row.characterGuid)==HelpyPlayerAuthorization::Guid(identity.characterGuid);});
-                else HelpyPlayerAuthorization::Remember(policy.authorizedPlayers,identity);
-            }
-            if(!config->Save())throw std::runtime_error("Player authorization was not saved. Existing permissions retained.");
-        }catch(...){policy=before;throw;}
+        auto* config=PSConfig::Get();const auto& before=config->LiveHelpyAuthority();auto proposed=before;
+        if(operation=="AutoAuthorize")proposed.autoAuthorizeConnectingPlayers=request.at("Enabled").get<bool>();
+        for(auto* target:targets){const auto identity=HelpyPlayerAccess::Identity(target);
+            if(operation=="Unauthorize")std::erase_if(proposed.authorizedPlayers,[&](const auto& row){return HelpyPlayerAuthorization::Guid(row.characterGuid)==HelpyPlayerAuthorization::Guid(identity.characterGuid);});
+            else HelpyPlayerAuthorization::Remember(proposed.authorizedPlayers,identity);
+        }
+        if(!config->SaveHelpyPlayerAccess(before,proposed))throw std::runtime_error("Player authorization was not saved. Refresh before retrying.");
         return {{"ServerControl",Read(caller,world)},{"Status","RuneSchema access saved and active. Native game roles are unchanged."}};
     }
     const auto wantedGuid=NativeServerAdmin::Guid(request.at("PlayerGuid").get<std::string>());

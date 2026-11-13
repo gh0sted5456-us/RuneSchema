@@ -13,7 +13,7 @@ int main(int argc,char** argv){
         const auto root=fs::current_path()/("config-migration-test-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
         Check(fs::create_directory(root));
         const auto write=[](const fs::path& path,std::string_view text){ConfigFiles::Write(path,text);};
-        const auto legacy=std::string("// preserve this original comment\n")+R"({"advancedLogging":true,"loaders":{"spawns":false},"helpyAuthority":{"permittedPlayerNames":["NuLL; # Silver","Unicode \u2605"]},"future":{"enabled":true,"empty":{},"nested":{"value":7}}})";
+        const auto legacy=std::string("// preserve this original comment\n")+R"({"advancedLogging":true,"loaders":{"spawns":false},"helpyAuthority":{"maximumItemCount":100,"permittedPlayerNames":["NuLL; # Silver","Unicode \u2605"]},"future":{"enabled":true,"empty":{},"nested":{"value":7}}})";
         const auto decoded=DecodeSettings(StripJsonComments(legacy));
         const auto document=SettingsDocument(decoded,nlohmann::json::parse(StripJsonComments(legacy)));
         const auto ini=EncodeIniDocument(document);
@@ -38,17 +38,20 @@ int main(int argc,char** argv){
         auto created=SettingsStore::Load(fresh);
         Check(created.File.filename()=="settings.ini"&&fs::exists(created.File)&&!fs::exists(fresh/"settings.jsonc"));
         Check(!created.Settings.advancedLogging&&SettingsStore::Load(fresh).Settings.loaders.spawns);
+        Check(created.Settings.helpyAuthority.maximumItemCount==0);
         const auto migrate=root/"migrate";
         write(migrate/"settings.jsonc",legacy);
         // A shipped INI beside an existing JSONC must not mask user values.
         write(migrate/"settings.ini",EncodeIniDocument(SettingsDocument(PSConfigSettings{})));
         auto first=SettingsStore::Load(migrate);
         Check(first.Settings.advancedLogging&&!first.Settings.loaders.spawns);
+        Check(first.Settings.helpyAuthority.maximumItemCount==100);
         Check(first.File.extension()==".ini"&&fs::exists(migrate/"settings.ini.migration"));
         Check(ConfigFiles::Read(migrate/"settings.jsonc")==legacy);
         Check(first.Document.at("future")==document.at("future"));
         auto second=SettingsStore::Load(migrate);
         Check(second.Settings.advancedLogging&&!fs::exists(migrate/"settings.jsonc")&&!fs::exists(migrate/"settings.ini.migration"));
+        Check(second.Settings.helpyAuthority.maximumItemCount==100);
         bool archived=false;
         for(const auto& file:fs::directory_iterator(migrate))if(file.path().filename().string().starts_with("settings.jsonc.migrated-")){Check(ConfigFiles::Read(file.path())==legacy);archived=true;}
         Check(archived&&SettingsStore::Load(migrate).Document.at("future")==document.at("future"));

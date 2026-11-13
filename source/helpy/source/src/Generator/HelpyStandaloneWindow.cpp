@@ -1813,7 +1813,6 @@ void RenderServerAccess(bool hostConfiguration=true){
     ImGui::TextUnformatted("World PIN");ImGui::SetNextItemWidth(std::min(300.f,ImGui::GetContentRegionAvail().x));
     HelpyTextInput::InputText("##world-pin",ServerPin,sizeof(ServerPin),ImGuiInputTextFlags_Password);
     ImGui::BeginDisabled(SpawnToolRequests::IsWaiting()||!SpawnToolRequests::IsAvailable());
-    if(ImGui::Button("Refresh access"))SpawnToolRequests::TrySubmit({{"Action","HelpyRemoteAccess"},{"Query",true}});
     HelpyMenu::NextControl("Submit PIN");
     if(ImGui::Button("Submit PIN")){
         if(SpawnToolRequests::TrySubmit({{"Action","HelpyRemoteAccess"},{"Pin",std::string(ServerPin)}}))SecureZeroMemory(ServerPin,sizeof(ServerPin));
@@ -1823,13 +1822,20 @@ void RenderServerAccess(bool hostConfiguration=true){
     if(!access.empty()){
         ImGui::TextWrapped("Server response: %s",access.value("Detail",std::string{}).c_str());
         const auto guid=access.value("CharacterGuid",std::string{});if(!guid.empty()){ImGui::TextWrapped("Your character: %s",guid.c_str());if(ImGui::Button("Copy character GUID"))ImGui::SetClipboardText(guid.c_str());}
-        if(access.value("Allowed",false))ImGui::TextWrapped("Enabled: item delivery %s; teleport %s.",access.value("ItemDelivery",false)?"yes":"no",access.value("Teleport",false)?"yes":"no");
+        if(access.value("Allowed",false)){
+            ImGui::TextWrapped("Enabled: item delivery %s; teleport %s.",access.value("ItemDelivery",false)?"yes":"no",access.value("Teleport",false)?"yes":"no");
+            if(access.value("ItemDelivery",false)&&access.contains("MaximumItemCount")){
+                const auto limit=access.value("MaximumItemCount",0);
+                if(limit>0)ImGui::TextWrapped("Server limit: %d items per request.",limit);
+                else ImGui::TextUnformatted("Server limit: none.");
+            }
+        }
     }
     else ImGui::TextDisabled("Connect after joining the world. A PIN is never saved by the client.");
     if(hostConfiguration&&ImGui::CollapsingHeader("Host configuration (this installation)")){
         using namespace RuneSchemaSettingsPanel;
         if(!Loaded&&Status.empty())Load();
-        ImGui::TextWrapped("Configure this installation before hosting. Choose an 8-64 character PIN and enable the actions you want. Keep the server settings file private. Save, then restart the host/server.");
+        ImGui::TextWrapped("A running host applies these settings automatically. Choose an 8-64 character PIN and enable the actions you want. Set the maximum item count to 0 for no server limit.");
         if(Loaded){
             for(const auto* key:{"allowPinAccess","accessPin","allowClientItemGrants","allowClientTeleport","maximumItemCount","permittedPlayerGuids","permittedPlayerNames"}){
                 const auto path=std::string("/helpyAuthority/")+key;

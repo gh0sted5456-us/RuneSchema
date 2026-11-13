@@ -66,12 +66,19 @@ inline nlohmann::json Save(const std::filesystem::path& directory,const nlohmann
             throw std::runtime_error("Settings changed while preparing the backup. Reload before saving.");
         ConfigFiles::Write(file,text);
         auto result=ReadUnlocked(directory);result["Backup"]=backup.string();
-        bool cleanupOnly=true;
-        for(const auto& [path,value]:patch.items())cleanupOnly&=path=="/persistence/blanketCleanup"||path=="/persistence/cleanupOnWorldEntry";
+        bool cleanupOnly=true,hostPolicyOnly=true,hostPolicyChanged=false;
+        for(const auto& [path,value]:patch.items()){
+            cleanupOnly&=path=="/persistence/blanketCleanup"||path=="/persistence/cleanupOnWorldEntry";
+            const bool hostPolicy=path.starts_with("/helpyAuthority/");
+            hostPolicyOnly&=hostPolicy;
+            hostPolicyChanged|=hostPolicy;
+        }
         const bool nextEntry=validated.persistence.cleanupOnWorldEntry;
-        result["RestartRequired"]=!cleanupOnly||!nextEntry;
-        result["Status"]=cleanupOnly
-            ?(nextEntry?"Saved with a backup. Cleanup changes apply at the next character/world entry.":"Saved with a backup. Cleanup changes apply after restarting Dragonwilds; the current session policy is retained.")
+        result["HostPolicyChanged"]=hostPolicyChanged;
+        result["RestartRequired"]=!hostPolicyOnly&&(!cleanupOnly||!nextEntry);
+        result["Status"]=hostPolicyOnly?"Saved server access settings. A running host applies them automatically."
+            :cleanupOnly?(nextEntry?"Saved with a backup. Cleanup changes apply at the next character/world entry.":"Saved with a backup. Cleanup changes apply after restarting Dragonwilds; the current session policy is retained.")
+            :hostPolicyChanged?"Saved settings.ini. Server access changes apply live; startup settings require a restart."
             :"Saved settings.ini with a backup. Startup settings require a restart; cleanup uses its selected activation timing.";
         return result;
     }catch(const std::exception& error){return {{"Ok",false},{"Status",error.what()}};}

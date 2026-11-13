@@ -24,6 +24,17 @@ int Run(){
     Check(state.Allowed("p1","w1",true,pin,now)&&!state.Allowed("p2","w1",true,pin,now));
     const auto granted=PS::HelpyRemoteAccess::AccessStatus(true,true,true,true,true,std::string(32,'a'),
         "Client-server authority bridged. Requests for your current character are validated and executed by the server.");
+    Check(granted["MaximumItemCount"]==0&&PS::HelpyAuthorityStatus::Valid(granted));
+    const auto limited=PS::HelpyRemoteAccess::AccessStatus(true,true,true,true,false,"guid","Active",250);
+    Check(limited["MaximumItemCount"]==250&&PS::HelpyAuthorityStatus::Valid(limited));
+    auto legacy=limited;legacy.erase("MaximumItemCount");Check(PS::HelpyAuthorityStatus::Valid(legacy));
+    legacy["MaximumItemCount"]=-1;Check(!PS::HelpyAuthorityStatus::Valid(legacy));
+    legacy["MaximumItemCount"]="250";Check(!PS::HelpyAuthorityStatus::Valid(legacy));
+    int64_t received=0;
+    Check(PS::HelpyAuthorityStatus::AcceptUpdate(limited,2,received)&&received==2);
+    Check(!PS::HelpyAuthorityStatus::AcceptUpdate(granted,1,received)&&received==2);
+    Check(!PS::HelpyAuthorityStatus::AcceptUpdate(legacy,3,received)&&received==2);
+    Check(PS::HelpyAuthorityStatus::AcceptUpdate(granted,3,received)&&received==3);
     Check(granted["Authenticated"]==true&&granted["PinRequired"]==false&&granted["ItemDelivery"]==true&&granted["Teleport"]==true&&granted.dump().size()<=512);
     Check(PS::HelpyRemoteAccess::AccessStatus(true,true,false,true,false,"guid","Active")["Authenticated"]==false);
     Check(PS::HelpyRemoteAccess::AccessStatus(false,false,false,true,true,"guid","Disabled")["PinRequired"]==false);

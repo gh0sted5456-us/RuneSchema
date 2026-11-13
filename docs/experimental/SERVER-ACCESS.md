@@ -44,13 +44,18 @@ character to authorize connected players.
 1. Open **Settings → Server access → Host configuration** in Helpy assigned to
    the host/server installation.
 2. Enable PIN access, enter an 8–64 character PIN without spaces, and enable
-   client item grants and/or client teleportation. Choose the item quantity limit.
-3. Press **Save host settings**, then restart that host/server normally.
+   client item grants and/or client teleportation. Set the item quantity limit
+   to **0** (the default) for no server total per grant request.
+3. Press **Save host settings**. A running host applies the changes and sends
+   the updated policy to connected RuneSchema clients.
 
 The PIN, action switches, limits and optional character-GUID/name allowlists
-are saved in that installation's **settings/settings.ini** and reload on later
-launches. Keep this file private. Editing a client's host settings does not
-change a remote server. The server does not need Helpy's window left open.
+are saved in the host installation's private **settings/settings.ini**. The
+running host watches for edits to that file and applies valid changes. Open
+Helpy assigned to the server installation to edit that server's settings.
+
+An existing nonzero limit stays in effect until you change it. Every request
+still goes through inventory capacity, item-network-ID and per-row validation.
 
 GUID/name allowlists are an alternative, broader explicit host permission.
 PIN access is limited to self-service delivery and map teleportation. PIN users
@@ -63,7 +68,8 @@ for owner-controlled admin grants and revocations.
 ## Connect as a client
 
 1. Join the world with the RuneSchema networking bridge installed on both ends.
-   The client makes one read-only access-status request on connection.
+   Helpy stores the server's access policy for the current connection. The
+   server sends updates when its policy changes.
 2. When the host offers PIN access, a diagnostic notice appears. Open Helpy;
    its **Connect to server authority** form asks for the world PIN. **Not now**
    dismisses it for this character/world. Use **Settings → Server access** later.
@@ -90,8 +96,7 @@ and expire after an idle hour. Changing world/character, restarting the server,
 changing the PIN or disabling access requires authentication again. **Disconnect**
 revokes the current session. Persistent host settings are separate from these
 temporary PIN sessions; restarting does not preserve PIN authentication. Saved
-player authorizations above persist independently of PIN sessions. Background
-access-status refreshes do not extend a PIN session's idle deadline.
+player authorizations above persist independently of PIN sessions.
 
 - [RS-NET-006: PIN access available](../ERROR-CODES.md#rs-net-006)
 - [RS-NET-007: client-server authority bridged](../ERROR-CODES.md#rs-net-007)

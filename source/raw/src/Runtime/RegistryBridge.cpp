@@ -311,14 +311,19 @@ UClass* RegistryBridge::ResolvePresentationClass() const {
     return type;
 }
 
+void RegistryBridge::ResetHelpyClientAccess() {
+    PS::HelpyRemoteAccess::ClientAllowed=false;PS::HelpyRemoteAccess::ClientTeleport=false;
+    PS::SpawnToolRequests::CatalogProgress({{"RemoteAccess",{{"Allowed",false},{"Detail","Connect again after joining this world."}}}});
+    m_helpyAccessRevision=0;m_helpyAccessComponent.Reset();m_helpyPolicyController.Reset();
+    m_helpyPolicyGeneration=0;m_receivedHelpyPolicyRevision=0;m_helpyPinNoticeSent=false;
+}
+
 void RegistryBridge::ResetWorld() {
     PS::MultiplayerRuntime::Reset();
     m_receivedCleanupRevision=0;
-    PS::HelpyRemoteAccess::Server.Reset();PS::HelpyRemoteAccess::ClientAllowed=false;PS::HelpyRemoteAccess::ClientTeleport=false;
-    PS::SpawnToolRequests::CatalogProgress({{"RemoteAccess",{{"Allowed",false},{"Detail","Connect again after joining this world."}}}});
-    m_helpyAccessRevision=0;m_helpyAccessComponent.Reset();m_helpyAccessStatusRequested=false;
-    m_helpyAccessRefreshAt={};
-    m_helpyPinNoticeSent=false;
+    PS::HelpyRemoteAccess::Server.Reset();
+    ResetHelpyClientAccess();
+    m_sentHelpyAuthorityVersion=0;m_helpyPolicyPeers.clear();
     m_helpyMutationRevision=0;m_helpyMutationComponent.Reset();m_helpyResultParts.Reset();
     PS::SpawnToolRequests::SetNetworkCompletion(0,{});
     for(const auto& pending:m_pendingClientActions)Trace("consumable.authority",pending.Caster.Get(),pending.Key,"consume",pending.Revision,pending.Correlation,
@@ -817,7 +822,11 @@ void RegistryBridge::ObservePlayerLifecycle(UObject* source,UFunction* function)
     if(!source||!function)return;
     const auto name=function->GetFName();if((name!=Names().BeginPlay&&name!=Names().EndPlay)||!source->IsA<AActor>())return;
     PS::MultiplayerRuntime::ObserveActor(source,name==Names().BeginPlay);
-    if(name==Names().EndPlay&&m_characterAppearanceRoutes.empty())return;
+    if(name==Names().EndPlay){
+        m_helpyPolicyPeers.erase(source);
+        if(m_helpyPolicyController.Get()==source)ResetHelpyClientAccess();
+        if(m_characterAppearanceRoutes.empty())return;
+    }
     auto* playerType=DragonWilds::ActorHelper::ResolveClass(TEXT("/Script/Dominion.DominionPlayerCharacter"));
     if(!playerType||!source->IsA(playerType)
         || source->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject))
@@ -1111,6 +1120,13 @@ void RegistryBridge::HandleGenericRequest(UObject* source,UFunction* function,vo
             auto body=payload;
             if(channel=="helpy.authority")body["_BridgeRevision"]=revision;
             const auto detail=AuthorityChannel(caster,channel,entity,action,body.dump());
+            if(channel=="helpy.authority"&&action=="HelpyRemoteAccess"
+                &&payload.value("Query",false)&&payload.value("AccessUpdates",false)){
+                std::erase_if(m_helpyPolicyPeers,[](const auto& peer){return !peer.second.Get();});
+                auto* controller=DragonWilds::ActorHelper::GetObjectRef(caster,TEXT("Controller"));
+                if(controller&&(m_helpyPolicyPeers.contains(controller)||m_helpyPolicyPeers.size()<512))
+                    m_helpyPolicyPeers[controller].Assign(controller);
+            }
             if(channel=="helpy.authority"&&action=="Players")SendNotification(source,"helpy.players","all",revision,detail);
             if(channel=="helpy.authority"&&action=="InventoryMarks")SendNotification(source,"helpy.marks",entity,revision,detail);
             SendReceipt(source,channel,entity,revision,true,detail.empty()?"Authority action completed.":detail);return;
@@ -1130,6 +1146,38 @@ bool RegistryBridge::PublishCleanupNotice(UObject* controller,std::size_t remove
     SendNotification(component,"save.cleanup","cleanup",++m_outboundRevision,packet.dump());return true;
 }
 
+void RegistryBridge::ApplyHelpyAccessStatus(const nlohmann::json& access,bool success,const std::string& detail) {
+    const auto generation=PS::SpawnToolRequests::Generation.load();
+    const bool valid=success&&PS::HelpyAuthorityStatus::Valid(access);
+    const bool wasAllowed=PS::HelpyRemoteAccess::ClientReady(generation);
+    PS::HelpyRemoteAccess::ClientAllowed=valid&&access.value("Allowed",false);
+    PS::HelpyRemoteAccess::ClientTeleport=PS::HelpyRemoteAccess::ClientAllowed&&access.value("Teleport",false);
+    PS::HelpyRemoteAccess::ClientGeneration=generation;
+    const auto message=valid?access.value("Detail",std::string{}):detail;
+    PS::SpawnToolRequests::CatalogProgress({{"Status",message},{"RemoteAccess",valid?access:
+        nlohmann::json{{"Allowed",false},{"PinRequired",true},{"Detail",message}}}});
+    if(valid&&!wasAllowed&&access.value("Authenticated",false)&&PS::HelpyRemoteAccess::ClientAllowed)
+        PS::Log<LogLevel::Normal>(STR("[RS-NET-007] Client-server authority bridged. Self-service requests are validated and executed by the server for your current character.\n"));
+    else if(valid&&!m_helpyPinNoticeSent&&access.value("PinRequired",false)){
+        m_helpyPinNoticeSent=true;
+        PS::Log<LogLevel::Normal>(STR("[RS-NET-006] This RuneSchema world offers PIN access. Open Helpy to connect to server authority.\n"));
+    }
+}
+
+void RegistryBridge::PublishHelpyPolicy() {
+    if(!AuthorityChannel||m_helpyPolicyPeers.empty())return;
+    const auto revision=++m_outboundRevision;
+    std::erase_if(m_helpyPolicyPeers,[](const auto& peer){return !peer.second.Get();});
+    for(const auto& [key,identity]:m_helpyPolicyPeers)try{
+        auto* controller=identity.Get();if(!controller||controller!=key)continue;
+        auto* pawn=ControllerPawn(controller);if(!pawn||!pawn->IsA<AActor>())continue;
+        const auto components=static_cast<AActor*>(pawn)->GetComponentsByClass(ResolveContract().Type);
+        if(!components.Num())continue;
+        const auto status=AuthorityChannel(pawn,"helpy.authority","access-status","HelpyRemoteAccess",R"({"Action":"HelpyRemoteAccess","Query":true})");
+        SendNotification(components[0],"helpy.access","policy",revision,status);
+    }catch(const std::exception&){}
+}
+
 void RegistryBridge::ObserveClientTransport(UObject* source,UFunction* function,void* parameters) {
     if(!source||!function||!parameters)return;const auto name=function->GetFName();
     if(name!=Names().Receipt&&name!=Names().Notification)return;
@@ -1143,23 +1191,8 @@ void RegistryBridge::ObserveClientTransport(UObject* source,UFunction* function,
             auto fields=nlohmann::json::object();
             if(revision==m_helpyAccessRevision&&m_helpyAccessComponent.Get()==source
                 &&m_helpyAccessGeneration==PS::SpawnToolRequests::Generation.load()){
-                const auto access=nlohmann::json::parse(detail,nullptr,false);
-                const bool valid=success&&PS::HelpyAuthorityStatus::Valid(access);
-                const bool wasAllowed=PS::HelpyRemoteAccess::ClientReady(m_helpyAccessGeneration);
-                PS::HelpyRemoteAccess::ClientAllowed=valid&&access.value("Allowed",false);
-                PS::HelpyRemoteAccess::ClientTeleport=PS::HelpyRemoteAccess::ClientAllowed&&access.value("Teleport",false);
-                PS::HelpyRemoteAccess::ClientGeneration=m_helpyAccessGeneration;
-                const auto message=valid?access.value("Detail",std::string{}):detail;
-                fields["RemoteAccess"]=valid?access:nlohmann::json{{"Allowed",false},{"PinRequired",true},{"Detail",message}};
-                fields["Status"]=message;
-                if(valid&&!wasAllowed&&access.value("Authenticated",false)&&PS::HelpyRemoteAccess::ClientAllowed)
-                    PS::Log<LogLevel::Normal>(STR("[RS-NET-007] Client-server authority bridged. Self-service requests are validated and executed by the server for your current character.\n"));
-                else if(valid&&!m_helpyPinNoticeSent&&access.value("PinRequired",false)){
-                    m_helpyPinNoticeSent=true;
-                    PS::Log<LogLevel::Normal>(STR("[RS-NET-006] This RuneSchema world offers PIN access. Open Helpy to connect to server authority.\n"));
-                }
+                ApplyHelpyAccessStatus(nlohmann::json::parse(detail,nullptr,false),success,detail);
                 m_helpyAccessRevision=0;m_helpyAccessComponent.Reset();
-                m_helpyAccessRefreshAt=std::chrono::steady_clock::now()+std::chrono::seconds(5);
             }
             if(revision==m_helpyMutationRevision&&m_helpyMutationComponent.Get()==source
                 &&m_helpyMutationGeneration==PS::SpawnToolRequests::Generation.load()){
@@ -1178,7 +1211,20 @@ void RegistryBridge::ObserveClientTransport(UObject* source,UFunction* function,
         if(channel=="system.compat" && !success)
             PS::Log<LogLevel::Warning>(STR("{}\n"),PS::ToWideSafe(detail.c_str()));
     } else {
-        const auto payload=ParameterString(function,parameters,TEXT("Payload"),MaxActionPayloadBytes);(void)nlohmann::json::parse(payload);
+        const auto payload=ParameterString(function,parameters,TEXT("Payload"),MaxActionPayloadBytes);
+        if(channel=="helpy.access"){
+            auto* controller=m_helpyPolicyController.Get();
+            if(entity!="policy"||!controller||m_helpyPolicyGeneration!=PS::SpawnToolRequests::Generation.load())return;
+            auto* pawn=ControllerPawn(controller);if(!pawn)return;
+            DragonWilds::ActorHelper::FunctionCall owner(source,TEXT("/Script/Engine.ActorComponent:GetOwner"));owner.Invoke();
+            if(owner.Result<UObject*>()!=pawn)return;
+            const auto revision=ParameterInt64(function,parameters,TEXT("Revision"));
+            const auto access=nlohmann::json::parse(payload,nullptr,false);
+            if(PS::HelpyAuthorityStatus::AcceptUpdate(access,revision,m_receivedHelpyPolicyRevision))
+                ApplyHelpyAccessStatus(access,true,{});
+            return;
+        }
+        (void)nlohmann::json::parse(payload);
         DragonWilds::ActorHelper::FunctionCall owner(source,TEXT("/Script/Engine.ActorComponent:GetOwner"));owner.Invoke();
         if(channel=="save.cleanup"){
             auto* pawn=owner.Result<UObject*>();if(!pawn||!pawn->IsA<AActor>())return;
@@ -1463,13 +1509,16 @@ void RegistryBridge::SendCompatibilityAck(const std::string& remoteFingerprint,b
                 .Arg(TEXT("Payload"),nlohmann::json{{"version",1},{"maxBytes",PS::ModDataRelay::MaxBytes}}.dump())
                 .Arg(TEXT("Revision"),++m_outboundRevision).Invoke();
         }
-        if(!m_helpyAccessStatusRequested&&!m_helpyAccessRevision){
-            m_helpyAccessStatusRequested=true;m_helpyAccessComponent.Assign(components[0]);
-            m_helpyAccessRevision=++m_outboundRevision;m_helpyAccessGeneration=PS::SpawnToolRequests::Generation.load();
-            m_helpyAccessRefreshAt=std::chrono::steady_clock::now()+std::chrono::seconds(15);
+        const auto generation=PS::SpawnToolRequests::Generation.load();
+        auto* controller=DragonWilds::ActorHelper::GetObjectRef(player,TEXT("Controller"));
+        if(controller&&(m_helpyPolicyController.Get()!=controller||m_helpyPolicyGeneration!=generation)){
+            ResetHelpyClientAccess();
+            m_helpyPolicyController.Assign(controller);m_helpyPolicyGeneration=generation;
+            m_helpyAccessComponent.Assign(components[0]);m_helpyAccessGeneration=generation;
+            m_helpyAccessRevision=++m_outboundRevision;
             DragonWilds::ActorHelper::FunctionCall access(components[0],rpc);access.Arg(TEXT("Channel"),std::string("helpy.authority"))
                 .Arg(TEXT("EntityId"),std::string("access-status")).Arg(TEXT("ActionKey"),std::string("HelpyRemoteAccess"))
-                .Arg(TEXT("Payload"),std::string("{\"Action\":\"HelpyRemoteAccess\",\"Query\":true}"))
+                .Arg(TEXT("Payload"),std::string(R"({"Action":"HelpyRemoteAccess","Query":true,"AccessUpdates":true})"))
                 .Arg(TEXT("Revision"),m_helpyAccessRevision).Invoke();
         }
         if(!resync)return;
@@ -1508,7 +1557,7 @@ bool RegistryBridge::RequestAuthority(const std::string& action,const std::strin
         if(!rpc||!rpc->HasAnyFunctionFlags(FUNC_Net|FUNC_NetServer))continue;
         const auto revision=++m_outboundRevision;
         if(action=="Players") {m_helpyRosterComponent.Assign(components[0]);m_helpyRosterRevision=revision;m_helpyRosterGeneration=PS::SpawnToolRequests::Generation.load();m_helpyRosterRequestedAt=std::chrono::steady_clock::now();}
-        if(action=="HelpyRemoteAccess") {m_helpyAccessComponent.Assign(components[0]);m_helpyAccessRevision=revision;m_helpyAccessGeneration=PS::SpawnToolRequests::Generation.load();m_helpyAccessRefreshAt=std::chrono::steady_clock::now()+std::chrono::seconds(15);}
+        if(action=="HelpyRemoteAccess") {m_helpyAccessComponent.Assign(components[0]);m_helpyAccessRevision=revision;m_helpyAccessGeneration=PS::SpawnToolRequests::Generation.load();}
         if(action=="GiveItems"||action=="MapTeleport"||action=="NativeServerAdmin"){
             m_helpyMutationComponent.Assign(components[0]);m_helpyMutationRevision=revision;m_helpyMutationGeneration=PS::SpawnToolRequests::Generation.load();
             m_helpyMutationDeadline=std::chrono::steady_clock::now()+std::chrono::seconds(60);m_helpyResultParts.Reset();
@@ -1590,6 +1639,7 @@ bool RegistryBridge::Attach(AGameModeBase* mode) {
     DragonWilds::ActorHelper::FunctionCall(component,TEXT("/Script/Engine.ActorComponent:SetIsReplicated"))
         .Arg(TEXT("ShouldReplicate"),true).Invoke();
     m_authorityComponent=component;
+    PS::PSConfig::Get()->StartHelpyAuthorityWatch();
     try {
         PS::MultiplayerRuntime::Attach(gameState,[this](const std::string& channel,const std::string& payload){
             m_modDataRelay.Publish(channel,payload,++m_outboundRevision);
@@ -1829,12 +1879,12 @@ void RegistryBridge::StartRetryTick() {
     options.HookName=TEXT("RegistryBridgeDeferredAttach");
     m_retryTick=Hook::RegisterEngineTickPostCallback(
         [this](Hook::TCallbackIterationData<void>&,UEngine*,float deltaSeconds,bool){
-            if(m_helpyAccessStatusRequested&&std::chrono::steady_clock::now()>=m_helpyAccessRefreshAt){
-                m_helpyAccessRefreshAt=std::chrono::steady_clock::now()+std::chrono::seconds(5);
-                if(auto* world=m_buildingAuthorityWorld.Get();world&&PS::Network::Detect(world).Mode==PS::Network::Role::Client)try{
-                    m_helpyAccessRevision=0;m_helpyAccessComponent.Reset();
-                    (void)RequestAuthority("HelpyRemoteAccess","{\"Action\":\"HelpyRemoteAccess\",\"Query\":true}");
-                }catch(...){}
+            if(m_authorityComponent){
+                const auto version=PS::PSConfig::Get()->RefreshHelpyAuthority();
+                if(version!=m_sentHelpyAuthorityVersion){
+                    m_sentHelpyAuthorityVersion=version;
+                    PublishHelpyPolicy();
+                }
             }
             if(m_helpyMutationRevision&&std::chrono::steady_clock::now()>=m_helpyMutationDeadline){
                 if(m_helpyMutationGeneration==PS::SpawnToolRequests::Generation.load())PS::SpawnToolRequests::Publish({{"Status","Server result timed out; inspect your inventory or position before retrying. The request was not replayed."}});
@@ -2211,6 +2261,7 @@ void RegistryBridge::Start() {
 void RegistryBridge::Stop() {
     PS::SpawnToolRequests::SetNetworkCompletion(0,{});
     for(auto* id:{&m_worldStarting,&m_worldReady,&m_retryTick,&m_authorityPre,&m_processEvent,&m_localProfileHook})if(*id!=Hook::ERROR_ID){Hook::UnregisterCallback(*id);*id=Hook::ERROR_ID;}
+    PS::PSConfig::Get()->StopHelpyAuthorityWatch();
     ResetWorld();m_started=false;
 }
 }

@@ -168,6 +168,7 @@ int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,ui
             if(!size)return RS_PLUGIN_INVALID_ARGUMENT;
             if(!response||capacity<RUNESCHEMA_PLUGIN_MAX_MESSAGE){*size=RUNESCHEMA_PLUGIN_MAX_MESSAGE;return RS_PLUGIN_BUFFER_TOO_SMALL;}
             result=RuneSchemaSettingsEditor::Save(HostServices::SettingsDirectory(),request);
+            if(result.value("Ok",false)&&result.value("HostPolicyChanged",false))PSConfig::Get()->InvalidateHelpyAuthority();
             result["BypassStatus"]=DragonWilds::CharacterEntryRecovery::StatusText();
         }
         else if(action=="QuestCatalog")result=QuestPresentationCatalog::Read(request);

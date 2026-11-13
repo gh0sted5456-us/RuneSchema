@@ -5,16 +5,20 @@
 #include "Core/JsonDocument.h"
 #include "Helpers/String.hpp"
 #include "Core/ConfigFiles.h"
+#include "Core/HelpyRemoteAccess.h"
 #include "Core/DiagnosticLogPaths.h"
 #include "Utility/ConfigCodec.h"
 #include "Utility/ConfigStore.h"
 #include "Core/RuneSchemaSettingsEditor.h"
 #include "Runtime/HostServices.h"
+#include "Misc/FileWatchWrapper.h"
 #include <nlohmann/json.hpp>
 
 namespace fs = std::filesystem;
 
 namespace PS {
+    PSConfig::PSConfig() = default;
+    PSConfig::~PSConfig() = default;
 
     PSConfig* PSConfig::Get()
     {
@@ -134,6 +138,69 @@ namespace PS {
             m_status = std::string("Cannot load configuration; using session defaults. Originals left untouched: ") + error.what();
             PS::CodedLog<RC::LogLevel::Error>(PS::Diagnostics::Id::ConfigLoadFailed, STR("{}\n"), RC::to_generic_string(m_status));
         }
+        m_liveHelpyAuthority=m_settings.helpyAuthority;
+        InvalidateHelpyAuthority();
+    }
+
+    void PSConfig::StartHelpyAuthorityWatch()
+    {
+        if(m_helpyAuthorityWatch||m_configFile.empty())return;
+        try{
+            const auto filename=m_configFile.filename().string();
+            auto watcher=std::make_unique<FileWatchWrapper>(m_configFile.parent_path(),
+                [this,filename](auto,const auto&,const std::string& name,auto,const std::string& previous){
+                    if(name==filename||previous==filename)InvalidateHelpyAuthority();
+                });
+            if(!watcher->IsWatchingDirectory())throw std::runtime_error("Settings directory watch unavailable");
+            watcher->Watch();
+            m_helpyAuthorityWatch=std::move(watcher);
+            InvalidateHelpyAuthority();
+        }catch(const std::exception&){
+            PS::CodedLog<RC::LogLevel::Warning>(PS::Diagnostics::Id::ConfigLoadFailed,
+                STR("Cannot watch the Helpy server settings file. Save from Helpy to apply changes while the host is running.\n"));
+        }
+    }
+
+    void PSConfig::StopHelpyAuthorityWatch()
+    {
+        m_helpyAuthorityWatch.reset();
+    }
+
+    void PSConfig::ApplyHelpyAuthority(HelpyAuthoritySettings latest)
+    {
+        if(latest==m_liveHelpyAuthority)return;
+        if(latest.allowPinAccess!=m_liveHelpyAuthority.allowPinAccess||latest.accessPin!=m_liveHelpyAuthority.accessPin)
+            HelpyRemoteAccess::Server.Reset();
+        m_liveHelpyAuthority=std::move(latest);
+        ++m_helpyAuthorityVersion;
+    }
+
+    uint64_t PSConfig::RefreshHelpyAuthority()
+    {
+        if(m_configFile.empty()||!m_helpyAuthorityRefresh.exchange(false))return m_helpyAuthorityVersion;
+        std::lock_guard lock(RuneSchemaSettingsEditor::Gate);
+        try{
+            ApplyHelpyAuthority(SettingsStore::ReadHelpyAuthority(m_configFile));
+            m_helpyAuthorityReadFailed=false;
+        }catch(const std::exception&){
+            if(!m_helpyAuthorityReadFailed)
+                PS::CodedLog<RC::LogLevel::Warning>(PS::Diagnostics::Id::ConfigLoadFailed,
+                    STR("Cannot reload Helpy server access settings. Last valid policy remains active.\n"));
+            m_helpyAuthorityReadFailed=true;
+        }
+        return m_helpyAuthorityVersion;
+    }
+
+    bool PSConfig::SaveHelpyPlayerAccess(const HelpyAuthoritySettings& before,const HelpyAuthoritySettings& proposed)
+    {
+        std::lock_guard lock(RuneSchemaSettingsEditor::Gate);
+        try{
+            ApplyHelpyAuthority(SettingsStore::SaveHelpyPlayerAccess(m_configFile,before,proposed));
+            return true;
+        }catch(const std::exception&){
+            InvalidateHelpyAuthority();
+            return false;
+        }
     }
 
     std::filesystem::path PSConfig::GetSettingsPath()
@@ -146,13 +213,28 @@ namespace PS {
     {
         const auto configFile = m_configFile.empty()?GetSettingsPath()/"settings.ini":m_configFile;
         fs::path backup;
+        std::lock_guard lock(RuneSchemaSettingsEditor::Gate);
         try {
-            const auto document=SettingsDocument(m_settings,m_configDocument);
+            auto document=SettingsDocument(m_settings,m_configDocument);
+            if(!m_preserveOriginal&&fs::exists(configFile)){
+                SettingsStore::Loaded persisted;
+                try{persisted=SettingsStore::Parse(configFile,configFile.extension()==".ini");}
+                catch(const std::exception&){throw std::runtime_error("Cannot verify the current server access settings. Reload them in Helpy before saving.");}
+                const auto disk=SettingsDocument(persisted.Settings,persisted.Document).at("helpyAuthority");
+                const auto baseline=SettingsDocument(DecodeSettings(m_configDocument.dump()),m_configDocument).at("helpyAuthority");
+                auto& edited=document.at("helpyAuthority");
+                if(disk!=baseline&&edited!=disk){
+                    if(edited!=baseline)throw std::runtime_error("Server access settings changed on disk. Reload them in Helpy before saving.");
+                    edited=disk;
+                }
+            }
             const auto contents=configFile.extension()==".ini"?EncodeIniDocument(document):document.dump(2)+"\n";
-            (void)DecodeSettings(document.dump());
+            auto validated=DecodeSettings(document.dump());
             if (m_preserveOriginal&&fs::exists(configFile)) backup = ConfigFiles::Backup(configFile);
             ConfigFiles::Write(configFile, contents);
             m_configDocument=document;
+            m_settings.helpyAuthority=std::move(validated.helpyAuthority);
+            InvalidateHelpyAuthority();
             m_preserveOriginal = false;
             m_status = backup.empty() ? "Settings saved. Restart for startup settings."
                 : "Configuration recovered with current settings. Original preserved at: " + backup.string();

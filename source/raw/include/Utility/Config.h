@@ -1,5 +1,8 @@
 #pragma once
 
+#include <atomic>
+#include <cstdint>
+#include <memory>
 #include <filesystem>
 #include <string>
 #include <string_view>
@@ -9,6 +12,7 @@
 #include "../../../shared/HelpyPlayerAuthorization.h"
 
 namespace PS {
+    class FileWatchWrapper;
     struct LoadOrderSettings {
         bool enabled = true;
         bool autoCreate = true;
@@ -166,13 +170,14 @@ namespace PS {
         bool allowClientTemporarySpawns = false;
         bool autoAuthorizeConnectingPlayers = false;
         std::vector<HelpyAuthorizedPlayer> authorizedPlayers{};
-        int maximumItemCount = 100;
+        int maximumItemCount = 0; // No host quantity limit when zero.
         int maximumSpawnCount = 100;
         int maximumNpcDurationSeconds = 300;
         // Without PIN access, empty lists deny remote mutations. GUIDs are preferred;
         // exact names are an explicit compatibility fallback.
         std::vector<std::string> permittedPlayerGuids{};
         std::vector<std::string> permittedPlayerNames{};
+        bool operator==(const HelpyAuthoritySettings&) const = default;
     };
 
     struct PSConfigSettings {
@@ -231,18 +236,34 @@ namespace PS {
         const PSConfigSettings& GetSettings() const;
         std::string_view ItemDeliveryMode() const;
 
+        // Live authority is read and applied only on the game thread.
+        const HelpyAuthoritySettings& LiveHelpyAuthority() const { return m_liveHelpyAuthority; }
+        uint64_t RefreshHelpyAuthority();
+        void StartHelpyAuthorityWatch();
+        void StopHelpyAuthorityWatch();
+        void InvalidateHelpyAuthority() noexcept { m_helpyAuthorityRefresh = true; }
+        bool SaveHelpyPlayerAccess(const HelpyAuthoritySettings& before, const HelpyAuthoritySettings& proposed);
+
         bool Save();
         const std::string& GetStatus() const { return m_status; }
 
         void Load();
     private:
+        PSConfig();
+        ~PSConfig();
         static std::filesystem::path GetSettingsPath();
+        void ApplyHelpyAuthority(HelpyAuthoritySettings latest);
 
     private:
         PSConfigSettings m_settings;
+        HelpyAuthoritySettings m_liveHelpyAuthority;
+        uint64_t m_helpyAuthorityVersion = 0;
+        std::atomic_bool m_helpyAuthorityRefresh{true};
+        bool m_helpyAuthorityReadFailed = false;
         std::string m_status;
         bool m_preserveOriginal = false;
         std::filesystem::path m_configFile;
         nlohmann::json m_configDocument = nlohmann::json::object();
+        std::unique_ptr<FileWatchWrapper> m_helpyAuthorityWatch;
     };
 }

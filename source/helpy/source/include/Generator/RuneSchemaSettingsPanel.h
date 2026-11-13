@@ -45,7 +45,7 @@ inline void Accept(const json& result){Snapshot=result;Draft=result.at("Document
 inline void Load(){
     json result;if(!Remote||!Remote({{"Action","SettingsRead"}},result)){Status="RuneSchema settings service is unavailable. Update the matching core and RSMK together.";return;}
     if(!result.value("Ok",false)){Status=result.value("Status",std::string("Could not read settings.ini."));return;}
-    Accept(result);Status="The Helpy shortcut applies immediately. Cleanup follows its activation choice; other startup changes require a restart.";
+    Accept(result);Status="Helpy shortcuts and server access settings apply live. Cleanup follows its activation choice. Startup settings require a restart.";
 }
 inline json Patch(){json result=json::object();if(!Loaded)return result;
     for(const auto& [path,type]:Snapshot.at("Editable").items()){

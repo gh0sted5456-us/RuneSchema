@@ -540,12 +540,12 @@ public:
             ImGui::Checkbox("Allow client self-teleport", &settings.helpyAuthority.allowClientTeleport);
             ImGui::Checkbox("Allow client temporary spawns", &settings.helpyAuthority.allowClientTemporarySpawns);
             ImGui::SetNextItemWidth(140.0f);
-            ImGui::InputInt("Maximum items per request", &settings.helpyAuthority.maximumItemCount);
+            ImGui::InputInt("Maximum items per request (0 = no limit)", &settings.helpyAuthority.maximumItemCount);
             ImGui::SetNextItemWidth(140.0f);
             ImGui::InputInt("Maximum actors per request", &settings.helpyAuthority.maximumSpawnCount);
             ImGui::SetNextItemWidth(140.0f);
             ImGui::InputInt("Maximum temporary NPC seconds", &settings.helpyAuthority.maximumNpcDurationSeconds);
-            settings.helpyAuthority.maximumItemCount=std::clamp(settings.helpyAuthority.maximumItemCount,1,10000);
+            settings.helpyAuthority.maximumItemCount=std::max(settings.helpyAuthority.maximumItemCount,0);
             settings.helpyAuthority.maximumSpawnCount=std::clamp(settings.helpyAuthority.maximumSpawnCount,1,100);
             settings.helpyAuthority.maximumNpcDurationSeconds=std::clamp(settings.helpyAuthority.maximumNpcDurationSeconds,1,3600);
             ImGui::TextWrapped("Remote users need an allowlist entry or opted-in world PIN access. Configure the PIN in Helpy > Settings > Server access. PIN access covers only self-delivery and self-teleport; action limits and registry checks still apply. GUIDs are preferred for allowlists.");
