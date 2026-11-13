@@ -135,6 +135,14 @@ int main(){try{
         const CacheBundleItems::Index armor(set);
         const auto query="__helpyfamily:"+ItemFamily::Key("Hard Leather Body (Dyed Black, Mirror Trim)");
         const auto first=armor.Page(query,"",2),last=armor.Page(query,first.at("NextCursor"),2);
+        const auto filtered=query+" ck dyEd mirror";
+        const auto firstFiltered=armor.Page(filtered,"",2);
+        const auto lastFiltered=armor.Page(filtered,firstFiltered.at("NextCursor"),2);
+        assert(firstFiltered.at("Rows")==first.at("Rows")&&firstFiltered.at("HasMore")==true);
+        assert(lastFiltered.at("Rows")==last.at("Rows")&&lastFiltered.at("HasMore")==false);
+        const auto shortQuery=armor.Page("ck","",8);
+        assert(shortQuery.at("Rows").size()==4);
+        assert(armor.Page("hard mirror impossible","",8).at("Rows").empty());
         assert(first.at("Rows").size()==2&&first.at("HasMore")==true);
         assert(last.at("Rows").size()==1&&last.at("HasMore")==false);
         assert(first.at("Rows")[0].at("Name")=="Hard Leather Body (Dyed Black, Mirror Trim)");

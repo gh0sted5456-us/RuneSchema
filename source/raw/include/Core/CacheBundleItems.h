@@ -4,6 +4,7 @@
 #include "Core/ItemCatalogFilter.h"
 #include "Core/PagedItemCatalog.h"
 #include "Core/ItemGroupings.h"
+#include <array>
 #include <future>
 #include <optional>
 #include <charconv>
@@ -13,7 +14,23 @@ namespace PS::CacheBundleItems {
 using Json=nlohmann::json;using Clock=std::chrono::steady_clock;
 struct Index {
     struct Entry{Json Row;std::string Name,Search,Category,Family;};
-    std::vector<Entry> Rows;std::string Ticket;
+    // Hash each three-byte substring into a fixed-size mask. Exact matching
+    // still runs for survivors, so collisions only increase the work.
+    struct SearchMask {
+        std::array<uint64_t,4> Bits{};
+        void Add(std::string_view text) {
+            for(size_t i=2;i<text.size();++i){
+                const uint32_t gram=(uint32_t(uint8_t(text[i-2]))<<16)|(uint32_t(uint8_t(text[i-1]))<<8)|uint8_t(text[i]);
+                const uint32_t bit=(gram*0x9e3779b1u)>>24;
+                Bits[bit/64]|=uint64_t{1}<<(bit%64);
+            }
+        }
+        bool Includes(const SearchMask& query)const {
+            for(size_t i=0;i<Bits.size();++i)if((Bits[i]&query.Bits[i])!=query.Bits[i])return false;
+            return true;
+        }
+    };
+    std::vector<Entry> Rows;std::vector<SearchMask> SearchMasks;std::string Ticket;
     std::vector<size_t> All;std::map<std::string,std::vector<size_t>> Categories,Families;
     explicit Index(const Json& records,const ItemGroupings::Plan& groups={}){
         for(const auto& record:records)if(record.value("Kind",std::string{})=="items"){
@@ -23,7 +40,12 @@ struct Index {
             Rows.push_back({std::move(row),std::move(name),std::move(search),category,family});
         }
         std::sort(Rows.begin(),Rows.end(),[](const auto& a,const auto& b){return a.Name==b.Name?a.Row.at("Path")<b.Row.at("Path"):a.Name<b.Name;});
-        for(size_t i=0;i<Rows.size();++i){All.push_back(i);Categories[Rows[i].Category].push_back(i);if(!Rows[i].Family.empty())Families[Rows[i].Family].push_back(i);}
+        SearchMasks.reserve(Rows.size());
+        for(size_t i=0;i<Rows.size();++i){
+            const auto& row=Rows[i];
+            All.push_back(i);Categories[row.Category].push_back(i);if(!row.Family.empty())Families[row.Family].push_back(i);
+            SearchMasks.emplace_back().Add(row.Search);
+        }
         auto hash=HelpySourceCache::Hash(records.dump());hash=HelpySourceCache::Hash(ItemGroupings::Document(groups).dump(),hash);Ticket=HelpySourceCache::Hex(hash);
     }
     Json Page(const std::string& query,const std::string& cursor,size_t limit)const{
@@ -33,13 +55,17 @@ struct Index {
     const auto words=std::move(match.Words);match.Words.clear();const std::vector<size_t> empty;const std::vector<size_t>* candidates=&All;
     if(!category.empty()){const auto found=Categories.find(category);candidates=found==Categories.end()?&empty:&found->second;}
     if(!family.empty()){const auto found=Families.find(family);const auto* familyRows=found==Families.end()?&empty:&found->second;if(familyRows->size()<candidates->size())candidates=familyRows;}
+    SearchMask queryMask;bool useMask=false;
+    for(const auto& word:words)if(word.size()>=3){queryMask.Add(word);useMask=true;}
     if(!cursor.empty()){const auto prefix="B:"+ticket+":";if(cursor.starts_with(prefix)){
         const auto text=std::string_view(cursor).substr(prefix.size());const auto [end,error]=std::from_chars(text.data(),text.data()+text.size(),offset);
         if(text.empty()||error!=std::errc{}||end!=text.data()+text.size()||offset>candidates->size()){offset=0;reset=true;}
     }else reset=true;}
     Json found=Json::array();
     for(;offset<candidates->size()&&found.size()<limit;++offset){
-        const auto& entry=rows[(*candidates)[offset]];
+        const auto index=(*candidates)[offset];
+        if(useMask&&!SearchMasks[index].Includes(queryMask))continue;
+        const auto& entry=rows[index];
         if((category.empty()||category==entry.Category)&&(family.empty()||family==entry.Family)&&std::all_of(words.begin(),words.end(),[&](const auto& word){return entry.Search.find(word)!=entry.Search.npos;})&&match(entry.Row))found.push_back(entry.Row);
     }
     Json page={{"Rows",std::move(found)},{"HasMore",offset<candidates->size()},{"NextCursor","B:"+ticket+":"+std::to_string(offset)},{"AlphabeticalReady",true},{"CacheHit",true},{"CachePreview",true},{"CheckingChanges",true},{"BundleReference",true},{"PopulationStage","cached-items-verifying"},{"IndexedItems",rows.size()},{"Coverage","Partial imported references; exact paths and known persistence IDs are cached. Live availability and delivery are validated separately."}};
