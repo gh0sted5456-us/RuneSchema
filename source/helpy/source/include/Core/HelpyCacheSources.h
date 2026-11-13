@@ -99,6 +99,8 @@ template<class Manifest> inline void DeclareManifest(const Manifest& manifest) n
     }catch(...){} // Optional bookkeeping cannot undo an accepted registry.
 }
 inline Plan Snapshot(){std::lock_guard lock(Mutex);auto result=Current;result.AssetOwners=CurrentAssetOwners;return result;}
+// Cheap change probe for per-frame/per-tick pollers; Snapshot() copies every owner map.
+inline std::uint64_t CurrentRevision(){std::lock_guard lock(Mutex);return Current.Revision;}
 // A registered item can reference an icon in another mounted content source.
 // Observe that native relationship, not a UI-supplied or cached asset list.
 inline void Reference(const std::string& asset,const std::string& icon) noexcept {

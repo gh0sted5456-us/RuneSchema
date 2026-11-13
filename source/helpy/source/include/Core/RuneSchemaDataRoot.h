@@ -34,14 +34,26 @@ inline fs::path Resolve(const fs::path& local){
     Safe(destination);return destination;
 }
 inline const fs::path& Directory(){static const fs::path directory=Resolve(LocalDirectory());return directory;}
-inline fs::path SharedDirectory(const fs::path& root,const std::string& name){
+inline fs::path SharedDirectoryLocation(const fs::path& root,const std::string& name){
     if(name!="HELPY"&&name!="runeschema.profile"&&name!="health")throw std::runtime_error("Unknown RuneSchema shared folder");
     const auto destination=root/"core"/name,existing=root/name;
     // Reuse established AppData profiles/settings in place, without moving them.
-    const auto path=!fs::exists(destination)&&fs::is_directory(existing)?existing:destination;
+    return !fs::exists(destination)&&fs::is_directory(existing)?existing:destination;
+}
+inline fs::path SharedDirectory(const fs::path& root,const std::string& name){
+    const auto path=SharedDirectoryLocation(root,name);
     Safe(path);return path;
 }
 inline fs::path SharedDirectory(const std::string& name){return SharedDirectory(Directory(),name);}
+inline fs::path ResolveSaveRoot(const fs::path& directory){
+    // The caller chooses the save root. Resolve it before checking any generated children.
+    const auto resolved=fs::weakly_canonical(directory);
+    Safe(resolved);
+    return resolved;
+}
+inline fs::path CharacterCopiesDirectory(const fs::path& root=Directory()){
+    return ResolveSaveRoot(SharedDirectoryLocation(root,"runeschema.profile")/"characters");
+}
 inline std::string RuntimeKey(std::string platform){
     std::transform(platform.begin(),platform.end(),platform.begin(),[](unsigned char c){return c>='A'&&c<='Z'?char(c-'A'+'a'):char(c);});
     if(platform=="steam"||platform=="epic"||platform=="gamepass"||platform=="server")return platform;

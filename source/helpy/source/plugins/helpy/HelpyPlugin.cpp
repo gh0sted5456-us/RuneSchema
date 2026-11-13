@@ -38,6 +38,8 @@ struct State {const RuneSchemaHostApi* Host{};std::unique_ptr<PS::HelpyStandalon
     PS::ProcessExitFuture<CatalogReply> CatalogSubmit;std::deque<nlohmann::json> CatalogQueue;
     struct IconRequest {std::string Icon;uint64_t Connection,Generation;};
     PS::ProcessExitFuture<nlohmann::json> IconSubmit;std::deque<IconRequest> IconQueue;
+    // Only the pending host read owns this buffer, across successive workers.
+    std::vector<char> HostReadBuffer;
     PS::ProcessExitFuture<nlohmann::json> HostRead;bool ReadingMetadata=false;uint64_t ReadingRevision=0,ReadingConnection=0;
     std::atomic<uint64_t> ConnectionEpoch=0;
     std::atomic<bool> RelayOnly=false;
@@ -46,7 +48,8 @@ struct State {const RuneSchemaHostApi* Host{};std::unique_ptr<PS::HelpyStandalon
     std::map<uint64_t,nlohmann::json> Completed;std::map<uint64_t,std::string> IconDictionary;std::deque<nlohmann::json> QueryResults;uint64_t HostRevision=0;std::chrono::steady_clock::time_point NextHostRead{};
     nlohmann::json MapGroundReply=nlohmann::json::object();std::chrono::steady_clock::time_point NextMetadataRead{};
     bool LoggedQuery=false,LoggedRows=false,LoggedIcon=false;std::atomic<bool> InventoryReady=false;};
-bool CallCore(State* state,const nlohmann::json& request,nlohmann::json& response) {
+bool CallCore(State* state,const nlohmann::json& request,nlohmann::json& response,
+              std::vector<char>* readBuffer=nullptr) {
     try {
     if(!state||!state->Host)return false;
     const auto input=request.dump();
@@ -54,9 +57,12 @@ bool CallCore(State* state,const nlohmann::json& request,nlohmann::json& respons
     const bool hudExtension=action=="HudExtensions";
     const bool hudRead=hudExtension&&request.at("Payload").value("Action",std::string{})=="List";
     const bool readOnly=action=="Read"||action=="AuthoringSnapshot"||action=="SettingsRead"||action=="QuickLoadRead"||action=="AdditionalLoggingRead"||action=="ModsRead"||action=="IconCacheOwnership"||action=="IconCacheSources"||action=="CrashDumpRead"||action=="HelpyModMenuRead"||hudRead;
-    uint32_t size=0;thread_local std::vector<char> output(8192);
+    uint32_t size=0;
+    thread_local std::vector<char> threadOutput;
+    auto& output=readBuffer?*readBuffer:threadOutput;
     const bool maximum=action=="Completed"||action=="SettingsSave"||action=="ModsSave"||action=="ModsImport"||action=="QuickLoadSave"||action=="AdditionalLoggingSave"||action=="CrashDumpSave";
-    uint32_t capacity=(readOnly||action=="HelpyNativeOverlay"||hudExtension)?8192:maximum?RUNESCHEMA_PLUGIN_MAX_MESSAGE:4096;
+    uint32_t capacity=(action=="HelpyNativeOverlay"||hudExtension)?8192:maximum?RUNESCHEMA_PLUGIN_MAX_MESSAGE:4096;
+    if(readOnly)capacity=static_cast<uint32_t>(std::clamp<size_t>(output.size(),8192,RUNESCHEMA_PLUGIN_MAX_MESSAGE));
     if(output.size()<capacity)output.resize(capacity);
     auto code=state->Host->CallService(Descriptor.Id,"runeschema.tools",input.c_str(),output.data(),capacity,&size);
     if(readOnly&&code==RS_PLUGIN_BUFFER_TOO_SMALL&&size>capacity&&size<=RUNESCHEMA_PLUGIN_MAX_MESSAGE){capacity=size;if(output.size()<capacity)output.resize(capacity);code=state->Host->CallService(Descriptor.Id,"runeschema.tools",input.c_str(),output.data(),capacity,&size);}
@@ -245,7 +251,11 @@ void SyncHost(State* state,bool force=false,bool metadata=false) {
         const auto now=std::chrono::steady_clock::now();auto& next=metadata?state->NextMetadataRead:state->NextHostRead;if(!force&&now<next)return;
         next=now+std::chrono::seconds(metadata?5:2);
         uint64_t revision;{std::lock_guard lock(state->ToolsMutex);revision=metadata?0:state->HostRevision;state->ReadingRevision=state->ToolsRevision;state->ReadingConnection=state->ConnectionEpoch.load();}
-        const auto read=[state,revision,metadata]{nlohmann::json value;CallCore(state,{{"Action","Read"},{"Revision",revision},{"Category",metadata?-2:-1}},value);return value;};
+        const auto read=[state,revision,metadata]{
+            nlohmann::json value;
+            CallCore(state,{{"Action","Read"},{"Revision",revision},{"Category",metadata?-2:-1}},value,&state->HostReadBuffer);
+            return value;
+        };
         if(!force){state->ReadingMetadata=metadata;state->HostRead=std::async(std::launch::async,read);return;}
         reply=read();
     }

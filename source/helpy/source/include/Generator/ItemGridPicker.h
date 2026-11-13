@@ -262,8 +262,12 @@ inline bool SourceControl(State& state,const json& catalog,uint64_t revision,con
 }
 inline int MaxStack(const json& row){try{const auto it=row.find("MaxStackSize");if(it!=row.end()){if(it->is_number_integer())return std::clamp(it->get<int>(),1,10000);if(it->is_number_unsigned())return std::clamp(static_cast<int>(it->get<unsigned>()),1,10000);if(it->is_number_float())return std::clamp(static_cast<int>(it->get<double>()),1,10000);}}catch(...){}return 1;}
 inline const json* Find(const json& catalog,const char* selected) {
-    if(!selected||!*selected||!catalog.contains("Items")||!catalog["Items"].is_array())return nullptr;
-    for(const auto& row:catalog["Items"])if(row.value("Path",std::string{})==selected)return &row;return nullptr;
+    if(!selected||!*selected)return nullptr;
+    const auto items=catalog.find("Items");if(items==catalog.end()||!items->is_array())return nullptr;
+    const std::string_view wanted(selected);
+    // Called every frame by the docked bay and authoring panel: compare in place, no per-row copies.
+    for(const auto& row:*items){const auto path=row.find("Path");if(path!=row.end()&&path->is_string()&&path->get_ref<const std::string&>()==wanted)return &row;}
+    return nullptr;
 }
 inline std::string Title(const json& catalog,const std::string& path){const auto* row=Find(catalog,path.c_str());return row?ItemPresentation::Name(*row):path;}
 inline json BuildActionItems(const json& catalog,const State& state,const std::string& clickedPath,bool fullStack) {
@@ -1042,7 +1046,7 @@ inline Result RenderShared(const json& catalog,uint64_t revision,bool fillSpace=
         Bay.RowsRevision=rowsRevision;
     }
     if(!RenderingDetachedBay&&DetachedBay){ImGui::TextDisabled("Item Bay is in its separate window.");HelpyMenu::NextControl("Dock back");if(ImGui::SmallButton("Dock back"))DetachedBay=false;}
-    if((DockedBay||DetachedBay)&&!RenderingDetachedBay){Result result;result.SelectedPaths=Bay.Picker.SelectedPaths;result.SelectedCount=result.SelectedPaths.size();result.SelectedTitle=Title(Bay.Catalog,Bay.Selected);result.SelectedRow=Find(Bay.Catalog,Bay.Selected);return result;}
+    if((DockedBay||DetachedBay)&&!RenderingDetachedBay){Result result;result.SelectedPaths=Bay.Picker.SelectedPaths;result.SelectedCount=result.SelectedPaths.size();result.SelectedRow=Find(Bay.Catalog,Bay.Selected);result.SelectedTitle=result.SelectedRow?ItemPresentation::Name(*result.SelectedRow):std::string(Bay.Selected);return result;}
     if(!RenderingDetachedBay){if(ImGui::SmallButton(Bay.Expanded?"Restore pane":"Expand pane"))Bay.Expanded=!Bay.Expanded;
 #if defined(HELPY_PREVIEW)
         HelpyPreviewHooks::BayExpand=HelpyPreviewHooks::LastRect();

@@ -226,19 +226,28 @@ int main(){
         assert(PS::RuneSchemaSettingsPanel::Remote({{"Action","HelpyNativeOverlay"},{"Payload",{{"Action",action}}}},reply)&&reply.at("Ready")==true&&reply.at("Api")=="D3D12");
         assert(HostCalls["HelpyNativeOverlay"]==before+1&&GuardedCalls["HelpyNativeOverlay"]==before+1);
     }
-    for(const auto* action:{"QuickLoadRead","AdditionalLoggingRead"}){json reply;const auto before=HostCalls[action],writes=SettingsWrites;
-        assert(CallCore(&state,{{"Action",action}},reply)&&reply.at("Ok")==true&&reply.at("ExpectedContents").get<std::string>().size()==10000);
-        assert(HostCalls[action]==before+2&&SettingsWrites==writes);}
-    {json reply;assert(CallCore(&state,{{"Action","CrashDumpRead"}},reply)&&reply.at("ExpectedContents").get<std::string>().size()==10000&&CrashOptionReads==2);}
+    for(const auto* action:{"QuickLoadRead","AdditionalLoggingRead"}){
+        json first,repeated;const auto before=HostCalls[action],writes=SettingsWrites;
+        const json request={{"Action",action}};
+        assert(CallCore(&state,request,first)&&first.at("Ok")==true&&first.at("ExpectedContents").get<std::string>().size()==10000);
+        const auto afterFirst=HostCalls[action];
+        assert(afterFirst==before+(std::string_view(action)=="QuickLoadRead"?2:1));
+        assert(CallCore(&state,request,repeated)&&repeated==first);
+        assert(HostCalls[action]==afterFirst+1&&SettingsWrites==writes);
+    }
+    {json reply;assert(CallCore(&state,{{"Action","CrashDumpRead"}},reply)&&reply.at("ExpectedContents").get<std::string>().size()==10000&&CrashOptionReads==1);}
     {json reply;const auto before=HostCalls["HelpyModMenuRead"];assert(CallCore(&state,{{"Action","HelpyModMenuRead"}},reply)&&reply.at("Available")==true&&reply.at("Snapshot").at("Padding").get<std::string>().size()==32000);assert(HostCalls["HelpyModMenuRead"]==before+2);}
     for(const auto* action:{"List","Activate","Deactivate"}){json reply;const auto before=HostCalls["HudExtensions"];assert(CallCore(&state,{{"Action","HudExtensions"},{"Payload",{{"Action",action}}}},reply)&&reply.at("Accepted")==true);assert(HostCalls["HudExtensions"]==before+1);}
-    {json manifest;assert(PS::HelpySourceCache::RemoteSnapshot(manifest)&&manifest.at("Padding").get<std::string>().size()==20000&&IconManifestReads==2);
+    {json manifest;assert(PS::HelpySourceCache::RemoteSnapshot(manifest)&&manifest.at("Padding").get<std::string>().size()==20000&&IconManifestReads==1);
         PS::HelpySourceCache::Current.Provisional=true;PS::HelpySourceCache::CachedSourcesAttempted=true;PS::HelpySourceCache::Next={};
         assert(PS::HelpySourceCache::Poll({})&&PS::HelpySourceCache::Ready()&&!PS::HelpySourceCache::Current.Provisional);
         assert(PS::HelpySourceCache::Fingerprint("/Game/UI/T_Power.T_Power")=="abcdef0123456789");
         PS::HelpySourceCache::Current={};}
     for(const auto* action:{"ModsRead","ModsSave","ModsImport","QuickLoadSave","AdditionalLoggingSave","CrashDumpSave"}){
-        json reply;assert(CallCore(&state,{{"Action",action}},reply)&&reply.at("Ok")==true&&reply.at("Root")=="D:/XboxGames/Active/RuneSchema");assert(GuardedCalls[action]==1);
+        json reply;const auto before=HostCalls[action];
+        assert(CallCore(&state,{{"Action",action}},reply)&&reply.at("Ok")==true&&reply.at("Root")=="D:/XboxGames/Active/RuneSchema");
+        assert(GuardedCalls[action]==1);
+        assert(HostCalls[action]==before+(std::string_view(action)=="ModsRead"?2:1));
     }
     assert(state.ToolsGeneration==41&&state.ToolsAvailable&&state.Players.size()==1); // No bootstrap push required.
     const auto unchangedRevision=state.ToolsRevision;syncHost();syncHost();
@@ -566,6 +575,19 @@ int main(){
         flushCatalog();BlockAction=0;DrainCancellations();assert(responsive&&accepted&&BlockEntered);
         assert(LastQuery["Query"]=="latest-31"&&For(0).LastError.empty()&&For(0).Pending);
         assert(Search(0,"reject-current"));flushCatalog();assert(!For(0).Pending&&!For(0).LastError.empty());
+    }
+    {
+        decltype(state) reader{&host};reader.ToolsGeneration=HostGeneration;
+        const auto previous=HostSnapshot;
+        HostSnapshot["Padding"]=std::string(24000,'x');
+        for(const auto expectedCalls:{2u,1u}){
+            ++HostRevision;reader.NextHostRead={};
+            const auto before=HostCalls["Read"];
+            SyncHost(&reader);assert(reader.HostRead.valid());reader.HostRead.wait();SyncHost(&reader);
+            assert(HostCalls["Read"]==before+expectedCalls);
+            assert(reader.HostRevision==HostRevision&&reader.ToolsResult==HostSnapshot);
+        }
+        HostSnapshot=previous;
     }
     {
         std::promise<void> release;HostRelease=release.get_future().share();BlockEntered=false;BlockAction=2;
