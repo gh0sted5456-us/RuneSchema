@@ -6,10 +6,10 @@ promote_to: RELEASE-0.8.1.0.md
 # Pre-release · 0.8.1.0
 
 !!! info "Available for testing · pending promotion to stable"
-    The November 10 preview includes the standalone UE4SS bridge and multiplayer updates. Stable RuneSchema is **0.8.0.3**.
+    The November 14 preview includes faster Item Bay searches, persistent live discoveries, and scoped icon refresh. Stable RuneSchema is **0.8.0.3**.
 
 <div class="rs-actions">
-  <a class="md-button md-button--primary" href="https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0-pre.20261110/RuneSchema-0.8.1.0-preview-20261110.zip">Download complete preview</a>
+  <a class="md-button md-button--primary" href="https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0-pre.20261114/RuneSchema-0.8.1.0-preview-20261114.zip">Download complete preview</a>
   <a class="md-button" href="../INSTALLATION/">Installation</a>
 </div>
 
@@ -18,6 +18,8 @@ Lua adapters. Install the pinned UE4SS build separately and preserve your
 settings, mods, and saves when updating. Use **Exit Helpy** before replacing it.
 
 ## Pending changelog
+
+- **Item Bay search.** Cached searches do less repeated work. Helpy reuses the mounted item index for live searches and saves verified discoveries for later searches. Right-click an item to recapture its icon or refresh item icons for its mod. Mod-wide refresh requires **Keep icons between launches**.
 
 - **Standalone UE4SS mods.** The bundled [RuneSchema.UE4SS.Bridge](UE4SS-SISTER-CONTENT.md) plugin lets enabled UE4SS mods register their own RuneSchema content. Standalone mods can also opt into RuneSchema networking for appearance and opaque mod data.
 - **Multiplayer.** The bundled [RSNetworking policy plugin](MULTIPLAYER-PLUGIN.md) adds host controls for opted-in actors. The [network bridge](NETWORK-CAPACITY.md) supports larger payloads within its per-route and per-peer budgets.
@@ -35,20 +37,22 @@ and defaults.
 
 ## Testing and feedback
 
-The archive passed file and license checks, and Helpy started from a clean
-extraction. The Core and new bridge match the desktop Steam and Game Pass
-installs. Steam has loaded the new bridge in-game. A synchronized laptop
-Game Pass install reached registry, asset and recipe loading.
-[Release notes and checksums](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0-pre.20261110)
+All 86 runtime files passed archive hash verification, and Helpy started from
+a clean extraction. Seven targeted tests passed. The packaged binaries match
+the desktop Steam, desktop Game Pass, and dedicated Steam installations. An
+isolated Dragonwilds CL260223 server reached world startup and initialized
+the native server filter.
+[Release notes and checksums](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0-pre.20261114)
 
 [Report a bug on Nexus](https://www.nexusmods.com/runescapedragonwilds/mods/570?tab=bugs)
 with the build, platform, reproduction, and relevant diagnostic codes.
 
 ## Known limits
 
-Dedicated server startup, Proton and Wine, the physical controller matrix,
-live Rasthin's Rest arrival, and multiplayer restart behavior remain unverified
-for this preview. A controller fixture still reports D-pad focus crossing.
+In-game search latency and icon recapture, Proton and Wine, the physical
+controller matrix, live Rasthin's Rest arrival, and multiplayer restart
+behavior remain unverified for this preview. A controller fixture still
+reports D-pad focus crossing.
 Item Delivery needs live checks for grants and save acknowledgement.
 Mod Menu 2 is key-gated. World recovery is opt-in.
 

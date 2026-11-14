@@ -4,7 +4,7 @@ A modding framework for **RuneScape: Dragonwilds**. RuneSchema loads JSON/JSONC
 and cooked content; **Helpy** provides item browsing, carts, mod management,
 map tools and diagnostics in a desktop window or game overlay.
 
-**[Download 0.8.1.0 prerelease](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0-pre.20261110)**
+**[Download 0.8.1.0 prerelease](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0-pre.20261114)**
 · [Candidate guide](docs/experimental/PRE-RELEASE.md)
 · [Stable download](https://github.com/gh0sted5456-us/RuneSchema/releases/latest)
 · [Report a bug on Nexus](https://www.nexusmods.com/runescapedragonwilds/mods/570?tab=bugs)
