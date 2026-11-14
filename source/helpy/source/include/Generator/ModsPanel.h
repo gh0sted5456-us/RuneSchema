@@ -37,7 +37,7 @@ inline std::string UeStatus;
 inline uint64_t UeGeneration=~uint64_t{},UeRequestGeneration=0,UeRequestRevision=0,UeRevision=0;
 #if defined(HELPY_PREVIEW)
 inline size_t ServerRowsDrawn=0;
-inline size_t UeRowsDrawn=0;
+inline size_t UeRowsDrawn=0, UeCapabilityBadgesDrawn=0;
 inline std::string PreviewOpenedModLink;
 inline std::string ServerTableWindow;
 inline ImVec4 ServerLinkRect{};
@@ -126,9 +126,30 @@ inline void UeCardBadge(bool enabled,ImVec2 a,float size){
     HelpyBackgrounds::RequestImage("power-neutralzone.png");if(const auto* art=HelpyBackgrounds::Find("power-neutralzone.png");art&&art->Texture)draw->AddImage(ImTextureRef(art->Texture),a,b,{0,0},{1,1},tint);
     else{const ImVec2 diamond[]{{a.x+size*.5f,a.y},{b.x,a.y+size*.5f},{a.x+size*.5f,b.y},{a.x,a.y+size*.5f}};draw->AddConvexPolyFilled(diamond,4,tint);draw->AddPolyline(diamond,4,IM_COL32(110,110,110,255),ImDrawFlags_Closed,1);}
 }
+inline void UeCapabilityBadges(const Json& row) {
+    auto& theme = HelpyImGuiTheme::Current;
+    const auto badge = [&](const char* label, const char* description, ImVec4 color) {
+        const auto pos = ImGui::GetCursorScreenPos(), text = ImGui::CalcTextSize(label);
+        ImGui::Dummy({text.x + theme.X(8), text.y + theme.Y(2)});
+        auto fill = color; fill.w = .16f;
+        auto* draw = ImGui::GetWindowDrawList();
+        draw->AddRectFilled(pos, ImGui::GetItemRectMax(), ImGui::GetColorU32(fill), theme.Y(3));
+        draw->AddText({pos.x + theme.X(4), pos.y + theme.Y(1)}, ImGui::GetColorU32(color), label);
+        if (ImGui::IsItemHovered()) HelpyImGuiTheme::Tooltip(description);
+#if defined(HELPY_PREVIEW)
+        ++UeCapabilityBadgesDrawn;
+#endif
+    };
+    const bool pakLoader = row.value("J4SPakLoader", false);
+    if (pakLoader) badge("J4S PAKLoader", "Declares J4S PAKLoader support via paks/PAKLoader.json.", {.96f, .80f, .41f, 1.f});
+    if (row.value("MaxxModMenu", false)) {
+        if (pakLoader) ImGui::SameLine();
+        badge("Maxx's Mod Menu", "Declares settings for Maxx's Mod Menu via modmenu.json or modmenu.txt.", {.55f, .78f, .98f, 1.f});
+    }
+}
 inline void RenderUeInventory(){
 #if defined(HELPY_PREVIEW)
-    UeRowsDrawn=0;
+    UeRowsDrawn=UeCapabilityBadgesDrawn=0;
 #endif
     auto& theme=HelpyImGuiTheme::Current;const auto generation=SpawnToolRequests::CurrentGeneration();
     if(UeWorker.valid()&&UeWorker.wait_for(std::chrono::seconds(0))==std::future_status::ready){auto result=UeWorker.get();if(UeRequestGeneration==generation&&UeRequestRevision==SnapshotRevision){UeGeneration=generation;UeStatus=result.value("Status",std::string{});UeSnapshot=std::move(result);++UeRevision;}}
@@ -152,7 +173,7 @@ inline void RenderUeInventory(){
     if(filtered.empty()){ImGui::TextDisabled("No matching UE4SS entries in this group.");return;}
     if(!theme.modsCompact){
         if(HelpyImGuiTheme::BeginPanel("ue4ss-mod-cards",{0,0},false)){
-            const float rowHeight=theme.Y(88);ImGuiListClipper clipper;clipper.Begin(static_cast<int>(filtered.size()),rowHeight+ImGui::GetStyle().ItemSpacing.y);
+            const float rowHeight=theme.Y(104);ImGuiListClipper clipper;clipper.Begin(static_cast<int>(filtered.size()),rowHeight+ImGui::GetStyle().ItemSpacing.y);
             while(clipper.Step())for(int i=clipper.DisplayStart;i<clipper.DisplayEnd;++i){const auto& row=rows.at(filtered[i]);const auto& metadata=row.at("Metadata");const auto name=row.at("Name").get<std::string>();auto title=metadata.value("name",name);if(title.empty())title=name;const bool enabled=row.value("ConfiguredEnabled",false)&&!row.value("NativeUnsupported",false);
                 ImGui::PushID(static_cast<int>(filtered[i]));if(HelpyImGuiTheme::BeginPanel("ue4ss-mod",{0,rowHeight},true,ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse)){
 #if defined(HELPY_PREVIEW)
@@ -168,6 +189,7 @@ inline void RenderUeInventory(){
                     if(ImGui::IsItemHovered()){HelpyImGuiTheme::BeginDetailsTooltip();HelpyImGuiTheme::DetailsText("%s",name.c_str());if(group)HelpyImGuiTheme::DetailsText("RuneSchema owner: %s",row.at("Owner").get_ref<const std::string&>().c_str());for(const auto* key:{"author","description","source","issue"})if(metadata.contains(key)&&metadata[key].is_string())HelpyImGuiTheme::DetailsText("%s: %s",key,metadata[key].get_ref<const std::string&>().c_str());HelpyImGuiTheme::EndDetailsTooltip();}
                     ImGui::SetCursorScreenPos({a.x+theme.X(68),a.y+theme.Y(34)});ImGui::TextDisabled("%s · %s",row.at("Kind").get_ref<const std::string&>().c_str(),row.at("Version").get_ref<const std::string&>().empty()?"Unversioned":row.at("Version").get_ref<const std::string&>().c_str());
                     ImGui::SetCursorScreenPos({a.x+theme.X(68),a.y+theme.Y(57)});ImGui::TextDisabled("%s",row.value("NativeUnsupported",false)?"Native loader unsupported here":!row.value("ParentEnabled",true)?"Parent mod is disabled":enabled?"Enabled for next launch":"Disabled for next launch");
+                    ImGui::SetCursorScreenPos({a.x+theme.X(68),a.y+theme.Y(78)});UeCapabilityBadges(row);
                     ImGui::SetCursorScreenPos({a.x+size.x-theme.X(116),a.y+theme.Y(12)});UeToggle(row);
                     ImGui::SetCursorScreenPos({a.x+size.x-theme.X(116),a.y+theme.Y(48)});if(HelpyImGuiTheme::SoftButton("Folder"))ShellExecuteW(nullptr,L"open",std::filesystem::u8path(row.at("Folder").get<std::string>()).c_str(),nullptr,nullptr,SW_SHOWNORMAL);
                     if(ImGui::IsWindowHovered()&&(ImGui::IsMouseClicked(0)||ImGui::IsMouseClicked(1)))ModLicensePanel::Select(row,title);
@@ -176,8 +198,9 @@ inline void RenderUeInventory(){
             }
         }PS::HelpyImGuiTheme::EndPanel();return;
     }
-    if(ImGui::BeginTable("ue4ss-inventory",5,ImGuiTableFlags_RowBg|ImGuiTableFlags_BordersInnerH|ImGuiTableFlags_ScrollY|ImGuiTableFlags_ScrollX|ImGuiTableFlags_Resizable,ImGui::GetContentRegionAvail(),std::max(ImGui::GetContentRegionAvail().x,theme.X(700)))){
-        ImGui::TableSetupColumn("Mod",ImGuiTableColumnFlags_WidthStretch);ImGui::TableSetupColumn("Version",ImGuiTableColumnFlags_WidthFixed,theme.X(76));ImGui::TableSetupColumn("Type",ImGuiTableColumnFlags_WidthFixed,theme.X(70));ImGui::TableSetupColumn("Configured",ImGuiTableColumnFlags_WidthFixed,theme.X(90));ImGui::TableSetupColumn("Observed health",ImGuiTableColumnFlags_WidthFixed,theme.X(140));ImGui::TableHeadersRow();
+    if(ImGui::BeginTable("ue4ss-inventory",6,ImGuiTableFlags_RowBg|ImGuiTableFlags_BordersInnerH|ImGuiTableFlags_ScrollY|ImGuiTableFlags_ScrollX|ImGuiTableFlags_Resizable,ImGui::GetContentRegionAvail(),std::max(ImGui::GetContentRegionAvail().x,theme.X(700)))){
+        ImGui::TableSetupColumn("Mod",ImGuiTableColumnFlags_WidthStretch);const float capabilitiesWidth=ImGui::CalcTextSize("J4S PAKLoader").x+ImGui::CalcTextSize("Maxx's Mod Menu").x+theme.X(16)+ImGui::GetStyle().ItemSpacing.x;
+        ImGui::TableSetupColumn("Capabilities",ImGuiTableColumnFlags_WidthFixed,capabilitiesWidth);ImGui::TableSetupColumn("Version",ImGuiTableColumnFlags_WidthFixed,theme.X(76));ImGui::TableSetupColumn("Type",ImGuiTableColumnFlags_WidthFixed,theme.X(70));ImGui::TableSetupColumn("Configured",ImGuiTableColumnFlags_WidthFixed,theme.X(90));ImGui::TableSetupColumn("Observed health",ImGuiTableColumnFlags_WidthFixed,theme.X(140));ImGui::TableHeadersRow();
         ImGuiListClipper clipper;clipper.Begin(static_cast<int>(filtered.size()));while(clipper.Step())for(int i=clipper.DisplayStart;i<clipper.DisplayEnd;++i){const auto& row=rows.at(filtered[i]);const auto& metadata=row.at("Metadata");const auto name=row.at("Name").get<std::string>(),version=row.at("Version").get<std::string>();
 #if defined(HELPY_PREVIEW)
             ++UeRowsDrawn;
@@ -186,6 +209,7 @@ inline void RenderUeInventory(){
             if(ImGui::IsItemHovered()){HelpyImGuiTheme::BeginDetailsTooltip();HelpyImGuiTheme::DetailsText("%s",name.c_str());if(group)HelpyImGuiTheme::DetailsText("RuneSchema owner: %s",row.at("Owner").get_ref<const std::string&>().c_str());
                 for(const auto* key:{"author","description","source","issue"})if(metadata.contains(key)&&metadata[key].is_string())HelpyImGuiTheme::DetailsText("%s: %s",key,metadata[key].get_ref<const std::string&>().c_str());HelpyImGuiTheme::DetailsText("%s",row.at("Folder").get_ref<const std::string&>().c_str());HelpyImGuiTheme::EndDetailsTooltip();}
             if(HelpyMenu::BeginContextItem("ue4ss-entry")){ModLicensePanel::Select(row,title);if(ImGui::MenuItem("Open folder"))ShellExecuteW(nullptr,L"open",std::filesystem::u8path(row.at("Folder").get<std::string>()).c_str(),nullptr,nullptr,SW_SHOWNORMAL);ImGui::TextDisabled(group?"Controlled through its owner's ue4ss/status.txt":"Optional next-launch UE4SS mods.txt management");ImGui::EndPopup();}
+            ImGui::TableNextColumn();UeCapabilityBadges(row);
             ImGui::TableNextColumn();ImGui::TextUnformatted(version.empty()?"Unversioned":version.c_str());ImGui::TableNextColumn();ImGui::TextUnformatted(row.at("Kind").get_ref<const std::string&>().c_str());
             ImGui::TableNextColumn();UeToggle(row);
             ImGui::TableNextColumn();const auto health=theme.ue4ssDiagnostics?HelpyRuntimeMonitor::Lua.Status(name):std::string("Monitoring disabled");ImGui::TextUnformatted(health.c_str());if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Observed stock UE4SS log evidence only. Errors may precede this observation; current execution and every mod feature are not certified. Resource thresholds are in Settings > Diagnostics > Performance.");ImGui::PopID();

@@ -40,6 +40,10 @@ Enable **Manage external UE4SS mods** to allow Helpy to edit this installation's
 `ue4ss/Mods/mods.txt`. Disabling an external mod also removes its `enabled.txt`
 override after backing it up in AppData. Changes take effect on the next launch.
 The inventory reports configured state separately from observed loader health.
+**J4S PAKLoader** marks a mod with a version 1 `paks/PAKLoader.json` marker.
+**Maxx's Mod Menu** marks a mod that declares settings in `modmenu.json` or
+`modmenu.txt`. Both badges appear on cards and in Compact view. Use
+**Refresh UE4SS inventory** after adding a descriptor.
 
 The **RuneSchema loaders** tab controls only a parent mod's `ue4ss/` loader.
 Helpy writes `<mod>/ue4ss/status.txt`:

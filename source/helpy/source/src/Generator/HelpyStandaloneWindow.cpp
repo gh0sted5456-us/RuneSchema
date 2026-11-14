@@ -4082,15 +4082,17 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
             {namespace Hooks=HelpyPreviewHooks;
                 const auto saved=ModsPanel::UeSnapshot;const bool compactBefore=HelpyImGuiTheme::Current.modsCompact;HelpyImGuiTheme::Current.modsCompact=true;const auto savedGeneration=ModsPanel::UeGeneration;const auto savedStatus=ModsPanel::UeStatus;const auto savedTab=ModsPanel::Tab;
                 ModsPanel::UeSnapshot={{"Ok",true},{"Rows",nlohmann::json::array({
-                    {{"Name","ModMenu"},{"Owner",""},{"Folder",(output/"inventory-fixture/ModMenu").string()},{"Managed",false},{"ConfiguredEnabled",true},{"NativeUnsupported",false},{"Kind","Lua"},{"Version","2.0.2"},{"Metadata",{{"name","Mod Menu"},{"source","modmenu.json"}}}},
+                    {{"Name","ModMenu"},{"Owner",""},{"Folder",(output/"inventory-fixture/ModMenu").string()},{"Managed",false},{"ConfiguredEnabled",true},{"NativeUnsupported",false},{"Kind","Lua"},{"Version","2.0.2"},{"J4SPakLoader",true},{"MaxxModMenu",true},{"Metadata",{{"name","Mod Menu"},{"source","modmenu.json"}}}},
                     {{"Name","External without version"},{"Owner",""},{"Folder",(output/"inventory-fixture/External").string()},{"Managed",false},{"ConfiguredEnabled",false},{"NativeUnsupported",false},{"Kind","Native"},{"Version",""},{"Metadata",nlohmann::json::object()}},
                     {{"Name","Owned Lua companion"},{"Owner","My RuneSchema mod"},{"Folder",(output/"inventory-fixture/Owner/ue4ss/Companion").string()},{"Managed",true},{"ConfiguredEnabled",true},{"NativeUnsupported",false},{"Kind","Lua"},{"Version","1.2"},{"Metadata",{{"source","RuneSchema parent metadata"}}}}
                 })}};
                 ModsPanel::UeGeneration=SpawnToolRequests::CurrentGeneration();ModsPanel::UeStatus.clear();++ModsPanel::UeRevision;ModsPanel::Tab=2;CurrentPage=Page::Mods;
-                for(int i=0;i<3;++i)RenderFrame();if(ModsPanel::UeRowsDrawn!=2)throw std::runtime_error("External UE4SS view must show versioned and unversioned mods");
+                for(int i=0;i<3;++i)RenderFrame();if(ModsPanel::UeRowsDrawn!=2 || ModsPanel::UeCapabilityBadgesDrawn!=2)
+                    throw std::runtime_error("Compact UE4SS view must show both declared capability badges");
                 for(const char* label:{"RuneSchema mods","Server comparison","UE4SS mods"}){const auto rect=Hooks::MenuTabs.at(std::string("mod-manager-sections/")+label);if(rect.z<=rect.x||rect.x<0||rect.z>width||rect.w>height)throw std::runtime_error("Mods category rail escaped the viewport");}
                 PreviewCapture=output/"mods-ue4ss-external.png";RenderFrame();PreviewCapture.clear();
-                HelpyImGuiTheme::Current.modsCompact=false;for(int i=0;i<3;++i)RenderFrame();PreviewCapture=output/"mods-ue4ss-cards.png";RenderFrame();PreviewCapture.clear();HelpyImGuiTheme::Current.modsCompact=true;RenderFrame();
+                HelpyImGuiTheme::Current.modsCompact=false;for(int i=0;i<3;++i)RenderFrame();if(ModsPanel::UeCapabilityBadgesDrawn!=2)throw std::runtime_error("UE4SS cards must show both declared capability badges");
+                PreviewCapture=output/"mods-ue4ss-cards.png";RenderFrame();PreviewCapture.clear();HelpyImGuiTheme::Current.modsCompact=true;RenderFrame();
                 {const auto rect=Hooks::MenuTabs.at("ue4ss-mod-groups/RuneSchema loaders");Hooks::MouseEnabled=true;Hooks::Mouse={(rect.x+rect.z)*.5f,(rect.y+rect.w)*.5f};Hooks::MouseDown=false;RenderFrame();Hooks::MouseDown=true;RenderFrame();Hooks::MouseDown=false;RenderFrame();}
                 if(ModsPanel::UeRowsDrawn!=1)throw std::runtime_error("RuneSchema UE4SS view must exclude external mods");
                 PreviewCapture=output/"mods-ue4ss-owned.png";RenderFrame();PreviewCapture.clear();Hooks::MouseEnabled=false;Hooks::Mouse={-100,-100};
