@@ -6,10 +6,10 @@ promote_to: RELEASE-0.8.1.0.md
 # Pre-release · 0.8.1.0
 
 !!! info "Available for testing · pending promotion to stable"
-    The November 14 preview includes faster Item Bay searches, persistent live discoveries, and scoped icon refresh. Stable RuneSchema is **0.8.0.3**.
+    The November 14 follow-up restores downloaded item and icon recall, retries failed cache writes, and speeds up large live search result merges. Stable RuneSchema is **0.8.0.3**.
 
 <div class="rs-actions">
-  <a class="md-button md-button--primary" href="https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0-pre.20261114/RuneSchema-0.8.1.0-preview-20261114.zip">Download complete preview</a>
+  <a class="md-button md-button--primary" href="https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0-pre.20261114.2/RuneSchema-0.8.1.0-preview-20261114.2.zip">Download complete preview</a>
   <a class="md-button" href="../INSTALLATION/">Installation</a>
 </div>
 
@@ -18,6 +18,8 @@ Lua adapters. Install the pinned UE4SS build separately and preserve your
 settings, mods, and saves when updating. Use **Exit Helpy** before replacing it.
 
 ## Pending changelog
+
+- **Helpy cache follow-up.** Keep downloaded item records and icons available for recall. Retry failed learned-item writes and report failures or dropped observations in diagnostics. Reduce repeated cache work and speed up merging live search results.
 
 - **Item Bay search.** Cached searches do less repeated work. Helpy reuses the mounted item index for live searches and saves verified discoveries for later searches. Right-click an item to recapture its icon or refresh item icons for its mod. Mod-wide refresh requires **Keep icons between launches**.
 
@@ -38,11 +40,11 @@ and defaults.
 ## Testing and feedback
 
 All 86 runtime files passed archive hash verification, and Helpy started from
-a clean extraction. Seven targeted tests passed. The packaged binaries match
+a clean extraction. Eleven targeted Windows tests passed. The packaged binaries match
 the desktop Steam, desktop Game Pass, and dedicated Steam installations. An
 isolated Dragonwilds CL260223 server reached world startup and initialized
 the native server filter.
-[Release notes and checksums](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0-pre.20261114)
+[Release notes and checksums](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0-pre.20261114.2)
 
 [Report a bug on Nexus](https://www.nexusmods.com/runescapedragonwilds/mods/570?tab=bugs)
 with the build, platform, reproduction, and relevant diagnostic codes.
