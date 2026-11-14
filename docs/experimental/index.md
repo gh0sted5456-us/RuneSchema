@@ -4,7 +4,7 @@ channel: experimental
 
 # Pre-release guides
 
-Start with [0.8.1.0 downloads and the pending changelog](PRE-RELEASE.md).
+Start with [RuneSchema 1.0.0 Pre Release downloads and changelog](PRE-RELEASE.md).
 These guides cover the candidate; [normal guides](../CURRENT-RELEASE.md) cover
 stable RuneSchema. Features marked as investigations still need live acceptance.
 
@@ -22,7 +22,7 @@ stable RuneSchema. Features marked as investigations still need live acceptance.
 | Cooked content | [Registry declarations](COOKED-PAK-REGISTRY-MANIFEST.md), [table extensions](COOKED-TABLE-EXTENSIONS.md), [world policies](BUILDING-WORLD-POLICIES.md), and [UE4SS Pak Loader](UE4SS-PAK-LOADER.md) |
 
 Automated and isolated tests cover contracts and UI layouts, not every game,
-mod or hardware combination. See [candidate limits](PRE-RELEASE.md#known-limits).
+mod or hardware combination. See the [prerelease verification record](PRE-RELEASE.md#verification).
 Historical detail remains in the [changelog](CHANGELOG-0.8.1.0.md).
 
 [Report a bug on Nexus](https://www.nexusmods.com/runescapedragonwilds/mods/570?tab=bugs)
