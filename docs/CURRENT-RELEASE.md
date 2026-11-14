@@ -6,9 +6,9 @@ from the same package; install the appropriate stock UE4SS separately.
 | Channel | Version | Download and notes |
 | --- | --- | --- |
 | Stable | **0.8.0.3** | [Download ZIP](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.0.3/RuneSchema-0.8.0.3.zip) · [Released changes and verification](RELEASE-0.8.0.3.md) |
-| Pre-release | **0.8.1.0** | [Download ZIP](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0-pre.20261110/RuneSchema-0.8.1.0-preview-20261110.zip) · [Pending changelog and testing status](experimental/PRE-RELEASE.md) |
+| Pre-release | **0.8.1.0** | [Download ZIP](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0-pre.20261114.3/RuneSchema-0.8.1.0-preview-20261114.3.zip) · [Consolidated changelog and testing status](experimental/PRE-RELEASE.md) |
 
-The **0.8.1.0** download is the complete November 9 testing package.
+The **0.8.1.0** download is the complete November 14 testing package for Dragonwilds CL260223.
 GitHub's **Source code** archives are for development.
 
 ## What changed
