@@ -234,13 +234,14 @@ inline Result Import(const fs::path& file,const fs::path& root,const fs::path& c
     if(manifest.PresentationOnly&&policy!=ImportPolicy::Presentation)throw std::runtime_error("[RS-CACHE-008] This cached snapshot is display data; import it as presentation rather than verified live content.");
     if(policy==ImportPolicy::Presentation)return ImportPresentation(input,manifest,start,cache,budget,progress,allowedOwner);
     HelpyCacheSources::Plan originPlan;originPlan.Owners=snapshot.Owners;
-    const auto recordScope=[&](const CacheBundle::Record& row){return policy!=ImportPolicy::ServerDisplayOnly&&(source.empty()||source==row.Owner)&&(allowedOwner.empty()||row.Owner==allowedOwner)&&(allowedGroups.empty()||allowedGroups.contains(row.Source))&&CacheBundleStore::ActiveOwner(row,snapshot);};
+    const auto recordPlan=CacheBundleStore::Plan(snapshot); // Built once; each record used to copy every owner table twice.
+    const auto recordScope=[&](const CacheBundle::Record& row){return policy!=ImportPolicy::ServerDisplayOnly&&(source.empty()||source==row.Owner)&&(allowedOwner.empty()||row.Owner==allowedOwner)&&(allowedGroups.empty()||allowedGroups.contains(row.Source))&&CacheBundleStore::ActiveOwner(row,snapshot,recordPlan);};
     if(!manifest.ContentOwner.empty()){
         const auto plan=CacheBundleStore::Plan(snapshot);
         if(!HelpyCacheSources::ActiveOwners(plan).contains(manifest.ContentOwner.substr(5))||(!source.empty()&&source!=manifest.ContentOwner)||(!allowedOwner.empty()&&allowedOwner!=manifest.ContentOwner))throw std::runtime_error("[RS-CACHE-008] Cache owner is inactive or outside the selected mod");
     }
     std::map<std::string,std::set<std::string>> borrowed;
-    for(const auto& row:manifest.Records)if(recordScope(row)&&CacheBundle::OriginalOwnerProven(row,CacheBundleStore::Plan(snapshot),snapshot.NativePlugins)){
+    for(const auto& row:manifest.Records)if(recordScope(row)&&CacheBundle::OriginalOwnerProven(row,recordPlan,snapshot.NativePlugins)){
         const auto icon=row.Data.value("Icon",std::string{}),group=HelpyCacheSources::Source(icon);
         if(!icon.empty()&&(group=="game"||group=="engine"||snapshot.NativePlugins.contains(group)))borrowed[icon].insert(row.Source);
     }
@@ -331,7 +332,7 @@ inline Result Export(const fs::path& file,const fs::path& root,const fs::path& c
     }
     auto allReferences=nlohmann::json::array();for(const auto& [key,value]:savedRecords)allReferences.push_back(value);
     auto records=nlohmann::json::array();std::set<std::string> referenced;size_t unproven=0;
-    for(const auto& row:CacheBundle::Records(allReferences))if((source.empty()||row.Owner==source||selectedRecords.contains(row.Owner+"|"+row.Kind+"|"+row.Path))&&(presentationOnly||CacheBundleStore::ActiveOwner(row,snapshot))){
+    for(const auto& row:CacheBundle::Records(allReferences))if((source.empty()||row.Owner==source||selectedRecords.contains(row.Owner+"|"+row.Kind+"|"+row.Path))&&(presentationOnly||CacheBundleStore::ActiveOwner(row,snapshot,plan))){
         if(targeted&&!presentationOnly&&!CacheBundle::OriginalOwnerProven(row,plan,snapshot.NativePlugins)){++unproven;continue;}
         records.push_back(CacheBundle::Document(row));const auto icon=row.Data.value("Icon",std::string{});if(!icon.empty())referenced.insert(icon);
     }

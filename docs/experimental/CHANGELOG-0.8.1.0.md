@@ -14,6 +14,14 @@ promote_to: CHANGELOG-0.8.1.0.md
     follow-ups below. Older entries retain their original test-stage wording;
     their historical “unpublished” labels are superseded by this dated package.
 
+## 2026-11-14 · Helpy cache follow-up candidate
+
+- Restore reliable recall of downloaded item records and icons.
+- Retry failed learned-item writes in order and report failed writes or dropped
+  observations in RuneSchema diagnostics.
+- Reduce cache reads, unchanged-write processing, and the work Helpy does to
+  merge live search results.
+
 ## 2026-11-12 · Dragonwilds CL260223
 
 - Verify the native dedicated-server filter binding for CL260223.

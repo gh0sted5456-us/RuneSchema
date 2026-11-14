@@ -696,16 +696,44 @@ json RefreshItemMetadata(const std::string& path){
     return row;
 }
 
-namespace {PersistentItemCatalog::Store ItemManifest;PagedItemCatalog::Store ItemPages,ItemPreviewPages;CacheBundleItems::Store BundleItems;std::atomic<bool> ImportedCacheChanged=false;bool ItemRefreshPending=false,ItemRefreshPumping=false;HelpyBrowsePolicy::Policy BrowsePolicy;}
+namespace {
+PersistentItemCatalog::Store ItemManifest;PagedItemCatalog::Store ItemPages,ItemPreviewPages;CacheBundleItems::Store BundleItems;
+std::atomic<bool> ImportedCacheChanged=false;bool ItemRefreshPending=false,ItemRefreshPumping=false;HelpyBrowsePolicy::Policy BrowsePolicy;
+void ReportLearnedItemWrites(bool shutdown=false){
+    static std::string lastError;
+    static size_t reportedDrops=0;
+    static std::chrono::steady_clock::time_point nextReport{};
+    if(LearnedItems.Error.empty())lastError.clear();
+    const bool failed=!LearnedItems.Error.empty()&&LearnedItems.Error!=lastError;
+    const bool dropped=LearnedItems.Dropped>reportedDrops;
+    const auto now=std::chrono::steady_clock::now();
+    if((!failed&&!dropped)||(!shutdown&&now<nextReport))return;
+    if(failed){
+        CodedLog<LogLevel::Warning>(Diagnostics::Id::CachePublish,STR("Learned item cache write failed: {}\n"),ToWideSafe(LearnedItems.Error));
+        lastError=LearnedItems.Error;
+    }
+    if(dropped){
+        CodedLog<LogLevel::Warning>(Diagnostics::Id::CachePartial,STR("Learned item cache did not save {} queued observations. Search again to rediscover them.\n"),LearnedItems.Dropped-reportedDrops);
+        reportedDrops=LearnedItems.Dropped;
+    }
+    nextReport=now+std::chrono::minutes(1);
+}
+}
 void RememberRefreshedItem(const json& row){
     LearnedItems.Observe(HelpySourceCache::Directory(false),HelpySourceCache::Current,CacheBundleStore::Locale(),json::array({row}));
 }
 HelpyBrowsePolicy::Policy ItemBrowsePolicy() noexcept {return BrowsePolicy;}
 void NotifyImportedCache() noexcept {ImportedCacheChanged.store(true);}
-void ShutdownItemCatalog() noexcept {ItemRefreshPending=false;LearnedItems.Shutdown();BundleItems.Shutdown();ItemPreviewPages.Shutdown();ItemPages.Shutdown();ItemManifest.Shutdown();}
+void ShutdownItemCatalog() noexcept {
+    ItemRefreshPending=false;
+    LearnedItems.Shutdown();
+    try{ReportLearnedItemWrites(true);}catch(...){}
+    BundleItems.Shutdown();ItemPreviewPages.Shutdown();ItemPages.Shutdown();ItemManifest.Shutdown();
+}
 bool HasPendingLearnedItems(){return LearnedItems.HasWork();}
 void PumpItemCatalog(bool passiveRefresh){
     if(LearnedItems.Flush())BundleItems.Invalidate();
+    ReportLearnedItemWrites();
     if(!passiveRefresh||!ItemRefreshPending||!BrowsePolicy.PassiveRefresh)return;
     static auto next=std::chrono::steady_clock::time_point{};const auto now=std::chrono::steady_clock::now();
     if(now<next)return;next=now+std::chrono::milliseconds(50);

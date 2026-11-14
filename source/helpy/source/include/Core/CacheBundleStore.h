@@ -23,7 +23,9 @@ inline HelpyCacheSources::Plan Plan(const HelpySourceCache::Snapshot& snapshot){
     plan.ContainerAssets=snapshot.ContainerAssets;plan.ContainerFiles=snapshot.ContainerFiles;
     for(const auto& [source,key]:snapshot.SourceKeys)plan.Registered.insert(source);return plan;
 }
-inline bool ActiveOwner(const CacheBundle::Record& row,const HelpySourceCache::Snapshot& snapshot){return snapshot.SourceKeys.contains(row.Source)&&CacheBundle::Owned(row,Plan(snapshot),snapshot.NativePlugins);}
+// Plan copies every owner table. Loops build it once and pass it to the three-argument form.
+inline bool ActiveOwner(const CacheBundle::Record& row,const HelpySourceCache::Snapshot& snapshot,const HelpyCacheSources::Plan& plan){return snapshot.SourceKeys.contains(row.Source)&&CacheBundle::Owned(row,plan,snapshot.NativePlugins);}
+inline bool ActiveOwner(const CacheBundle::Record& row,const HelpySourceCache::Snapshot& snapshot){return ActiveOwner(row,snapshot,Plan(snapshot));}
 // Cached presentation never proves that a mod is enabled in this runtime.
 inline bool Browsable(const Json& value,const HelpySourceCache::Snapshot& snapshot){
     const auto row=CacheBundle::Parse(value);
@@ -39,7 +41,7 @@ inline bool Browsable(const Json& value,const HelpySourceCache::Snapshot& snapsh
     }return false;
 }
 inline Json Read(const fs::path& cache,const fs::path& root,const HelpySourceCache::Snapshot& snapshot,const std::string& locale,const std::string& kind={},bool stale=true){
-    auto result=Json::array();std::map<std::string,size_t> seen;size_t bytes=0;
+    auto result=Json::array();std::map<std::string,size_t> seen;size_t bytes=0;const auto plan=Plan(snapshot);
     if(stale)try{for(auto row:HelpyPresentationCache::Records(cache,locale,kind)){if(!Browsable(row,snapshot))continue;seen.emplace(row.at("Kind").get<std::string>()+"|"+row.at("Path").get<std::string>(),result.size());result.push_back(std::move(row));}}catch(...){}
     const auto learned=Directory(cache,cache.parent_path());
     for(const auto& folder:std::set<fs::path>{Directory(cache,root),learned}){
@@ -54,7 +56,7 @@ inline Json Read(const fs::path& cache,const fs::path& root,const HelpySourceCac
             bytes+=text.size();if(bytes>CacheBundle::MaxMetadata)throw std::runtime_error("[RS-CACHE-005] Active bundle references exceed the metadata limit.");
             if(CacheBundleIO::Hash(text)!=digest)continue;
             for(auto row:CacheBundle::Records(Parse(text))){
-                if(row.Kind!=entry.value("Kind",std::string{})||row.Source!=source||row.Owner!=entry.value("Owner",std::string{})||!ActiveOwner(row,snapshot)||(!kind.empty()&&row.Kind!=kind))continue;
+                if(row.Kind!=entry.value("Kind",std::string{})||row.Source!=source||row.Owner!=entry.value("Owner",std::string{})||!ActiveOwner(row,snapshot,plan)||(!kind.empty()&&row.Kind!=kind))continue;
                 const auto identity=row.Kind+"|"+row.Path;const auto [found,inserted]=seen.emplace(identity,result.size());
                 if(!inserted){
                     auto& cached=result.at(found->second).at("Data");
@@ -82,11 +84,11 @@ inline Json Read(const fs::path& cache,const fs::path& root,const HelpySourceCac
                 }
                 row.Data["CacheSourceVerified"]=current;row.Data["CheckingChanges"]=true;
                 if(row.Kind=="items"&&current&&folder==learned)row.Data["LiveLearned"]=true;
-                if(snapshot.ContainerAssets&&snapshot.ContainerAssets->contains(HelpyCacheSources::AssetKey(row.Path))&&CacheBundle::OriginalOwnerProven(row,Plan(snapshot),snapshot.NativePlugins)){
-                    const auto fields=ItemSource::Fields(ItemSource::Describe(row.Path,Plan(snapshot),snapshot.NativePlugins));
+                if(snapshot.ContainerAssets&&snapshot.ContainerAssets->contains(HelpyCacheSources::AssetKey(row.Path))&&CacheBundle::OriginalOwnerProven(row,plan,snapshot.NativePlugins)){
+                    const auto fields=ItemSource::Fields(ItemSource::Describe(row.Path,plan,snapshot.NativePlugins));
                     for(const auto& [field,value]:fields.items())row.Data[field]=value;
                 }
-                if(!CacheBundle::OriginalOwnerProven(row,Plan(snapshot),snapshot.NativePlugins)){
+                if(!CacheBundle::OriginalOwnerProven(row,plan,snapshot.NativePlugins)){
                     row.Data["CachedSourceName"]=row.Data["SourceName"];row.Data["SourceKind"]="unknown";row.Data["SourceName"]="";
                     row.Data["SourceEvidence"]="Shared namespace reference; original provider awaits native exact-path attribution";
                 }
@@ -96,18 +98,18 @@ inline Json Read(const fs::path& cache,const fs::path& root,const HelpySourceCac
     }}return result;
 }
 inline size_t Commit(const fs::path& cache,const fs::path& root,const HelpySourceCache::Snapshot& snapshot,const std::string& locale,const std::vector<CacheBundle::Record>& records,const std::function<void()>& check={}){
-    std::lock_guard lock(CommitMutex);const auto folder=Directory(cache,root);auto index=Index(folder);
+    std::lock_guard lock(CommitMutex);const auto folder=Directory(cache,root);auto index=Index(folder);const auto plan=Plan(snapshot);
     std::map<std::string,std::vector<CacheBundle::Record>> routes;
-    for(const auto& row:records){if(!ActiveOwner(row,snapshot))throw std::runtime_error("[RS-CACHE-008] Record owner is not active or cannot be proven.");routes[CacheBundle::Route(row)].push_back(row);}
+    for(const auto& row:records){if(!ActiveOwner(row,snapshot,plan))throw std::runtime_error("[RS-CACHE-008] Record owner is not active or cannot be proven.");routes[CacheBundle::Route(row)].push_back(row);}
     if(routes.size()+index["Routes"].size()>2048)throw std::runtime_error("[RS-CACHE-005] Too many bundle routes.");
-    size_t changed=0;
+    size_t changed=0;bool publishIndex=false;
     for(const auto& [route,rows]:routes){
         if(check)check();const auto identity=route+"|"+locale;auto merged=std::map<std::string,Json>{};
         // Partial bundles merge; they cannot erase other cached records.
-        const auto previous=index["Routes"].find(identity);
+        const auto previous=index["Routes"].find(identity);bool current=false;const size_t before=changed;
         if(previous!=index["Routes"].end()&&previous->value("SourceKey",std::string{})==snapshot.SourceKeys.at(rows.front().Source)){
             const auto digest=previous->value("SHA256",std::string{});
-            if(CacheBundleIO::Digest(digest))try{const auto old=CacheBundleIO::Read(folder/(digest+".json"),CacheBundle::MaxMetadata);if(CacheBundleIO::Hash(old)==digest)for(const auto& row:CacheBundle::Records(Parse(old)))merged[row.Path]=CacheBundle::Document(row);}catch(...){}
+            if(CacheBundleIO::Digest(digest))try{const auto old=CacheBundleIO::Read(folder/(digest+".json"),CacheBundle::MaxMetadata);if(CacheBundleIO::Hash(old)==digest){for(const auto& row:CacheBundle::Records(Parse(old)))merged[row.Path]=CacheBundle::Document(row);current=true;}}catch(...){}
         }
         for(const auto& row:rows){
             auto doc=CacheBundle::Document(row);
@@ -122,21 +124,27 @@ inline size_t Commit(const fs::path& cache,const fs::path& root,const HelpySourc
             }else ++changed;
             merged[row.Path]=std::move(doc);
         }
+        // Re-observing saved rows changes nothing: keep the verified document and index entry as they are.
+        if(current&&changed==before)continue;
         auto data=Json::array();for(const auto& [path,row]:merged)data.push_back(row);(void)CacheBundle::Records(data);
         const auto text=data.dump(),digest=CacheBundleIO::Hash(text);
         if(!fs::exists(folder/(digest+".json")))CacheBundleIO::Publish(folder/(digest+".json"),text);
-        const auto& first=rows.front();index["Routes"][identity]={{"Owner",first.Owner},{"Kind",first.Kind},{"Source",first.Source},{"SourceKey",snapshot.SourceKeys.at(first.Source)},{"Locale",locale},{"SHA256",digest},{"Count",data.size()},{"Bytes",text.size()}};
+        const auto& first=rows.front();publishIndex=true;index["Routes"][identity]={{"Owner",first.Owner},{"Kind",first.Kind},{"Source",first.Source},{"SourceKey",snapshot.SourceKeys.at(first.Source)},{"Locale",locale},{"SHA256",digest},{"Count",data.size()},{"Bytes",text.size()}};
     }
     size_t totalBytes=0,totalRecords=0;for(const auto& [route,entry]:index["Routes"].items()){totalBytes+=entry.value("Bytes",CacheBundle::MaxMetadata);totalRecords+=entry.value("Count",CacheBundle::MaxRecords);}
     if(totalBytes>CacheBundle::MaxMetadata||totalRecords>CacheBundle::MaxRecords)throw std::runtime_error("[RS-CACHE-005] Committed metadata exceeds the 64 MiB / 65536-record limit; previous index retained.");
-    const auto text=index.dump();if(text.size()>1024*1024)throw std::runtime_error("[RS-CACHE-005] Bundle index exceeds its limit.");
-    if(check)check();if(!routes.empty()&&Index(folder)!=index)CacheBundleIO::Publish(folder/"index.json",text);
+    if(check)check();
+    if(publishIndex){
+        const auto text=index.dump();
+        if(text.size()>1024*1024)throw std::runtime_error("[RS-CACHE-005] Bundle index exceeds its limit.");
+        CacheBundleIO::Publish(folder/"index.json",text);
+    }
     return changed;
 }
 inline Json Collect(const fs::path& cache,const fs::path& root,const fs::path& journal,const HelpySourceCache::Snapshot& snapshot,bool savedPresentation=false){
-    std::map<std::string,Json> unique;
+    std::map<std::string,Json> unique;const auto plan=Plan(snapshot);
     const auto add=[&](const std::string& kind,const Json& rows){if(!rows.is_array()||rows.size()>CacheBundle::MaxRecords)return;for(const auto& data:rows){
-        const auto row=CacheBundle::FromRow(kind,data);if(row.is_null())continue;const auto parsed=CacheBundle::Parse(row);if(savedPresentation||ActiveOwner(parsed,snapshot))unique[kind+"|"+parsed.Path]=row;
+        const auto row=CacheBundle::FromRow(kind,data);if(row.is_null())continue;const auto parsed=CacheBundle::Parse(row);if(savedPresentation||ActiveOwner(parsed,snapshot,plan))unique[kind+"|"+parsed.Path]=row;
     }};
     try{for(const auto& row:Read(cache,root,snapshot,Locale(),{},false))unique[row.at("Kind").get<std::string>()+"|"+row.at("Path").get<std::string>()]=row;}catch(...){}
     const auto manifest=cache.parent_path()/"item-catalogues"/"native-items.json";
