@@ -9,18 +9,15 @@ promote_to: CHANGELOG-0.8.1.0.md
 
 # RuneSchema 0.8.1.0 — experimental
 
-!!! info "Complete candidate published · 2026-11-10"
-    The [complete candidate](PRE-RELEASE.md) includes the runtime, Helpy and plugin
-    follow-ups below. Older entries retain their original test-stage wording;
-    their historical “unpublished” labels are superseded by this dated package.
+!!! info "Complete candidate published · 2026-11-14"
+    The [consolidated changelog and download](PRE-RELEASE.md) cover the current preview.
+    The entries below record earlier development and testing.
 
-## 2026-11-14 · Helpy cache follow-up candidate
+## 2026-11-14 · Pak Loader and Helpy cache
 
-- Restore reliable recall of downloaded item records and icons.
-- Retry failed learned-item writes in order and report failed writes or dropped
-  observations in RuneSchema diagnostics.
-- Reduce cache reads, unchanged-write processing, and the work Helpy does to
-  merge live search results.
+- Add the experimental [UE4SS Pak Loader](UE4SS-PAK-LOADER.md) for native mods with local cooked content.
+- Reuse cached and live item indexes, save verified discoveries, and refresh icons by item or mod.
+- Restore downloaded item and icon recall, retry failed cache writes, and reduce transport, search and cache work.
 
 ## 2026-11-12 · Dragonwilds CL260223
 

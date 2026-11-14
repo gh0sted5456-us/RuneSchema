@@ -33,6 +33,10 @@ onto the cart or the **Drop into cart** target above the results.
 In **World → Map**, click a world map zone for its close-up, or choose a zone from the picker. **Transport outlines** toggles the zone and portal guides. **Scorned Wilderness** uses a separate coordinate view. **Find player** opens the player's area, and **Fit map** resets the current view.
 
 
+## Search and refresh Item Bay icons
+
+Search uses cached items first and can also look up items in the running game. Verified live discoveries are saved for later searches. Right-click an item to recapture its icon or refresh the item icons for its mod. Mod-wide refresh requires **Keep icons between launches**.
+
 ## Cache updates and notifications
 
 | Action | Where |

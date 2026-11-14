@@ -9,6 +9,8 @@ promote_to: modders/UE4SS-PAK-LOADER.md
     Built against UE4SS `f6d5f9425a31f3e3a4fd185b40148f5aa4d81a44`.
     Game Pass and dedicated server support are unverified.
 
+[Download the Steam author kit](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0-pre.20261114.3/RuneSchema-PakLoader-Steam-CL260223.zip)
+
 Use the loader in an existing UE4SS C++ mod. It mounts cooked content at game
 startup. The mod can run with UE4SS alone. If RuneSchema is also enabled, use
 a RuneSchema Core build with the companion mount API included in this source.
