@@ -7,6 +7,7 @@
 #include "SDK/WeakObjectHandle.h"
 #include "Core/RuneSchemaDataRoot.h"
 #include "Core/PakDiscovery.h"
+#include "Runtime/PakLoader.h"
 #include "Core/NativePersistencePolicy.h"
 #include "Core/ModIdentity.h"
 #include "Core/ModManager.h"
@@ -2098,9 +2099,13 @@ namespace DragonWilds {
     void DragonWildsMainLoader::GetPakFolders(const TCHAR* CmdLine, TArray<FString>* OutPakFolders)
     {
         GetPakFolders_Hook.call(CmdLine, OutPakFolders);
+        if (!OutPakFolders || OutPakFolders->Num() < 0 || OutPakFolders->Num() > 4096) return;
         PS::PakDiscovery::ResetRoots();
-        if(OutPakFolders&&OutPakFolders->Num()>=0&&OutPakFolders->Num()<=4096)
-            for(const auto& folder:*OutPakFolders)PS::PakDiscovery::RememberRoot(fs::path(folder.GetCharArray().GetData()));
+        std::vector<fs::path> nativeRoots;
+        for (const auto& folder : *OutPakFolders) {
+            nativeRoots.emplace_back(folder.GetCharArray().GetData());
+            PS::PakDiscovery::RememberRoot(nativeRoots.back());
+        }
 
         try
         {
@@ -2188,6 +2193,11 @@ namespace DragonWilds {
                 PS::Log<LogLevel::Warning>(STR("[SISTER-CONTENT][PAK][SKIPPED] {}: {}.\n"),
                     root.Name, PS::ToWideSafe(error.what()));
             }
+        }
+        for (const auto& paks : PS::PakLoader::Roots()) {
+            if (!PS::PakLoader::AlreadyRegistered(paks, nativeRoots)
+                && !PS::PakLoader::AlreadyRegistered(paks, pakRoots))
+                pakRoots.push_back(paks);
         }
         std::unordered_set<std::wstring> registered;
         size_t addedPakDirectories = 0;

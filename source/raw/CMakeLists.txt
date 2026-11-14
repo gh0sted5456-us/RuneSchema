@@ -124,6 +124,22 @@ target_include_directories(RuneSchemaUE4SSBridgePlugin PRIVATE include)
 set_target_properties(RuneSchemaUE4SSBridgePlugin PROPERTIES OUTPUT_NAME "RuneSchema.UE4SS.Bridge")
 add_dependencies(${TARGET} RuneSchemaUE4SSBridgePlugin)
 
+add_library(RuneSchemaPakLoader SHARED
+    ../ue4ss/pak-loader/PakLoader.cpp ../ue4ss/pak-loader/StartupMount.cpp)
+set_target_properties(RuneSchemaPakLoader PROPERTIES OUTPUT_NAME "runeschema-pakloader")
+target_include_directories(RuneSchemaPakLoader PRIVATE include)
+target_compile_definitions(RuneSchemaPakLoader PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_link_libraries(RuneSchemaPakLoader PRIVATE UE4SS safetyhook Zydis)
+add_library(pak-loader-fixture SHARED EXCLUDE_FROM_ALL ../ue4ss/pak-loader/FixtureMod.cpp)
+target_link_libraries(pak-loader-fixture PRIVATE UE4SS)
+add_executable(pak-loader-test EXCLUDE_FROM_ALL tests/pak-loader.cpp)
+target_include_directories(pak-loader-test PRIVATE include)
+add_dependencies(pak-loader-test RuneSchemaPakLoader)
+if(WIN32)
+    set_target_properties(pak-loader-test PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:UE4SS>")
+endif()
+
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../../docs/examples/SisterContentExample/Example.cpp")
     add_library(SisterContentExample SHARED EXCLUDE_FROM_ALL
         ../../docs/examples/SisterContentExample/Example.cpp)

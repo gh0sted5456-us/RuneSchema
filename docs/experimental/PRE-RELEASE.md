@@ -19,6 +19,8 @@ settings, mods, and saves when updating. Use **Exit Helpy** before replacing it.
 
 ## Pending changelog
 
+- **Experimental Pak Loader.** Mod authors can add the [UE4SS Pak Loader](UE4SS-PAK-LOADER.md) to an existing native mod to mount its local `paks/` folder.
+
 - **Helpy cache follow-up.** Keep downloaded item records and icons available for recall. Retry failed learned-item writes and report failures or dropped observations in diagnostics. Reduce repeated cache work and speed up merging live search results.
 
 - **Item Bay search.** Cached searches do less repeated work. Helpy reuses the mounted item index for live searches and saves verified discoveries for later searches. Right-click an item to recapture its icon or refresh item icons for its mod. Mod-wide refresh requires **Keep icons between launches**.

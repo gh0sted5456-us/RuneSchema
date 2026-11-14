@@ -35,6 +35,7 @@
 #include "Generator/AppearanceTrace.h"
 #include "Generator/PlayerTrace.h"
 #include "Loader/DragonWildsMainLoader.h"
+#include "Runtime/PakLoader.h"
 #include "Runtime/PluginHost.h"
 #include "Runtime/QuickLoad.h"
 #include "Runtime/AdditionalLogging.h"
@@ -961,6 +962,11 @@ BOOL APIENTRY DllMain(HMODULE,DWORD reason,LPVOID reserved) {
 }
 extern "C"
 {
+    RuneSchema_API bool RuneSchema_RegisterPakLoaderRootV1(const wchar_t* path) noexcept
+    {
+        return PS::PakLoader::Register(path);
+    }
+
     RuneSchema_API RC::CppUserModBase* start_mod()
     {
         try {
