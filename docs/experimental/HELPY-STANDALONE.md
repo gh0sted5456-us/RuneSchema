@@ -12,10 +12,30 @@ promote_to: HELPY-STANDALONE.md
 
 # Helpy desktop app
 
+For screenshots and troubleshooting, open the [Helpy support guide](HELPY-SUPPORT.md).
+
 Helpy runs as `Helpy.exe` from
 `RuneSchema/Helpy/`, beside its bridge and `SDL3.dll`.
 AppData holds settings, caches, profiles and logs. Keep all components from one
 matching runtime package.
+
+## Welcome splash and map
+
+In **Settings → Backgrounds → Welcome splash**, choose which logos rotate,
+set seconds per logo, or turn off the artwork crossfade. The RuneSchema logo
+uses your theme accent. Backgrounds crossfade when optional artwork is
+available. Windows reduced motion holds a static splash.
+
+The footer follows the active input mode. Item Bay shows mouse buttons,
+keyboard shortcuts, or controller glyphs. Drag one card or a selected group
+onto the cart or the **Drop into cart** target above the results.
+
+In **World → Map**, click a world map zone for its close-up, or choose a zone from the picker. **Transport outlines** toggles the zone and portal guides. **Scorned Wilderness** uses a separate coordinate view. **Find player** opens the player's area, and **Fit map** resets the current view.
+
+
+## Search and refresh Item Bay icons
+
+Search uses cached items first and can also look up items in the running game. Verified live discoveries are saved for later searches. Right-click an item to recapture its icon or refresh the item icons for its mod. Mod-wide refresh requires **Keep icons between launches**.
 
 ## Cache updates and notifications
 
@@ -24,7 +44,7 @@ matching runtime package.
 | Build caches for enabled mods sequentially | **Home → Build enabled mod caches**, or **Mods → Cache enabled mods** |
 | Pause, resume or stop a build | The Tools progress view |
 | Review cache changes and job results | **Notifications**, below Report a bug |
-| Resync vanilla files after a game update | The **i Game cache update** action on Players |
+| Resync vanilla files after a game update | The **i Game cache update** action on Items |
 | Switch display/internal item names immediately | Item Bay's settings cog |
 
 The read-only PAK builder works with the assigned game open or closed. Existing
@@ -91,9 +111,10 @@ The tray tooltip identifies the runtime. Windows controls whether its icon is
 visible or under the overflow arrow. If the tray is unavailable, Helpy uses the
 taskbar instead.
 
-The supplied release settings enable **Exit Helpy when the game closes**. This
-follows an attached game/server process; temporary bridge disconnects do not
-request an exit. Turn it off to keep Helpy available offline after playing.
+**Exit game-launched Helpy when the game closes** follows the game or server
+process that started Helpy. Helpy opened from its desktop shortcut stays
+available after the game closes. A temporary bridge disconnect keeps either
+session open.
 Leftover-process reports are still under investigation; see [known limits](PRE-RELEASE.md#known-limits).
 
 The executable stays in its installed runtime folder. The desktop shortcut

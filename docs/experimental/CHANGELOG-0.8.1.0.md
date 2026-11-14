@@ -9,10 +9,22 @@ promote_to: CHANGELOG-0.8.1.0.md
 
 # RuneSchema 0.8.1.0 — experimental
 
-!!! info "Complete candidate published · 2026-11-10"
-    The [complete candidate](PRE-RELEASE.md) includes the runtime, Helpy and plugin
-    follow-ups below. Older entries retain their original test-stage wording;
-    their historical “unpublished” labels are superseded by this dated package.
+!!! info "Complete candidate published · 2026-11-14"
+    The [consolidated changelog and download](PRE-RELEASE.md) cover the current preview.
+    The entries below record earlier development and testing.
+
+## 2026-11-14 · Pak Loader and Helpy cache
+
+- Add the experimental [UE4SS Pak Loader](UE4SS-PAK-LOADER.md) for native mods with local cooked content.
+- Reuse cached and live item indexes, save verified discoveries, and refresh icons by item or mod.
+- Restore downloaded item and icon recall, retry failed cache writes, and reduce transport, search and cache work.
+
+## 2026-11-12 · Dragonwilds CL260223
+
+- Verify the native dedicated-server filter binding for CL260223.
+- Push the [item grant and access policy](SERVER-ACCESS.md) to clients on connection and when the host changes it. A limit of 0 is unlimited. Existing configured limits still apply.
+- Recover Helpy render targets after resize or device changes, improve desktop diagnostics, and reduce Shipping build overhead.
+- Validation covered the core and Helpy contract tests, UE4SS export checks on Steam, Game Pass and the dedicated server, and native filter initialization in an isolated CL260223 world. Live client joins still need verification.
 
 ## 2026-11-10 preview
 

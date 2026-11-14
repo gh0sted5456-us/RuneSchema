@@ -19,7 +19,7 @@ stable RuneSchema. Features marked as investigations still need live acceptance.
 | Servers | [Control](SERVER-CONTROL.md), [access](SERVER-ACCESS.md) and [mod comparison](SERVER-MOD-LIST.md) |
 | Diagnostics and notifications | [Performance](PERFORMANCE-DIAGNOSTICS.md) and [cleanup/hotfix notices](NOTIFICATIONS-AND-HOTFIXES.md) |
 | Mod-facing interfaces | [Shared HUD](SHARED-HUD.md), [profiles](LOCAL-MOD-PROFILES.md), [appearance](CHARACTER-APPEARANCE.md) and [Lua scheduling](LUA-SCHEDULING.md) |
-| Cooked content | [Registry declarations](COOKED-PAK-REGISTRY-MANIFEST.md), [table extensions](COOKED-TABLE-EXTENSIONS.md) and [world policies](BUILDING-WORLD-POLICIES.md) |
+| Cooked content | [Registry declarations](COOKED-PAK-REGISTRY-MANIFEST.md), [table extensions](COOKED-TABLE-EXTENSIONS.md), [world policies](BUILDING-WORLD-POLICIES.md), and [UE4SS Pak Loader](UE4SS-PAK-LOADER.md) |
 
 Automated and isolated tests cover contracts and UI layouts, not every game,
 mod or hardware combination. See [candidate limits](PRE-RELEASE.md#known-limits).
