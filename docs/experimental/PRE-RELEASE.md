@@ -1,63 +1,87 @@
 ---
 channel: experimental
-promote_to: RELEASE-0.8.1.0.md
+promote_to: RELEASE-1.0.0.md
 ---
 
-# Pre-release · 0.8.1.0
-
-!!! info "Available for testing · pending promotion to stable"
-    The November 14 preview includes faster Item Bay search, live server policy updates, and the experimental Steam Pak Loader. Stable RuneSchema is **0.8.0.3**.
+# RuneSchema 1.0.0 Pre Release
 
 <div class="rs-actions">
-  <a class="md-button md-button--primary" href="https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0-pre.20261114.3/RuneSchema-0.8.1.0-preview-20261114.3.zip">Download complete preview</a>
+  <a class="md-button md-button--primary" href="https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0-pre.20261114.3/RuneSchema-0.8.1.0-preview-20261114.3.zip">Download RuneSchema</a>
   <a class="md-button" href="../INSTALLATION/">Installation</a>
 </div>
 
-The complete package includes RuneSchema, Helpy, bundled plugins, and matching
-Lua adapters. Install the pinned UE4SS build separately and preserve your
-settings, mods, and saves when updating. Use **Exit Helpy** before replacing it.
+This prerelease packages RuneSchema and Helpy for Dragonwilds CL260223. Install the pinned UE4SS build separately. Close the game and choose **Exit Helpy** before updating. Keep your settings, mods, saves, and activation keys.
 
-## Pending changelog
+<span id="pending-changelog"></span>
 
-### Item Bay, cache, and Helpy
+## Changes since 0.8.0.3
 
-- Browse cached items offline, filter by source, drag selections to the cart, or send an item directly while the cart is populated. Cached searches reuse a prepared index. Live searches reuse the mounted item index and save verified discoveries for later searches.
-- Right-click an item to recapture its icon from the game or refresh icons for that item's mod. Mod-wide refresh requires **Keep icons between launches**.
-- Recall downloaded item records and icons reliably. Failed learned-item writes retry in order, with diagnostics for failed writes and dropped observations. Cache reads, unchanged saves, live-result merges, and host-worker transport reuse do less repeated work.
-- Use the two-pane desktop and overlay layouts with contextual keyboard and controller glyphs, an in-app Help guide, and improved navigation across settings, tools, Item Bay and maps. The overlay reacquires controller input after focus returns. Helpy launched from the desktop can stay open when the game closes.
-- Explore atlas close-ups, coordinate overlays, player centering and named Dragon Gate travel to Rasthin’s Rest. The welcome screen supports rotating platform and theme-colored logos and optional artwork crossfades.
-- Recover Helpy render targets after rejected resizes, improve desktop graphics and plugin diagnostics, and reduce overhead in the Windows Shipping build.
+### Helpy desktop, overlay, and settings
 
-### Servers and multiplayer
+- Helpy runs as a separate desktop app with a system tray icon and a shortcut for each installed runtime. A desktop-launched session can stay open for offline browsing after the game closes. A game-launched session can close with its attached game or server.
+- Settings, Quick Settings, Tools, and mod management share a two-pane layout with a category rail and independently scrolling controls. The rail can collapse or stay pinned. Startup, overlay, shortcuts, performance, and cache preferences are available from Settings.
+- The themed game overlay has adjustable opacity, size, and interface scale. The desktop window and tray remain available. New settings default to native presentation, and existing window preferences are preserved.
+- The overlay includes Direct3D 11, Direct3D 12, OpenGL, and opt-in Vulkan presentation paths. Changes address rejected resizes, 10-bit SDR target handling, Direct3D 12 frame submission, hybrid-GPU adapter changes, and stale cursor and panel pixels.
+- Interactive overlays capture keyboard, mouse, and controller input and release it when hidden or disconnected. Passive startup, coordinates, and notification displays leave game input available.
+- The welcome screen supports rotating platform and theme-colored RuneSchema logos, adjustable timing, and artwork crossfades. Windows reduced-motion settings keep the splash static. The in-app Help guide covers controls and troubleshooting.
 
-- Use the CL260223 native dedicated-server filter binding. The host sends [item-grant and access policy](SERVER-ACCESS.md) on connection and pushes changes to connected clients. A grant limit of **0** is unlimited. Existing configured limits still apply.
-- Compare mods with the server, configure PIN access, and save player authorizations. Experimental [Item Delivery](ITEM-DELIVERY.md) tracks grants per character and waits for the matching save acknowledgement.
-- The bundled [RSNetworking policy plugin](MULTIPLAYER-PLUGIN.md) adds host controls for opted-in actors. The [network bridge](NETWORK-CAPACITY.md) supports larger payloads within per-route and per-peer budgets and reduces repeated network and Lua relay work.
+### Controller and keyboard navigation
 
-### UE4SS, mod tools, and runtime
+- Helpy adds automatic input-mode detection and selectable Xbox, PlayStation, and generic button glyphs. Controller input gives the welcome screen and Home an initial selection without requiring a mouse click.
+- Triggers switch main sections, bumpers switch panes or tabs, and the D-pad moves focus. The left stick scrolls or pans. The right stick can move a pointer, click, and drag. Back returns through dialogs and panels.
+- Controller actions cover Item Bay selection and quantity controls, cart drops, mod actions, Settings, Tools, and map panning and zoom. Text fields include an on-screen keyboard, including the server PIN field.
+- The controller menu shortcut is configurable. Supported PlayStation touchpads have an optional pointer mode. Native overlay input is reacquired after focus returns.
 
-- The bundled [RuneSchema.UE4SS.Bridge](UE4SS-SISTER-CONTENT.md) lets enabled standalone UE4SS mods register their own content and opt into appearance and namespaced mod-data networking.
-- The experimental **RuneSchema Pak Loader** author kit lets an existing native UE4SS mod mount its local `paks/` folder at startup. Multiple opted-in mods can share the same game startup. Download the Steam author kit separately and follow the bootstrap steps. The kit contains the helper DLL, headers, config, and notices. [Pak Loader guide](UE4SS-PAK-LOADER.md)
-- RuneSchema and UE4SS share a Compact view with mod metadata, licenses, cache building, and loader controls. Mod Menu 2 keeps valid pages available when another mod reports a schema error and supports offline editing for eligible settings. Mod Menu 2 and Advanced Tooling remain optional and key-gated.
-- Redirected AppData and character save roots work with the pinned UE4SS host. Save cleanup scopes its changes, reports removals, and backs up affected records where supported. World recovery is opt-in.
-- Startup and recipe preparation reuse discovery work, tolerate malformed plugin order entries, and report advisory UE4SS version notices. Temporary reflected map and array values release nested allocations. Experimental authoring includes cooked world components, typed templates, numeric providers, guarded host commands and shared HUD services.
+### Item Bay, filters, and caches
 
-[Dated development history](CHANGELOG-0.8.1.0.md) and [feature guides](index.md)
+- Item Bay can browse saved items and icons offline. The search bar groups source, category, family, and display-name filters. The display/internal-name switch preserves the current query, selection, and asset identity.
+- Cached searches reuse prepared indexes and unchanged rows. Live searches reuse the mounted item index, and discoveries with valid asset identities are saved for later searches. Live work and cancellation run off Helpy’s UI thread.
+- Downloaded records and icon packs remain available to the cache. Learned-item writes retry in order after a failure. Diagnostics report failed writes and discarded observations. Unchanged cache writes and repeated source-plan copies are reduced.
+- **Refresh search** reruns the query with the active filters. Right-click an item to request a new in-game icon capture or refresh icons for its mod. Mod-wide icon refresh requires **Keep icons between launches**.
+- Search and cache controls retain cached results during updates. Source grouping and name recovery preserve readable labels and distinguish different assets with the same display name. Cooked equipment types help categorize weapons, armor, and ammunition.
+- Select individual items or groups and move them to the cart. **Send to player…** opens a separate quantity and recipient picker for one item while preserving the staged cart.
+- **Cache enabled mods** runs a sequential queue with pause, resume, stop, and per-mod results. Installed mods and vanilla files can be read in the cache worker. Cache bundles preserve portable item taglines and tips.
+
+### World map, HUD, and presentation
+
+- The world atlas adds selectable zone close-ups, transport outlines, a coordinate view, and player centering. Scorned Wilderness has its own view. The map includes a named Dragon Gate destination for Rasthin’s Rest.
+- Helpy adds optional startup artwork and progress, a coordinate HUD, and a HUD layout preview for minimap, coordinates, notifications, and loading artwork. HUD positions can be saved from the preview.
+- Mods can use the shared HUD and presentation interfaces, declare input bindings, and supply an optional owner-only presentation handler for a registered consumable.
+
+### Dedicated servers and multiplayer
+
+- RuneSchema adds the CL260223 native dedicated-server filter binding. In an isolated Steam dedicated-server run, the server opened its game port, loaded the world, and requested native filter setup.
+- The authority sends item-grant and access policy when the client connects and pushes policy changes to connected clients. A limit of **0** means no server total per grant request. Existing configured limits still apply.
+- Hosts can configure world PIN access with separate self-delivery and self-teleport permissions, or save grants by character GUID. The server checks request identity, item IDs, quantity, and destination. Correlated results distinguish an accepted request from a completed action.
+- **Mods → Server mods** shows the host’s enabled mods and versions beside local entries, including missing, disabled, version-different, and client-only entries. Authors can supply a download-page link through mod metadata.
+- The bundled RSNetworking policy plugin adds opt-in actor policies and larger network payload budgets. The network bridge adds declared character-appearance snapshots and namespaced mod-data channels.
+- The building registry checks compatibility before modded placement by comparing network ID fingerprints while retaining the verified native ID prefix.
+- Item Delivery adds host-configured delivery lists with **Off**, **Deliver Once**, and **Always Deliver**. Its receipt logic binds deliveries to character identity and records completion on the matching save acknowledgement.
+
+### Mods, authoring, and content registration
+
+- RuneSchema and UE4SS share a compact mod-management view with metadata, license inspection, next-launch loader controls, and cache actions. The UE4SS inventory distinguishes external packages and RuneSchema-owned packages.
+- The bundled **RuneSchema.UE4SS.Bridge** lets an enabled standalone UE4SS mod declare and register RuneSchema content, including appearance and mod-data declarations.
+- **Mods → Mod Menu 2** adds a key-gated Helpy editor with legacy callbacks, offline editing for supported settings, optional character tabs, and template import and export. Supported controls include sliders, radial choices, and RGB/RGBA colors. A schema error stays on its own page so valid pages remain available. The existing external Mod Menu keeps precedence when enabled.
+- The runtime includes optional, key-gated Advanced Tooling. Helpy’s authoring tools build and update caches, and the repair tool verifies the matching package, backs up replacements, and preserves user mods, settings, saves, and caches.
+- Cooked registry support expands to table extensions, skill declarations, world components, and guarded host console commands. Mods can declare local profiles, typed templates, and numeric providers. The settings processor handles up to 1,024 combined schema settings, tab keys, and template entries.
+- Cooked world policies add hooks for building support, placement and dismantling, player phasing, material requirements, farming, resource yields, player effects, and enemy spawning. Material policy calls preserve native unlock, quantity, station, and authority checks.
+
+### Saves, startup, and diagnostics
+
+- Helpy’s Save Recovery view lists character snapshots with their reason and active mod metadata. World snapshot and restore controls are opt-in. Cleanup stays scoped to the selected save and uses verified backups on supported paths.
+- Character copy, import, and export follow redirected save roots. Core and Helpy share the resolved AppData root while guarding nested paths. Optional world archive errors are reported separately from verified cleanup backups.
+- Startup discovery reuses mounted-directory results, ownership checks, and ready recipe references. Registry merging reduces duplicate copies. Recipe prefetch stays bounded, malformed plugin order entries leave other plugins available, and temporary reflected map and array values release nested allocations.
+- The core and Helpy reduce repeated transport work, idle cache copies, registry notices, and diagnostic traffic. Helpy recovers its previous render target after a rejected resize and reports the window, graphics error, and source plugin where available.
+- Diagnostics reset with each attached session and include resource sampling, startup timings, and bounded Lua and UE4SS activity reports. Helpy adds a persistent notification inbox, stable-release and hotfix notices, and a clipboard bug report.
+- The runtime groups core plugins under `dlls/plugins` and the desktop app, HUD, and Helpy plugins under `Helpy`. The complete ZIP pairs the core, Helpy, cooked bridges, Lua adapters, and licenses from the same build.
 
 ## Verification
 
-All 86 runtime files passed archive SHA-256 verification. Nine Helpy tests, two core tests and eleven Pak Loader contract checks passed. On Steam, two native mods and RuneSchema each mounted their PAK and IoStore content once. An isolated CL260223 dedicated server listened, loaded its world and requested native filter setup. The runtime matches the desktop Steam, desktop Game Pass, and dedicated Steam installations by hash.
+All 86 runtime files passed SHA-256 verification. Helpy started from a clean extraction, and nine Helpy tests and two core tests passed. The core starts an isolated Steam dedicated server on Dragonwilds CL260223. The packaged runtime matches the verified desktop Steam, desktop Game Pass, and dedicated Steam installations by hash.
 
-[Release notes and checksums](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0-pre.20261114.3)
+[Release files and checksums](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0-pre.20261114.3)
 
 ## Feedback
 
-[Report a bug on Nexus](https://www.nexusmods.com/runescapedragonwilds/mods/570?tab=bugs)
-with the build, platform, reproduction, and relevant diagnostic codes.
-
-## Known limits
-
-Live joins and rejoins, in-game search latency and icon recapture, Proton and Wine, the physical controller matrix, live Rasthin's Rest arrival, and multiplayer restart behavior remain unverified. A controller fixture still reports D-pad focus crossing. Item Delivery needs live grant and save acknowledgement checks. Pak Loader testing covers Steam clients. Game Pass and dedicated-server Pak Loader behavior still need verification.
-
-The [documentation promotion procedure](../DOCUMENTATION-CHANNELS.md)
-describes how these guides and notes move to stable.
+[Report a bug on Nexus](https://www.nexusmods.com/runescapedragonwilds/mods/570?tab=bugs) with the build, platform, reproduction, and relevant diagnostic codes.

@@ -115,7 +115,6 @@ taskbar instead.
 process that started Helpy. Helpy opened from its desktop shortcut stays
 available after the game closes. A temporary bridge disconnect keeps either
 session open.
-Leftover-process reports are still under investigation; see [known limits](PRE-RELEASE.md#known-limits).
 
 The executable stays in its installed runtime folder. The desktop shortcut
 points there and identifies the installation. Game auto-launch uses Explorer's

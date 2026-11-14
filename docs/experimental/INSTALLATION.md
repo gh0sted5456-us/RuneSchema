@@ -4,10 +4,10 @@ promote_to: INSTALLATION.md
 ---
 
 !!! info "Folder layout during testing"
-    The [complete 2026-11-06 candidate](PRE-RELEASE.md) uses the [new runtime layout](RUNTIME-LAYOUT.md): Helpy under `Helpy`, core plugins under `dlls/plugins` and Helpy plugins under `Helpy/plugins`. Legacy layouts remain supported.
+    The [complete prerelease](PRE-RELEASE.md) uses the [new runtime layout](RUNTIME-LAYOUT.md): Helpy under `Helpy`, core plugins under `dlls/plugins` and Helpy plugins under `Helpy/plugins`. Legacy layouts remain supported.
 
 
-!!! info "Experimental · 0.8.1.0"
+!!! info "RuneSchema 1.0.0 Pre Release"
     This guide describes the experimental branch. For the current public package, see
     [stable downloads](../CURRENT-RELEASE.md). [Experimental overview](index.md).
 
@@ -35,8 +35,8 @@ You need:
 
 Close the game before replacing RuneSchema, UE4SS, or any PAK files.
 
-Use the complete [0.8.1.0 prerelease ZIP](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0-pre.20261114.3/RuneSchema-0.8.1.0-preview-20261114.3.zip).
-Read its [candidate notes and limits](PRE-RELEASE.md) before testing.
+Use the complete [RuneSchema 1.0.0 Pre Release ZIP](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0-pre.20261114.3/RuneSchema-0.8.1.0-preview-20261114.3.zip).
+Read its [changelog and verification record](PRE-RELEASE.md) before testing.
 There is one `RuneSchema-<version>.zip` per release, with the registry and
 networking bridges and Helpy included. No separate Core or Universal choice is
 needed. Older `e`/`m` suffixes are historical. For the current stable package,

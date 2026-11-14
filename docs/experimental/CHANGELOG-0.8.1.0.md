@@ -10,12 +10,11 @@ promote_to: CHANGELOG-0.8.1.0.md
 # RuneSchema 0.8.1.0 — experimental
 
 !!! info "Complete candidate published · 2026-11-14"
-    The [consolidated changelog and download](PRE-RELEASE.md) cover the current preview.
+    See the [RuneSchema 1.0.0 Pre Release changelog](PRE-RELEASE.md) for the current package.
     The entries below record earlier development and testing.
 
-## 2026-11-14 · Pak Loader and Helpy cache
+## 2026-11-14 · Helpy search and cache
 
-- Add the experimental [UE4SS Pak Loader](UE4SS-PAK-LOADER.md) for native mods with local cooked content.
 - Reuse cached and live item indexes, save verified discoveries, and refresh icons by item or mod.
 - Restore downloaded item and icon recall, retry failed cache writes, and reduce transport, search and cache work.
 
