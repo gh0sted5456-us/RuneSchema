@@ -10,14 +10,17 @@
 #include "Utility/Logging.h"
 #include "Utility/Config.h"
 #include "Unreal/Hooks.hpp"
+#include "LuaMadeSimple/LuaMadeSimple.hpp"
 #include <windows.h>
+#include <atomic>
 #include <map>
 #include <cmath>
 namespace PS::AutoMapping {
 namespace fs=std::filesystem;using Json=nlohmann::json;
-inline fs::path Root,Host,Request;inline std::string Build,Nonce;inline bool Pending=false;inline double Elapsed=0;inline ULONGLONG Started=0;
+inline fs::path Root,Host,Request;inline std::string Build,Nonce;inline std::atomic_bool Pending{false};inline double Elapsed=0;inline ULONGLONG Started=0;
 struct CacheLease {HANDLE Handle=INVALID_HANDLE_VALUE;~CacheLease(){if(Handle!=INVALID_HANDLE_VALUE)CloseHandle(Handle);}};
 inline CacheLease Lease;
+inline std::atomic_bool RequestHandedOff{false};
 inline std::map<fs::path,std::pair<uintmax_t,fs::file_time_type>> Before;
 inline std::string Key(std::string_view text){uint64_t hash=14695981039346656037ull;for(unsigned char c:text){hash^=c;hash*=1099511628211ull;}std::ostringstream out;out<<std::hex<<std::setfill('0')<<std::setw(16)<<hash;return out.str();}
 inline bool Hex(const std::string& value){return value.size()==16&&value.find_first_not_of("0123456789abcdef")==value.npos;}
@@ -44,7 +47,6 @@ inline void Prune(const Json& receipt)noexcept{try{
 inline void FinishRequest()noexcept{try{
     if(Request.empty())return;
     for(const auto& path:{Request,fs::path(Request.wstring()+L".result")}){Safe(path);fs::remove(path);}
-    SetEnvironmentVariableW(L"RUNESCHEMA_AUTO_MAPPING_REQUEST",nullptr);_putenv_s("RUNESCHEMA_AUTO_MAPPING_REQUEST","");
 }catch(...){/* Stale handoff files are bounded by the next validated cache cleanup. */}}
 inline void Prepare()noexcept{try{
     if(Lease.Handle!=INVALID_HANDLE_VALUE)return;
@@ -75,12 +77,19 @@ inline void Prepare()noexcept{try{
         Safe(entry.path());Before[entry.path()]={entry.file_size(),entry.last_write_time()};
     }
     ConfigFiles::Write(Request,Nonce+"\n");
-    const auto utf8=Request.u8string();const std::string requestPath(utf8.begin(),utf8.end());
-    if(!SetEnvironmentVariableW(L"RUNESCHEMA_AUTO_MAPPING_REQUEST",Request.c_str())||_putenv_s("RUNESCHEMA_AUTO_MAPPING_REQUEST",requestPath.c_str())!=0)
-        throw std::runtime_error("Automatic mapping Lua/CRT handoff failed");
     Pending=true;Started=GetTickCount64();
     ConsolidatedLog<RC::LogLevel::Normal>(STR("[RuneSchema] [MAPPINGS][CAPTURE] No matching cached mapping yet; native UE4SS capture queued. Once capture completes, the next launch will reuse it. Live reflection and native safety checks remain active.\n"));
 }catch(const std::exception& error){Pending=false;FinishRequest();Log<RC::LogLevel::Warning>(STR("[MAPPINGS][DEFERRED] {}. Existing cache files retained; live reflection remains active.\n"),ToWideSafe(error.what()));}}
+inline void InstallLua(const RC::LuaMadeSimple::Lua& lua) {
+    if (!Pending) return;
+    lua.register_function("RuneSchemaTakeMappingRequest", [](const RC::LuaMadeSimple::Lua& state) -> int {
+        if (!Pending || RequestHandedOff.exchange(true)) return 0;
+        const auto utf8 = Request.u8string();
+        state.set_string(reinterpret_cast<const char*>(utf8.data()), utf8.size());
+        state.set_string(Nonce);
+        return 2;
+    });
+}
 inline void Start(){if(!Pending)return;
     RC::Unreal::Hook::FCallbackOptions options{};options.OwnerModName=STR("RuneSchema");options.HookName=STR("RuneSchemaAutoMapping");
     RC::Unreal::Hook::RegisterEngineTickPostCallback([](auto& iteration,RC::Unreal::UEngine*,float delta,bool){

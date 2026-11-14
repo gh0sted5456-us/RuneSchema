@@ -833,7 +833,10 @@ public:
     }
 
     void InstallPackageDiscovery(RC::StringViewType modName,RC::LuaMadeSimple::Lua& lua) {
-        if(m_startupFailed.load(std::memory_order_acquire)||m_packageDiscoveryBootstrap.empty())return;
+        if (m_startupFailed.load(std::memory_order_acquire)) return;
+        if (PS::ModFolderLayout::EqualsInsensitive(RC::to_string(modName), "RuneSchema"))
+            PS::AutoMapping::InstallLua(lua);
+        if (m_packageDiscoveryBootstrap.empty()) return;
         if(PS::ModFolderLayout::EqualsInsensitive(RC::to_string(modName),"RuneSchema"))try{PS::HelpyHudInterfaces::Install(PS::HostServices::ModDirectory(),lua);}catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[RuneSchema][HUD][INACTIVE] {}\n"),PS::ToWideSafe(error.what()));}
         if(PS::ModFolderLayout::EqualsInsensitive(RC::to_string(modName),"RuneSchema"))try{PS::HelpyModMenu::Install(PS::HostServices::ModDirectory(),lua);}catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[RuneSchema][MOD-MENU][INACTIVE] {}\n"),PS::ToWideSafe(error.what()));}
         try {lua.execute_string(m_packageDiscoveryBootstrap);}
