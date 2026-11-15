@@ -63,7 +63,7 @@ int main(){try{
     {
         Client modes;const auto sameBounds=[](int width,int height){return Client::HudBounds(width,height,.9f,Client::Hud::None);};
         for(unsigned i=0;i<200&&!modes.NotificationsVisible();++i){modes.Tick(remote,GetCurrentProcessId(),true,device.Get(),.9f,1.f,Client::Hud::Coordinates,sameBounds,focused);modes.Notifications(true);Sleep(2);}
-        Check(modes.NotificationsVisible()&&!interactive,"Passive HUD did not register a noninteractive owner");
+        Check(modes.NotificationsVisible()&&!interactive&&!modes.NotificationsUnavailable(),"Passive HUD did not register a noninteractive owner");
         modes.Show();
         for(unsigned i=0;i<200&&(!modes.Visible()||!interactive);++i){modes.Tick(remote,GetCurrentProcessId(),true,device.Get(),.9f,1.f,Client::Hud::None,{},focused);Sleep(2);}
         Check(modes.Visible()&&interactive,"Opening an equal-sized HUD did not acquire interactive input ownership");
@@ -100,6 +100,6 @@ int main(){try{
     }
     passive=false;PS::HelpyNativeOverlayClient legacy;
     for(unsigned i=0;i<100;++i){legacy.Tick(remote,GetCurrentProcessId(),true,device.Get(),.9f,1.f,Client::Hud::None,{},focused);legacy.Notifications(true);Sleep(2);}
-    Check(!legacy.NotificationsVisible()&&!legacy.Presenting()&&!legacy.Wanted(),"An older bridge was asked to capture notification input");legacy.Shutdown();
+    Check(legacy.NotificationsUnavailable()&&!legacy.NotificationsVisible()&&!legacy.Presenting()&&!legacy.Wanted(),"An older bridge did not fall back without capturing notification input");legacy.Shutdown();
     UnmapViewOfFile(page);CloseHandle(mapping);DestroyWindow(window);UnregisterClassW(type.lpszClassName,type.hInstance);std::puts("Native client attachment, passive notices, input isolation, resize recovery and idempotent hide passed.");return 0;
 }catch(const std::exception& error){std::fprintf(stderr,"%s\n",error.what());return 1;}}

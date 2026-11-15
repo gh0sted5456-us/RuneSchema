@@ -18,7 +18,9 @@
 #include "Core/ModDeployment.h"
 #include "Generator/ModMetadataPanel.h"
 #include "Generator/ModLicensePanel.h"
+#include "Generator/ModContentBadgeView.h"
 #include "Generator/ModSaveFilesPanel.h"
+#include "Generator/AchievementsPanel.h"
 #include <future>
 #include <map>
 
@@ -227,7 +229,7 @@ inline void Metadata(const Json& row){
     if(row.value("ModOrganizerVirtualView",false))PS::HelpyImGuiTheme::DetailsTextUnformatted("Mod Organizer 2 virtual filesystem is active for this view.");
     if(row.value("LocalIdentity",false))PS::HelpyImGuiTheme::DetailsTextUnformatted("Local ID.txt; file-change tracking enabled.");
     if(row.contains("MetadataTrackingIssue"))PS::HelpyImGuiTheme::DetailsText("Local tracking: %s",row["MetadataTrackingIssue"].get_ref<const std::string&>().c_str());
-    PS::HelpyImGuiTheme::DetailsText("Loaders: %s",row.at("Loaders").dump().c_str());
+    PS::HelpyImGuiTheme::DetailsText("Content: %s",ModContentBadges::Summary(ModContentBadges::ForRow(row)).c_str());
     PS::HelpyImGuiTheme::DetailsTextDisabled("Cache: %s",row.value("HasCache",false)?"included":"not supplied");
     if(metadata.contains("history")&&metadata["history"].is_array()){
         ImGui::SeparatorText("Version history (author supplied)");size_t count=0;
@@ -273,6 +275,10 @@ inline void ModActions(const Json& row,const std::string& owner,const std::strin
     const auto source=ContentSource::Mod(owner);
     ModLicensePanel::Select(row,nickname);
     if(ImGui::MenuItem("License"))Tab=3;
+    if(ImGui::MenuItem("View achievements"))AchievementsPanel::OpenMod(row,nickname);
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::ModAchievementsAction=HelpyPreviewHooks::LastRect();
+#endif
     if(!row.value("Present",true)&&ImGui::MenuItem("Remove missing entry"))removeMissing=owner;
     const auto url=row.at("Metadata").value("website",std::string{});
     if(ImGui::MenuItem("Open mod page",nullptr,false,ModDownloadLink::Valid(url)))OpenModPage(url);
@@ -389,6 +395,13 @@ inline void RenderBody(){
     if(HelpyImGuiTheme::SoftButton("Refresh")&&!Worker.valid()&&!Dirty)Start({{"Action","ModsRead"}});
     HelpyMenu::NextControl("Cache enabled mods");ImGui::BeginDisabled(Snapshot.is_null()||Dirty||Worker.valid()||HelpyModCacheBuilder::Current().Running||HelpyModCacheBuilder::CurrentBatch().Active);
     if(HelpyImGuiTheme::SoftButton("Cache enabled mods")&&HelpyModCacheBuilder::StartEnabled(std::filesystem::u8path(Snapshot.value("Root",std::string{})),Rows,theme.autoInstallAuthoringDotNet))CacheBuilderPanel::FocusInstalled(Snapshot,Json::object());ImGui::EndDisabled();
+    HelpyMenu::NextControl("View All Achievements");
+    ImGui::BeginDisabled(Snapshot.is_null());
+    if(HelpyImGuiTheme::SoftButton("View All Achievements"))AchievementsPanel::OpenAll(Rows);
+#if defined(HELPY_PREVIEW)
+    HelpyPreviewHooks::ModAchievementsAll=HelpyPreviewHooks::LastRect();
+#endif
+    ImGui::EndDisabled();
     HelpyMenu::NextControl("More");
     if(HelpyMenu::BeginMore("mods-actions")){
 const bool missing=std::any_of(Rows.begin(),Rows.end(),[](const auto& row){return !row.value("Present",true);});
@@ -426,11 +439,12 @@ const bool missing=std::any_of(Rows.begin(),Rows.end(),[](const auto& row){retur
     ImGui::BeginDisabled(Worker.valid()&&WorkerMutates);
     const float actionsHeight=ImGui::GetFrameHeightWithSpacing()+ImGui::GetTextLineHeightWithSpacing()+theme.Y(8);
     if(HelpyImGuiTheme::BeginPanel("mods-list",{0,std::max(theme.Y(100),ImGui::GetContentRegionAvail().y-actionsHeight)},ImGuiChildFlags_Borders)){
-        const bool table=theme.modsCompact&&ImGui::BeginTable("mods-compact",5,ImGuiTableFlags_RowBg|ImGuiTableFlags_BordersInnerH|ImGuiTableFlags_ScrollY|ImGuiTableFlags_ScrollX|ImGuiTableFlags_Resizable,
-            ImGui::GetContentRegionAvail(),std::max(ImGui::GetContentRegionAvail().x,theme.X(560)));
+        const bool table=theme.modsCompact&&ImGui::BeginTable("mods-compact",6,ImGuiTableFlags_RowBg|ImGuiTableFlags_BordersInnerH|ImGuiTableFlags_ScrollY|ImGuiTableFlags_ScrollX|ImGuiTableFlags_Resizable,
+            ImGui::GetContentRegionAvail(),std::max(ImGui::GetContentRegionAvail().x,theme.X(780)));
         if(table){
             ImGui::TableSetupColumn("Order",ImGuiTableColumnFlags_WidthFixed,theme.X(52));
             ImGui::TableSetupColumn("Mod",ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("Content",ImGuiTableColumnFlags_WidthFixed,theme.X(220));
             ImGui::TableSetupColumn("Version",ImGuiTableColumnFlags_WidthFixed,theme.X(100));
             ImGui::TableSetupColumn("Next launch",ImGuiTableColumnFlags_WidthFixed,theme.X(112));
             ImGui::TableSetupColumn("Move",ImGuiTableColumnFlags_WidthFixed,theme.X(90));
@@ -458,6 +472,12 @@ const bool missing=std::any_of(Rows.begin(),Rows.end(),[](const auto& row){retur
                 ModOrderDrag(i,moveFrom,moveTo,nickname);
                 if(HelpyMenu::BeginContextItem("mod-actions")){ModActions(row,owner,nickname,removeMissing);ImGui::EndPopup();}
                 else if(ImGui::IsItemHovered()&&!row.value("Present",false))ImGui::SetTooltip("Folder missing");
+                ImGui::TableNextColumn();
+                {   const auto at=ImGui::GetCursorScreenPos();const float width=ImGui::GetContentRegionAvail().x,height=ImGui::GetTextLineHeight()+theme.Y(2);
+                    ImGui::Dummy({width,height});
+                    const auto described=ModContentBadgeView::Draw(ImGui::GetWindowDrawList(),at,width,height,theme.X(4),ModContentBadges::ForRow(row));
+                    if(!described.empty())HelpyImGuiTheme::Tooltip("%s",described.c_str());
+                }
                 ImGui::TableNextColumn();const auto version=row.at("Metadata").value("version",std::string{});
                 ImGui::TextUnformatted(version.empty()?"—":version.c_str());
                 ImGui::TableNextColumn();ModToggle(row);
@@ -489,13 +509,18 @@ const bool missing=std::any_of(Rows.begin(),Rows.end(),[](const auto& row){retur
                 if(ImGui::BeginPopupContextWindow("mod-actions",ImGuiPopupFlags_MouseButtonRight)){
                     ModActions(row,owner,nickname,removeMissing);ImGui::EndPopup();
                 }
-                if(hovered&&!ImGui::IsPopupOpen("mod-actions")){HelpyImGuiTheme::BeginDetailsTooltip(titleAt,{titleAt.x+titleWidth,titleAt.y+theme.Y(60)},480);Metadata(row);HelpyImGuiTheme::EndDetailsTooltip();}
-                auto* draw=ImGui::GetWindowDrawList();draw->PushClipRect(titleAt,{titleAt.x+titleWidth,b.y-theme.Y(6)},true);
-                draw->AddText(ImGui::GetFont(),theme.Y(17),titleAt,ImGui::GetColorU32(theme.text),nickname.c_str());
-                PersonalizationPanel::Italic(draw,ImGui::GetFont(),theme.Y(12),{titleAt.x,titleAt.y+theme.Y(25)},ImGui::GetColorU32(theme.textDisabled),"{"+owner+"}");
+                auto* draw=ImGui::GetWindowDrawList();
                 const auto& metadata=row.at("Metadata");const auto version=metadata.value("version",std::string{});
                 const std::string subtitle=!row.value("Present",false)?"Folder missing":!row.value("Enabled",false)?"Disabled for next launch":version.empty()?"Enabled for next launch":"v"+version+"  |  Enabled next launch";
+                // Content pills follow the subtitle inside the title column. A hovered pill shows its own tooltip.
+                const float pillStart=ImGui::CalcTextSize(subtitle.c_str()).x+theme.X(10);
+                const auto described=ModContentBadgeView::Draw(draw,{titleAt.x+pillStart,titleAt.y+theme.Y(45)},titleWidth-pillStart,ImGui::GetTextLineHeight()+theme.Y(2),theme.X(4),ModContentBadges::ForRow(row));
+                if(hovered&&described.empty()&&!ImGui::IsPopupOpen("mod-actions")){HelpyImGuiTheme::BeginDetailsTooltip(titleAt,{titleAt.x+titleWidth,titleAt.y+theme.Y(60)},480);Metadata(row);HelpyImGuiTheme::EndDetailsTooltip();}
+                draw->PushClipRect(titleAt,{titleAt.x+titleWidth,b.y-theme.Y(6)},true);
+                draw->AddText(ImGui::GetFont(),theme.Y(17),titleAt,ImGui::GetColorU32(theme.text),nickname.c_str());
+                PersonalizationPanel::Italic(draw,ImGui::GetFont(),theme.Y(12),{titleAt.x,titleAt.y+theme.Y(25)},ImGui::GetColorU32(theme.textDisabled),"{"+owner+"}");
                 draw->AddText({titleAt.x,titleAt.y+theme.Y(46)},ImGui::GetColorU32(theme.textDisabled),subtitle.c_str());draw->PopClipRect();
+                if(!described.empty()&&!ImGui::IsPopupOpen("mod-actions"))HelpyImGuiTheme::Tooltip("%s",described.c_str());
                 ImGui::SetCursorScreenPos({b.x-theme.X(116),a.y+theme.Y(12)});ModToggle(row);
                 ImGui::SetCursorScreenPos({b.x-theme.X(116),a.y+theme.Y(46)});ModMoveButtons(i,moveFrom,moveTo);
                 if(ImGui::IsWindowHovered()&&(ImGui::IsMouseClicked(0)||ImGui::IsMouseClicked(1)))ModLicensePanel::Select(row,nickname);

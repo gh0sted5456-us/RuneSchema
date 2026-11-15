@@ -1516,6 +1516,7 @@ namespace DragonWilds {
         auto npcs=std::make_unique<DragonWildsNpcLoader>(recipeService);
         auto* npcService=npcs.get();
         npcService->PublishCleanupNotice=[this](RC::Unreal::UObject* controller,std::size_t removed,const std::string& mod){return m_registryBridge.PublishCleanupNotice(controller,removed,mod);};
+        npcService->PublishPlayerActivity=[this](RC::Unreal::UObject* controller,const std::string& payload){return m_registryBridge.PublishPlayerActivity(controller,payload);};
         npcService->NotifyWorldCleanup=[this](RC::Unreal::UObject* controller){
             auto* world=WorldCleanupReceiptWorld.Get();
             if(controller&&world&&WorldCleanupReceipt.Pending(controller,controller->GetWorld())&&controller->GetWorld()==world
@@ -1529,6 +1530,7 @@ namespace DragonWilds {
         m_registryBridge.ClientNotification=[this,npcService](RC::Unreal::UObject* player,const std::string& channel,
             const std::string& entity,const std::string& payload){
             if(channel=="helpy.marks"){if(m_spawnLoader)m_spawnLoader->HandleNetworkHelpyMarks(player,payload);return;}
+            if(channel=="helpy.activity"){(void)GameplayEventObserver::ReceiveRemote(payload);return;}
             npcService->HandleNetworkNotification(player,channel,entity,payload);
         };
         npcService->PublishWorldState=[this](const std::string& instance,const std::string& record){

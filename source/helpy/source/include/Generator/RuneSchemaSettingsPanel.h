@@ -17,6 +17,7 @@
 #include "Core/HelpyPreviewHooks.h"
 #include "Core/HelpyVulkanSetup.h"
 #include "Core/RuneSchemaDataRoot.h"
+#include "Core/SettingsFieldState.h"
 #include "SaveBackupStore.h"
 #include <nlohmann/json.hpp>
 #include <functional>
@@ -33,6 +34,7 @@ inline bool Loaded=false,Dirty=false;
 inline bool QuickToggleError=false;
 inline std::string Status;
 inline char Filter[128]{};
+inline bool ModifiedOnly=false; // Show only fields that differ from the shipped defaults or have unsaved edits.
 inline std::map<std::string,std::string> ArrayText;
 inline std::map<std::string,bool> ArrayErrors;
 inline std::string Label(std::string value){
@@ -362,6 +364,16 @@ inline void Field(const std::string& key,json& value,const std::string& path){
         if(ArrayErrors[path])ImGui::TextColored(HelpyImGuiTheme::Current.error,"Enter a JSON list, for example [\"value\"].");
     }
     if(changed)Dirty=true;
+    {   // Unsaved / non-default markers with a one-click reset to the shipped default.
+        const auto state=SettingsFieldState::For(Snapshot,Draft,path);
+        if(state.Unsaved){ImGui::TextColored(HelpyImGuiTheme::Current.accent,"Unsaved change");if(state.NonDefault)ImGui::SameLine();}
+        if(state.NonDefault){
+            const auto& fallback=Snapshot.at("Editable").at(path);
+            ImGui::TextDisabled("Default: %s",SettingsFieldState::DefaultText(fallback,path=="/helpyAuthority/accessPin").c_str());ImGui::SameLine();
+            if(ImGui::SmallButton("Reset to default")){value=fallback;ArrayText.erase(path);ArrayErrors.erase(path);Dirty=true;}
+            if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Puts the shipped default in the draft. Nothing is written until you save.");
+        }
+    }
     if(path=="/persistence/allowCorruptCharacterEntry"){
         ImGui::TextWrapped("Use Save Bypass by default. When off, Normal and Quick Launch use failure-only fallback after native rejection. Native loading runs once; no automatic reload. Restart required. Disable the standalone bypass first.");
         ImGui::TextWrapped("Dedicated servers use Less Restrictive loading and failure-only fallback by default; native world startup is unchanged.");
@@ -407,21 +419,26 @@ inline void Render(){
     if(!Loaded)return;
     ImGui::TextDisabled("%s",Snapshot.value("Path",std::string("settings/settings.ini")).c_str());
     HelpyTextInput::InputTextWithHint("##settings-filter","Filter settings...",Filter,sizeof(Filter));const auto filter=Lower(Filter);
+    ImGui::SameLine();ImGui::Checkbox("Changed from default",&ModifiedOnly);
+    ImGui::SameLine();ImGui::TextDisabled("%zu differ from defaults",SettingsFieldState::CountNonDefault(Snapshot,Draft));
+    const bool searching=!filter.empty()||ModifiedOnly;
     if(!HelpyMenu::BeginBody("RuneSchema settings body",ConfigSection)){HelpyMenu::EndBody();return;}
-    const auto matches=[&](const std::string& path){return filter.empty()||Lower(path+" "+Label(path.substr(path.find_last_of('/')+1))).find(filter)!=std::string::npos;};
+    const auto matches=[&](const std::string& path){
+        if(ModifiedOnly){const auto state=SettingsFieldState::For(Snapshot,Draft,path);if(!state.NonDefault&&!state.Unsaved)return false;}
+        return filter.empty()||Lower(path+" "+Label(path.substr(path.find_last_of('/')+1))).find(filter)!=std::string::npos;};
     const auto& editable=Snapshot.at("Editable");
     const auto render=[&](auto&& self,json& object,const std::string& prefix)->void{
         for(auto& [key,value]:object.items()){
-            if(prefix.empty()&&filter.empty()&&ConfigGroup(key)!=ConfigSection)continue;
+            if(prefix.empty()&&!searching&&ConfigGroup(key)!=ConfigSection)continue;
             const auto path=prefix+"/"+key;
             if(HelpyEnvironment::Server()&&path=="/quickLaunch")continue;
             if(value.is_object()){
                 bool has=false;for(const auto& [field,type]:editable.items())if(field.starts_with(path+"/")&&matches(field)){has=true;break;}
-                if(has&&ImGui::CollapsingHeader(Label(key).c_str(),filter.empty()?0:ImGuiTreeNodeFlags_DefaultOpen))self(self,value,path);
+                if(has&&ImGui::CollapsingHeader(Label(key).c_str(),searching?ImGuiTreeNodeFlags_DefaultOpen:0))self(self,value,path);
             }else if(editable.contains(path)&&matches(path))Field(key,value,path);
         }
     };
-    if(!filter.empty())ImGui::TextDisabled("Searching across every settings category");
+    if(searching)ImGui::TextDisabled("Searching across every settings category");
     if(ConfigSection==5&&filter.empty()&&!editable.contains("/itemDeliveryMode"))
         ImGui::TextWrapped("Item Delivery requires a matching RuneSchema core build.");
     render(render,Draft,"");

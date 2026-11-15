@@ -1146,6 +1146,13 @@ bool RegistryBridge::PublishCleanupNotice(UObject* controller,std::size_t remove
     SendNotification(component,"save.cleanup","cleanup",++m_outboundRevision,packet.dump());return true;
 }
 
+bool RegistryBridge::PublishPlayerActivity(UObject* controller,const std::string& payload) {
+    if(!controller||payload.empty()||payload.size()>1024||LocalController(controller))return false;
+    auto* pawn=ControllerPawn(controller);if(!ActorAuthority(pawn))return false;
+    auto* component=EnsureBridgeComponent(static_cast<AActor*>(pawn),true);if(!component)return false;
+    SendNotification(component,"helpy.activity","activity",++m_outboundRevision,payload);return true;
+}
+
 void RegistryBridge::ApplyHelpyAccessStatus(const nlohmann::json& access,bool success,const std::string& detail) {
     const auto generation=PS::SpawnToolRequests::Generation.load();
     const bool valid=success&&PS::HelpyAuthorityStatus::Valid(access);
@@ -1226,6 +1233,14 @@ void RegistryBridge::ObserveClientTransport(UObject* source,UFunction* function,
         }
         (void)nlohmann::json::parse(payload);
         DragonWilds::ActorHelper::FunctionCall owner(source,TEXT("/Script/Engine.ActorComponent:GetOwner"));owner.Invoke();
+        if(channel=="helpy.activity"){
+            // Achievement credit from the host. Accept it only on the owning local player's bridge.
+            auto* pawn=owner.Result<UObject*>();if(!pawn||!pawn->IsA<AActor>())return;
+            DragonWilds::ActorHelper::FunctionCall controller(pawn,TEXT("/Script/Engine.Pawn:GetController"));controller.Invoke();
+            if(!LocalController(controller.Result<UObject*>())||ControllerPawn(controller.Result<UObject*>())!=pawn)return;
+            if(ClientNotification)ClientNotification(pawn,channel,entity,payload);
+            return;
+        }
         if(channel=="save.cleanup"){
             auto* pawn=owner.Result<UObject*>();if(!pawn||!pawn->IsA<AActor>())return;
             DragonWilds::ActorHelper::FunctionCall controller(pawn,TEXT("/Script/Engine.Pawn:GetController"));controller.Invoke();

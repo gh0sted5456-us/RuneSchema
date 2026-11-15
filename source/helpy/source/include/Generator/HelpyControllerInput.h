@@ -57,7 +57,7 @@ inline void Feed(const XINPUT_GAMEPAD& physical){
     if(family!=detected||!HelpyControllerDevice::Active(physical)){ActiveBindings=HelpyControllerBindings::Read(HelpyImGuiTheme::Current.controllerBindings,detected.data());family=detected;}
     const auto pad=HelpyControllerBindings::Apply(physical,ActiveBindings);
     if(PointerEnabled)BlockedFaces&=pad.wButtons;
-    const auto motion=HelpyControllerPointer::Motion(physical.sThumbRX,physical.sThumbRY,ImGui::GetIO().DeltaTime,HelpyImGuiTheme::Current.controllerCursorSpeed);
+    const auto motion=HelpyControllerPointer::Motion(physical.sThumbRX,physical.sThumbRY,ImGui::GetIO().DeltaTime,HelpyImGuiTheme::Current.controllerCursorSpeed,{HelpyImGuiTheme::Current.controllerDeadZone});
     if(!PointerEnabled||(!HelpyImGuiTheme::Current.controllerCursor&&!HelpyImGuiTheme::Current.controllerTouchpad))PointerModeTo(false,pad.wButtons);
     else if((HelpyImGuiTheme::Current.controllerCursor&&(motion.X!=0||motion.Y!=0||(physical.wButtons&XINPUT_GAMEPAD_RIGHT_THUMB)))
         ||(HelpyImGuiTheme::Current.controllerTouchpad&&PointerReading.Connected&&PointerReading.Touch.Down))PointerModeTo(true,pad.wButtons);
@@ -102,7 +102,9 @@ inline std::optional<ImVec2> UpdatePointer(bool enabled,bool stickEnabled=false)
     if(!enabled&&!stickEnabled)PointerModeTo(false);
     const auto pad=HelpyControllerBindings::Apply(PhysicalPad,ActiveBindings);
     const bool right=(enabled&&touch.Fingers>=2&&TouchRightArmed)||(PointerMode&&(pad.wButtons&XINPUT_GAMEPAD_X)&&!(BlockedFaces&XINPUT_GAMEPAD_X));
-    const auto delta=HelpyControllerPointer::Motion(PhysicalPad.sThumbRX,PhysicalPad.sThumbRY,io.DeltaTime,HelpyImGuiTheme::Current.controllerCursorSpeed);
+    // Cursor assist: slow down over a hoverable control, but never while dragging or editing one.
+    const bool assist=HelpyImGuiTheme::Current.controllerCursorAssist&&PointerMode&&!DragLatched&&ImGui::IsAnyItemHovered()&&!ImGui::IsAnyItemActive();
+    const auto delta=HelpyControllerPointer::Motion(PhysicalPad.sThumbRX,PhysicalPad.sThumbRY,io.DeltaTime,HelpyImGuiTheme::Current.controllerCursorSpeed,{HelpyImGuiTheme::Current.controllerDeadZone,assist?.55f:1.f});
     const bool pressed=(PhysicalPad.wButtons&XINPUT_GAMEPAD_RIGHT_THUMB)!=0;
     if(!stickEnabled){StickClickArmed=false;CancelGrab();}else if(!pressed)StickClickArmed=true;
     if(PointerMode&&stickEnabled&&pressed&&!StickWasDown&&StickClickArmed)DragLatched=!DragLatched;

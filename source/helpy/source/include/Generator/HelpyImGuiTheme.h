@@ -83,6 +83,8 @@ struct Theme {
     int inputMode=0,controllerGlyphs=0,controllerShortcut=1;
     bool reserveControllerGuide=true,controllerTouchpad=true,controllerCursor=true;
     float controllerCursorSpeed=900.f;
+    float controllerDeadZone=.27f;      // Right-stick radius ignored as drift (0.08-0.50).
+    bool controllerCursorAssist=true;   // Slow the pointer while it is over a control.
     std::string quickSendPlayerGuid;
     bool navigationCollapsed=false,navigationPinned=false;
     bool autoInstallAuthoringDotNet{true};
@@ -109,6 +111,7 @@ struct Theme {
     std::string fontFamily{"Segoe UI"};
     std::vector<LiveLog::ColorRule> logColors;
     bool diagnosticToastsEnabled{true};
+    bool achievementPopups{true}, achievementSound{true};
     bool diagnosticRegistryActivity{false};
     int diagnosticToastLimit{4},diagnosticToastDuration{6};
     int diagnosticHistoryDays{14},diagnosticHistorySessions{10},diagnosticHistoryMB{20};
@@ -320,7 +323,7 @@ inline nlohmann::json DocumentFrom(const Theme& t,int iconCacheMB) {
         {"views",{{"quickSendPlayerGuid",t.quickSendPlayerGuid},{"advancedMode",t.advancedMode},{"itemGrid",t.itemGridView},{"itemInternalNames",t.itemInternalNames},{"itemPageSize",t.itemPageSize},{"itemGridColumns",t.itemGridColumns},{"itemGridRows",t.itemGridRows},{"itemGridFitRows",t.itemGridFitRows},{"itemShowPlaceholders",t.itemShowPlaceholders},{"aiGrid",t.aiGridView},{"itemResultHeight",t.itemResultHeight},{"aiResultHeight",t.aiResultHeight},{"itemCategory",t.itemCategory},{"itemSource",t.itemSource},{"itemBayBrowseRatio",t.itemBayBrowseRatio},{"dockedBayHeight",t.dockedBayHeight},{"itemCartWidth",t.itemCartWidth}}},
         {"cache",{{"iconCacheMB",std::clamp(iconCacheMB,0,16384)},{"loadOrder",HelpyRuntimePreferences::CacheFirst.load()?"cacheFirst":"gameFirst"},{"passiveRefresh",HelpyRuntimePreferences::PassiveRefresh.load()}}},
         {"monitoring",{{"resources",t.resourceDiagnostics},{"gpu",t.gpuResourceDiagnostics},{"ue4ss",t.ue4ssDiagnostics},{"playTimeReminders",t.playTimeReminders},{"startupResourceAlerts",t.startupResourceAlerts},{"cpuThreshold",t.resourceCpuThreshold},{"memoryThreshold",t.resourceMemoryThreshold},{"gpuThreshold",t.resourceGpuThreshold},{"luaMessages",t.ue4ssLogBudget},{"overlapSeconds",t.ue4ssOverlapSeconds}}},
-        {"input",{{"mode",t.inputMode},{"glyphs",t.controllerGlyphs},{"shortcut",t.controllerShortcut},{"binding",t.controllerBinding},{"keyboardBinding",t.helpyKeyboardBinding},{"hudBindings",t.hudBindings},{"reserveGuide",t.reserveControllerGuide},{"touchpad",t.controllerTouchpad},{"cursor",t.controllerCursor},{"cursorSpeed",t.controllerCursorSpeed},{"controllerBindings",t.controllerBindings}}},
+        {"input",{{"mode",t.inputMode},{"glyphs",t.controllerGlyphs},{"shortcut",t.controllerShortcut},{"binding",t.controllerBinding},{"keyboardBinding",t.helpyKeyboardBinding},{"hudBindings",t.hudBindings},{"reserveGuide",t.reserveControllerGuide},{"touchpad",t.controllerTouchpad},{"cursor",t.controllerCursor},{"cursorSpeed",t.controllerCursorSpeed},{"deadZone",t.controllerDeadZone},{"cursorAssist",t.controllerCursorAssist},{"controllerBindings",t.controllerBindings}}},
         {"navigation",{{"collapsed",t.navigationCollapsed},{"pinned",t.navigationPinned}}},
         {"authoring",{{"autoInstallDotNet",t.autoInstallAuthoringDotNet}}},
         {"mods",{{"manageExternalUE4SS",t.ue4ssManageExternal},{"compactView",t.modsCompact}}},
@@ -330,7 +333,7 @@ inline nlohmann::json DocumentFrom(const Theme& t,int iconCacheMB) {
         {"background",{{"file",t.backgroundFile},{"strength",t.backgroundStrength}}},
         {"splash",{{"gameLogo",t.splashGameLogo},{"runtimeLogo",t.splashRuntimeLogo},{"rotateBackgrounds",t.splashBackgrounds},{"logoSeconds",t.splashLogoSeconds}}},
         {"liveLog",{{"colorRules",LiveLog::WriteColors(t.logColors)}}},
-        {"notifications",{{"enabled",t.diagnosticToastsEnabled},{"visibleLimit",t.diagnosticToastLimit},{"durationSeconds",t.diagnosticToastDuration},{"registryActivity",t.diagnosticRegistryActivity}}},
+        {"notifications",{{"enabled",t.diagnosticToastsEnabled},{"achievements",t.achievementPopups},{"achievementSound",t.achievementSound},{"visibleLimit",t.diagnosticToastLimit},{"durationSeconds",t.diagnosticToastDuration},{"registryActivity",t.diagnosticRegistryActivity}}},
         {"diagnosticHistory",{{"ageDays",t.diagnosticHistoryDays},{"maxSessions",t.diagnosticHistorySessions},{"maxStorageMB",t.diagnosticHistoryMB}}},
         {"diagnosticPresentation",{{"splitRatio",t.diagnosticSplitRatio},{"developerMode",t.diagnosticDeveloperMode}}},
         {"colors",{
@@ -403,7 +406,7 @@ inline void Reload(bool createIfMissing=true) {
         next.updateWorldMap=doc.value("updates",nlohmann::json::object()).value("worldMap",true);
         next.updateMapFilters=doc.value("updates",nlohmann::json::object()).value("mapFilters",true);
         const auto notifications=doc.value("notifications",nlohmann::json::object());
-        next.diagnosticToastsEnabled=notifications.value("enabled",true);
+        next.diagnosticToastsEnabled=notifications.value("enabled",true);next.achievementPopups=notifications.value("achievements",true);next.achievementSound=notifications.value("achievementSound",true);
         next.diagnosticRegistryActivity=notifications.value("registryActivity",false);
         next.diagnosticToastLimit=ReadInt(notifications,"visibleLimit",4,1,10);
         next.diagnosticToastDuration=ReadInt(notifications,"durationSeconds",6,2,15);
@@ -443,7 +446,7 @@ inline void Reload(bool createIfMissing=true) {
         next.hudBindings=input.value("hudBindings",nlohmann::json::object());if(!next.hudBindings.is_object()||next.hudBindings.size()>256)throw std::runtime_error("Invalid HUD bindings.");
         for(auto& [id,binding]:next.hudBindings.items()){if(id.empty()||id.size()>256)throw std::runtime_error("Invalid HUD binding identity.");binding={{"Keyboard",InputBindings::Text(InputBindings::Parse(binding.value("Keyboard",std::string("None"))))},{"Controller",InputBindings::PadText(InputBindings::ParsePad(binding.value("Controller",std::string("None"))))}};}
         next.helpyKeyboardBinding=input.value("keyboardBinding",std::string{});if(!next.helpyKeyboardBinding.empty())try{next.helpyKeyboardBinding=InputBindings::Text(InputBindings::Parse(next.helpyKeyboardBinding));}catch(const std::exception&){next.helpyKeyboardBinding.clear();}
-        next.controllerBinding=input.value("binding",std::string{});if(!next.controllerBinding.empty())try{next.controllerBinding=InputBindings::PadText(InputBindings::ParsePad(next.controllerBinding));}catch(const std::exception&){next.controllerBinding.clear();}next.controllerBindings=HelpyControllerBindings::Validate(input.value("controllerBindings",nlohmann::json::object()));next.reserveControllerGuide=input.value("reserveGuide",true);next.controllerTouchpad=input.value("touchpad",true);next.controllerCursor=input.value("cursor",true);next.controllerCursorSpeed=ReadFloat(input,"cursorSpeed",900.f,200.f,1800.f);
+        next.controllerBinding=input.value("binding",std::string{});if(!next.controllerBinding.empty())try{next.controllerBinding=InputBindings::PadText(InputBindings::ParsePad(next.controllerBinding));}catch(const std::exception&){next.controllerBinding.clear();}next.controllerBindings=HelpyControllerBindings::Validate(input.value("controllerBindings",nlohmann::json::object()));next.reserveControllerGuide=input.value("reserveGuide",true);next.controllerTouchpad=input.value("touchpad",true);next.controllerCursor=input.value("cursor",true);next.controllerCursorSpeed=ReadFloat(input,"cursorSpeed",900.f,200.f,1800.f);next.controllerDeadZone=ReadFloat(input,"deadZone",.27f,.08f,.5f);next.controllerCursorAssist=input.value("cursorAssist",true);
         next.autoInstallAuthoringDotNet=doc.value("authoring",nlohmann::json::object()).value("autoInstallDotNet",true);
         next.overlayOpacity=ReadFloat(runtime,"overlayOpacity",.88f,.60f,1.f);
         next.overlaySize=ReadFloat(runtime,"overlaySize",.9f,.45f,.98f);

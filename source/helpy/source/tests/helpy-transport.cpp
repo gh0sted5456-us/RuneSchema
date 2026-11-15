@@ -214,7 +214,7 @@ int main(){
     }
     RuneSchemaHostApi host{};host.CallService=HostCall;State state{&host};ConfigureTransport(&state);
     {const json admin={{"Kind","RuneSchemaServerControl1"},{"CanManage",true}};
-        StoreReceipt(&state,{{"_RequestId",90001},{"Status","Native role confirmed"},{"ServerControl",admin}});
+        StoreReceipt(&state,BuildReceipt({{"_RequestId",90001},{"Status","Native role confirmed"},{"ServerControl",admin}}));
         assert(state.Completed.at(90001).at("ServerControl")==admin);state.Completed.erase(90001);}
     const auto syncHost=[&](bool metadata=false){SyncHost(&state,true,metadata);state.NextHostRead=state.NextMetadataRead=std::chrono::steady_clock::time_point::max();};syncHost();
     {const auto previous=HostSnapshot;HostSnapshot={{"_RequestId",90002},{"_InProgress",false},{"Status","Recovered native role result"},{"ServerControl",{{"Kind","RuneSchemaServerControl1"},{"CanManage",true}}}};++HostRevision;syncHost();
@@ -254,9 +254,9 @@ int main(){
     assert(state.ToolsRevision==unchangedRevision); // Heartbeats do not invalidate row/order caches.
     const auto serverGrant=json{{"Action","GiveItems"},{"Player","/Server/Player/Remote"},{"Items",json::array({{{"Item","/Game/Items/Log.Log"},{"Quantity",1}}})}};
     assert(PS::SpawnToolRequests::TrySubmit(serverGrant)&&LastSubmission==serverGrant);
-    StoreReceipt(&state,{{"_RequestId",uint64_t(556)},{"JournalCatalog",{{"Entries",json::array({{{"Path","/Game/Journal/Native.Native"},{"Native",true},{"Pages",json::array({"native text"})}}})},{"HasMore",false}}}});
+    StoreReceipt(&state,BuildReceipt({{"_RequestId",uint64_t(556)},{"JournalCatalog",{{"Entries",json::array({{{"Path","/Game/Journal/Native.Native"},{"Native",true},{"Pages",json::array({"native text"})}}})},{"HasMore",false}}}}));
     json journalReceipt;assert(PS::SpawnToolRequests::TakeCompleted(556,journalReceipt)&&journalReceipt["JournalCatalog"]["Entries"][0]["Pages"][0]=="native text");
-    StoreReceipt(&state,{{"_RequestId",uint64_t(557)},{"InventorySnapshot",{{"PlayerGuid","fixture"},{"Items",json::array({{{"Name","Ash Logs"},{"Count",12}}})}}}});
+    StoreReceipt(&state,BuildReceipt({{"_RequestId",uint64_t(557)},{"InventorySnapshot",{{"PlayerGuid","fixture"},{"Items",json::array({{{"Name","Ash Logs"},{"Count",12}}})}}}}));
     json inventoryReceipt;assert(PS::SpawnToolRequests::TakeCompleted(557,inventoryReceipt)&&inventoryReceipt["InventorySnapshot"]["Items"][0]["Count"]==12);
     PS::RuneSchemaSettingsPanel::Load();assert(PS::RuneSchemaSettingsPanel::Loaded&&SettingsWrites==0);
     PS::RuneSchemaSettingsPanel::Draft["advancedLogging"]=true;PS::RuneSchemaSettingsPanel::Dirty=true;
@@ -426,7 +426,7 @@ int main(){
     assert(accessPrompt.Observe(HostGeneration+1,challenge));auto another=challenge;another["CharacterGuid"]="another-character";
     assert(accessPrompt.Observe(HostGeneration+1,another));another["Available"]=false;assert(!accessPrompt.Observe(HostGeneration+2,another));
     {
-        const auto oldSnapshot=HostSnapshot,oldResult=state.ToolsResult;const auto oldHostRevision=state.HostRevision;
+        const auto oldSnapshot=HostSnapshot;const auto oldResult=state.ToolsResult;const auto oldHostRevision=state.HostRevision;
         HostSnapshot["RemoteAccess"]=challenge;HostSnapshot["Items"]=json::array({{{"Name",std::string(20000,'x')}}});++HostRevision;
         syncHost(true);assert(LastHostRead["Category"]==-2&&LastHostRead["Revision"]==0&&state.HostRevision==oldHostRevision&&state.ToolsResult==oldResult);
         const auto calls=HostCalls["Read"];SyncHost(&state,false,true);assert(HostCalls["Read"]==calls);HostSnapshot=oldSnapshot;
@@ -585,7 +585,8 @@ int main(){
             const auto before=HostCalls["Read"];
             SyncHost(&reader);assert(reader.HostRead.valid());reader.HostRead.wait();SyncHost(&reader);
             assert(HostCalls["Read"]==before+expectedCalls);
-            assert(reader.HostRevision==HostRevision&&reader.ToolsResult==HostSnapshot);
+            assert(reader.HostRevision==HostRevision&&reader.ToolsResult&&*reader.ToolsResult==HostSnapshot);
+            assert(reader.ToolsCatalog.at("Padding").get()==&reader.ToolsResult->at("Padding"));
         }
         HostSnapshot=previous;
     }
@@ -598,7 +599,7 @@ int main(){
         if(responsive){uint32_t size=0;const auto message=json{{"Kind","bootstrap"},{"Generation",HostGeneration},{"Available",true},{"Payload",{{"Result",{{"Status","newer push"}}}}}}.dump();
             assert(ToolsPush(&state,message.c_str(),nullptr,0,&size)==RS_PLUGIN_OK);release.set_value();}
         if(state.HostRead.valid())state.HostRead.wait();SyncHost(&state);BlockAction=0;
-        assert(responsive&&BlockEntered&&state.ToolsResult["Status"]=="newer push"&&state.Players==lastPlayers);
+        assert(responsive&&BlockEntered&&state.ToolsResult&&state.ToolsResult->at("Status")=="newer push"&&state.Players==lastPlayers);
     }
     {
         std::promise<void> release;HostRelease=release.get_future().share();BlockEntered=false;BlockAction=3;

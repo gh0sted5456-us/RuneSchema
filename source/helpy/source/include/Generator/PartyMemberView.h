@@ -2,6 +2,7 @@
 #include "Core/ItemPresentation.h"
 #include "Core/PartyStats.h"
 #include "Core/PartyCardLayout.h"
+#include "Generator/AchievementsPanel.h"
 #include "Core/ItemPreviewRequest.h"
 #include <functional>
 #include <algorithm>
@@ -252,6 +253,7 @@ inline void RenderProfile(){
             ImGui::TextDisabled("Shared by this player; links are not verified");
             if(ImGui::CollapsingHeader("Platforms played"))for(const auto& value:profile.at("Platforms"))ImGui::TextUnformatted(value.get_ref<const std::string&>().c_str());
         }
+        AchievementsPanel::RenderShared(RuneSchemaProfile::AchievementsFor(ItemPresentation::Text(ProfilePlayer,"Guid"),ProfilePlayer.value("IsLocal",false)));
     }ImGui::End();
 }
 inline void RenderInspector(){

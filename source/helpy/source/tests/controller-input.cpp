@@ -48,6 +48,11 @@ int main()try{using namespace PS::HelpyInputMode;Selection selected;selected.Upd
         Check(std::abs(full.X-2*half.X)<.001f&&std::abs(full.X-15)<.001f);
         Check(std::sqrt(diagonal.X*diagonal.X+diagonal.Y*diagonal.Y)<=full.X+.001f);
         Check(Motion(32767,0,-1,900).X==0&&Motion(32767,0,10,900).X<=45.001f);
+        // Tuning: a smaller dead zone admits gentle input; the assist scale slows motion; bad values are clamped.
+        Check(Motion(6000,0,1.f/60,900,{.12f}).X>0&&Motion(6000,0,1.f/60,900).X==0);
+        Check(std::abs(Motion(32767,0,1.f/60,900,{.27f,.5f}).X-7.5f)<.001f);
+        Check(std::abs(Motion(32767,0,1.f/60,900,{.27f,0.f}).X-3.75f)<.001f&&Motion(32767,0,1.f/60,900,{NAN,NAN}).X==full.X);
+        Check(Motion(20000,0,1.f/60,900,{.9f}).X>0); // Dead zone is capped at 50%.
         ImGui::CreateContext();auto& pointerIo=ImGui::GetIO();pointerIo.IniFilename=nullptr;pointerIo.DisplaySize={800,600};pointerIo.DeltaTime=1.f/60;pointerIo.Fonts->Build();pointerIo.ConfigInputTrickleEventQueue=false;
         PS::HelpyControllerInput::DeviceRead=[](bool){return Reading{};};PS::HelpyControllerInput::Selection.Controller=false;
         XINPUT_GAMEPAD cursorPad{};pointerIo.AddMousePosEvent(100,100);

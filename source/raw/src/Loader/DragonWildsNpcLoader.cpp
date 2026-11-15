@@ -419,6 +419,8 @@ namespace DragonWilds {
     bool DragonWildsNpcLoader::OnInitialize()
     {
         m_summonNativeCredit=std::make_unique<Quests::Summons::NativeKillCredit>();
+        m_summonNativeCredit->Confirmed=[this](UObject* controller,UObject* victim){m_gameplayEvents.Kill(controller,victim);};
+        m_gameplayEvents.PublishRemote=[this](UObject* controller,const std::string& payload){return PublishPlayerActivity&&PublishPlayerActivity(controller,payload);};
         #include "NpcEventContracts.inl"
         m_events.Report=[](const std::string& message){PS::Log<LogLevel::Normal>(STR("Events: {}.\n"),PS::ToWideSafe(message.c_str()));};
         m_events.ReportFailure=[this](const std::string& message){ErrorOnce("event-failure:"+message,PS::ToWideSafe("Events: "+message));};
@@ -480,6 +482,9 @@ namespace DragonWilds {
                 try {
                     if(m_summonNativeCredit && m_gameThreadId.load(std::memory_order_relaxed)==GetCurrentThreadId())
                         m_summonNativeCredit->After(dispatch,source,function,parameters);
+                    // Helpy achievements: local player's crafts, unlocks, quests, skills and watched mod events.
+                    if(m_gameThreadId.load(std::memory_order_relaxed)==GetCurrentThreadId())
+                        m_gameplayEvents.Observe(dispatch,source,function,parameters);
                     static const FName onRepIdentity(TEXT("OnRep_IdentityPayload"),FNAME_Add);
                     static const FName receiveBeginPlay(TEXT("ReceiveBeginPlay"),FNAME_Add);
                     static const FName receiveEndPlay(TEXT("ReceiveEndPlay"),FNAME_Add);

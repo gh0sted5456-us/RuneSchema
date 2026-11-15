@@ -45,6 +45,9 @@ public:
     bool HardwareCursor()const{return Visible()&&HelpyOverlayFrames::Read(m_surface.Page->CursorActive)==1;}
     void Cursor(int shape){if(m_surface.Page&&InterlockedExchange(&m_surface.Page->CursorShape,LONG(shape))!=shape&&m_game){DWORD owner=0;GetWindowThreadProcessId(m_game,&owner);if(owner==m_pid)PostMessageW(m_game,WM_APP+0x5a1,1,0);}}
     bool Failed()const{return m_failed;}
+    bool NotificationsUnavailable()const{
+        return m_failed||(m_status.value("Ready",false)&&!m_status.value("PassivePresentation",false));
+    }
     bool AdapterChange(LUID& adapter)const{adapter=m_adapter;return m_changeAdapter&&!m_failed;}
     void AdapterChanged(){m_surface.Reset();m_bound=false;m_seenBound=false;m_showing=false;m_changeAdapter=false;}
     void Fail(std::string error){Hide();m_changeAdapter=false;m_failed=true;Status=std::move(error);}

@@ -40,4 +40,21 @@ int main(){
     DiagnosticIssueFilters::Sort(groups,2);assert(groups.front()==&second);
     DiagnosticIssueFilters::Sort(groups,0);assert(groups.front()==&second);
     DiagnosticIssueFilters::Sort(groups,1);assert(groups.front()==&first);
+    // Case-insensitive matching never needs the haystack lowered first.
+    assert(DiagnosticIssueFilters::Contains("Mods/DemoMod/PATCH.jsonc","patch.json"));
+    assert(!DiagnosticIssueFilters::Contains("","x")&&DiagnosticIssueFilters::Contains("x",""));
+    // View rebuilds only when the store revision or filters change.
+    DiagnosticCenterModel::Store store;
+    for(int i=0;i<4;++i){LiveLog::Entry entry;entry.Severity=i%2?LiveLog::Level::Error:LiveLog::Level::Warning;
+        entry.Message="Problem "+std::to_string(i);entry.Text=entry.Message;entry.Source="Mod"+std::to_string(i);store.Accept(entry);}
+    DiagnosticIssueFilters::View view;
+    const auto all=view.Update(store,"",false,false,0,0).size();
+    assert(all==store.Groups().size()&&all>0&&view.Rebuilds==1);
+    view.Update(store,"",false,false,0,0);assert(view.Rebuilds==1);   // Unchanged: cached.
+    view.Update(store,"",false,false,1,0);assert(view.Rebuilds==2);   // Filter change.
+    store.MarkViewed(store.Groups().front().Id);
+    view.Update(store,"",false,false,1,0);assert(view.Rebuilds==3);   // Store revision change.
+    const auto onlyNew=view.Update(store,"",false,true,0,0).size();assert(onlyNew==all-1);
+    LiveLog::Entry late;late.Severity=LiveLog::Level::Error;late.Message="Late";late.Text="Late";store.Accept(late);
+    for(const auto* group:view.Update(store,"",false,false,0,0))assert(group>=store.Groups().data()&&group<store.Groups().data()+store.Groups().size());
 }

@@ -47,6 +47,7 @@
 #include <windows.h>
 #include <algorithm>
 #include <mutex>
+#include "Core/GameplayEventFeed.h"
 #include <unordered_map>
 #include <unordered_set>
 #include <string_view>
@@ -130,6 +131,7 @@ int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,ui
             if(!Storefront::IsDedicatedServer()&&!GameFrameRate::StartupReady.load())GameFrameRate::StartupProbe=true;
         }
         else if(action=="FrameRate")result={{"Available",GameFrameRate::Available()},{"Fps",GameFrameRate::Fps.load()}};
+        else if(action=="GameplayEvents")result=Storefront::IsDedicatedServer()?nlohmann::json{{"Available",false}}:PS::GameplayEventFeed::Service(request);
         else if(action=="LocalCoordinates")result=Storefront::IsDedicatedServer()?nlohmann::json{{"Available",false}}:PlayerCoordinates::Current.Read(SpawnToolRequests::Generation.load());
         else if(action=="NetworkStatus"){
             SpawnToolRequests::RequestPlayerRoles();
@@ -191,36 +193,24 @@ int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,ui
         else if(action=="AuthoringSnapshot")result=HelpyAuthoring::Bridge.Snapshot(request.value("Revision",uint64_t{}));
         else if(action=="Read") {
             const auto prior=request.value("Revision",uint64_t{});const auto category=request.value("Category",-1);
-            if(category!=-2)SpawnToolRequests::RequestPlayerRoles();std::lock_guard lock(SpawnToolRequests::Mutex);
-            result={{"Available",SpawnToolRequests::Available.load()},{"Waiting",SpawnToolRequests::Waiting.load()},
-                {"Generation",SpawnToolRequests::Generation.load()},{"Revision",SpawnToolRequests::Revision},
-                {"Changed",prior!=SpawnToolRequests::Revision}};
-            if(prior!=SpawnToolRequests::Revision) {
-                nlohmann::json snapshot={{"Status",SpawnToolRequests::Result.value("Status",std::string("Ready."))},{"_Category",category}};
-                const auto copy=[&](const char* key){
-                    if(SpawnToolRequests::QuickCatalogData.contains(key))snapshot[key]=SpawnToolRequests::QuickCatalogData[key];
-                    else if(SpawnToolRequests::Result.contains(key))snapshot[key]=SpawnToolRequests::Result[key];
-                };
-                if(category==-2){snapshot=nlohmann::json::object();copy("ServerMods");copy("RemoteAccess");}
-                else if(category==0){copy("Items");copy("CookedVisuals");copy("CatalogIssues");}
-                else if(category==1||category==2) {
-                    const auto* source=SpawnToolRequests::QuickCatalogData.contains("Definitions")?&SpawnToolRequests::QuickCatalogData:
-                        SpawnToolRequests::Result.contains("Definitions")?&SpawnToolRequests::Result:nullptr;
-                    if(source) {
-                        snapshot["Definitions"]=nlohmann::json::array();
-                        for(const auto& row:(*source)["Definitions"]) {
-                            const auto type=row.value("Type",std::string{});
-                            if((category==1&&(type=="AI"||type=="NPC"))||(category==2&&type=="Resource"))snapshot["Definitions"].push_back(row);
-                        }
-                    }
-                } else {
-                    snapshot=SpawnToolRequests::Result;
-                    for(auto it=SpawnToolRequests::QuickCatalogData.begin();it!=SpawnToolRequests::QuickCatalogData.end();++it)snapshot[it.key()]=it.value();
+            if(category!=-2)SpawnToolRequests::RequestPlayerRoles();
+            // Hold the game's tool mutex only to read counters and take shared catalog pointers. The (large)
+            // snapshot is built after release, so Helpy never stalls the game thread's CatalogProgress/Publish.
+            uint64_t revision=0;SpawnToolRequests::CatalogMap catalog,fields;
+            {
+                std::lock_guard lock(SpawnToolRequests::Mutex);revision=SpawnToolRequests::Revision;
+                result={{"Available",SpawnToolRequests::Available.load()},{"Waiting",SpawnToolRequests::Waiting.load()},
+                    {"Generation",SpawnToolRequests::Generation.load()},{"Revision",revision},{"Changed",prior!=revision}};
+                if(prior!=revision){catalog=SpawnToolRequests::QuickCatalogData;fields=SpawnToolRequests::Result;}
+            }
+            if(prior!=revision){
+                const bool full=category!=0&&category!=1&&category!=2&&category!=-2;
+                auto base=full?SpawnToolRequests::Expand(fields):nlohmann::json::object();
+                if(!full){
+                    if(category!=-2){const auto it=fields.find("Status");base["Status"]=it==fields.end()?nlohmann::json("Ready."):*it->second;}
+                    catalog.merge(fields);
                 }
-                if(category!=-2)for(const auto* key:{"Players","PlayerRoles","ServerMods","RemoteAccess","CatalogReady","_CatalogIndexing","CatalogStatus","RegistryRecords","UnresolvedAssets",
-                        "MetadataUnavailable","UnclassifiedRecords","CatalogAI","CatalogResources","CatalogCoverage",
-                        "IndexStage","IndexDone","IndexTotal","IndexHasTotal","IndexFinished","IndexDetail"})copy(key);
-                result["Snapshot"]=std::move(snapshot);
+                result["Snapshot"]=SpawnToolRequests::CatalogSnapshot(std::move(base),catalog,category);
             }
         } else if(action=="Submit") result={{"Accepted",SpawnToolRequests::TrySubmit(request.at("Request"))}};
         else if(action=="QuerySubmit") result={{"Accepted",HelpyQueryService::Submit(request.at("Request"))}};
@@ -520,11 +510,11 @@ void PluginHost::OnUnrealInit(){
         uint32_t ignored=0;CallService("RuneSchema.Core","helpy.tools.push",message.c_str(),nullptr,0,&ignored);
         if(DesktopBridgeReady)m_state->Desktop.Push(message);
     };
-    nlohmann::json bootstrap;uint64_t bootstrapRevision=0;{
+    SpawnToolRequests::CatalogMap bootstrap;uint64_t bootstrapRevision=0;{
         std::lock_guard lock(SpawnToolRequests::Mutex);
-        bootstrap={{"Result",SpawnToolRequests::Result}};
+        bootstrap=SpawnToolRequests::Result;
         bootstrapRevision=SpawnToolRequests::Revision;
-    }SpawnToolRequests::PushUpdate("bootstrap",bootstrap,bootstrapRevision);
+    }SpawnToolRequests::PushUpdate("bootstrap",{{"Result",SpawnToolRequests::Expand(bootstrap)}},bootstrapRevision);
     ModLocalServices::Start();
     m_state->UnrealReady.store(true,std::memory_order_release);
 }

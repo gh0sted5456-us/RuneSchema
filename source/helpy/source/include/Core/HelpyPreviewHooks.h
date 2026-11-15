@@ -133,7 +133,7 @@ inline ImVec4 IconCache{};
 inline ImVec4 IconCacheClose{};
 inline ImVec4 SourceFilter{},ViewFamily{},ViewModFamily{},RefreshSource{},RefreshSearch{},ItemCacheFirstSwitch{};
 inline std::map<std::string,ImVec4> ModTitles;
-inline ImVec4 ModDetailsMenu{},ModDetailsWindow{};
+inline ImVec4 ModDetailsMenu{},ModDetailsWindow{},ModAchievementsAction{},ModAchievementsAll{};
 inline std::map<std::string,ImVec4> SourceOptions;
 inline size_t ModBadges=0;
 inline size_t LoadingRings=0;

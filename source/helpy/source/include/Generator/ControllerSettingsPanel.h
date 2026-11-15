@@ -10,6 +10,11 @@ inline void Render(const std::function<void()>& shortcuts){
  ImGui::TextUnformatted("Glyphs");ImGui::SetNextItemWidth(-1);changed|=ImGui::Combo("##controller-glyphs",&theme.controllerGlyphs,"Automatic (device labels)\0Xbox\0PlayStation\0Generic\0Nintendo\0");
  changed|=HelpyImGuiTheme::Toggle("Right-stick cursor",&theme.controllerCursor);
  ImGui::TextUnformatted("Cursor speed");ImGui::SetNextItemWidth(-1);changed|=ImGui::SliderFloat("##controller-cursor-speed",&theme.controllerCursorSpeed,200.f,1800.f,"%.0f px/s");
+ changed|=HelpyImGuiTheme::Toggle("Slow cursor over controls",&theme.controllerCursorAssist);
+ if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Moves the right-stick cursor at about half speed while it is over a button, row or field, so small targets are easier to hit.");
+ ImGui::TextUnformatted("Right-stick dead zone");ImGui::SetNextItemWidth(-1);
+ {float percent=theme.controllerDeadZone*100.f;if(ImGui::SliderFloat("##controller-dead-zone",&percent,8.f,50.f,"%.0f%%")){theme.controllerDeadZone=percent/100.f;changed=true;}}
+ if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Raise this if the cursor drifts on its own; lower it for finer control. Default 27%%.");
  ImGui::TextWrapped("Triggers change main sections. Bumpers change panels. The D-pad moves focus within the active panel. The left stick scrolls the focused panel or the panel under the pointer. Right stick enters pointer mode: the bottom face button left-clicks or drags and the left face button right-clicks. The D-pad returns to focus navigation. Right-stick click grabs the item or selected group; click again over the cart to drop. Left-stick click toggles multi-select in Item Bay. On the map, left stick pans, left-stick press zooms in and the top face button zooms out.");
  changed|=HelpyImGuiTheme::Toggle("PlayStation touchpad pointer",&theme.controllerTouchpad);
  ImGui::TextWrapped("Swipe with one finger to move; tap to left-click, or physically press to click and drag. Two fingers right-click. PlayStation glyphs stay active.");

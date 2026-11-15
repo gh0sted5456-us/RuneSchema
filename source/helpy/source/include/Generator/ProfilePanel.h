@@ -6,6 +6,7 @@
 #include "Generator/SpawnToolsPanel.h"
 #include "Generator/SaveEditorPanel.h"
 #include "Generator/PartyMemberView.h"
+#include "Generator/AchievementsPanel.h"
 #include <shellapi.h>
 namespace PS::ProfilePanel {
 inline uint64_t DraftRevision=UINT64_MAX;
@@ -60,6 +61,7 @@ inline bool Render(const nlohmann::json& catalog){
         if(named){ImGui::TextUnformatted(Name);if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Your permanent profile name");}
         else {ImGui::SetNextItemWidth(std::min(t.X(320),ImGui::GetContentRegionAvail().x));Dirty|=HelpyTextInput::InputTextWithHint("##profile-name","Choose your permanent profile name",Name,sizeof(Name));}
         if(local)ImGui::TextDisabled("Playing: %s",local->value("Name",std::string("Player")).c_str());else ImGui::TextDisabled("One profile across your characters");
+        AchievementsPanel::Header();
         if(HelpyImGuiTheme::SoftButton("Picture..."))PlayerPortraitPicker::Request(account);ImGui::SameLine();
         ImGui::BeginDisabled(!Dirty||(!named&&HelpyPersonalization::Trim(Name).empty()));
         if(HelpyImGuiTheme::SoftButton(named?"Save details":"Create profile")){if(P::Save(Name,{{"Steam",std::string(Steam)},{"Nexus",std::string(Nexus)},{"Discord",std::string(Discord)}}))Refresh();}
@@ -120,6 +122,7 @@ inline bool Render(const nlohmann::json& catalog){
     HelpyPreviewHooks::AuthoringButtons["Profile links"]=HelpyPreviewHooks::LastRect();
 #endif
     if(links){SocialInput("Steam","Steam profile link",Steam,sizeof(Steam));SocialInput("Nexus","Nexus profile link",Nexus,sizeof(Nexus));SocialInput("Discord","Discord username",Discord,sizeof(Discord));ImGui::TextDisabled("Shared with connected Helpy users after saving.");}
+    if(ImGui::CollapsingHeader("Mod achievements"))AchievementsPanel::Render();
     if(ImGui::CollapsingHeader("Loadouts"))SpawnToolsPanel::RenderKitLibrary();
     if(ImGui::CollapsingHeader("Spawn browser presets"))SpawnBrowserSettings::PresetControls();
     if(ImGui::CollapsingHeader("More")){

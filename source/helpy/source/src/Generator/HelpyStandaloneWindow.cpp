@@ -57,6 +57,9 @@
 #include "Generator/StructuredLogFeed.h"
 #include "Core/DiagnosticSession.h"
 #include "Generator/HelpyDiagnosticOverlay.h"
+#include "Generator/HelpyAchievementOverlay.h"
+#include "Runtime/HelpyAchievements.h"
+#include "Core/HelpyCoreLink.h"
 #include "Generator/ModsPanel.h"
 #include "Generator/NotificationsPanel.h"
 #include "Generator/HelpyControllerInput.h"
@@ -276,6 +279,7 @@ DiagnosticCenterHistory::Service DiagnosticHistory;
 DiagnosticCenterMutes::Manager DiagnosticMutes;
 HelpyDiagnosticOverlay DiagnosticOverlay;
 HelpyDiagnosticOverlay CoordinatesOverlay;
+HelpyAchievementOverlay AchievementOverlay;
 HelpyDiagnosticOverlay StartupOverlay;
 DiagnosticToastFeed::Options DiagnosticOptions(){const auto& t=HelpyImGuiTheme::Current;return {t.diagnosticToastsEnabled,t.diagnosticToastLimit,t.diagnosticToastDuration,t.diagnosticRegistryActivity};}
 std::chrono::steady_clock::time_point NextPlayerRefresh{};
@@ -333,15 +337,25 @@ void RenderDiagnosticIcon(ImDrawList* dl,ImVec2 p,float size,ImU32 color,
 }
 ImVec2 HudViewport{},HudOrigin{};
 HelpyHudLayout::Rect CoordinatesBox(const HelpyImGuiTheme::Theme& theme,ImVec2 viewport){const auto label=HelpyHudLayout::CoordinateText(HelpyCoordinates::Label,HelpyFeatureSettings::Hud);const auto text=ImGui::CalcTextSize(label.c_str());return HelpyHudLayout::Coordinates(viewport.x,viewport.y,text.x+theme.X(24),text.y+theme.Y(16),HelpyFeatureSettings::Hud);}
-RECT HudSurfaceBounds(int width,int height,bool map,bool coordinates,bool loading,bool diagnostics){
+HelpyHudLayout::Rect AwardBounds(const HelpyImGuiTheme::Theme& theme, float width, float height) {
+    namespace A = AchievementToastTimeline;
+    const float scale = std::min({theme.Scale(), width / (A::Width + 24), height / (A::Height + A::Margin * 2)});
+    const float cardWidth = A::Width * scale, cardHeight = (A::Height + A::Margin) * scale;
+    return {(width - cardWidth) * .5f, A::Top(height, scale, 0.f), cardWidth, cardHeight};
+}
+RECT HudSurfaceBounds(int width,int height,bool map,bool coordinates,bool loading,bool diagnostics,bool award){
     float left=float(width),top=float(height),right=0,bottom=0;const auto& layout=HelpyFeatureSettings::Hud;
     const auto include=[&](HelpyHudLayout::Rect box){left=std::min(left,box.X);top=std::min(top,box.Y);right=std::max(right,box.X+box.W);bottom=std::max(bottom,box.Y+box.H);};
     if(map)include(HelpyHudLayout::Map(float(width),float(height),layout));
     if(coordinates)include(CoordinatesBox(HelpyImGuiTheme::Current,{float(width),float(height)}));
     if(loading)include(HelpyHudLayout::Place(float(width),float(height),768,480,layout.Loading));
     if(diagnostics)include({0,0,float(width),float(height)});
+    const auto card=AwardBounds(HelpyImGuiTheme::Current,float(width),float(height));
+    if(award)include(card);
     const LONG w=std::clamp(LONG(std::ceil(right)-std::floor(left)),160L,LONG(HelpyOverlayFrames::MaxWidth)),h=std::clamp(LONG(std::ceil(bottom)-std::floor(top)),120L,LONG(HelpyOverlayFrames::MaxHeight));
-    const LONG x=std::clamp(LONG(std::floor(left)),0L,std::max(0L,LONG(width)-w)),y=std::clamp(LONG(std::floor(top)),0L,std::max(0L,LONG(height)-h));return {x,y,x+w,y+h};
+    const LONG x=std::clamp(LONG(std::floor(left)),award?std::max(0L,LONG(std::ceil(card.X+card.W))-w):0L,std::max(0L,LONG(width)-w));
+    const LONG y=std::clamp(LONG(std::floor(top)),award?std::max(0L,LONG(std::ceil(card.Y+card.H))-h):0L,std::max(0L,LONG(height)-h));
+    return {x,y,x+w,y+h};
 }
 void RenderCoordinates(const HelpyImGuiTheme::Theme& t){
     if(!t.showCoordinates||HelpyCoordinates::Label.empty())return;
@@ -702,6 +716,77 @@ void DrawThemedLogo(ImDrawList* draw,ImVec2 a,ImVec2 b,const HelpyImGuiTheme::Th
     }
     if(BrandTexture)draw->AddImage(ImTextureRef(BrandTexture),a,b,{0,0},{1,1},ImGui::GetColorU32(ImVec4(1,1,1,opacity)));
     if(BrandAccentTexture){auto tint=theme.accent;tint.w=opacity;draw->AddImage(ImTextureRef(BrandAccentTexture),a,b,{0,0},{1,1},ImGui::GetColorU32(tint));}
+}
+void RenderGamerPoints(const HelpyImGuiTheme::Theme& theme) {
+    const auto* unlock = AchievementOverlay.Current();
+    const auto& frame = AchievementOverlay.Frame();
+    if (!unlock || !frame.Visible || frame.Alpha <= 0) return;
+
+    const auto bounds = AwardBounds(theme, HudViewport.x, HudViewport.y);
+    const float scale = bounds.W / AchievementToastTimeline::Width;
+    const float x = bounds.X - HudOrigin.x;
+    const float y = bounds.Y - HudOrigin.y + bounds.H * frame.Offset;
+    const ImVec2 a{x, y}, b{x + bounds.W, y + AchievementToastTimeline::Height * scale};
+    auto* draw = ImGui::GetForegroundDrawList();
+    const auto color = [&](ImVec4 value, float opacity = 1.f) {
+        value.w = frame.Alpha * opacity;
+        return ImGui::GetColorU32(value);
+    };
+    const float rounding = 11 * scale;
+    draw->AddRectFilled({a.x + 2 * scale, a.y + 4 * scale}, {b.x + 2 * scale, b.y + 4 * scale},
+        color({0,0,0,1}, .55f), rounding);
+    draw->AddRectFilled(a, b, color(theme.panelAlt, .98f), rounding);
+    draw->AddRect(a, b, color(theme.accent, .68f), rounding);
+
+    auto* regular = ImGui::GetFont();
+    auto* bold = UiBoldFont ? UiBoldFont : regular;
+    if (frame.Rune > 0 || frame.Brackets < 1) {
+        const float size = 70 * scale;
+        const ImVec2 mark{(a.x + b.x - size) * .5f, (a.y + b.y - size) * .5f};
+        constexpr const char* pieces[] = {"[", "R", "]"};
+        for (size_t i = 0; i < SplashSprites.size(); ++i) {
+            const float opacity = i == 1 ? frame.Rune : 1.f - frame.Brackets;
+            if (opacity <= 0) continue;
+            const float step = i == 0 ? -1.f : i == 2 ? 1.f : 0.f;
+            const float shift = step * frame.Brackets * 73 * scale;
+            const float lift = std::abs(step) * frame.Brackets * 9 * scale;
+            const auto& sprite = SplashSprites[i];
+            if (sprite.Texture) {
+                draw->AddImage(ImTextureRef(sprite.Texture), {mark.x + sprite.Bounds.x * size + shift, mark.y + sprite.Bounds.y * size - lift},
+                    {mark.x + sprite.Bounds.z * size + shift, mark.y + sprite.Bounds.w * size - lift},
+                    {0,0}, {1,1}, color({1,1,1,1}, opacity));
+                if (i == 1 && BrandAccentTexture)
+                    draw->AddImage(ImTextureRef(BrandAccentTexture), mark, {mark.x + size, mark.y + size},
+                        {0,0}, {1,1}, color(theme.accent, opacity));
+            } else {
+                const float fontSize = 34 * scale;
+                const float width = bold->CalcTextSizeA(fontSize, FLT_MAX, 0.f, pieces[i]).x;
+                draw->AddText(bold, fontSize, {mark.x + (size - width) * .5f + step * 23 * scale + shift,
+                    mark.y + (size - fontSize) * .5f - lift}, color(theme.accent, opacity), pieces[i]);
+            }
+        }
+    }
+    if (frame.Text <= 0) return;
+
+    const auto gold = color(theme.accent, frame.Text);
+    constexpr float valueSize = 22;
+    const std::string points = "+" + std::to_string(unlock->Points);
+    const float valueWidth = bold->CalcTextSizeA(valueSize * scale, FLT_MAX, 0, points.c_str()).x;
+    const float badgeWidth = std::max(72 * scale, valueWidth + 20 * scale);
+    const ImVec2 badge{b.x - badgeWidth - 15 * scale, y + 20 * scale};
+    draw->AddRectFilled(badge, {badge.x + badgeWidth, badge.y + 52 * scale}, color(theme.accent, .15f * frame.Text), 8 * scale);
+    draw->AddRect(badge, {badge.x + badgeWidth, badge.y + 52 * scale}, color(theme.accent, .48f * frame.Text), 8 * scale);
+    draw->AddText(bold, valueSize * scale, {badge.x + (badgeWidth - valueWidth) * .5f, badge.y + 6 * scale}, gold, points.c_str());
+    const float labelWidth = bold->CalcTextSizeA(10 * scale, FLT_MAX, 0, "POINTS").x;
+    draw->AddText(bold, 10 * scale, {badge.x + (badgeWidth - labelWidth) * .5f, badge.y + 33 * scale}, gold, "POINTS");
+
+    const float left = x + 22 * scale;
+    draw->PushClipRect({left, y}, {badge.x - 10 * scale, b.y}, true);
+    draw->AddText(bold, 11 * scale, {left, y + 14 * scale}, gold, "RUNESCHEMA GAMER POINTS");
+    draw->AddText(bold, 19 * scale, {left, y + 34 * scale}, color(theme.text, frame.Text), unlock->Title.c_str());
+    const auto detail = unlock->Description.empty() ? unlock->ModName : unlock->Description;
+    draw->AddText(regular, 12 * scale, {left, y + 62 * scale}, color(theme.textDisabled, frame.Text), detail.c_str());
+    draw->PopClipRect();
 }
 struct HomeDestination { Page Target; const char* Label; const char* Description; };
 void DrawRuneExit(ImDrawList* draw,ImVec2 a,ImVec2 b,const HelpyImGuiTheme::Theme& theme,const HelpySplash::ExitFrame& exit,float opacity=1){
@@ -1482,6 +1567,8 @@ void RenderDiagnosticsSettings(const HelpyImGuiTheme::Theme& t) {
     ImGui::SeparatorText("Diagnostic notifications");
     changed|=HelpyImGuiTheme::Toggle("Enable on-screen log toasts",&theme.diagnosticToastsEnabled);
     changed|=HelpyImGuiTheme::Toggle("Show routine registry synchronization notices",&theme.diagnosticRegistryActivity);
+    changed|=HelpyImGuiTheme::Toggle("Show RuneSchema Gamer Points popups",&theme.achievementPopups);
+    changed|=HelpyImGuiTheme::Toggle("Play Gamer Points chime",&theme.achievementSound);
     ImGui::TextWrapped("Registry handshakes and nonblocking content differences stay in Diagnostics by default. Blocked operations, unrelated warnings and errors still appear.");
     ImGui::SetNextItemWidth(t.X(250));
     changed|=ImGui::SliderInt("Maximum visible toasts",&theme.diagnosticToastLimit,1,10);
@@ -1491,6 +1578,8 @@ void RenderDiagnosticsSettings(const HelpyImGuiTheme::Theme& t) {
     if(ImGui::SmallButton("Reset notification defaults")){
         const HelpyImGuiTheme::Theme defaults{};
         theme.diagnosticToastsEnabled=defaults.diagnosticToastsEnabled;
+        theme.achievementPopups=defaults.achievementPopups;
+        theme.achievementSound=defaults.achievementSound;
         theme.diagnosticRegistryActivity=defaults.diagnosticRegistryActivity;
         theme.diagnosticToastLimit=defaults.diagnosticToastLimit;
         theme.diagnosticToastDuration=defaults.diagnosticToastDuration;
@@ -2361,7 +2450,10 @@ void HelpyStandaloneWindow::ThreadMain() {
     const auto currentDiagnostic=[&](std::string_view record){
         return diagnosticPid&&diagnosticPid==diagnosticOwner()&&DiagnosticSession::Includes(diagnosticStart,record);
     };
+    HelpyCoreLink::Link coreLink;
     const auto cleanup=[&](void*){
+        coreLink.Stop();
+        try{nlohmann::json ignored;if(PluginRuntimeServices::ExternalDesktop&&RuneSchemaSettingsPanel::Remote)RuneSchemaSettingsPanel::Remote({{"Action","HelpyNativeOverlay"},{"Payload",{{"Action","DesktopInput"},{"Enabled",false}}}},ignored);}catch(...){}
         try{nlohmann::json ignored;if(RuneSchemaSettingsPanel::Remote)RuneSchemaSettingsPanel::Remote({{"Action","HelpyNativeOverlay"},{"Payload",{{"Action","GuideReservation"},{"Enabled",false}}}},ignored);}catch(...){}
         try{nlohmann::json ignored;if(RuneSchemaSettingsPanel::Remote)RuneSchemaSettingsPanel::Remote({{"Action","HelpyVisibility"},{"Visible",false}},ignored);}catch(...){}
         m_publishedWindow=nullptr;ClosePopup();m_nativeOverlay.Shutdown();HelpyControllerInput::Shutdown();m_tray.Remove();
@@ -2369,9 +2461,11 @@ void HelpyStandaloneWindow::ThreadMain() {
         NotificationsPanel::Shutdown();
         ModMetadataPanel::Shutdown();
         ModSaveFilesPanel::Shutdown();
+        AchievementsPanel::CloseModWindow();
         ModMenu2Panel::Shutdown();
         if(!DiagnosticStore.Events().empty())DiagnosticHistory.Queue(DiagnosticStore,true);
         DiagnosticHistory.Close();
+        HelpyAchievements::Shutdown();AchievementOverlay.Close();
         DiagnosticOverlay.Close();CoordinatesOverlay.Close();StartupOverlay.Close();HelpyCoordinates::Shutdown();HelpyStartupProgress::Shutdown();StructuredLogFeed::Shutdown();DiagnosticsPanel::Shutdown();
         LiveLogPanel::OnEntry={};LiveLogPanel::OnBackfillEntry={};LiveLogPanel::OnUE4SSEntry={};
         if(ImGui::GetCurrentContext()){
@@ -2393,6 +2487,7 @@ void HelpyStandaloneWindow::ThreadMain() {
         if(SUCCEEDED(com))CoUninitialize();
     };
     std::unique_ptr<void,decltype(cleanup)> resources(reinterpret_cast<void*>(1),cleanup);
+    coreLink.Start();
     RegisterClassExW(&wc);HelpyWindowPlacement::Load(HostServices::StateDirectory()/"window-placement.json");
     m_hwnd=CreateWindowExW(WS_EX_APPWINDOW,wc.lpszClassName,HelpyBranding::WindowTitle,WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,CW_USEDEFAULT,1280,900,nullptr,nullptr,m_module,this);
     if(!m_hwnd){SetError("CreateWindowExW failed");m_started=true;return;}
@@ -2468,6 +2563,7 @@ void HelpyStandaloneWindow::ThreadMain() {
     uint64_t nextControllerShortcut=0,nextGuideReservation=0,nativeGuideUntil=0;uint32_t guidePid=~uint32_t{};bool previousGuide=false;
     HelpyGuideReservation desktopGuide;
     uint32_t desktopInputPid=0;uint64_t nextDesktopInput=0;
+    uint64_t visibilityEpoch=0,nextVisibility=0;
     const auto controllerAllowed=[&]{const auto focus=GetForegroundWindow();return HelpyPopupInput::CanToggle(GameWindow(focus),OwnsWindow(focus)||(m_nativeOverlay.Visible()&&focus==m_gameWindow));};
     const auto controllerToggle=[&]{HelpyControllerInput::ShortcutActivated=true;Toggle();};
     while(!done&&!m_stop.load()) {
@@ -2555,13 +2651,18 @@ void HelpyStandaloneWindow::ThreadMain() {
             }else nextDiagnosticAttach=shortcutNow+1000;
         }
 #endif
+        coreLink.Drain();
         const bool reserve=PluginRuntimeServices::ExternalDesktop&&!HelpyEnvironment::Server()&&shortcutPid&&(InputBindings::ParsePad(HelpyBindingActions::Controller())&InputBindings::Guide)&&shortcutTheme.reserveControllerGuide;
         if(guidePid!=shortcutPid||previousGuide!=reserve||(reserve&&shortcutNow>=nextGuideReservation)){
             if(reserve)desktopGuide.Start(GetCurrentProcessId(),GetCurrentThreadId(),m_hwnd);else desktopGuide.Stop();
             guidePid=shortcutPid;previousGuide=reserve;nextGuideReservation=shortcutNow+2000;
             if(shortcutPid&&RuneSchemaSettingsPanel::Remote){
-                nlohmann::json reply;const bool ok=RuneSchemaSettingsPanel::Remote({{"Action","HelpyNativeOverlay"},{"Payload",{{"Action","GuideReservation"},{"Enabled",reserve},{"AppPid",GetCurrentProcessId()},{"Thread",GetCurrentThreadId()},{"Window",uint64_t(reinterpret_cast<uintptr_t>(m_hwnd))}}}},reply);
-                HelpyImGuiTheme::ControllerShortcutStatus=ok?reply.value("Status",std::string("Guide reservation is unavailable in this bridge")):"Guide reservation unavailable; SDL shortcut remains available";
+                const auto epoch=PluginRuntimeServices::ConnectionEpoch.load();
+                coreLink.Post("guide-reservation",{{"Action","HelpyNativeOverlay"},{"Payload",{{"Action","GuideReservation"},{"Enabled",reserve},{"AppPid",GetCurrentProcessId()},{"Thread",GetCurrentThreadId()},{"Window",uint64_t(reinterpret_cast<uintptr_t>(m_hwnd))}}}},
+                    RuneSchemaSettingsPanel::Remote,[epoch](bool ok,const nlohmann::json& reply){
+                        if(epoch!=PluginRuntimeServices::ConnectionEpoch.load())return;
+                        HelpyImGuiTheme::ControllerShortcutStatus=ok?reply.value("Status",std::string("Guide reservation is unavailable in this bridge")):"Guide reservation unavailable; SDL shortcut remains available";
+                    });
             }else HelpyImGuiTheme::ControllerShortcutStatus="Native Guide reservation needs a connected game; the SDL shortcut remains available";
         }
         if(HudExtensionsPanel::HideRequested){HudExtensionsPanel::HideRequested=false;ClosePopup();HudExtensionsPanel::AfterHide();}
@@ -2573,10 +2674,17 @@ void HelpyStandaloneWindow::ThreadMain() {
         const bool minimap=HelpyFeatureSettings::Hud.Minimap&&HelpyCoordinates::HasPosition;
         const bool notices=HelpyImGuiTheme::Current.diagnosticToastsEnabled&&!DiagnosticFeed.Empty();
         const bool starting=HelpyStartupProgress::Visible();
+        const bool gameFocused=GameWindow(foreground)&&!HelpyEnvironment::Server();
+        const bool award=HelpyImGuiTheme::Current.achievementPopups&&(AchievementOverlay.Busy()||!HelpyAchievements::Popups.empty());
+        const bool passiveHud=notices||coordinates||minimap||starting||award;
+        const bool panelVisible=m_visible.load();
+        const bool gameAward=award&&gameFocused&&!wasNative&&(!panelVisible||!m_gameOverlay.Active());
+        const bool showHud=gameFocused&&((!panelVisible&&passiveHud)||gameAward);
+        const bool nativeAward=PluginRuntimeServices::ExternalDesktop&&RuneSchemaSettingsPanel::Remote;
         auto hud=HelpyNativeOverlayClient::Hud::None;
-        if(!m_visible.load()&&(coordinates||minimap||starting||notices))hud=notices?HelpyNativeOverlayClient::Hud::Combined:starting?HelpyNativeOverlayClient::Hud::Startup:HelpyNativeOverlayClient::Hud::Coordinates;
-        m_nativeOverlay.Notifications(!m_visible.load()&&GameWindow(foreground)&&(notices||coordinates||minimap||starting));
-        m_nativeOverlay.Tick(RuneSchemaSettingsPanel::Remote,PluginRuntimeServices::GameProcessId.load(),HelpyStartupProgress::Presentation(PluginRuntimeServices::ExternalDesktop,HelpyEnvironment::Server(),HelpyImGuiTheme::Current.gameOverlay,HelpyImGuiTheme::Current.nativeOverlay,starting||minimap||coordinates||notices),m_device,HelpyImGuiTheme::Current.overlaySize,1.f,hud,[&](int width,int height){return HudSurfaceBounds(width,height,minimap,coordinates,starting,notices);});
+        if(showHud)hud=notices||award?HelpyNativeOverlayClient::Hud::Combined:starting?HelpyNativeOverlayClient::Hud::Startup:HelpyNativeOverlayClient::Hud::Coordinates;
+        m_nativeOverlay.Notifications(showHud);
+        m_nativeOverlay.Tick(RuneSchemaSettingsPanel::Remote,shortcutPid,HelpyStartupProgress::Presentation(PluginRuntimeServices::ExternalDesktop,HelpyEnvironment::Server(),HelpyImGuiTheme::Current.gameOverlay,HelpyImGuiTheme::Current.nativeOverlay,passiveHud),m_device,HelpyImGuiTheme::Current.overlaySize,1.f,hud,[&](int width,int height){return HudSurfaceBounds(width,height,minimap,coordinates,starting,notices,award);},foreground);
         if(const auto* page=m_nativeOverlay.Page();page&&page->ViewportWidth&&page->ViewportHeight){HelpyHudPanel::Viewport={float(page->ViewportWidth),float(page->ViewportHeight)};HelpyHudPanel::Detected=true;}
         else {RECT rect{};HelpyHudPanel::Detected=GameWindow(foreground)&&GetClientRect(foreground,&rect)&&rect.right>0&&rect.bottom>0;if(HelpyHudPanel::Detected)HelpyHudPanel::Viewport={float(rect.right),float(rect.bottom)};}
         LUID adapter{};if(m_nativeOverlay.AdapterChange(adapter))RebindNativeDevice(adapter);
@@ -2589,19 +2697,30 @@ void HelpyStandaloneWindow::ThreadMain() {
         const auto desktopPid=desktopOverlay?shortcutPid:0;
         if(desktopPid!=desktopInputPid||(desktopPid&&shortcutNow>=nextDesktopInput)){
             if(shortcutPid&&RuneSchemaSettingsPanel::Remote){
-                nlohmann::json reply;
                 const auto payload=nlohmann::json{{"Action","DesktopInput"},{"Enabled",desktopPid!=0},{"AppPid",GetCurrentProcessId()},{"Window",uint64_t(reinterpret_cast<uintptr_t>(m_hwnd))}};
-                const bool accepted=RuneSchemaSettingsPanel::Remote({{"Action","HelpyNativeOverlay"},{"Payload",payload}},reply)&&reply.value("Accepted",false);
-                if(desktopPid&&!accepted&&!desktopInputPid)PushToast("Helpy could not reserve desktop overlay input. Check the installed RuneSchema HUD plugin.",6.0);
+                const bool warn=desktopPid&&!desktopInputPid;
+                const auto epoch=PluginRuntimeServices::ConnectionEpoch.load();
+                coreLink.Post("desktop-input",{{"Action","HelpyNativeOverlay"},{"Payload",payload}},RuneSchemaSettingsPanel::Remote,[warn,epoch](bool ok,const nlohmann::json& reply){
+                    if(warn&&epoch==PluginRuntimeServices::ConnectionEpoch.load()&&!(ok&&reply.value("Accepted",false)))
+                        PushToast("Helpy could not reserve desktop overlay input. Check the installed RuneSchema HUD plugin.",6.0);
+                });
             }
             desktopInputPid=desktopPid;nextDesktopInput=shortcutNow+2000;
         }
         if(publishedVisibility&&*publishedVisibility&&!renderable)HelpyControllerInput::Suspend();
-        if(!publishedVisibility||*publishedVisibility!=renderable||!publishedCapture||*publishedCapture!=captureInput){
-            publishedVisibility=renderable;publishedCapture=captureInput;nlohmann::json ignored;
-            if(RuneSchemaSettingsPanel::Remote)RuneSchemaSettingsPanel::Remote({{"Action","HelpyVisibility"},{"Visible",renderable},{"CaptureInput",captureInput}},ignored);
+        const auto epoch=PluginRuntimeServices::ConnectionEpoch.load();
+        if(visibilityEpoch!=epoch){visibilityEpoch=epoch;publishedVisibility.reset();nextVisibility=0;}
+        if(shortcutNow>=nextVisibility&&(!publishedVisibility||*publishedVisibility!=renderable||!publishedCapture||*publishedCapture!=captureInput)){
+            nextVisibility=shortcutNow+250;
+            if(coreLink.Post("visibility",{{"Action","HelpyVisibility"},{"Visible",renderable},{"CaptureInput",captureInput}},RuneSchemaSettingsPanel::Remote,
+                [&,epoch,renderable,captureInput](bool ok,const nlohmann::json&){
+                    if(!ok&&epoch==visibilityEpoch&&publishedVisibility==renderable&&publishedCapture==captureInput){
+                        publishedVisibility.reset();nextVisibility=GetTickCount64()+250;
+                    }
+                })){
+                publishedVisibility=renderable;publishedCapture=captureInput;nextVisibility=0;
+            }
         }
-        const bool gameFocused=GameWindow(foreground)&&!HelpyEnvironment::Server();
 #if !defined(HELPY_PREVIEW)
         HelpyUpdates::Tick(HelpyImGuiTheme::Current.automaticUpdateChecks,HelpyEnvironment::UpdateChecksAvailable,HelpyEnvironment::RuneSchemaVersion);
         if(NotificationsPanel::Poll())PushToast("RuneSchema and Helpy update available. See Notifications.",6.0);
@@ -2629,10 +2748,18 @@ void HelpyStandaloneWindow::ThreadMain() {
         DiagnosticOverlay.Update(m_module,gameFocused?foreground:nullptr,gameToasts&&!m_nativeOverlay.NotificationsVisible()?DiagnosticFeed:noGameToasts,performance,gameFocused,gameFocused&&performance.showGameFps?HelpyPerformance::GameLabel():std::string{},ModsPanel::ServerComparison.Counts,HelpyDiagnosticOverlay::Mode::Notifications,HelpyFeatureSettings::Hud);
         CoordinatesOverlay.Update(m_module,gameFocused?foreground:nullptr,noGameToasts,performance,gameToasts&&coordinates&&!m_nativeOverlay.NotificationsVisible(),HelpyCoordinates::Label,{},HelpyDiagnosticOverlay::Mode::Coordinates,HelpyFeatureSettings::Hud);
         StartupOverlay.Update(m_module,gameFocused?foreground:nullptr,noGameToasts,performance,gameToasts&&starting&&!m_nativeOverlay.NotificationsVisible(),HelpyStartupProgress::Label(),{},HelpyDiagnosticOverlay::Mode::Startup,HelpyFeatureSettings::Hud);
+        // Mod achievements: read the core's gameplay feed, then raise unlocks from the bottom of the game window.
+        const bool achievementGame=gamePid&&!HelpyEnvironment::Server();
+        if(achievementGame&&ModsPanel::Snapshot.is_null()&&!ModsPanel::Worker.valid()&&ModsPanel::Status.empty()&&RuneSchemaSettingsPanel::Remote)ModsPanel::Start({{"Action","ModsRead"}});
+        ModsPanel::Poll();HelpyAchievements::Observe(ModsPanel::Rows,ModsPanel::SnapshotRevision);
+        HelpyAchievements::Poll(coreLink,RuneSchemaSettingsPanel::Remote,achievementGame);
+        AchievementOverlay.Update(m_module,foreground,performance,gameAward&&m_nativeOverlay.NotificationsVisible(),
+            gameAward&&(!nativeAward||m_nativeOverlay.NotificationsUnavailable()),ClientAreaAnimations,HelpyAchievements::Popups);
         if(DiagnosticOverlay.TakeModsRequest()){SplashEntered=true;CurrentPage=Page::Mods;ModsPanel::Tab=1;OpenPopup();}
         if(renderable&&std::chrono::steady_clock::now()>=NextPlayerRefresh)QueuePlayerRefresh(true);
         const bool presenting=renderable||m_nativeOverlay.NotificationsVisible();
-        if(pacing.Due(std::chrono::steady_clock::now(),presenting,m_nativeOverlay.Presenting()||OwnsWindow(GetForegroundWindow()),m_nativeOverlay.NotificationsVisible()?(starting?LoadingIndicator::StartupFps(ClientAreaAnimations):minimap||!DiagnosticFeed.Empty()?15:2):HelpyImGuiTheme::Current.helpyFpsLimit))RenderFrame();
+        const int hudFps=AchievementOverlay.Animating()?60:starting?LoadingIndicator::StartupFps(ClientAreaAnimations):minimap||award||notices?15:2;
+        if(pacing.Due(std::chrono::steady_clock::now(),presenting,m_nativeOverlay.Presenting()||OwnsWindow(GetForegroundWindow()),m_nativeOverlay.NotificationsVisible()?hudFps:performance.helpyFpsLimit))RenderFrame();
         const auto now=std::chrono::steady_clock::now();
         if(presenting&&pacing.Focused&&frameTimer&&pacing.Next>now){
             LARGE_INTEGER due{};due.QuadPart=-std::max<int64_t>(1,std::chrono::duration_cast<std::chrono::nanoseconds>(pacing.Next-now).count()/100);
@@ -2641,7 +2768,8 @@ void HelpyStandaloneWindow::ThreadMain() {
             }
         }
         const auto wait=pacing.WaitMs(now,presenting);
-        MsgWaitForMultipleObjectsEx(0,nullptr,starting&&gameToasts&&ClientAreaAnimations?std::min(wait,16u):wait,QS_ALLINPUT,MWMO_INPUTAVAILABLE);
+        const bool animating=(gameToasts&&starting&&ClientAreaAnimations)||(gameAward&&AchievementOverlay.Animating());
+        MsgWaitForMultipleObjectsEx(0,nullptr,animating?std::min(wait,16u):wait,QS_ALLINPUT,MWMO_INPUTAVAILABLE);
     }
 }
 
@@ -3349,6 +3477,83 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                     const auto menu=H::ModDetailsMenu;H::Mouse={(menu.x+menu.z)*.5f,(menu.y+menu.w)*.5f};RenderFrame();H::MouseDown=true;RenderFrame();H::MouseDown=false;for(int i=0;i<5;++i)RenderFrame();
                     const auto details=H::ModDetailsWindow;if(details.z-details.x<300||details.x<0||details.z>width||details.y<0||details.w>height)throw std::runtime_error("Mod details submenu must retain a readable width and fit the viewport");
                     PreviewCapture=output/"mods-details.png";RenderFrame();PreviewCapture.clear();ImGui::ClosePopupsOverWindow(nullptr,false);H::MouseEnabled=false;H::Mouse={-100,-100};RenderFrame();}
+                {
+                    namespace A=AchievementsPanel;
+                    namespace H=HelpyPreviewHooks;
+                    const auto fixture=output/"mods-achievement-fixture"/"Dye_Quests";
+                    ConfigFiles::Write(fixture/"cache"/"achievements.json", R"({"format":1,"achievements":[
+                        {"id":"first","title":"First dye","description":"Dye a piece of gear.","points":10,"conditions":[{"event":"death"}]},
+                        {"id":"master","title":"Master dyer","description":"Dye ten pieces of gear.","points":30,"conditions":[{"event":"death","count":10}]},
+                        {"id":"secret","title":"Secret recipe","points":30,"hidden":true,"conditions":[{"event":"death","count":100}]}
+                    ]})");
+                    const auto original=Rows[0];
+                    Rows[0]["Folder"]=fixture.string();
+                    Rows[0]["Enabled"]=false;
+                    const auto oldProgress=HelpyAchievements::Progress;
+                    const bool oldLoaded=HelpyAchievements::ProgressLoaded;
+                    HelpyAchievements::Progress.Entries={
+                        {"mods/dye_quests|first",{{},1700000000,8,"First dye","mods/dye_quests","Dye Quests"}},
+                        {"mods/dye_quests|retired",{{},101,80,"Retired reward","mods/dye_quests","Dye Quests"}},
+                        {"mods/other|first",{{},102,100,"Other mod reward","mods/other","Other"}}
+                    };
+                    HelpyAchievements::ProgressLoaded=true;
+                    H::MouseEnabled=true;
+                    for(const bool compact:{false,true}){
+                        modTheme.modsCompact=compact;
+                        for(int frame=0;frame<3;++frame)RenderFrame();
+                        const auto title=H::ModTitles.at("Dye_Quests");
+                        H::Mouse={title.x+std::min(24.f,(title.z-title.x)*.5f),(title.y+title.w)*.5f};
+                        H::ModAchievementsAction={};A::PreviewModBounds={};
+                        A::PreviewUnlocked=A::PreviewLocked=A::PreviewHidden=0;
+                        RenderFrame();H::RightDown=true;RenderFrame();H::RightDown=false;
+                        // A popup can flip above the cursor when its measured height exceeds the viewport.
+                        for(int frame=0;frame<3;++frame)RenderFrame();
+                        const auto action=H::ModAchievementsAction;
+                        if(action.z<=action.x||action.w<=action.y)throw std::runtime_error("View achievements was missing from the mod context menu");
+                        H::Mouse={(action.x+action.z)*.5f,(action.y+action.w)*.5f};
+                        RenderFrame();H::MouseDown=true;RenderFrame();H::MouseDown=false;RenderFrame();
+                        for(int frame=0;frame<120&&A::PreviewLocked==0;++frame){Sleep(2);RenderFrame();}
+                        const auto rect=A::PreviewModBounds;
+                        if(A::PreviewBadgeValues!=std::vector<int>{188,8,80,30,-1})
+                            throw std::runtime_error("Achievement placards must show the player total, stored rewards, locked value, and hidden badge");
+                        if(A::PreviewUnlocked!=2||A::PreviewLocked!=2||A::PreviewHidden!=1||rect.x<0||rect.y<0||rect.z>width||rect.w>height){
+                            PreviewCapture=output/"mods-achievements-failure.png";RenderFrame();PreviewCapture.clear();
+                            throw std::runtime_error(std::format("Mod achievements preview (compact={}): earned={}, locked={}, hidden={}, bounds=({}, {}, {}, {}), viewport={}x{}",
+                                compact,A::PreviewUnlocked,A::PreviewLocked,A::PreviewHidden,rect.x,rect.y,rect.z,rect.w,width,height));
+                        }
+                        if(!compact){
+                            const auto hover=[&](const ImVec4& row,const std::string& expected){
+                                H::Mouse={row.x+std::min(12.f,(row.z-row.x)*.5f),(row.y+row.w)*.5f};
+                                for(int frame=0;frame<150&&A::PreviewTooltip!=expected;++frame){Sleep(3);RenderFrame();}
+                                if(A::PreviewTooltip!=expected)throw std::runtime_error("Achievement hover showed the wrong unlock details");
+                            };
+                            hover(A::PreviewEarnedRow,A::Date(1700000000,"%Y-%m-%d %H:%M"));
+                            hover(A::PreviewHiddenRow,"hidden");
+                            hover(A::PreviewLockedRow,"master");
+                            PreviewCapture=output/"mods-achievements.png";RenderFrame();PreviewCapture.clear();
+                        }
+                        ImGui::ClosePopupsOverWindow(nullptr,false);H::Mouse={-100,-100};RenderFrame();
+                    }
+                    const auto other=Rows[1];
+                    const auto otherFolder=fixture.parent_path()/"Flintlocks";
+                    ConfigFiles::Write(otherFolder/"cache"/"achievements.json",R"({"format":1,"achievements":[
+                        {"id":"practice","title":"Target practice","points":100,"conditions":[{"event":"kill"}]}
+                    ]})");
+                    Rows[1]["Folder"]=otherFolder.string();
+                    modTheme.modsCompact=false;RenderFrame();
+                    const auto all=H::ModAchievementsAll;
+                    H::Mouse={(all.x+all.z)*.5f,(all.y+all.w)*.5f};
+                    A::PreviewUnlocked=A::PreviewLocked=A::PreviewHidden=0;
+                    RenderFrame();H::MouseDown=true;RenderFrame();H::MouseDown=false;RenderFrame();
+                    for(int frame=0;frame<120&&A::PreviewLocked<3;++frame){Sleep(2);RenderFrame();}
+                    if(!A::ModOwner.empty()||A::PreviewUnlocked!=2||A::PreviewLocked!=3||A::PreviewHidden!=1)
+                        throw std::runtime_error("View All Achievements did not show exactly the installed enrolled mods");
+                    PreviewCapture=output/"mods-achievements-all.png";RenderFrame();PreviewCapture.clear();
+                    ImGui::ClosePopupsOverWindow(nullptr,false);
+                    H::MouseEnabled=false;H::Mouse={-100,-100};Rows[0]=original;Rows[1]=other;
+                    HelpyAchievements::Progress=oldProgress;HelpyAchievements::ProgressLoaded=oldLoaded;
+                    RenderFrame();
+                }
                 ModLicensePanel::Requested=false;ModLicensePanel::Data={{{"LICENSE.txt","SYNTHETIC LICENSE PREVIEW\n\nThis notice is an automated layout fixture. It does not grant permissions for any installed mod.\n\nThe license viewer preserves each bundled notice separately and provides a copy action."},{"conditions.license","Synthetic additional conditions"}}, {}};
                 Tab=3;for(int i=0;i<3;++i)RenderFrame();PreviewCapture=output/"mods-license.png";RenderFrame();PreviewCapture.clear();Tab=0;RenderFrame();
                 if(PreviewBadgeOrders!=std::vector<size_t>{1,2,3})throw std::runtime_error("Enabled mods must have consecutive load-order numbers");
@@ -5170,6 +5375,39 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 if(ImGui::GetIO().MouseDrawCursor||m_nativeOverlay.Wanted()||HelpyOverlayFrames::CapturesInput(*m_nativeOverlay.Page(),GetTickCount64())||queries.size()!=queryCount)throw std::runtime_error("Passive diagnostics captured input or woke item queries");
                 const auto passiveSlot=HelpyOverlayFrames::Read(m_nativeOverlay.Page()->Published);if(passiveSlot<0)throw std::runtime_error("Passive diagnostic surface was not published");
                 m_nativeOverlay.Target(passiveSlot)->GetResource(picture.ReleaseAndGetAddressOf());m_context->OMSetRenderTargets(0,nullptr,nullptr);m_context->CopyResource(back.Get(),picture.Get());CapturePreview(m_device,m_context,m_swapChain,output/"native-diagnostic-notice.png");
+
+                namespace A = AchievementToastTimeline;
+                std::deque<ModAchievements::Unlock> awards{{"fixture|builder","fixture","Builder's Guild","Master Builder","Place 100 structures",150,1}};
+                const auto captureAward=[&](double elapsed,const char* file) {
+                    AchievementOverlay.PreviewAt(elapsed,awards);
+                    RenderFrame();
+                    const auto slot=HelpyOverlayFrames::Read(m_nativeOverlay.Page()->Published);
+                    if(slot<0)throw std::runtime_error("Gamer Points animation did not publish a HUD frame");
+                    m_nativeOverlay.Target(slot)->GetResource(picture.ReleaseAndGetAddressOf());
+                    m_context->OMSetRenderTargets(0,nullptr,nullptr);
+                    m_context->CopyResource(back.Get(),picture.Get());
+                    CapturePreview(m_device,m_context,m_swapChain,output/file);
+                };
+                captureAward(A::Rise+.05,"native-gamer-points-logo.png");
+                captureAward(A::BreakAt+A::Break*.55,"native-gamer-points-brackets.png");
+                captureAward(A::CloseAt+A::CloseBrackets*.55,"native-gamer-points-reassembly.png");
+                AchievementOverlay.PreviewAt(A::HoldAt+.10,awards);
+                RenderFrame();
+                const auto awardSlot=HelpyOverlayFrames::Read(m_nativeOverlay.Page()->Published);
+                if(!awards.empty()||awardSlot<0||HelpyOverlayFrames::CapturesInput(*m_nativeOverlay.Page(),GetTickCount64()))
+                    throw std::runtime_error("Gamer Points award did not use the passive HUD");
+                m_nativeOverlay.Target(awardSlot)->GetResource(picture.ReleaseAndGetAddressOf());
+                m_context->OMSetRenderTargets(0,nullptr,nullptr);
+                m_context->CopyResource(readback.Get(),picture.Get());
+                if(FAILED(m_context->Map(readback.Get(),0,D3D11_MAP_READ,0,&mapped)))throw std::runtime_error("Gamer Points alpha map unavailable");
+                const auto awardBox=AwardBounds(HelpyImGuiTheme::Current,float(width),float(height));
+                const auto alphaAt=[&](UINT x,UINT y){return static_cast<const unsigned char*>(mapped.pData)[size_t(y)*mapped.RowPitch+x*4+3];};
+                const bool awardDrawn=alphaAt(width/2,UINT(awardBox.Y+awardBox.H*.5f))>200&&alphaAt(0,height-1)==0;
+                m_context->Unmap(readback.Get(),0);
+                if(!awardDrawn)throw std::runtime_error("Gamer Points card was missing or filled the game viewport");
+                m_context->CopyResource(back.Get(),picture.Get());
+                CapturePreview(m_device,m_context,m_swapChain,output/"native-gamer-points.png");
+                AchievementOverlay.Reset();
                 m_context->CopyResource(readback.Get(),picture.Get());if(FAILED(m_context->Map(readback.Get(),0,D3D11_MAP_READ,0,&mapped)))throw std::runtime_error("Passive alpha map unavailable");
                 const auto* center=static_cast<const unsigned char*>(mapped.pData)+size_t(height/2)*mapped.RowPitch+size_t(width/2)*4;const bool transparent=center[3]==0;m_context->Unmap(readback.Get(),0);
                 if(!transparent)throw std::runtime_error("Passive notices drew the full Helpy background");
@@ -5223,7 +5461,7 @@ void HelpyStandaloneWindow::RenderFrame() {
         HudViewport={page->ViewportWidth?float(page->ViewportWidth):float(page->Width),page->ViewportHeight?float(page->ViewportHeight):float(page->Height)};HudOrigin={float(page->Left),float(page->Top)};
         {HelpyImGuiTheme::Scope skin(HelpyImGuiTheme::Current);if(UiRegularFont)ImGui::PushFont(UiRegularFont);
             RenderDiagnosticToasts(HelpyImGuiTheme::Current,false);HelpyMiniMap::Draw(HelpyImGuiTheme::Current,HudViewport,HudOrigin);RenderCoordinates(HelpyImGuiTheme::Current);
-            RenderStartupProgress(HelpyImGuiTheme::Current,HudOrigin,HudViewport);
+            RenderStartupProgress(HelpyImGuiTheme::Current,HudOrigin,HudViewport);RenderGamerPoints(HelpyImGuiTheme::Current);
             if(UiRegularFont)ImGui::PopFont();}
         ImGui::Render();const int slot=m_nativeOverlay.Begin();if(slot>=0){auto* target=m_nativeOverlay.Target(slot);const float clear[4]{};
             m_context->OMSetRenderTargets(1,&target,nullptr);m_context->ClearRenderTargetView(target,clear);ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());m_nativeOverlay.Publish(slot);}return;
@@ -5411,6 +5649,7 @@ void HelpyStandaloneWindow::RenderFrame() {
         NotificationsPanel::Prompt();
         ModMetadataPanel::Render();
         ModSaveFilesPanel::Render();
+        AchievementsPanel::RenderModWindow();
         if(taskbar){
             PS::HelpyImGuiTheme::EndPanel();ImGui::Separator();
             const float logoSize=ImGui::GetFrameHeight();const auto logo=ImGui::GetCursorScreenPos();

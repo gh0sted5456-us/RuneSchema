@@ -331,7 +331,7 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
         if(request.contains("ProfileAction")){
             const auto operation=request.at("ProfileAction").get<std::string>();const auto id=request.at("RequestId").get<uint64_t>();if(!id)throw std::runtime_error("Invalid profile request");
             if(operation=="Publish"){
-                PS::InventoryMarkService::Call({{"Action","ReceivePublicProfile"},{"CharacterGuid",guid},{"Profile",request.at("Profile")}});
+                PS::InventoryMarkService::Call({{"Action","ReceivePublicProfile"},{"CharacterGuid",guid},{"Profile",request.at("Profile")},{"Achievements",request.contains("Achievements")?request["Achievements"]:nlohmann::json(nullptr)}});
                 return nlohmann::json{{"Kind","HelpyProfilePublished1"},{"RequestId",id},{"CharacterGuid",guid}}.dump();
             }
             if(operation!="Read")throw std::runtime_error("Invalid profile operation");
@@ -339,7 +339,9 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
             bool ambiguous=false;auto* target=FindPlayerControllerByGuid(targetGuid,ambiguous);if(!target||ambiguous||target->GetWorld()!=player->GetWorld())throw std::runtime_error("Profile target is not connected");
             ActorHelper::FunctionCall local(target,TEXT("/Script/Engine.Controller:IsLocalController"));local.Invoke();
             const auto result=PS::InventoryMarkService::Call({{"Action","ReadPublicProfile"},{"CharacterGuid",targetGuid},{"Local",local.Result<bool>()}});
-            return nlohmann::json{{"Kind","HelpyProfile1"},{"RequestId",id},{"CharacterGuid",targetGuid},{"Profile",result.at("Profile")}}.dump();
+            nlohmann::json reply{{"Kind","HelpyProfile1"},{"RequestId",id},{"CharacterGuid",targetGuid},{"Profile",result.at("Profile")}};
+            if(result.contains("Achievements")&&result["Achievements"].is_object())reply["Achievements"]=result["Achievements"];
+            return reply.dump();
         }
         const auto& batch=request.at("Batch");
         if(payload.size()>3500||guid.empty()||batch.at("CharacterGuid")!=guid||ActorHelper::GetObjectRef(controller,TEXT("Pawn"))!=player)

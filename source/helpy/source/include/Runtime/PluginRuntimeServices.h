@@ -9,6 +9,7 @@ namespace PS::PluginRuntimeServices {
     inline std::atomic<bool> ProfileChanged=false;
     inline std::atomic<uint32_t> GameProcessId=0;
     inline std::atomic<bool> ConnectionChanged=false;
+    inline std::atomic<uint64_t> ConnectionEpoch=0;
     inline void Set(const RuneSchemaHostApi* host) noexcept { Host = host; }
     inline void Reset() noexcept { Host = nullptr; }
 }

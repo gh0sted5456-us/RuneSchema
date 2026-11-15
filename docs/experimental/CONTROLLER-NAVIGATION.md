@@ -73,6 +73,12 @@ Cursor speed, cursor enablement, glyph choice and per-controller bindings are
 saved locally and shared by standalone Helpy and its overlay. Stick dead zones
 prevent resting drift; cursor movement uses elapsed frame time.
 
+The right-stick dead zone is adjustable from 8% to 50% (default 27%) for worn
+sticks that drift or for finer control. **Slow cursor over controls** (on by
+default) moves the pointer at about half speed while it is over a button, row
+or field, so small targets are easier to land on. It never slows a drag or an
+active text field.
+
 PlayStation touchpad movement, one-finger tap/press and two-finger actions remain
 available. Synthetic pointer events stay associated with the controller so they
 do not switch Auto detect to mouse mode. The pointer stops and releases both mouse buttons

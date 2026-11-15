@@ -65,6 +65,8 @@ public:
     bool RequestAuthority(const std::string& action,const std::string& payload);
     void PublishHelpyResult(RC::Unreal::UObject* player,int64_t revision,const nlohmann::json& result);
     bool PublishCleanupNotice(RC::Unreal::UObject* controller,std::size_t removed,const std::string& mod);
+    // Host -> owning client: a confirmed kill for that player's Helpy achievements (channel helpy.activity).
+    bool PublishPlayerActivity(RC::Unreal::UObject* controller,const std::string& payload);
     // Publishes an allow-listed presentation event through the replicated
     // GameState bridge. The payload contains semantic cue data only; asset
     // paths are rejected and client consumers remain mod-owned.
