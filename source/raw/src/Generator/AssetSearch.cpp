@@ -517,6 +517,7 @@ std::string PresentationName(UObject* object){
 }
 namespace {
 LearnedItemCatalog::Store LearnedItems;
+LearnedItemCatalog::IndexRefresh LearnedIndexRefresh;
 const std::vector<std::string>& PriorityItemPaths(){
     static uint64_t revision=0,generation=0;static std::vector<std::string> paths;
     const auto current=SpawnToolRequests::Generation.load();
@@ -621,7 +622,10 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
     // the original time-bounded object-array walk, not a synchronous fallback.
     const ItemCatalogLayout layout{{priorityPaths.size(),useClassIndex?indexedItems.size():static_cast<std::size_t>(objectCount),mountedItems.size()}};
     const auto total=layout.Total();
-    if(!total)return {{"Rows",std::move(rows)},{"NextOffset",0},{"Start",0},{"HasMore",false},{"Scanned",0},{"MountedMetadataReady",mountedReady}};
+    if(!total){
+        if(mountedFirst)LearnedIndexRefresh.SearchSlice(std::chrono::steady_clock::now(),false);
+        return {{"Rows",std::move(rows)},{"NextOffset",0},{"Start",0},{"HasMore",false},{"Scanned",0},{"MountedMetadataReady",mountedReady}};
+    }
     const std::size_t start=randomOrder?static_cast<std::size_t>(startSeed%total):0;
     std::size_t visited=std::min(offset,total),scanned=0;const auto begin=std::chrono::steady_clock::now();
     while(visited<total&&rows.size()<limit&&scanned<scanBudget) {
@@ -680,7 +684,10 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
         auto entry=fieldSet=="Detail"||segment==0?DescribeItemWithSource(object,&source):DescribeItemBasic(object,path,name,internal,tags,broadCategory);
         if(entry.is_object()){entry["StableId"]=HelpyStableId(path);entry["Category"]=broadCategory;entry.update(ItemSource::Fields(source));rows.push_back(std::move(entry));}
     }
-    if(mountedFirst&&!rows.empty())LearnedItems.Observe(HelpySourceCache::Directory(false),HelpySourceCache::Current,CacheBundleStore::Locale(),rows);
+    if(mountedFirst){
+        LearnedIndexRefresh.SearchSlice(std::chrono::steady_clock::now(),visited<total);
+        if(!rows.empty())LearnedItems.Observe(HelpySourceCache::Directory(false),HelpySourceCache::Current,CacheBundleStore::Locale(),rows);
+    }
     return {{"Rows",std::move(rows)},{"NextOffset",visited},{"Start",start},{"HasMore",visited<total},
         {"Scanned",scanned},{"BudgetExhausted",visited<total&&scanned>=scanBudget},{"FieldSet",fieldSet},{"MountedMetadataReady",mountedReady}};
 }
@@ -699,7 +706,6 @@ json RefreshItemMetadata(const std::string& path){
 namespace {
 PersistentItemCatalog::Store ItemManifest;PagedItemCatalog::Store ItemPages,ItemPreviewPages;CacheBundleItems::Store BundleItems;
 std::atomic<bool> ImportedCacheChanged=false;bool ItemRefreshPending=false,ItemRefreshPumping=false;HelpyBrowsePolicy::Policy BrowsePolicy;
-bool LearnedIndexStale=false;std::chrono::steady_clock::time_point NextLearnedRebuild{}; // Coalesced learned-index rebuilds.
 void ReportLearnedItemWrites(bool shutdown=false){
     static std::string lastError;
     static size_t reportedDrops=0;
@@ -728,20 +734,18 @@ void NotifyImportedCache() noexcept {ImportedCacheChanged.store(true);}
 void ShutdownItemCatalog() noexcept {
     ItemRefreshPending=false;
     LearnedItems.Shutdown();
+    LearnedIndexRefresh={};
     try{ReportLearnedItemWrites(true);}catch(...){}
     BundleItems.Shutdown();ItemPreviewPages.Shutdown();ItemPages.Shutdown();ItemManifest.Shutdown();
 }
-bool HasPendingLearnedItems(){return LearnedItems.HasWork()||LearnedIndexStale;} // A deferred rebuild keeps the pump running.
+bool HasPendingLearnedItems(){return LearnedItems.HasWork()||LearnedIndexRefresh.Ready(std::chrono::steady_clock::now(),false);}
 void PumpItemCatalog(bool passiveRefresh){
-    // Learned writes arrive every 250 ms during discovery, and each invalidation rebuilds the whole cached index.
-    // Coalesce them: rebuild at most every three seconds while writes continue, and at once when discovery settles.
-    if(LearnedItems.Flush())LearnedIndexStale=true;
-    if(LearnedIndexStale&&(!LearnedItems.HasWork()||std::chrono::steady_clock::now()>=NextLearnedRebuild)){
-        BundleItems.Invalidate();LearnedIndexStale=false;NextLearnedRebuild=std::chrono::steady_clock::now()+std::chrono::seconds(3);
-    }
+    const auto now=std::chrono::steady_clock::now();
+    if(LearnedItems.Flush())LearnedIndexRefresh.Committed(now);
+    if(LearnedIndexRefresh.Take(now,LearnedItems.HasWork()))BundleItems.Invalidate();
     ReportLearnedItemWrites();
     if(!passiveRefresh||!ItemRefreshPending||!BrowsePolicy.PassiveRefresh)return;
-    static auto next=std::chrono::steady_clock::time_point{};const auto now=std::chrono::steady_clock::now();
+    static auto next=std::chrono::steady_clock::time_point{};
     if(now<next)return;next=now+std::chrono::milliseconds(50);
     ItemRefreshPumping=true;
     struct ResetPump{~ResetPump(){ItemRefreshPumping=false;}} reset;

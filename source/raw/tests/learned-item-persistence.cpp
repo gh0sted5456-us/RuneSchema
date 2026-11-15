@@ -100,6 +100,42 @@ int main(){
         std::this_thread::sleep_for(std::chrono::milliseconds(2100));
         writer.Observe(cache,active,"fr-FR",Json::array({Row("Seen")}));assert(writer.HasWork());writer.Shutdown();assert(writer.Error.empty());
     }
+    {
+        const auto cache=root/"observation-order"/"cache"/"item-icons";
+        LearnedItemCatalog::Store writer;
+        const auto original=Row("Seen");
+        auto intermediate=original;intermediate["Name"]="Intermediate name";
+        writer.Observe(cache,active,"en-US",Json::array({original}));
+        writer.Shutdown();
+        writer.Observe(cache,active,"en-US",Json::array({intermediate}));
+        writer.Flush(true);
+        writer.Observe(cache,active,"en-US",Json::array({original}));
+        writer.Shutdown();
+        const auto saved=CacheBundleStore::Read(cache,root,active,"en-US","items",false);
+        assert(saved.size()==1&&saved.at(0).at("Data").at("Name")=="Seen");
+    }
+    {
+        using namespace std::chrono_literals;
+        const auto start=std::chrono::steady_clock::time_point{}+1s;
+        LearnedItemCatalog::IndexRefresh refresh;
+        refresh.SearchSlice(start,true);
+        refresh.Committed(start);
+        assert(!refresh.Take(start+250ms,false));
+        refresh.SearchSlice(start+1s,true);
+        refresh.Committed(start+1200ms);
+        assert(!refresh.Take(start+1500ms,false));
+        assert(refresh.Take(start+3s,false));
+        refresh.SearchSlice(start+3100ms,false);
+        refresh.Committed(start+3300ms);
+        assert(!refresh.Take(start+3300ms,true));
+        assert(refresh.Take(start+3300ms,false));
+        assert(!refresh.Take(start+4s,false));
+        // An abandoned search still publishes its last discoveries.
+        refresh.SearchSlice(start+5s,true);refresh.Committed(start+5100ms);
+        assert(refresh.Take(start+8s,false));
+        // A standalone refresh publishes as soon as the writer finishes.
+        refresh.Committed(start+9s);assert(refresh.Take(start+9s,false));
+    }
 #endif
     fs::remove_all(root);std::cout<<"Learned discoveries survive failed writes, worker failures at shutdown, context changes and saturation\n";
 }

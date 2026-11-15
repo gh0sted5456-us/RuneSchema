@@ -5,6 +5,23 @@
 #include <future>
 
 namespace PS::LearnedItemCatalog {
+// A continuation can arrive after the current batch has finished writing.
+class IndexRefresh {
+    using Clock=std::chrono::steady_clock;
+    static constexpr auto Interval=std::chrono::seconds(3);
+    Clock::time_point SearchUntil{}, RebuildBy{};
+    bool Dirty=false;
+public:
+    void SearchSlice(Clock::time_point now,bool hasMore){SearchUntil=hasMore?now+Interval:Clock::time_point{};}
+    void Committed(Clock::time_point now){if(!Dirty){Dirty=true;RebuildBy=now+Interval;}}
+    bool Ready(Clock::time_point now,bool writesPending)const{
+        return Dirty&&(now>=RebuildBy||(!writesPending&&now>=SearchUntil));
+    }
+    bool Take(Clock::time_point now,bool writesPending){
+        if(!Ready(now,writesPending))return false;
+        Dirty=false;return true;
+    }
+};
 // Keep retries ahead of newer observations so old data cannot overwrite a later result.
 class Store {
     using Clock=std::chrono::steady_clock;
@@ -99,11 +116,10 @@ public:
         const auto context=cache.generic_string()+"|"+snapshot.CatalogKey+"|"+locale;
         // Rows from an earlier context keep their own writer instead of being discarded.
         if(Current.Context!=context){Close(std::move(Current));Current={context,{},{},0,CacheBundleStore::Directory(cache,cache.parent_path())/"index.json"};}
-        if(Current.Rows.empty()){
-            NextWrite=std::max(NextWrite,Clock::now()+std::chrono::milliseconds(250));
-            Current.Write=[cache,snapshot,locale](auto records){return CacheBundleStore::Commit(cache,cache.parent_path(),snapshot,locale,records);};
-        }
-        const auto plan=CacheBundleStore::Plan(snapshot);ValidateSaved();const bool remembered=SavedContext==context&&!Saved.empty();
+        const auto plan=CacheBundleStore::Plan(snapshot);
+        ValidateSaved();
+        // Earlier batches can still change a saved row, including retries and closed contexts.
+        const bool remembered=SavedContext==context&&!Saved.empty()&&Running.Rows.empty()&&Closed.empty();
         for(const auto& data:rows){
             if(!data.value("Available",true))continue;
             const auto document=CacheBundle::FromRow("items",data);if(document.is_null())continue;
@@ -112,6 +128,10 @@ public:
             if(remembered&&!Current.Rows.contains(row.Path))
                 if(const auto saved=Saved.find(row.Path);saved!=Saved.end()&&saved->second==Fingerprint(row)){++Unchanged;continue;}
             if(Current.Rows.size()>=MaximumPending&&!Current.Rows.contains(row.Path)){++Dropped;continue;}
+            if(Current.Rows.empty()){
+                NextWrite=std::max(NextWrite,Clock::now()+std::chrono::milliseconds(250));
+                Current.Write=[cache,snapshot,locale](auto records){return CacheBundleStore::Commit(cache,cache.parent_path(),snapshot,locale,records);};
+            }
             Merge(Current.Rows,std::move(row));
         }
     }

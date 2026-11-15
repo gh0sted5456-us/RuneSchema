@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <atomic>
 #include <condition_variable>
+#include <exception>
 #include <mutex>
 #include <optional>
 #include <cstdint>
@@ -65,7 +66,7 @@ namespace PS::JsonHelpers {
             return files;
         }
         // A definition read and parsed away from the caller. Diagnostics are published later, on the caller's thread.
-        struct LoadedJson{nlohmann::json Document;bool Missing=false;const char* Code=nullptr;std::string Detail,Message;};
+        struct LoadedJson{nlohmann::json Document;bool Missing=false;const char* Code=nullptr;std::string Detail,Message;std::exception_ptr ParseFailure;};
         LoadedJson LoadJson(const fs::path& path) noexcept
         {
             LoadedJson result;
@@ -76,11 +77,14 @@ namespace PS::JsonHelpers {
                 if(size>2*1024*1024){result.Code="RS-JSON-004";result.Detail=result.Message="JSON definition exceeds the 2 MiB safety limit";return result;}
                 std::ifstream input(path,std::ios::binary);
                 if(!input){result.Code="RS-JSON-001";result.Detail=result.Message="JSON definition could not be opened";return result;}
-                // Parsing a buffer is markedly faster in nlohmann than parsing the stream character by character.
-                std::string text(static_cast<size_t>(size),'\0');
-                input.read(text.data(),static_cast<std::streamsize>(text.size()));text.resize(static_cast<size_t>(input.gcount()));
+                std::string text(static_cast<size_t>(size)+1,'\0');
+                input.read(text.data(),static_cast<std::streamsize>(text.size()));
+                if(input.bad()||static_cast<uintmax_t>(input.gcount())!=size)throw std::runtime_error("JSON definition changed or could not be read");
+                text.resize(static_cast<size_t>(size));
                 try{result.Document=nlohmann::json::parse(text,nullptr,true,true);}
-                catch(const nlohmann::json::parse_error& parseError){result.Code="RS-JSON-001";result.Detail=result.Message=parseError.what();}
+                catch(const nlohmann::json::parse_error& parseError){
+                    result.Code="RS-JSON-001";result.Detail=parseError.what();result.ParseFailure=std::current_exception();
+                }
             }catch(const std::exception& failure){result.Code="RS-JSON-001";result.Detail=result.Message=failure.what();result.Document=nullptr;}
             catch(...){result.Code="RS-JSON-001";result.Detail=result.Message="unknown JSON or definition error";result.Document=nullptr;}
             return result;
@@ -134,7 +138,11 @@ namespace PS::JsonHelpers {
         {
             if(loaded.Missing)return;
             SourceScope scope(path);
-            if(loaded.Code){Publish(loaded.Code,path,{},loaded.Detail);throw std::runtime_error(loaded.Message);}
+            if(loaded.Code){
+                Publish(loaded.Code,path,{},loaded.Detail);
+                if(loaded.ParseFailure)std::rethrow_exception(loaded.ParseFailure);
+                throw std::runtime_error(loaded.Message);
+            }
             callback(loaded.Document);
         }
     }
