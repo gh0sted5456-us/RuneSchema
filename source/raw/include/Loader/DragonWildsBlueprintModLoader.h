@@ -79,6 +79,8 @@ namespace DragonWilds {
         std::vector<RuntimeWidgetRule> m_runtimeWidgetRules;
         std::vector<RuntimeUiRule> m_runtimeUiRules;
         std::unordered_set<RC::Unreal::FName> m_runtimeWidgetOwnerClasses,m_runtimeWidgetPathOwners;
+        std::unordered_set<RC::Unreal::FName> m_runtimeWidgetEvents;
+        bool m_runtimeWidgetAnyEvent = false;
         struct RuntimeOwnerClassPath {PS::WeakObjectHandle Type;RC::Unreal::FName Path;};
         std::unordered_map<RC::Unreal::UClass*,RuntimeOwnerClassPath> m_runtimeOwnerClassPaths;
         std::unordered_set<std::string> m_reportedRuntimeWidgetFailures;
@@ -95,6 +97,7 @@ namespace DragonWilds {
         RC::Unreal::Hook::GlobalCallbackId m_worldTeardownCallbackId = RC::Unreal::Hook::ERROR_ID;
         RC::Unreal::Hook::GlobalCallbackId m_runtimeWidgetCallbackId = RC::Unreal::Hook::ERROR_ID;
         void EnsureRuntimeWidgetObserver();
+        void RegisterRuntimeWidgetEvents(const nlohmann::json& rule);
         RC::Unreal::FName RuntimeWidgetOwnerClassPath(RC::Unreal::UClass* type);
         void ApplyBlueprintVisualEffect(RC::Unreal::AActor* actor);
         void ClearWorldVisualEffects();

@@ -350,6 +350,7 @@ if(PROJECT_IS_TOP_LEVEL)
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsBlueprintModLoader.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsMainLoader.cpp")
     add_executable(runtime-widget-contract ../tests/runtime-widget-contract.cpp)
+    target_link_libraries(runtime-widget-contract PRIVATE RuneSchemaJsonCore)
     add_test(NAME runtime-widget-contract COMMAND runtime-widget-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../include/Loader/DragonWildsBlueprintModLoader.h"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsBlueprintModLoader.cpp"
