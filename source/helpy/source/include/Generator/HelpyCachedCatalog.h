@@ -72,7 +72,10 @@ inline bool RefreshSearch(const std::string& query){
 }
 inline bool ReceiveCheck(const nlohmann::json& window){
     if(!Check||!Check->Id||window.value("RequestId",uint64_t{})!=Check->Id)return false;
-    auto& job=*Check;job.Waiting=false;job.Next=std::chrono::steady_clock::now()+std::chrono::milliseconds(200);
+    auto& job=*Check;job.Waiting=false;
+    // An interactive check has a player waiting on it: continue after about two frames. Each slice stays bounded
+    // by the game thread's own 1.8 ms / 4,096-candidate budget. Background checks keep the gentler 200 ms pace.
+    job.Next=std::chrono::steady_clock::now()+std::chrono::milliseconds(job.Interactive?33:200);
     auto& state=LazyCatalog::For(0);bool changed=false;
     if(job.Request.value("ClientGeneration",uint64_t{})!=state.RuntimeGeneration||job.Request.value("CancelGeneration",uint64_t{})!=state.CancelGeneration){StopCheck("Live session or search changed; existing cache retained.");return true;}
     if(job.Interactive)state.PopulationDone=window.value("PopulationDone",state.PopulationDone);

@@ -83,6 +83,23 @@ int main(){
         while(writer.HasWork()){writer.Flush(true);assert(std::chrono::steady_clock::now()<deadline);std::this_thread::sleep_for(std::chrono::milliseconds(2));}
         assert(!writer.Error.empty()&&writer.Dropped==1);fs::remove_all(blocked);
     }
+    {   // 6. Re-observing a saved row queues nothing; a changed row or an external index change queues again.
+        const auto cache=root/"unchanged"/"cache"/"item-icons";
+        LearnedItemCatalog::Store writer;writer.Observe(cache,active,"en-US",Json::array({Row("Seen")}));
+        WaitIdle(writer,false);assert(Saved(cache,root,active)==1);
+        writer.Observe(cache,active,"en-US",Json::array({Row("Seen")}));
+        assert(writer.Unchanged==1&&!writer.HasWork()); // Already on disk: no batch, no commit.
+        auto renamed=Row("Seen");renamed["Name"]="Seen again";
+        writer.Observe(cache,active,"en-US",Json::array({renamed}));assert(writer.HasWork());WaitIdle(writer,false);
+        writer.Observe(cache,active,"fr-FR",Json::array({Row("Seen")}));assert(writer.HasWork()); // A new context has no record.
+        WaitIdle(writer,false);
+        // Another writer replaces the index (a cache reset or icon-pack import): the record is dropped.
+        writer.Observe(cache,active,"fr-FR",Json::array({Row("Seen")}));assert(!writer.HasWork());
+        const auto index=CacheBundleStore::Directory(cache,cache.parent_path())/"index.json";
+        fs::last_write_time(index,fs::last_write_time(index)+std::chrono::seconds(5));
+        std::this_thread::sleep_for(std::chrono::milliseconds(2100));
+        writer.Observe(cache,active,"fr-FR",Json::array({Row("Seen")}));assert(writer.HasWork());writer.Shutdown();assert(writer.Error.empty());
+    }
 #endif
     fs::remove_all(root);std::cout<<"Learned discoveries survive failed writes, worker failures at shutdown, context changes and saturation\n";
 }

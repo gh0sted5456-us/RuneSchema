@@ -699,6 +699,7 @@ json RefreshItemMetadata(const std::string& path){
 namespace {
 PersistentItemCatalog::Store ItemManifest;PagedItemCatalog::Store ItemPages,ItemPreviewPages;CacheBundleItems::Store BundleItems;
 std::atomic<bool> ImportedCacheChanged=false;bool ItemRefreshPending=false,ItemRefreshPumping=false;HelpyBrowsePolicy::Policy BrowsePolicy;
+bool LearnedIndexStale=false;std::chrono::steady_clock::time_point NextLearnedRebuild{}; // Coalesced learned-index rebuilds.
 void ReportLearnedItemWrites(bool shutdown=false){
     static std::string lastError;
     static size_t reportedDrops=0;
@@ -730,9 +731,14 @@ void ShutdownItemCatalog() noexcept {
     try{ReportLearnedItemWrites(true);}catch(...){}
     BundleItems.Shutdown();ItemPreviewPages.Shutdown();ItemPages.Shutdown();ItemManifest.Shutdown();
 }
-bool HasPendingLearnedItems(){return LearnedItems.HasWork();}
+bool HasPendingLearnedItems(){return LearnedItems.HasWork()||LearnedIndexStale;} // A deferred rebuild keeps the pump running.
 void PumpItemCatalog(bool passiveRefresh){
-    if(LearnedItems.Flush())BundleItems.Invalidate();
+    // Learned writes arrive every 250 ms during discovery, and each invalidation rebuilds the whole cached index.
+    // Coalesce them: rebuild at most every three seconds while writes continue, and at once when discovery settles.
+    if(LearnedItems.Flush())LearnedIndexStale=true;
+    if(LearnedIndexStale&&(!LearnedItems.HasWork()||std::chrono::steady_clock::now()>=NextLearnedRebuild)){
+        BundleItems.Invalidate();LearnedIndexStale=false;NextLearnedRebuild=std::chrono::steady_clock::now()+std::chrono::seconds(3);
+    }
     ReportLearnedItemWrites();
     if(!passiveRefresh||!ItemRefreshPending||!BrowsePolicy.PassiveRefresh)return;
     static auto next=std::chrono::steady_clock::time_point{};const auto now=std::chrono::steady_clock::now();
