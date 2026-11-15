@@ -22,4 +22,10 @@ int main(int argc,char** argv){
     assert(Manifest(root,{}).find("\tlua\n")==std::string::npos); // Disabled parents produce no executable rows.
     file(root/"CustomDll/ue4ss/A/Scripts/main.lua");file(root/"CustomDll/ue4ss/A/dlls/custom.DLL");
     packages=Discover(root/"CustomDll","CustomDll");assert(packages.size()==1&&!packages[0].Native.empty());
+    const auto sister = root / "SisterContentExample/runeschema";
+    file(sister / "raws/example.json");
+    assert(PS::ModFolderLayout::LooksLikeRuneSchemaMod(sister));
+    assert(PS::ModFolderLayout::ResolveLoaderDirectory(sister, "raw") == sister / "raws");
+    file(sister / "raw/example.json");
+    assert(PS::ModFolderLayout::ResolveLoaderDirectory(sister, "raw") == sister / "raw");
 }

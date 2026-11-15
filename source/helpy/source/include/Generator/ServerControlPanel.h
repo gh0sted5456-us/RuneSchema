@@ -1,13 +1,14 @@
 #pragma once
 #include "Generator/DedicatedServerPanel.h"
 #include "Generator/ServerPlayersPanel.h"
+#include "Generator/MultiplayerSettingsPanel.h"
 #include <functional>
 
 namespace PS::ServerControlPanel {
 inline int Category=-1;
 inline void Render(const std::function<void()>& renderAccess){
     if(Category<0)Category=HelpyEnvironment::Server()?0:1;
-    constexpr std::array categories{"Settings","Players","RuneSchema access"};
+    constexpr std::array categories{"Settings","Players","RuneSchema access","Multiplayer"};
     HelpyMenu::Categories("server-control",categories,Category);
     const auto& theme=HelpyImGuiTheme::Current;auto surface=theme.panel;surface.w=std::max(.94f,surface.w);ImGui::PushStyleColor(ImGuiCol_ChildBg,surface);
     ImGui::PushID(Category);
@@ -17,6 +18,7 @@ inline void Render(const std::function<void()>& renderAccess){
             if(!HelpyEnvironment::Server()&&HelpyImGuiTheme::SoftButton("View connected players & roles"))Category=1;
         }
         else if(Category==1)ServerPlayersPanel::Render();
+        else if(Category==3)MultiplayerSettingsPanel::Render();
         else if(renderAccess)renderAccess();
     }
     HelpyImGuiTheme::EndPanel();ImGui::PopID();ImGui::PopStyleColor();

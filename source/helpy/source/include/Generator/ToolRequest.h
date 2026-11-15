@@ -59,13 +59,17 @@ template<> struct ToolRequest<SpawnToolTag> {
     inline static std::mutex Mutex;
     inline static std::optional<nlohmann::json> Pending;
     inline static std::optional<nlohmann::json> PendingMapGround;
-    inline static bool PendingPlayerRoles=false;
+    inline static std::atomic_bool PendingPlayerRoles=false;
     inline static std::chrono::steady_clock::time_point NextPlayerRoles{};
     static void RequestPlayerRoles(){
         std::lock_guard lock(Mutex);const auto now=std::chrono::steady_clock::now();
         if(Available&&now>=NextPlayerRoles){PendingPlayerRoles=true;NextPlayerRoles=now+std::chrono::seconds(5);}
     }
-    static bool TakePlayerRoles(){std::lock_guard lock(Mutex);const auto pending=PendingPlayerRoles;PendingPlayerRoles=false;return pending;}
+    static bool TakePlayerRoles(){
+        if(!PendingPlayerRoles.load(std::memory_order_relaxed))return false;
+        std::lock_guard lock(Mutex);
+        return PendingPlayerRoles.exchange(false,std::memory_order_relaxed);
+    }
     static std::atomic<bool> Waiting,Available,CancelRequested;
     static std::atomic<uint64_t> Generation;
     inline static nlohmann::json Result={{"Status","Load a world before using runtime tools."}};

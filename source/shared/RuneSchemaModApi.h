@@ -54,6 +54,9 @@ typedef struct RuneSchemaModApiV1 {
     // Success transfers release responsibility to core; failure leaves it with the provider.
     int32_t (RS_MOD_CALL *RegisterResource)(void* owner,uint64_t provider,const RuneSchemaModResourceV1* resource,uint64_t* handle);
     int32_t (RS_MOD_CALL *ReleaseResource)(void* owner,uint64_t resource);
+    // Optional API 1 extension. Check StructSize and the pointer. Game thread, host only.
+    // Channel is the local name from this mod's registered DataRelay. Payload is copied.
+    int32_t (RS_MOD_CALL *PublishNetworkSnapshot)(void* owner,const char* channel,const char* payload,uint32_t bytes);
 } RuneSchemaModApiV1;
 
 #ifdef __cplusplus

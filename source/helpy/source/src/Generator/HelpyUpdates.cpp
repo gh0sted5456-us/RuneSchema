@@ -39,7 +39,7 @@ void Load(){
         const auto news=SteamNewsInfo::LatestUpdate(data.value("GameNews",nlohmann::json::object()),Now());
         if(news){Result.GameUpdateTitle=news->Title;Result.GameUpdateUrl=news->Url;Result.GameUpdateDate=news->Date;}
         if(!Result.MainVersion.empty()&&!RuneSchemaUpdateInfo::Parse(Result.MainVersion))Result.MainVersion.clear();
-        if(!Result.ReleaseVersion.empty()&&!RuneSchemaUpdateInfo::Parse(Result.ReleaseVersion))Result.ReleaseVersion.clear();
+        if(!Result.ReleaseVersion.empty()&&!RuneSchemaUpdateInfo::IsStableReleaseTag(Result.ReleaseVersion))Result.ReleaseVersion.clear();
     }catch(...){Result={};}
 }
 void Save(){try{
@@ -90,7 +90,7 @@ View Check(const std::string& installed){
         const auto release=nlohmann::json::parse(Fetch(L"api.github.com",L"/repos/gh0sted5456-us/RuneSchema/releases/latest"));
         if(release.value("draft",true)||release.value("prerelease",true))throw std::runtime_error("No public stable release was returned");
         result.ReleaseVersion=release.value("tag_name",std::string{});
-        if(!RuneSchemaUpdateInfo::Parse(result.ReleaseVersion))throw std::runtime_error("Release tag could not be compared");
+        if(!RuneSchemaUpdateInfo::IsStableReleaseTag(result.ReleaseVersion))throw std::runtime_error("Latest release is not a recognized stable build");
     }catch(const std::exception& error){result.ReleaseVersion.clear();result.ReleaseError=error.what();}
     Progress=3;
     if(!Cancelled)try{
@@ -113,16 +113,13 @@ bool Start(const std::string& installed){
     NextManual=std::chrono::steady_clock::now()+std::chrono::seconds(60);Cancelled=false;Progress=0;
     try{Worker=std::async(std::launch::async,Check,installed);return true;}catch(...){Result.MainError="Could not start update worker";return false;}
 }
-bool Tick(bool automatic,bool networkAllowed,const std::string& installed){
-    Load();bool notify=false;
+void Tick(bool automatic,bool networkAllowed,const std::string& installed){
+    Load();
     if(Worker.valid()&&Worker.wait_for(std::chrono::seconds(0))==std::future_status::ready){
-        try{auto completed=Worker.get();if(!Cancelled){Result=std::move(completed);Save();notify=
-            RuneSchemaUpdateInfo::Compare(installed,Result.MainVersion)==RuneSchemaUpdateInfo::Comparison::Newer
-            ||RuneSchemaUpdateInfo::Compare(installed,Result.ReleaseVersion)==RuneSchemaUpdateInfo::Comparison::Newer;}}
+        try{auto completed=Worker.get();if(!Cancelled){Result=std::move(completed);Save();}}
         catch(...){Result.MainError="Update check failed; installed files were not changed";}
     }
     if(automatic&&networkAllowed&&!Busy()&&Now()-Result.CheckedAt>=86400)Start(installed);
-    return notify;
 }
 void Cancel() noexcept{Cancelled=true;}
 void Shutdown() noexcept{Cancelled=true;if(Worker.valid())try{(void)Worker.get();}catch(...){}Progress=0;}

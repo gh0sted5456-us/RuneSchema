@@ -47,6 +47,11 @@ int main(int argc,char** argv){
     Reject([]{ValidateGrants({{"/One",1},{"/One",2}});});Reject([]{ValidateGrants({{"/One",0}});});
     Reject([]{ValidateGrants({{"/One",10001}});});Reject([]{ValidateGrants({{std::string(2049,'/'),1}});});
     std::vector<Grant> maximum;for(int i=0;i<MaxSelection;++i)maximum.push_back({"/Item"+std::to_string(i),10000});
-    ValidateGrants(maximum);maximum.push_back({"/Extra",1});Reject([&]{ValidateGrants(maximum);});
+    ValidateGrants(maximum);
+    const std::vector<Grant> remote{{"/First",125},{"/Second",125}};
+    ValidateGrants(remote,0);ValidateGrants(remote,250);
+    Reject([&]{ValidateGrants(remote,249);});
+    Reject([&]{ValidateGrants({{"/First",10001}},0);});
+    maximum.push_back({"/Extra",1});Reject([&]{ValidateGrants(maximum);});
     std::cout<<"Standalone-only lifecycle and shared cart contracts passed.\n";
 }

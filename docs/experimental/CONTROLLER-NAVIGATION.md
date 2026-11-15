@@ -10,13 +10,13 @@ promote_to: CONTROLLER-NAVIGATION.md
 # Use Helpy with a controller
 
 The window and native overlay share the same controls. Open Helpy with its normal
-shortcut or tray icon, then use the D-pad or left stick to move the highlighted
+shortcut or tray icon, then use the D-pad to move the highlighted
 selection. Confirm activates buttons, switches, lists and item cards. Menus and
 dialogs retain their normal validation; selection alone never delivers an item.
 
 The splash button shows your controller's confirm glyph: **Cross** on
 PlayStation, **A** on Xbox or **B** on Nintendo. Confirm enters Home; use the
-D-pad or left stick to highlight a tile, then confirm to open it. Controller
+D-pad to highlight a tile, then confirm to open it. Controller
 entry assigns the first focus target automatically, so a mouse click is not
 required to start navigation. Returning to Home focuses its first available
 tile. Mouse/keyboard mode keeps the normal **Enter** label.
@@ -27,21 +27,22 @@ tile. Mouse/keyboard mode keeps the normal **Enter** label.
 | --- | --- |
 | Left / right trigger | Previous / next main section |
 | Left / right bumper | Previous / next visible panel; restore its last focused control |
-| D-pad / left stick | Move within the highlighted panel |
+| D-pad | Move focus within the highlighted panel. Left and Right switch focused settings tabs. Down from a Map tab enters the canvas. |
+| Left stick | Scroll the focused panel or the panel under the pointer. Pan when the map canvas has focus. |
 | Bottom face button | Select or deselect an item; enter or activate a control |
 | Right face button | Back; close the current editor before returning to its parent |
 | Left face button | Actions for the focused item |
 | Top face button | Item Bay search |
 | Menu / Options / Plus | Send selected Item Bay items to cart |
 | Right stick | Enter pointer mode and move the cursor |
-| Right-stick click | Grab; click again to drop without holding the stick down |
+| Right-stick click | Grab an item or selected group, then click again over the cart to drop |
 | Left-stick click | Toggle Item Bay multi-select; zoom in on the map |
 
 Moving the right stick enters pointer mode and shows a gold ring cursor. The
 bottom face button becomes **left-click / drag**, and the left face button becomes
 **right-click** at the pointer. On PS5 these are **Cross** and **Square**; Xbox uses
-**A** and **X**. Pointer mode stays active when the stick rests. D-pad, left-stick
-or menu navigation returns to focus controls. Mouse clicks and navigation
+**A** and **X**. Pointer mode stays active when the stick rests or you scroll with the left stick.
+D-pad or menu navigation returns to focus controls. Mouse clicks and navigation
 confirmation are routed exclusively, so one press cannot trigger both. The
 footer shows the current actions; remapping Confirm or Actions also updates the
 corresponding mouse button. Right-stick click holds the grab until its next
@@ -72,6 +73,12 @@ Cursor speed, cursor enablement, glyph choice and per-controller bindings are
 saved locally and shared by standalone Helpy and its overlay. Stick dead zones
 prevent resting drift; cursor movement uses elapsed frame time.
 
+The right-stick dead zone is adjustable from 8% to 50% (default 27%) for worn
+sticks that drift or for finer control. **Slow cursor over controls** (on by
+default) moves the pointer at about half speed while it is over a button, row
+or field, so small targets are easier to land on. It never slows a drag or an
+active text field.
+
 PlayStation touchpad movement, one-finger tap/press and two-finger actions remain
 available. Synthetic pointer events stay associated with the controller so they
 do not switch Auto detect to mouse mode. The pointer stops and releases both mouse buttons
@@ -85,9 +92,8 @@ game verification.
 
 ## Open and hide Helpy from the controller
 
-Open **Settings → Helpy → Startup → Controller shortcut**. The controller
-shortcut is independent of the normal keyboard shortcut; F2 remains available
-unless you have changed it.
+Open **Settings → Helpy → Startup → Helpy shortcut → Edit bindings**. You can
+set the keyboard and controller bindings independently. The keyboard default is F2.
 
 - **Xbox / PS / Home button** is the default. It uses the controller's Guide
   button to open or hide Helpy while the assigned game or Helpy has focus.
@@ -104,12 +110,12 @@ Helpy's existing window loop, at most once every 50 ms; they do not render the
 panel, search items or scan game objects.
 
 **Reserve Guide button in game** requests Windows GameInput's
-exclusive foreground Guide policy for Dragonwilds. It works independently of
+exclusive foreground Guide policy for Dragonwilds and Helpy. It works independently of
 the game's graphics API. The matching bridge forwards Guide presses to Helpy
 without requiring the panel to be open. A small lease renews every two seconds;
 the reservation is released when Helpy exits, when disabled, or within five
-seconds of lost bridge contact. Other game controls are not reserved by this
-setting. Missing GameInput support leaves the SDL shortcut and keyboard binding
+seconds of lost bridge contact. During an interactive desktop or native overlay,
+Helpy separately blocks the game's XInput controls. Missing GameInput support leaves the SDL shortcut and keyboard binding
 available; Settings shows the bridge status.
 
 This reservation applies to applications using **GameInput**. Steam can read
@@ -162,17 +168,18 @@ the selected one; disconnects release its held controls.
 ## Items, mods, maps and text
 
 - Press **Down** from a section's tabs/header to focus its content. Use the
-  D-pad or left stick to move between controls and
+  D-pad to move between controls and
   between adjoining panes. Press **Right** from a category list to enter its
   settings/content pane. Pane borders do not need an extra confirm press.
 - Focus an Item Bay card and confirm to select it. Enable **Select multiple**
   for a batch, then use **Send to cart**. The west button opens the existing
-  actions menu, including family/details commands. Drag/drop remains available.
+  actions menu, including family/details commands. With pointer mode active,
+  grab a selected item to drag the whole selection to the cart.
   Use the D-pad between cards and controls. Focus the search field and use the
   north button for the keyboard; cancel retains the existing search.
 - Focus a mod card and open its actions with the west button. Existing **Up**,
   **Down**, enable switches and save controls also accept normal navigation.
-- Focus the map canvas. The right stick pans, stick clicks zoom in/out, confirm
+- Focus the map canvas. The left stick pans, its press zooms in, the top face button zooms out, and confirm
   selects its center crosshair, and the west button opens actions there. Existing
   authority, ground and placement checks still apply.
 - On DualSense/PS5 and DualShock controllers, slide one finger on the touchpad

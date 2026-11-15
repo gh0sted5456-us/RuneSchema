@@ -496,6 +496,45 @@
       "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-item-001"
     },
     {
+      "id": "ItemDeliveryUnresolved",
+      "code": "RS-ITEM-002",
+      "title": "Automatic delivery item unavailable",
+      "summary": "An enabled mod lists an ItemData object that RuneSchema could not resolve.",
+      "impact": "Other items continue. RuneSchema reports each owner, delivery ID and path once per launch.",
+      "action": "Check the full ItemData object path and enable the mod that provides it.",
+      "subsystem": "Items",
+      "severity": "warning",
+      "causes": "The configured asset is missing, its provider is disabled, or the path names a different object type.",
+      "troubleshooting": "Check the full object path in item-delivery.json and the active mod list. Other paths still run.",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-item-002"
+    },
+    {
+      "id": "ItemDeliveryHeld",
+      "code": "RS-ITEM-003",
+      "title": "Automatic item delivery needs review",
+      "summary": "RuneSchema could not record a delivery or confirm its native character save.",
+      "impact": "A receipt claimed before a grant stays held across restarts to prevent duplicates.",
+      "action": "Check RuneSchema.log and the character inventory or save history before reconciling a held receipt.",
+      "subsystem": "Items",
+      "severity": "warning",
+      "causes": "An inventory mutation, receipt write, or native save outcome could not be verified.",
+      "troubleshooting": "Keep the held receipt and inspect the character and logs. Removing a held row can cause a duplicate if the save actually succeeded.",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-item-003"
+    },
+    {
+      "id": "ItemDeliveryUnavailable",
+      "code": "RS-ITEM-004",
+      "title": "Automatic item delivery unavailable",
+      "summary": "A delivery definition or native save contract could not be validated.",
+      "impact": "The affected definition or runtime path is skipped.",
+      "action": "Check the enabled mod's item-delivery.json and verify the supported game build.",
+      "subsystem": "Items",
+      "severity": "warning",
+      "causes": "The definition file is invalid or the current game build changed a reflected save or inventory contract.",
+      "troubleshooting": "Verify the mod JSON and RuneSchema game compatibility. Correct the source and restart.",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-item-004"
+    },
+    {
       "id": "SourceUnavailable",
       "code": "RS-SRC-001",
       "title": "Content source is not mounted",

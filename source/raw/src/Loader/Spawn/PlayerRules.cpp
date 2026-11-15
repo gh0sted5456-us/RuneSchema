@@ -1122,7 +1122,7 @@ namespace DragonWilds {
                 }
             }
             catch (...) {}
-            orderedControllers.push_back({playerId, {key, name, guid}});
+            orderedControllers.push_back({playerId, {key, name, guid, PS::WeakObjectHandle(controller)}});
         }
         std::stable_sort(orderedControllers.begin(), orderedControllers.end(),
             [](const auto& left, const auto& right) {
@@ -1130,6 +1130,10 @@ namespace DragonWilds {
                     return left.PlayerId < right.PlayerId;
                 return left.Player.Key < right.Player.Key;
             });
+        std::unordered_map<std::string_view, size_t> guidCounts;
+        for(const auto& ordered:orderedControllers)++guidCounts[ordered.Player.Guid];
+        for(auto& ordered:orderedControllers)
+            if(ordered.Player.Guid.empty()||guidCounts.at(ordered.Player.Guid)!=1)ordered.Player.Controller.Reset();
         for (auto& ordered : orderedControllers)
             connected.push_back(std::move(ordered.Player));
         return connected;

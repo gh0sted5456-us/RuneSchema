@@ -124,7 +124,8 @@ namespace DragonWilds {
         bool RestoreNativeRegistry();
         void ClearWorldRegistryState();
         bool ApplyUnlocks(RC::Unreal::UObject* progressComponent);
-        size_t ApplyUnlocksToWorld(
+        struct WorldUnlockResult { size_t ProgressComponents = 0, Applied = 0; };
+        WorldUnlockResult ApplyUnlocksToWorld(
             RC::Unreal::UObject* worldContext = nullptr,
             bool reportDeferred = true);
         void NotifyBuildingUnlocks(RC::Unreal::UObject* progressComponent,

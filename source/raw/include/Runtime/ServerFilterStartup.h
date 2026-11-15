@@ -50,11 +50,9 @@ inline void Start() {
         const auto* image=reinterpret_cast<const unsigned char*>(GetModuleHandleW(nullptr));
         const auto* dos=reinterpret_cast<const IMAGE_DOS_HEADER*>(image);
         const auto* pe=reinterpret_cast<const IMAGE_NT_HEADERS64*>(image+dos->e_lfanew);
-        if(!NativeServerFilterContract::Supports(pe->FileHeader.TimeDateStamp,pe->OptionalHeader.SizeOfImage))
-            throw std::runtime_error("This dedicated-server build's native filter setup has not been verified");
-        NativeServerFilterContract::Verify(pe->FileHeader.TimeDateStamp,pe->OptionalHeader.SizeOfImage,
-            {image+NativeServerFilterContract::ApplyAddress,NativeServerFilterContract::ApplyCode.size()});
-        Detail::ApplyNative=reinterpret_cast<Detail::ApplySettings>(const_cast<unsigned char*>(image)+NativeServerFilterContract::ApplyAddress);
+        const auto address=NativeServerFilterContract::ResolveApplyAddress(pe->FileHeader.TimeDateStamp,pe->OptionalHeader.SizeOfImage);
+        NativeServerFilterContract::Verify({image+address,NativeServerFilterContract::ApplyCode.size()});
+        Detail::ApplyNative=reinterpret_cast<Detail::ApplySettings>(const_cast<unsigned char*>(image)+address);
         Hook::FCallbackOptions options{};options.OwnerModName=TEXT("RuneSchema");options.HookName=TEXT("NativeServerFilterStartup");
         Detail::WorldHook=Hook::RegisterInitGameStatePostCallback([](auto&,AGameModeBase* mode){
             try{Detail::Apply(mode);}catch(const std::exception& error){Detail::Warn(error);}

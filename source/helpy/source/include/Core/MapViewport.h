@@ -1,6 +1,7 @@
 #pragma once
 #include "Core/MapProjection.h"
 #include <algorithm>
+#include <optional>
 namespace PS::MapProjection {
 // Preserve native map proportions in a rectangular viewport, including when
 // Fit world letterboxes the texture. Pixels and world coordinates share one view.
@@ -20,6 +21,12 @@ struct Viewport {
     void ZoomAt(double value,Point pixel){const auto anchor=ToUV(pixel);Zoom=std::clamp(value,FitZoom(),32.0);const auto span=Span();
         Center={anchor.X-(pixel.X/Width-0.5)*span.X,anchor.Y-(pixel.Y/Height-0.5)*span.Y};Clamp();}
     void Pan(Point delta){const auto span=Span();Center.X-=delta.X*span.X/Width;Center.Y-=delta.Y*span.Y/Height;Clamp();}
+    std::optional<Point> WorldAt(const Projection& projection,Point pixel)const{
+        if(pixel.X<0||pixel.X>Width||pixel.Y<0||pixel.Y>Height||!projection.Valid())return {};
+        const auto uv=ToUV(pixel);
+        if(!InMap(uv))return {};
+        return projection.ToWorld(uv);
+    }
     static bool InMap(Point uv){return std::isfinite(uv.X)&&std::isfinite(uv.Y)&&uv.X>=0&&uv.X<=1&&uv.Y>=0&&uv.Y<=1;}
 };
 }

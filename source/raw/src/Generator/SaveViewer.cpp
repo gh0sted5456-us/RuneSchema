@@ -1,5 +1,5 @@
 #include "Generator/SaveViewer.h"
-#include "Core/HelpyKitFiles.h"
+#include "Core/RuneSchemaDataRoot.h"
 #include "Generator/AssetSearch.h"
 #include "Generator/SaveReport.h"
 #include "Generator/ItemCatalogMetadata.h"
@@ -45,9 +45,9 @@ namespace fs=std::filesystem;
 namespace PS::SaveViewer {
 namespace {
     fs::path ImportFolder() {
-        const auto folder=HostServices::JobsDirectory()/"imports/saves";
+        const auto folder=RuneSchemaData::ResolveSaveRoot(HostServices::JobsDirectory()/"imports/saves");
         fs::create_directories(folder);
-        return fs::weakly_canonical(folder);
+        return folder;
     }
     std::vector<fs::path> ImportedSaves() {
         const auto folder=ImportFolder();std::vector<fs::path> files;size_t entries=0;

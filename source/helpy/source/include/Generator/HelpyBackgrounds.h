@@ -2,6 +2,7 @@
 #include "Core/ProcessExitFuture.h"
 #include "Core/BackgroundPolicy.h"
 #include "Core/HelpyUiAssets.h"
+#include "Core/HelpySplash.h"
 #include "Generator/HelpyImGuiTheme.h"
 #include "Runtime/HelpyPaths.h"
 #include "Core/HelpyPreviewHooks.h"
@@ -90,6 +91,26 @@ inline void DrawWindow(float opacity=1.f){
     ++HelpyPreviewHooks::BackgroundDraws;
 #endif
 }
+inline void DrawSplash(double elapsed,bool animate,float opacity){
+    static const std::array<std::string,2> names{"source-base-game.png","source-scorched-wilderness.png"};
+    for(const auto& name:names)RequestImage(name);
+    const auto rotation=HelpySplash::Cycle(animate?elapsed:0,names.size(),HelpyImGuiTheme::Current.splashLogoSeconds*2.f);
+    const auto* first=Find(names[rotation.First]);
+    const auto* next=Find(names[rotation.Next]);
+    if(!first&&!next)return;
+    const auto a=ImGui::GetWindowPos(),size=ImGui::GetWindowSize();
+    auto* draw=ImGui::GetWindowDrawList();
+    const auto paint=[&](const Image* image,float alpha){
+        if(!image||alpha<=0)return;
+        const auto crop=BackgroundPolicy::Cover(float(image->Width),float(image->Height),size.x,size.y);
+        draw->AddImage(ImTextureRef(image->Texture),a,{a.x+size.x,a.y+size.y},{crop.Left,crop.Top},{crop.Right,crop.Bottom},ImGui::GetColorU32(ImVec4(1,1,1,alpha)));
+    };
+    const float strength=.22f*opacity;
+    if(!first||!next||first==next){paint(first?first:next,strength);return;}
+    const float incoming=strength*rotation.Fade;
+    paint(first,strength*(1-rotation.Fade)/(1-incoming));
+    paint(next,incoming);
+}
 inline void Render(){
     SettingsVisible=true;auto& theme=HelpyImGuiTheme::Current;
     if(!DraftReady){DraftReady=true;Selection=theme.backgroundFile;DraftStrength=theme.backgroundStrength;}
@@ -117,6 +138,13 @@ inline void Render(){
     ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Refresh pictures"))Refresh();
     if(!Error.empty())ImGui::TextWrapped("%s",Error.c_str());
     ImGui::TextDisabled("Local only. Up to 128 images, 20 MiB each; maximum decoded size 4096 x 4096.");
+    ImGui::SeparatorText("Welcome splash");
+    bool changed=HelpyImGuiTheme::Toggle("Include Dragonwilds logo",&theme.splashGameLogo);
+    changed|=HelpyImGuiTheme::Toggle("Include platform logo",&theme.splashRuntimeLogo);
+    changed|=HelpyImGuiTheme::Toggle("Rotate splash artwork",&theme.splashBackgrounds);
+    ImGui::SetNextItemWidth(std::min(theme.X(260),ImGui::GetContentRegionAvail().x));
+    ImGui::SliderFloat("Seconds per logo",&theme.splashLogoSeconds,2.f,30.f,"%.0f s");
+    if(changed||ImGui::IsItemDeactivatedAfterEdit())HelpyImGuiTheme::SaveCurrent();
 }
 inline void Shutdown(){
     HelpyImGuiTheme::PictureBackingActive=false;

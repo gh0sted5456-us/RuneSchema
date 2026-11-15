@@ -900,9 +900,9 @@ inline void DrawIssues(DiagnosticCenterModel::Store& store,const HelpyImGuiTheme
     ImGui::Checkbox("Group same-operation",&GroupByOperation);
     if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Only reports sharing explicit OperationId AND ModId. Legacy safety warnings remain separate.");
 
-    std::vector<const DiagnosticCenterModel::Group*> filtered;
-    for(const auto& group:store.Groups())if(Matches(group,Query))filtered.push_back(&group);
-    DiagnosticIssueFilters::Sort(filtered,SortMode);
+    // Memoized per store revision and filter state; per-frame cost is a key comparison.
+    static DiagnosticIssueFilters::View issues;
+    const auto& filtered=issues.Update(store,Query,ShowAll,OnlyNew,SeverityScope,SortMode);
     if(RevealSelectedInList&&GroupByOperation&&DiagnosticIssueNavigation::Contains(filtered,SelectedGroup)){
         const auto parent=DiagnosticIssueNavigation::ParentFor(store,filtered,SelectedGroup);
         if(parent&&parent!=SelectedGroup)ExpandedOperations.insert(parent);

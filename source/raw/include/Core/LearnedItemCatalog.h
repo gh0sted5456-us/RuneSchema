@@ -1,40 +1,148 @@
 #pragma once
 #include "Core/CacheBundleStore.h"
+#include <deque>
+#include <unordered_map>
 #include <future>
 
 namespace PS::LearnedItemCatalog {
-class Store {
-    std::future<void> Work;
-    std::map<std::string,CacheBundle::Record> Pending;
-    std::string Context;
-    std::function<void(std::vector<CacheBundle::Record>)> Write;
+// A continuation can arrive after the current batch has finished writing.
+class IndexRefresh {
+    using Clock=std::chrono::steady_clock;
+    static constexpr auto Interval=std::chrono::seconds(3);
+    Clock::time_point SearchUntil{}, RebuildBy{};
+    bool Dirty=false;
 public:
-    std::string Error;
-    void Flush(){
-        if(Work.valid()){
-            if(Work.wait_for(std::chrono::seconds(0))!=std::future_status::ready)return;
-            try{Work.get();Error.clear();}catch(const std::exception& error){Error=error.what();}
+    void SearchSlice(Clock::time_point now,bool hasMore){SearchUntil=hasMore?now+Interval:Clock::time_point{};}
+    void Committed(Clock::time_point now){if(!Dirty){Dirty=true;RebuildBy=now+Interval;}}
+    bool Ready(Clock::time_point now,bool writesPending)const{
+        return Dirty&&(now>=RebuildBy||(!writesPending&&now>=SearchUntil));
+    }
+    bool Take(Clock::time_point now,bool writesPending){
+        if(!Ready(now,writesPending))return false;
+        Dirty=false;return true;
+    }
+};
+// Keep retries ahead of newer observations so old data cannot overwrite a later result.
+class Store {
+    using Clock=std::chrono::steady_clock;
+    using Writer=std::function<size_t(std::vector<CacheBundle::Record>)>;
+    struct Batch{std::string Context;Writer Write;std::map<std::string,CacheBundle::Record> Rows;unsigned Failures=0;std::filesystem::path Index;};
+    std::future<size_t> Work;
+    Batch Running,Current;              // Running is the batch the worker holds; Current collects new observations.
+    std::deque<Batch> Closed;           // Earlier contexts waiting for their own write, oldest first.
+    Clock::time_point NextWrite{};
+    static constexpr unsigned MaximumAttempts=5;
+    static constexpr size_t MaximumClosed=4;
+    // What each path last committed successfully, per context. A later identical observation is already on
+    // disk, so it neither queues nor commits again. Cleared when the learned index changes without us.
+    static constexpr size_t MaximumSaved=65536;
+    std::string SavedContext;std::unordered_map<std::string,size_t> Saved;
+    std::filesystem::path SavedIndex;std::filesystem::file_time_type SavedStamp{};Clock::time_point NextStampCheck{};
+    static size_t Fingerprint(const CacheBundle::Record& row){return std::hash<std::string>{}(CacheBundle::Document(row).dump());}
+    static std::filesystem::file_time_type Stamp(const std::filesystem::path& index){std::error_code error;const auto stamp=std::filesystem::last_write_time(index,error);return error?std::filesystem::file_time_type{}:stamp;}
+    void Remember(const Batch& batch){
+        if(batch.Context!=SavedContext){Saved.clear();SavedContext=batch.Context;}
+        if(Saved.size()+batch.Rows.size()>MaximumSaved)Saved.clear();
+        for(const auto& [path,row]:batch.Rows)Saved[path]=Fingerprint(row);
+        SavedIndex=batch.Index;SavedStamp=Stamp(SavedIndex);NextStampCheck=Clock::now()+std::chrono::seconds(2);
+    }
+    // At most one file-time check every two seconds, on the caller's thread.
+    void ValidateSaved(){
+        if(Saved.empty()||Work.valid()||Clock::now()<NextStampCheck)return; // An in-flight commit is ours; it refreshes the stamp.
+        NextStampCheck=Clock::now()+std::chrono::seconds(2);
+        if(Stamp(SavedIndex)!=SavedStamp)Saved.clear();
+    }
+    // Newer observations win; an older persistence ID fills a missing one, as Observe merges.
+    static void Merge(std::map<std::string,CacheBundle::Record>& into,CacheBundle::Record row){
+        const auto previous=into.find(row.Path);
+        if(previous==into.end()){into.emplace(row.Path,std::move(row));return;}
+        if(row.PersistenceID.empty())row.PersistenceID=previous->second.PersistenceID;
+        row.Data=ItemName::Merge(previous->second.Data,row.Data);previous->second=std::move(row);
+    }
+    void Abandon(Batch& batch){Dropped+=batch.Rows.size();batch.Rows.clear();}
+    void Close(Batch batch){
+        if(batch.Rows.empty())return;
+        if(Closed.size()>=MaximumClosed){Abandon(Closed.front());Closed.pop_front();}
+        Closed.push_back(std::move(batch));
+    }
+    void Failed(std::string message){
+        Error=std::move(message);
+        if(++Running.Failures>=MaximumAttempts){
+            Abandon(Running);
+            Running={};
+            return;
         }
-        if(Pending.empty())return;
-        std::vector<CacheBundle::Record> rows;for(auto& [path,row]:Pending)rows.push_back(std::move(row));Pending.clear();
-        Work=std::async(std::launch::async,[write=Write,rows=std::move(rows)]()mutable{write(std::move(rows));});
+        NextWrite=Clock::now()+std::chrono::milliseconds(250u<<Running.Failures);
+    }
+    void Start(){
+        try{
+            std::vector<CacheBundle::Record> rows;
+            rows.reserve(Running.Rows.size());
+            for(const auto& [path,row]:Running.Rows)rows.push_back(row);
+            Work=std::async(std::launch::async,[write=Running.Write,rows=std::move(rows)]()mutable{
+                return write(std::move(rows));
+            });
+        }catch(const std::exception& error){Failed(error.what());}
+    }
+public:
+    static constexpr size_t MaximumPending=2048;
+    std::string Error;   // Last persistence failure, cleared by the next successful commit.
+    size_t Dropped=0;    // Discoveries not persisted: saturation, abandoned retries or overflowing contexts.
+    size_t Unchanged=0;  // Observations skipped because the same row was already committed.
+    bool HasWork()const{return Work.valid()||!Running.Rows.empty()||!Current.Rows.empty()||!Closed.empty();}
+    bool Flush(bool force=false){
+        bool changed=false;
+        if(Work.valid()){
+            if(Work.wait_for(std::chrono::seconds(0))!=std::future_status::ready)return false;
+            try{changed=Work.get()!=0;Error.clear();Remember(Running);Running={};}
+            catch(const std::exception& error){Failed(error.what());}
+            catch(...){Failed("Learned item write failed.");}
+        }
+        if(!force&&Clock::now()<NextWrite)return changed;
+        if(Running.Rows.empty()){
+            if(!Closed.empty()){
+                Running=std::move(Closed.front());
+                Closed.pop_front();
+            }else if(!Current.Rows.empty()){
+                Running=std::move(Current);
+                Current={Running.Context,{},{},0,Running.Index};
+            }else return changed;
+        }
+        Start();
+        return changed;
     }
     void Observe(const std::filesystem::path& cache,const HelpySourceCache::Snapshot& snapshot,const std::string& locale,const nlohmann::json& rows){
         if(!snapshot.Authoritative||snapshot.Provisional||!rows.is_array())return;
-        const auto context=cache.generic_string()+snapshot.Key+locale;
-        if(Context!=context){Pending.clear();Context=context;}
+        const auto context=cache.generic_string()+"|"+snapshot.CatalogKey+"|"+locale;
+        // Rows from an earlier context keep their own writer instead of being discarded.
+        if(Current.Context!=context){Close(std::move(Current));Current={context,{},{},0,CacheBundleStore::Directory(cache,cache.parent_path())/"index.json"};}
         const auto plan=CacheBundleStore::Plan(snapshot);
+        ValidateSaved();
+        // Earlier batches can still change a saved row, including retries and closed contexts.
+        const bool remembered=SavedContext==context&&!Saved.empty()&&Running.Rows.empty()&&Closed.empty();
         for(const auto& data:rows){
             if(!data.value("Available",true))continue;
             const auto document=CacheBundle::FromRow("items",data);if(document.is_null())continue;
             auto row=CacheBundle::Parse(document);
-            if(snapshot.SourceKeys.contains(row.Source)&&CacheBundle::Owned(row,plan,snapshot.NativePlugins)
-                &&(Pending.size()<2048||Pending.contains(row.Path)))Pending.insert_or_assign(row.Path,std::move(row));
+            if(!snapshot.SourceKeys.contains(row.Source)||!CacheBundle::Owned(row,plan,snapshot.NativePlugins))continue;
+            if(remembered&&!Current.Rows.contains(row.Path))
+                if(const auto saved=Saved.find(row.Path);saved!=Saved.end()&&saved->second==Fingerprint(row)){++Unchanged;continue;}
+            if(Current.Rows.size()>=MaximumPending&&!Current.Rows.contains(row.Path)){++Dropped;continue;}
+            if(Current.Rows.empty()){
+                NextWrite=std::max(NextWrite,Clock::now()+std::chrono::milliseconds(250));
+                Current.Write=[cache,snapshot,locale](auto records){return CacheBundleStore::Commit(cache,cache.parent_path(),snapshot,locale,records);};
+            }
+            Merge(Current.Rows,std::move(row));
         }
-        Write=[cache,snapshot,locale](auto records){CacheBundleStore::Commit(cache,cache.parent_path(),snapshot,locale,records);};Flush();
     }
+    // Drains every queued batch. A failed earlier worker no longer prevents later rows from writing.
     void Shutdown()noexcept{
-        try{if(Work.valid())Work.get();Flush();if(Work.valid())Work.get();}catch(const std::exception& error){Error=error.what();}
+        try{
+            while(HasWork()){
+                if(Work.valid())Work.wait();
+                Flush(true);
+            }
+        }catch(const std::exception& error){Error=error.what();}catch(...){Error="Learned item shutdown failed.";}
     }
     ~Store(){Shutdown();}
 };

@@ -35,6 +35,7 @@
 #include "Generator/AppearanceTrace.h"
 #include "Generator/PlayerTrace.h"
 #include "Loader/DragonWildsMainLoader.h"
+#include "Runtime/PakLoader.h"
 #include "Runtime/PluginHost.h"
 #include "Runtime/QuickLoad.h"
 #include "Runtime/AdditionalLogging.h"
@@ -377,7 +378,7 @@ public:
         DragonWilds::UnrealOffsets::Initialize();
         PS::StartupTrace::Mark("offsets complete; early hooks begin");
 
-        MainLoader.PreInitialize();
+        MainLoader.PreInitialize(m_pluginHost.HasCapability("ue4ss.sister-content"));
         PS::StartupTrace::Mark("early hooks complete");
 
         PS::ConsolidatedLog<RC::LogLevel::Normal>(STR("[RuneSchema] v{} loaded | UE4SS | network role determined by game state.\n"), ModVersion);
@@ -540,12 +541,12 @@ public:
             ImGui::Checkbox("Allow client self-teleport", &settings.helpyAuthority.allowClientTeleport);
             ImGui::Checkbox("Allow client temporary spawns", &settings.helpyAuthority.allowClientTemporarySpawns);
             ImGui::SetNextItemWidth(140.0f);
-            ImGui::InputInt("Maximum items per request", &settings.helpyAuthority.maximumItemCount);
+            ImGui::InputInt("Maximum items per request (0 = no limit)", &settings.helpyAuthority.maximumItemCount);
             ImGui::SetNextItemWidth(140.0f);
             ImGui::InputInt("Maximum actors per request", &settings.helpyAuthority.maximumSpawnCount);
             ImGui::SetNextItemWidth(140.0f);
             ImGui::InputInt("Maximum temporary NPC seconds", &settings.helpyAuthority.maximumNpcDurationSeconds);
-            settings.helpyAuthority.maximumItemCount=std::clamp(settings.helpyAuthority.maximumItemCount,1,10000);
+            settings.helpyAuthority.maximumItemCount=std::max(settings.helpyAuthority.maximumItemCount,0);
             settings.helpyAuthority.maximumSpawnCount=std::clamp(settings.helpyAuthority.maximumSpawnCount,1,100);
             settings.helpyAuthority.maximumNpcDurationSeconds=std::clamp(settings.helpyAuthority.maximumNpcDurationSeconds,1,3600);
             ImGui::TextWrapped("Remote users need an allowlist entry or opted-in world PIN access. Configure the PIN in Helpy > Settings > Server access. PIN access covers only self-delivery and self-teleport; action limits and registry checks still apply. GUIDs are preferred for allowlists.");
@@ -832,7 +833,10 @@ public:
     }
 
     void InstallPackageDiscovery(RC::StringViewType modName,RC::LuaMadeSimple::Lua& lua) {
-        if(m_startupFailed.load(std::memory_order_acquire)||m_packageDiscoveryBootstrap.empty())return;
+        if (m_startupFailed.load(std::memory_order_acquire)) return;
+        if (PS::ModFolderLayout::EqualsInsensitive(RC::to_string(modName), "RuneSchema"))
+            PS::AutoMapping::InstallLua(lua);
+        if (m_packageDiscoveryBootstrap.empty()) return;
         if(PS::ModFolderLayout::EqualsInsensitive(RC::to_string(modName),"RuneSchema"))try{PS::HelpyHudInterfaces::Install(PS::HostServices::ModDirectory(),lua);}catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[RuneSchema][HUD][INACTIVE] {}\n"),PS::ToWideSafe(error.what()));}
         if(PS::ModFolderLayout::EqualsInsensitive(RC::to_string(modName),"RuneSchema"))try{PS::HelpyModMenu::Install(PS::HostServices::ModDirectory(),lua);}catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[RuneSchema][MOD-MENU][INACTIVE] {}\n"),PS::ToWideSafe(error.what()));}
         try {lua.execute_string(m_packageDiscoveryBootstrap);}
@@ -961,6 +965,11 @@ BOOL APIENTRY DllMain(HMODULE,DWORD reason,LPVOID reserved) {
 }
 extern "C"
 {
+    RuneSchema_API bool RuneSchema_RegisterPakLoaderRootV1(const wchar_t* path) noexcept
+    {
+        return PS::PakLoader::Register(path);
+    }
+
     RuneSchema_API RC::CppUserModBase* start_mod()
     {
         try {

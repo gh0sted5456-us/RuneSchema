@@ -32,6 +32,7 @@ namespace PS {
         FileWatchWrapper(const std::filesystem::path& path, const FilesystemUpdateCallback& callback);
         ~FileWatchWrapper();
 
+        bool IsWatchingDirectory() const noexcept { return m_fileWatchId >= 0; }
         void Watch();
     private:
         std::unique_ptr<efsw::FileWatcher> m_fileWatcher = nullptr;

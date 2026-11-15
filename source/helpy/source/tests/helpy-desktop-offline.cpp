@@ -11,7 +11,7 @@ int main()try{
     auto changed=PS::HelpyOfflineRuntime::Call(root,{{"Action","SettingsSave"},{"ExpectedContents",settings.at("ExpectedContents")},{"Patch",{{"/helpyHotkey","F4"}}}});
     assert(changed.at("Ok")==true&&changed.at("Document").at("helpyHotkey")=="F4");
     auto mods=PS::HelpyOfflineRuntime::Call(root,{{"Action","ModsRead"}});assert(mods.at("Ok")==true&&mods.at("Rows").size()==1);
-    const auto sources=root/"sources.json";PS::ConfigFiles::Write(sources,Json{{"Ready",true},{"Key","0123456789abcdef"},{"Owners",{{"example",Json::array({"example","removed"})}}},{"DeclaredOwners",{{"example",Json::array({"example","removed"})}}}}.dump());
+    const auto sources=root/"sources.json";PS::ConfigFiles::Write(sources,std::string(3*1024*1024,' ')+Json{{"Ready",true},{"Key","0123456789abcdef"},{"Owners",{{"example",Json::array({"example","removed"})}}},{"DeclaredOwners",{{"example",Json::array({"example","removed"})}}}}.dump());
     auto visible=PS::HelpyOfflineRuntime::Sources(root,sources);assert(visible.at("PresentationOnly")==true&&visible.at("Owners").at("example")==Json::array({"example"}));
     auto request=mods;request["Action"]="ModsSave";request["ExpectedRoot"]=mods.at("Root");request["Rows"][0]["Enabled"]=false;
     auto saved=PS::HelpyOfflineRuntime::Call(root,request);assert(saved.at("Rows")[0]["Enabled"]==false);

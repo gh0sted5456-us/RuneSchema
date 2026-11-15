@@ -7,7 +7,6 @@
 #include <future>
 #include <functional>
 #include <string>
-#include <cstdio>
 
 namespace PS::StructuredLogFeed {
 inline StructuredDiagnosticReader::Cursor Cursor;
@@ -17,22 +16,10 @@ inline std::function<void(const StructuredDiagnostic::Record&)> OnRecord;
 inline std::string Status;
 inline std::uint64_t Invalid=0;
 inline std::uint64_t Gaps=0;
-// RuneSchema and HELPY occupy the same game process. Old records in the
-// append-only active JSONL file must not become new current-session issues.
-inline bool InThisProcess(const StructuredDiagnostic::Record& entry){
-#ifdef _WIN32
-    static const std::string processStart=[]{
-        FILETIME start{},exit{},kernel{},user{};SYSTEMTIME utc{};
-        if(!GetProcessTimes(GetCurrentProcess(),&start,&exit,&kernel,&user)||!FileTimeToSystemTime(&start,&utc))return std::string{};
-        char time[32]{};std::snprintf(time,sizeof(time),"%04u-%02u-%02uT%02u:%02u:%02u",
-             static_cast<unsigned>(utc.wYear),static_cast<unsigned>(utc.wMonth),static_cast<unsigned>(utc.wDay),
-             static_cast<unsigned>(utc.wHour),static_cast<unsigned>(utc.wMinute),static_cast<unsigned>(utc.wSecond));
-        return std::string(time);
-    }();
-    return processStart.empty()||entry.Timestamp.substr(0,19)>=processStart;
-#else
-    (void)entry;return true;
-#endif
+inline bool RestartPending=false;
+inline void Restart(){
+    RestartPending=Worker.valid();Cursor={};NextRead={};
+    Status.clear();Invalid=0;Gaps=0;
 }
 inline void ConsumeBatch(StructuredDiagnosticReader::Batch batch){
     Cursor=std::move(batch.Next);
@@ -41,12 +28,14 @@ inline void ConsumeBatch(StructuredDiagnosticReader::Batch batch){
     if(!batch.Error.empty())Status=std::move(batch.Error);
     else if(batch.Gap)Status="A rotated diagnostic log was missed; retained history may be incomplete.";
     else Status.clear();
-    for(const auto& entry:batch.Records)if(OnRecord&&InThisProcess(entry))OnRecord(entry);
+    if(batch.More)NextRead={};
+    for(const auto& entry:batch.Records)if(OnRecord)OnRecord(entry);
 }
 inline void DrainPending(){
     if(!Worker.valid())return;
-    try{ConsumeBatch(Worker.get());}
-    catch(...){Status="Failed to process structured diagnostic log batch.";}
+    const bool discard=std::exchange(RestartPending,false);
+    try{auto batch=Worker.get();if(!discard)ConsumeBatch(std::move(batch));}
+    catch(...){if(!discard)Status="Failed to process structured diagnostic log batch."; }
 }
 inline void Poll(bool background=false){
     if(Worker.valid()&&Worker.wait_for(std::chrono::seconds(0))==std::future_status::ready)

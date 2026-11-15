@@ -21,8 +21,9 @@ struct VulkanConnection {VkDevice Device{};VkQueue Queue{};uint32_t Family=0;PFN
 struct State {
     HelpyOverlayFrames::Page PendingInput;
     std::mutex Gate;std::jthread Worker;std::atomic<bool> Started=false,Stopping=false,Suspended=false,Ready=false,Prepared=false;
+    std::atomic<HWND> DesktopWindow=nullptr;std::atomic<uint64_t> DesktopUntil=0;bool GameInputReady=false;
     std::atomic<unsigned> Calls=0;std::atomic<bool> Capturing=false,Drawing=false;std::string Error="Native overlay has not been prepared";
-    SafetyHookInline Present,Present1,Resize,Resize1,CreateSwap,CreateHwnd,Execute,Barriers,EnhancedBarriers,Clip,Warp,Cursor,Shape,Position,AsyncKeys,Keys,Keyboard,RawBuffer,SwapGl,SwapWgl;std::array<SafetyHookInline,3> Pads;
+    SafetyHookInline Present,Present1,Resize,Resize1,CreateSwap,CreateHwnd,Execute,Barriers,EnhancedBarriers,Clip,Warp,Cursor,Shape,Position,AsyncKeys,Keys,Keyboard,RawBuffer,RawData,SwapGl,SwapWgl;std::array<SafetyHookInline,3> Pads;std::array<std::array<HelpyXInputCapture,XUSER_MAX_COUNT>,3> PadCapture;
     uintptr_t GameImage=0;size_t GameImageBytes=0;
     ComPtr<IDXGISwapChain3> Swap;ComPtr<ID3D12Device> Device;ComPtr<ID3D12CommandQueue> Queue;
     std::array<ID3D12Resource*,8> Buffers{};std::vector<ID3D12CommandList*> PresentLists;ComPtr<ID3DBlob> Vertex,Pixel;Consumer12 Renderer;Consumer11 Renderer11;ConsumerGL RendererGL;ConsumerVulkan RendererVk;std::shared_ptr<VulkanConnection> Vulkan;ComPtr<ID3D11Device> VulkanVerifier;std::atomic<uint32_t> PendingApp=0;std::string PendingNonce;LUID GlAdapter{};ComPtr<ID3D11Device> Device11;std::string Api;
@@ -41,6 +42,15 @@ State& Shared(){static auto* state=new State;return *state;}
 struct Callback {State& Value;Callback():Value(Shared()){++Value.Calls;}~Callback(){--Value.Calls;}};
 bool GameWindow(HWND window){wchar_t name[64]{};DWORD pid=0;GetWindowThreadProcessId(window,&pid);return pid==GetCurrentProcessId()&&GetClassNameW(window,name,64)&&std::wstring_view(name)==L"UnrealWindow";}
 bool Captured(State& state){return !state.Stopping&&state.Capturing&&GetForegroundWindow()==state.Window;}
+bool DesktopCaptured(State& state){
+    const auto desktop=state.DesktopWindow.load();
+    if(!desktop||state.Stopping||GetTickCount64()>=state.DesktopUntil.load()||!IsWindowVisible(desktop)||IsIconic(desktop))return false;
+    const auto foreground=GetForegroundWindow();
+    if(foreground==desktop||GameWindow(foreground))return true;
+    DWORD foregroundPid=0,desktopPid=0;
+    GetWindowThreadProcessId(foreground,&foregroundPid);GetWindowThreadProcessId(desktop,&desktopPid);
+    return foregroundPid&&foregroundPid==desktopPid;
+}
 HCURSOR CurrentCursor(State& state){const auto index=state.CursorIndex.load();return index<0?nullptr:state.Cursors[size_t(index)<state.Cursors.size()?size_t(index):0];}
 void CursorInput(State& state,bool active){
     active=active&&state.Owner.Interactive;
@@ -118,7 +128,14 @@ BOOL WINAPI Keyboard(PBYTE keys){auto& state=Shared();const auto result=state.Ke
 UINT WINAPI RawBuffer(PRAWINPUT data,PUINT size,UINT header){
     auto& state=Shared();const auto result=state.RawBuffer.call<UINT>(data,size,header);
     // Drain the real queue before reporting no events, so hidden clicks/axes cannot replay on close.
-    return MaskBufferedGameInput(Captured(state),reinterpret_cast<uintptr_t>(_ReturnAddress()),state.GameImage,state.GameImageBytes,result);
+    return MaskBufferedGameInput(Captured(state)||DesktopCaptured(state),reinterpret_cast<uintptr_t>(_ReturnAddress()),state.GameImage,state.GameImageBytes,result);
+}
+UINT WINAPI RawData(HRAWINPUT input,UINT command,LPVOID data,PUINT size,UINT header){
+    auto& state=Shared();
+    if(command==RID_INPUT&&CapturedGameCall(Captured(state)||DesktopCaptured(state),reinterpret_cast<uintptr_t>(_ReturnAddress()),state.GameImage,state.GameImageBytes)){
+        SetLastError(ERROR_ACCESS_DENIED);return UINT(-1);
+    }
+    return state.RawData.call<UINT>(input,command,data,size,header);
 }
 BOOL WINAPI Warp(int x,int y){auto& state=Shared();return Captured(state)?TRUE:state.Warp.call<BOOL>(x,y);}
 int WINAPI Cursor(BOOL show){auto& state=Shared();return Captured(state)?(show?0:-1):state.Cursor.call<int>(show);}
@@ -232,12 +249,29 @@ HRESULT WINAPI Resize1(IDXGISwapChain3* swap,UINT count,UINT width,UINT height,D
     const auto result=state.Resize1.call<HRESULT>(swap,count,width,height,format,flags,masks,queues);if(SUCCEEDED(result)){std::lock_guard lock(state.Gate);DXGI_SWAP_CHAIN_DESC desc{};if(state.Swap.Get()==swap&&SUCCEEDED(swap->GetDesc(&desc))){state.Width=desc.BufferDesc.Width;state.Height=desc.BufferDesc.Height;}}return result;
 }
 template<unsigned Slot> DWORD WINAPI Pad(DWORD index,XINPUT_STATE* output){
-    auto& state=Shared();const auto result=state.Pads[Slot].call<DWORD>(index,output);if(result!=ERROR_SUCCESS||!output||!Captured(state))return result;
-    std::unique_lock lock(state.Gate,std::try_to_lock);if(lock)if(auto* page=state.Page()){
+    auto& state=Shared();const auto result=state.Pads[Slot].call<DWORD>(index,output);
+    if(index>=XUSER_MAX_COUNT||!output)return result;
+    auto& capture=state.PadCapture[Slot][index];
+    if(result!=ERROR_SUCCESS){capture.Reset();return result;}
+    const bool native=Captured(state);
+    if(native){std::unique_lock lock(state.Gate,std::try_to_lock);if(lock)if(auto* page=state.Page()){
         InterlockedIncrement(&page->PadSequence);std::memcpy(page->Pad.data(),&output->Gamepad,sizeof(output->Gamepad));InterlockedIncrement(&page->PadSequence);
-    }
-    // A held pad must deliver a changed packet when capture starts and ends.
-    output->dwPacketNumber^=0x80000000u;output->Gamepad={};return result;
+    }}
+    capture.Apply(*output,native||DesktopCaptured(state));
+    return result;
+}
+void PrepareGameInput(State& state){
+    if(state.GameInputReady)return;
+    HMODULE pinned{};
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_PIN,reinterpret_cast<LPCWSTR>(&PrepareGameInput),&pinned);
+    const auto image=reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));const auto* dos=reinterpret_cast<const IMAGE_DOS_HEADER*>(image);
+    if(dos->e_magic==IMAGE_DOS_SIGNATURE){const auto* nt=reinterpret_cast<const IMAGE_NT_HEADERS64*>(image+dos->e_lfanew);if(nt->Signature==IMAGE_NT_SIGNATURE){state.GameImage=image;state.GameImageBytes=nt->OptionalHeader.SizeOfImage;}}
+    std::array<const wchar_t*,3> libraries{L"xinput1_4.dll",L"xinput1_3.dll",L"xinput9_1_0.dll"};std::array<void*,3> callbacks{reinterpret_cast<void*>(Pad<0>),reinterpret_cast<void*>(Pad<1>),reinterpret_cast<void*>(Pad<2>)};
+    for(unsigned i=0;i<3;++i)if(auto library=GetModuleHandleW(libraries[i]))if(auto address=GetProcAddress(library,"XInputGetState")){bool duplicate=false;for(unsigned j=0;j<i;++j)duplicate|=state.Pads[j]&&state.Pads[j].target_address()==reinterpret_cast<uintptr_t>(address);if(!duplicate)Hook(state.Pads[i],reinterpret_cast<void*>(address),callbacks[i]);}
+    const auto user32=GetModuleHandleW(L"user32.dll");
+    Hook(state.RawBuffer,reinterpret_cast<void*>(GetProcAddress(user32,"GetRawInputBuffer")),RawBuffer);
+    Hook(state.RawData,reinterpret_cast<void*>(GetProcAddress(user32,"GetRawInputData")),RawData);
+    state.GameInputReady=true;
 }
 void Prepare(State& state){
     try{
@@ -253,17 +287,13 @@ void Prepare(State& state){
         ComPtr<ID3D12Device> device12;ComPtr<ID3D12CommandQueue> queue;if(SUCCEEDED(D3D12CreateDevice(nullptr,D3D_FEATURE_LEVEL_11_0,IID_PPV_ARGS(&device12)))){D3D12_COMMAND_QUEUE_DESC queueDesc{};queueDesc.Type=D3D12_COMMAND_LIST_TYPE_DIRECT;if(SUCCEEDED(device12->CreateCommandQueue(&queueDesc,IID_PPV_ARGS(&queue)))){auto** methods=*reinterpret_cast<void***>(queue.Get());Hook(state.Execute,methods[10],Execute);ComPtr<ID3D12CommandAllocator> allocator;ComPtr<ID3D12GraphicsCommandList> list;Need(device12->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,IID_PPV_ARGS(&allocator)),"Cannot prepare DX12 barrier verification");Need(device12->CreateCommandList(0,D3D12_COMMAND_LIST_TYPE_DIRECT,allocator.Get(),nullptr,IID_PPV_ARGS(&list)),"Cannot prepare DX12 command verification");auto** listMethods=*reinterpret_cast<void***>(list.Get());Hook(state.Barriers,listMethods[26],Barriers);ComPtr<ID3D12GraphicsCommandList7> enhanced;if(SUCCEEDED(list.As(&enhanced))){auto** enhancedMethods=*reinterpret_cast<void***>(enhanced.Get());Hook(state.EnhancedBarriers,enhancedMethods[80],EnhancedBarriers);}Need(list->Close(),"Cannot close DX12 barrier probe");}}
         ComPtr<IDXGISwapChain1> swap1;Need(swap.As(&swap1),"Cannot prepare presentation 1 hook");auto** methods=*reinterpret_cast<void***>(swap.Get());auto** methods1=*reinterpret_cast<void***>(swap1.Get());
         Hook(state.Present,methods[8],Present);Hook(state.Present1,methods1[22],Present1);Hook(state.Resize,methods[13],Resize);ComPtr<IDXGISwapChain3> swap3;if(SUCCEEDED(swap.As(&swap3))){auto** methods3=*reinterpret_cast<void***>(swap3.Get());Hook(state.Resize1,methods3[39],Resize1);}
-        std::array<const wchar_t*,3> libraries{L"xinput1_4.dll",L"xinput1_3.dll",L"xinput9_1_0.dll"};std::array<void*,3> callbacks{reinterpret_cast<void*>(Pad<0>),reinterpret_cast<void*>(Pad<1>),reinterpret_cast<void*>(Pad<2>)};
-        for(unsigned i=0;i<3;++i)if(auto library=GetModuleHandleW(libraries[i]))if(auto address=GetProcAddress(library,"XInputGetState")){bool duplicate=false;for(unsigned j=0;j<i;++j)duplicate|=state.Pads[j]&&state.Pads[j].target_address()==reinterpret_cast<uintptr_t>(address);if(!duplicate)Hook(state.Pads[i],reinterpret_cast<void*>(address),callbacks[i]);}
+        {std::lock_guard lock(state.Gate);PrepareGameInput(state);}
         const std::array<LPCWSTR,11> cursors{IDC_ARROW,IDC_IBEAM,IDC_SIZEALL,IDC_SIZENS,IDC_SIZEWE,IDC_SIZENESW,IDC_SIZENWSE,IDC_HAND,IDC_WAIT,IDC_APPSTARTING,IDC_NO};for(size_t i=0;i<cursors.size();++i)state.Cursors[i]=LoadCursorW(nullptr,cursors[i]);
         Hook(state.Clip,reinterpret_cast<void*>(GetProcAddress(GetModuleHandleW(L"user32.dll"),"ClipCursor")),Clip);Hook(state.Warp,reinterpret_cast<void*>(GetProcAddress(GetModuleHandleW(L"user32.dll"),"SetCursorPos")),Warp);Hook(state.Cursor,reinterpret_cast<void*>(GetProcAddress(GetModuleHandleW(L"user32.dll"),"ShowCursor")),Cursor);Hook(state.Shape,reinterpret_cast<void*>(GetProcAddress(GetModuleHandleW(L"user32.dll"),"SetCursor")),Shape);
-        const auto image=reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));const auto* dos=reinterpret_cast<const IMAGE_DOS_HEADER*>(image);
-        if(dos->e_magic==IMAGE_DOS_SIGNATURE){const auto* nt=reinterpret_cast<const IMAGE_NT_HEADERS64*>(image+dos->e_lfanew);if(nt->Signature==IMAGE_NT_SIGNATURE){state.GameImage=image;state.GameImageBytes=nt->OptionalHeader.SizeOfImage;}}
         Hook(state.Position,reinterpret_cast<void*>(GetProcAddress(GetModuleHandleW(L"user32.dll"),"GetCursorPos")),Position);
         Hook(state.AsyncKeys,reinterpret_cast<void*>(GetProcAddress(GetModuleHandleW(L"user32.dll"),"GetAsyncKeyState")),AsyncKeys);
         Hook(state.Keys,reinterpret_cast<void*>(GetProcAddress(GetModuleHandleW(L"user32.dll"),"GetKeyState")),Keys);
         Hook(state.Keyboard,reinterpret_cast<void*>(GetProcAddress(GetModuleHandleW(L"user32.dll"),"GetKeyboardState")),Keyboard);
-        Hook(state.RawBuffer,reinterpret_cast<void*>(GetProcAddress(GetModuleHandleW(L"user32.dll"),"GetRawInputBuffer")),RawBuffer);
         state.Prepared=true;
     }catch(const std::exception& error){std::lock_guard lock(state.Gate);state.Error=error.what();state.Stopping=true;}
 }
@@ -272,6 +302,18 @@ void Prepare(State& state){
 Json Call(const Json& request){
     auto& state=Shared();const auto action=request.value("Action",std::string{});
     const auto client=request.value("Client",uint64_t(1));
+    if(action=="DesktopInput"){
+        if(client!=1)return {{"Accepted",false}};
+        std::lock_guard lock(state.Gate);
+        if(!request.value("Enabled",false)){state.DesktopWindow=nullptr;return {{"Accepted",true}};}
+        const auto window=reinterpret_cast<HWND>(uintptr_t(request.at("Window").get<uint64_t>()));
+        DWORD pid=0;wchar_t name[64]{};
+        if(!GetWindowThreadProcessId(window,&pid)||pid!=request.at("AppPid").get<DWORD>()||pid==GetCurrentProcessId()||
+            !GetClassNameW(window,name,64)||std::wstring_view(name)!=L"RuneSchema.Helpy.Window"||state.Stopping)return {{"Accepted",false}};
+        PrepareGameInput(state);
+        state.DesktopUntil=GetTickCount64()+5000;state.DesktopWindow=window;
+        return {{"Accepted",true}};
+    }
     if(action=="GuideReservation"){
         std::lock_guard lock(state.Gate);const bool enabled=request.at("Enabled").get<bool>();
         if(enabled&&!state.Stopping)state.Guide.Start(request.at("AppPid").get<DWORD>(),request.at("Thread").get<DWORD>(),reinterpret_cast<HWND>(uintptr_t(request.at("Window").get<uint64_t>())));
@@ -325,8 +367,8 @@ VkResult Negotiate(VkNegotiateLayerInterface* version){
 }
 void Shutdown() noexcept{
     auto& state=Shared();state.Stopping=true;if(state.Worker.joinable())state.Worker.join();state.Capturing=false;if(state.Window){DWORD_PTR ignored{};SendMessageTimeoutW(state.Window,WM_APP+0x5a1,0,0,SMTO_ABORTIFHUNG,500,&ignored);}
-    std::lock_guard lock(state.Gate);state.Guide.Stop();state.Hide();state.Capturing=false;CursorInput(state,false);
-    for(auto* hook:{&state.Present,&state.Present1,&state.Resize,&state.Resize1,&state.CreateSwap,&state.CreateHwnd,&state.Execute,&state.Barriers,&state.EnhancedBarriers,&state.Clip,&state.Warp,&state.Cursor,&state.Shape,&state.Position,&state.AsyncKeys,&state.Keys,&state.Keyboard,&state.RawBuffer,&state.SwapGl,&state.SwapWgl})if(*hook)(void)hook->disable();
+    std::lock_guard lock(state.Gate);state.DesktopWindow=nullptr;state.Guide.Stop();state.Hide();state.Capturing=false;CursorInput(state,false);
+    for(auto* hook:{&state.Present,&state.Present1,&state.Resize,&state.Resize1,&state.CreateSwap,&state.CreateHwnd,&state.Execute,&state.Barriers,&state.EnhancedBarriers,&state.Clip,&state.Warp,&state.Cursor,&state.Shape,&state.Position,&state.AsyncKeys,&state.Keys,&state.Keyboard,&state.RawBuffer,&state.RawData,&state.SwapGl,&state.SwapWgl})if(*hook)(void)hook->disable();
     if(state.Window&&state.Previous&&reinterpret_cast<WNDPROC>(GetWindowLongPtrW(state.Window,GWLP_WNDPROC))==Input)SetWindowLongPtrW(state.Window,GWLP_WNDPROC,reinterpret_cast<LONG_PTR>(state.Previous));
     for(auto& hook:state.Pads)if(hook)(void)hook.disable();
     if(state.Idle())state.Reset();state.Ready=false;

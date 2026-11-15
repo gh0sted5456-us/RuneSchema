@@ -46,8 +46,7 @@ inline void Render(){
     Poll();
     if(!Attempted&&SpawnToolRequests::IsAvailable()){Attempted=true;Submit("Read");}
     HelpyMenu::Tabs("server-player-access",std::array{"RuneSchema access","Native Admin"},Tab,false);
-    ImGui::SeparatorText("Player administration");
-    ImGui::TextWrapped("Authorize connected players from server Helpy or the owner's client. Access is saved for their character; native Admin is managed separately.");
+    ImGui::TextWrapped(Tab==0?"Manage saved RuneSchema access for connected players.":"Manage the game's Admin role for connected players.");
     ImGui::BeginDisabled(Pending||SpawnToolRequests::IsWaiting());
     if(HelpyImGuiTheme::SoftButton("Refresh players & roles"))Submit("Read");
     ImGui::EndDisabled();
@@ -56,7 +55,6 @@ inline void Render(){
     const bool fresh=Fresh(),allowed=fresh&&Snapshot.value("CanManage",false);
     const bool canAuthorize=fresh&&Snapshot.value("CanAuthorize",false);
     if(Tab==0){
-    ImGui::SeparatorText("RuneSchema access");
     ImGui::BeginDisabled(!canAuthorize||Pending||SpawnToolRequests::IsWaiting());
     if(HelpyImGuiTheme::SoftButton("Authorize all connected"))Submit("AuthorizeAll");
 #if defined(HELPY_PREVIEW)
@@ -68,7 +66,8 @@ inline void Render(){
     HelpyPreviewHooks::AuthoringButtons["server-authorize-automatic"]=HelpyPreviewHooks::LastRect();
 #endif
     ImGui::EndDisabled();
-    ImGui::TextWrapped("Saved access enables item delivery, map travel and temporary spawns within the server's limits. Account name and platform are recorded from the server. Automatic authorization also includes currently connected players.");
+    if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)||ImGui::IsItemFocused())
+        HelpyImGuiTheme::Tooltip("Grants saved access to currently connected players and future arrivals. Access covers items, map travel and temporary spawns within server limits.");
     if(automatic)ImGui::TextDisabled("Turn off automatic authorization before removing saved access.");
     }
     const auto reason=Snapshot.value("Reason",std::string{});if(Tab==1&&!reason.empty())ImGui::TextWrapped("%s",reason.c_str());
@@ -83,9 +82,6 @@ inline void Render(){
         ImGui::PushID(guid.c_str());ImGui::SeparatorText(name.c_str());
         ImGui::Text("Role: %s",owner?"Owner":known?(admin?"Admin":"Player"):"Unknown");
         if(Tab==0){
-        const auto account=player.value("PlatformAccountName",std::string{}),platform=player.value("Platform",std::string("Unknown"));
-        ImGui::TextWrapped("%s | %s | Player ID: %d",account.empty()?"Account name unavailable":account.c_str(),platform.c_str(),player.value("PlayerId",-1));
-        ImGui::TextWrapped("Character: %s",guid.c_str());
         const bool authorized=player.value("Authorized",false);
         ImGui::BeginDisabled(!canAuthorize||owner||(Snapshot.value("AutoAuthorize",false)&&authorized)||Pending||SpawnToolRequests::IsWaiting());
         if(HelpyImGuiTheme::SoftButton(authorized?"Remove RuneSchema access":"Authorize player"))Submit(authorized?"Unauthorize":"Authorize",player);
@@ -93,6 +89,9 @@ inline void Render(){
         HelpyPreviewHooks::AuthoringButtons["server-authorize-"+guid]=HelpyPreviewHooks::LastRect();
 #endif
         ImGui::EndDisabled();
+        const auto account=player.value("PlatformAccountName",std::string{}),platform=player.value("Platform",std::string("Unknown"));
+        ImGui::TextWrapped("%s | %s | Player ID: %d",account.empty()?"Account name unavailable":account.c_str(),platform.c_str(),player.value("PlayerId",-1));
+        ImGui::TextWrapped("Character: %s",guid.c_str());
         ImGui::PopID();continue;
         }
         ImGui::BeginDisabled(!allowed||!known||owner||Pending||SpawnToolRequests::IsWaiting());

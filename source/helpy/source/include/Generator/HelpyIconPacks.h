@@ -10,6 +10,7 @@
 #include "Generator/SourceBanners.h"
 #include "Generator/HelpyLoadingIndicator.h"
 #include "Generator/ItemIconCache.h"
+#include "Generator/LazyCatalog.h"
 #include "Runtime/HostServices.h"
 #include "Runtime/HelpyDownloads.h"
 #include "Core/HelpyEnvironment.h"
@@ -43,6 +44,17 @@ inline std::string PendingBuildSource;
 inline std::chrono::steady_clock::time_point NextBuildRead{};
 inline bool BuildWasVisible=false;
 inline bool Building(){return BuildState.value("Active",false);}
+inline bool Busy(){return Worker.valid();}
+inline bool RefreshNative(const std::string& item,const std::string& source){
+    if(!RemoteBuild||Busy()||Building())return false;
+    nlohmann::json reply;
+    if(!RemoteBuild({{"Action","IconCacheRefreshStart"},{"Item",item},{"Source",source}},reply)||!reply.value("Accepted",false)){
+        Status="Live icon refresh could not start.";CompletionNotify=true;return false;
+    }
+    BuildState={{"Active",true},{"Stage","Queued"},{"Refresh",true}};NextBuildRead={};
+    Status=item.empty()?"Refreshing this mod's icons from the game.":"Refreshing the selected item's icon from the game.";
+    CompletionNotify=true;return true;
+}
 inline void PollBuild(){
     const bool visible=Open&&!HelpyTaskbar::Current.Contains(HelpyTaskbar::Window::IconCache);
     const bool opened=visible&&!BuildWasVisible;BuildWasVisible=visible;
@@ -50,9 +62,26 @@ inline void PollBuild(){
     if(!RemoteBuild||(!visible&&!active))return;
     const auto now=std::chrono::steady_clock::now();if(!opened&&now<NextBuildRead)return;
     NextBuildRead=now+std::chrono::milliseconds(active?500:2000);
-    nlohmann::json reply;if(RemoteBuild({{"Action","IconCacheBuildRead"}},reply)&&reply.is_object())BuildState=std::move(reply);
+    nlohmann::json reply;
+    if(!RemoteBuild({{"Action","IconCacheBuildRead"}},reply)||!reply.is_object())return;
+    if(active&&BuildState.value("Refresh",false)&&!reply.value("Active",false)){
+        const auto stage=reply.value("Stage",std::string{});
+        {
+            nlohmann::json manifest;
+            if(RemoteBuild({{"Action","IconCacheBuildRead"},{"IncludeManifest",true}},manifest)
+                &&manifest.value("Sequence",uint64_t{})==reply.value("Sequence",uint64_t{})){
+                if(manifest.contains("RefreshedIcons")&&manifest["RefreshedIcons"].is_array()&&!manifest["RefreshedIcons"].empty())
+                    ItemIconCache::InvalidateIcons(manifest["RefreshedIcons"].get<std::vector<std::string>>());
+                if(manifest.contains("ItemIcons"))LazyCatalog::RecordNativeIcons(manifest["ItemIcons"]);
+            }
+        }
+        if(stage=="Complete")Status="Live icon refresh finished.";
+        else if(stage=="Completed with failures")Status="Live icon refresh finished with failures. See Icon Cache for details.";
+        else Status=reply.value("Error",std::string("Live icon refresh stopped."));
+        CompletionNotify=true;
+    }
+    BuildState=std::move(reply);
 }
-inline bool Busy(){return Worker.valid();}
 inline bool Start(const std::filesystem::path& file,bool importing,const nlohmann::json& coverage=nlohmann::json::object(),bool nativeArtworkFallback=false){
     if(Busy()||Building()||SourceBanners::Busy()){Status="Wait for the active cache/artwork operation to finish.";return false;}
     try{

@@ -8,7 +8,11 @@ inline void Held(const char* kind,const char* label,ImTextureRef texture={}){
     const auto& theme=HelpyImGuiTheme::Current;auto* draw=ImGui::GetForegroundDrawList();const auto source=ImGui::GetItemRectMin(),sourceEnd=ImGui::GetItemRectMax();
     draw->AddRect(source,sourceEnd,ImGui::GetColorU32(theme.accentHover),theme.X(5),0,theme.X(2));ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
     const auto* viewport=ImGui::GetMainViewport();const auto mouse=ImGui::GetMousePos();const float width=std::min(theme.X(280),std::max(1.f,viewport->WorkSize.x-theme.X(16))),height=theme.Y(76);
-    const ImVec2 a{std::clamp(mouse.x+theme.X(18),viewport->WorkPos.x,std::max(viewport->WorkPos.x,viewport->WorkPos.x+viewport->WorkSize.x-width)),std::clamp(mouse.y+theme.Y(20),viewport->WorkPos.y,std::max(viewport->WorkPos.y,viewport->WorkPos.y+viewport->WorkSize.y-height))},b{a.x+width,a.y+height};
+    const ImVec2 inset{theme.X(8),theme.Y(8)};
+    const ImVec2 lower{viewport->WorkPos.x+inset.x,viewport->WorkPos.y+inset.y};
+    const ImVec2 upper{std::max(lower.x,viewport->WorkPos.x+viewport->WorkSize.x-width-inset.x),
+                       std::max(lower.y,viewport->WorkPos.y+viewport->WorkSize.y-height-inset.y)};
+    const ImVec2 a{std::clamp(mouse.x+theme.X(18),lower.x,upper.x),std::clamp(mouse.y+theme.Y(20),lower.y,upper.y)},b{a.x+width,a.y+height};
     draw->AddRectFilled({a.x+theme.X(4),a.y+theme.Y(5)},{b.x+theme.X(4),b.y+theme.Y(5)},IM_COL32(0,0,0,160),theme.X(6));
     draw->AddRectFilled(a,b,ImGui::GetColorU32(theme.panelAlt),theme.X(6));draw->AddRect(a,b,ImGui::GetColorU32(theme.accentHover),theme.X(6),0,theme.X(2));
     const float side=theme.Y(48);const ImVec2 art{a.x+theme.X(10),a.y+(height-side)*.5f};

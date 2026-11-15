@@ -26,6 +26,8 @@
 #include "Runtime/SteamBuild.h"
 #include "Runtime/UE4SSCompatibility.h"
 #include "Runtime/NetworkStatus.h"
+#include "Runtime/MultiplayerPolicy.h"
+#include "Runtime/MultiplayerRuntime.h"
 #include "Runtime/GameFrameRate.h"
 #include "Core/HelpySourceCache.h"
 #include "Core/HelpyCacheOwnership.h"
@@ -45,6 +47,7 @@
 #include <windows.h>
 #include <algorithm>
 #include <mutex>
+#include "Core/GameplayEventFeed.h"
 #include <unordered_map>
 #include <unordered_set>
 #include <string_view>
@@ -66,11 +69,22 @@ int32_t JsonResponse(const nlohmann::json& value,char* response,uint32_t capacit
     if(!response||capacity<*size)return RS_PLUGIN_BUFFER_TOO_SMALL;
     std::memcpy(response,text.c_str(),*size);return RS_PLUGIN_OK;
 }
+std::mutex MultiplayerPolicyLifetime;
 int32_t RS_PLUGIN_CALL CallService(const char*,const char*,const char*,char*,uint32_t,uint32_t*);
 int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,uint32_t capacity,uint32_t* size) {
     try {
         const auto request=nlohmann::json::parse(requestJson);const auto action=request.value("Action",std::string{});
         nlohmann::json result;
+        if(action=="MultiplayerPolicyLocation")
+            return JsonResponse({{"Path",RuntimeModPath::Text(HostServices::SettingsDirectory()/"multiplayer.json")}},response,capacity,size);
+        if(action=="MultiplayerRoute")return JsonResponse(MultiplayerRuntime::Probe(request),response,capacity,size);
+        if(action=="MultiplayerTuning"){
+            if(!size)return RS_PLUGIN_INVALID_ARGUMENT;
+            if(request.value("Operation",std::string("Read"))!="Read"&&(!response||capacity<8192)){
+                *size=8192;return RS_PLUGIN_BUFFER_TOO_SMALL;
+            }
+            return JsonResponse(MultiplayerRuntime::Control(request),response,capacity,size);
+        }
         if(action=="HudCapabilities")return JsonResponse({{"InputOwnership",true},{"Extensions",true}},response,capacity,size);
         if(action=="HudInterfacesRead")return JsonResponse(HelpyHudInterfaces::Read(request.value("Revision",~uint64_t{})),response,capacity,size);
         if(action=="HudInterfacesWrite")return JsonResponse(HelpyHudInterfaces::Queue(request.at("Payload")),response,capacity,size);
@@ -117,6 +131,7 @@ int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,ui
             if(!Storefront::IsDedicatedServer()&&!GameFrameRate::StartupReady.load())GameFrameRate::StartupProbe=true;
         }
         else if(action=="FrameRate")result={{"Available",GameFrameRate::Available()},{"Fps",GameFrameRate::Fps.load()}};
+        else if(action=="GameplayEvents")result=Storefront::IsDedicatedServer()?nlohmann::json{{"Available",false}}:PS::GameplayEventFeed::Service(request);
         else if(action=="LocalCoordinates")result=Storefront::IsDedicatedServer()?nlohmann::json{{"Available",false}}:PlayerCoordinates::Current.Read(SpawnToolRequests::Generation.load());
         else if(action=="NetworkStatus"){
             SpawnToolRequests::RequestPlayerRoles();
@@ -155,13 +170,18 @@ int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,ui
             if(!size)return RS_PLUGIN_INVALID_ARGUMENT;
             if(!response||capacity<RUNESCHEMA_PLUGIN_MAX_MESSAGE){*size=RUNESCHEMA_PLUGIN_MAX_MESSAGE;return RS_PLUGIN_BUFFER_TOO_SMALL;}
             result=RuneSchemaSettingsEditor::Save(HostServices::SettingsDirectory(),request);
+            if(result.value("Ok",false)&&result.value("HostPolicyChanged",false))PSConfig::Get()->InvalidateHelpyAuthority();
             result["BypassStatus"]=DragonWilds::CharacterEntryRecovery::StatusText();
         }
         else if(action=="QuestCatalog")result=QuestPresentationCatalog::Read(request);
         else if(action=="IconCacheSources")result=HelpySourceCache::ForClient();
         else if(action=="IconCacheOwnership")result=HelpyCacheOwnership::Page(HelpySourceCache::OwnershipSnapshot(),request);
         else if(action=="IconCacheBuildRead")result=IconCacheBuild::Read(request.value("IncludeManifest",false));
-        else if(action=="IconCacheBuildStart"){HelpySourceCache::Requested=true;result={{"Accepted",!Storefront::IsDedicatedServer()&&IconCacheBuild::Start(request.value("Source",std::string{}))}};}
+        else if(action=="IconCacheBuildStart"||action=="IconCacheRefreshStart"){
+            HelpySourceCache::Requested=true;
+            const bool refresh=action=="IconCacheRefreshStart";
+            result={{"Accepted",!Storefront::IsDedicatedServer()&&IconCacheBuild::Start(request.value("Source",std::string{}),refresh,refresh?request.value("Item",std::string{}):std::string{})}};
+        }
         else if(action=="IconCacheBuildCancel"){IconCacheBuild::Cancel();result={{"Accepted",true}};}
         else if(action=="IconCacheResetAccounting"){HelpyRuntimePreferences::IconCacheEpoch.fetch_add(1);result={{"Accepted",true}};}
         else if(action=="CacheBundleImported"){AssetSearch::NotifyImportedCache();++MapPresentationCache::Revision;result={{"Accepted",true}};}
@@ -173,36 +193,24 @@ int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,ui
         else if(action=="AuthoringSnapshot")result=HelpyAuthoring::Bridge.Snapshot(request.value("Revision",uint64_t{}));
         else if(action=="Read") {
             const auto prior=request.value("Revision",uint64_t{});const auto category=request.value("Category",-1);
-            if(category!=-2)SpawnToolRequests::RequestPlayerRoles();std::lock_guard lock(SpawnToolRequests::Mutex);
-            result={{"Available",SpawnToolRequests::Available.load()},{"Waiting",SpawnToolRequests::Waiting.load()},
-                {"Generation",SpawnToolRequests::Generation.load()},{"Revision",SpawnToolRequests::Revision},
-                {"Changed",prior!=SpawnToolRequests::Revision}};
-            if(prior!=SpawnToolRequests::Revision) {
-                nlohmann::json snapshot={{"Status",SpawnToolRequests::Result.value("Status",std::string("Ready."))},{"_Category",category}};
-                const auto copy=[&](const char* key){
-                    if(SpawnToolRequests::QuickCatalogData.contains(key))snapshot[key]=SpawnToolRequests::QuickCatalogData[key];
-                    else if(SpawnToolRequests::Result.contains(key))snapshot[key]=SpawnToolRequests::Result[key];
-                };
-                if(category==-2){snapshot=nlohmann::json::object();copy("ServerMods");copy("RemoteAccess");}
-                else if(category==0){copy("Items");copy("CookedVisuals");copy("CatalogIssues");}
-                else if(category==1||category==2) {
-                    const auto* source=SpawnToolRequests::QuickCatalogData.contains("Definitions")?&SpawnToolRequests::QuickCatalogData:
-                        SpawnToolRequests::Result.contains("Definitions")?&SpawnToolRequests::Result:nullptr;
-                    if(source) {
-                        snapshot["Definitions"]=nlohmann::json::array();
-                        for(const auto& row:(*source)["Definitions"]) {
-                            const auto type=row.value("Type",std::string{});
-                            if((category==1&&(type=="AI"||type=="NPC"))||(category==2&&type=="Resource"))snapshot["Definitions"].push_back(row);
-                        }
-                    }
-                } else {
-                    snapshot=SpawnToolRequests::Result;
-                    for(auto it=SpawnToolRequests::QuickCatalogData.begin();it!=SpawnToolRequests::QuickCatalogData.end();++it)snapshot[it.key()]=it.value();
+            if(category!=-2)SpawnToolRequests::RequestPlayerRoles();
+            // Hold the game's tool mutex only to read counters and take shared catalog pointers. The (large)
+            // snapshot is built after release, so Helpy never stalls the game thread's CatalogProgress/Publish.
+            uint64_t revision=0;SpawnToolRequests::CatalogMap catalog,fields;
+            {
+                std::lock_guard lock(SpawnToolRequests::Mutex);revision=SpawnToolRequests::Revision;
+                result={{"Available",SpawnToolRequests::Available.load()},{"Waiting",SpawnToolRequests::Waiting.load()},
+                    {"Generation",SpawnToolRequests::Generation.load()},{"Revision",revision},{"Changed",prior!=revision}};
+                if(prior!=revision){catalog=SpawnToolRequests::QuickCatalogData;fields=SpawnToolRequests::Result;}
+            }
+            if(prior!=revision){
+                const bool full=category!=0&&category!=1&&category!=2&&category!=-2;
+                auto base=full?SpawnToolRequests::Expand(fields):nlohmann::json::object();
+                if(!full){
+                    if(category!=-2){const auto it=fields.find("Status");base["Status"]=it==fields.end()?nlohmann::json("Ready."):*it->second;}
+                    catalog.merge(fields);
                 }
-                if(category!=-2)for(const auto* key:{"Players","PlayerRoles","ServerMods","RemoteAccess","CatalogReady","_CatalogIndexing","CatalogStatus","RegistryRecords","UnresolvedAssets",
-                        "MetadataUnavailable","UnclassifiedRecords","CatalogAI","CatalogResources","CatalogCoverage",
-                        "IndexStage","IndexDone","IndexTotal","IndexHasTotal","IndexFinished","IndexDetail"})copy(key);
-                result["Snapshot"]=std::move(snapshot);
+                result["Snapshot"]=SpawnToolRequests::CatalogSnapshot(std::move(base),catalog,category);
             }
         } else if(action=="Submit") result={{"Accepted",SpawnToolRequests::TrySubmit(request.at("Request"))}};
         else if(action=="QuerySubmit") result={{"Accepted",HelpyQueryService::Submit(request.at("Request"))}};
@@ -283,6 +291,11 @@ int32_t RS_PLUGIN_CALL RegisterService(const char* plugin,const char* name,RuneS
 int32_t RS_PLUGIN_CALL CallService(const char* caller,const char* name,const char* request,char* response,uint32_t capacity,uint32_t* size) {
     if(!Token(caller)||!Token(name)||!request||!size||capacity>RUNESCHEMA_PLUGIN_MAX_MESSAGE
         ||(!response&&capacity)||strnlen_s(request,RUNESCHEMA_PLUGIN_MAX_MESSAGE+1)>RUNESCHEMA_PLUGIN_MAX_MESSAGE)return RS_PLUGIN_INVALID_ARGUMENT;
+    std::unique_lock policyLock(MultiplayerPolicyLifetime,std::defer_lock);
+    if(std::string_view(name)==MultiplayerPolicy::Service){
+        if(std::string_view(caller)!="RuneSchema.Core")return RS_PLUGIN_INVALID_ARGUMENT;
+        policyLock.lock();
+    }
     Service service;{std::scoped_lock lock(Gate);const auto found=Services.find(name);if(found==Services.end())return RS_PLUGIN_NOT_FOUND;service=found->second;}
     try{return service.Callback(service.Context,request,response,capacity,size);}catch(...){return RS_PLUGIN_FAILED;}
 }
@@ -353,7 +366,6 @@ void PluginHost::Load(const std::filesystem::path& root) {
     LoadCatalog(manifests);
 }
 void PluginHost::LoadOwned(const std::filesystem::path& root,const std::vector<std::filesystem::path>& enabled){
-    if(Storefront::IsDedicatedServer())return;
     auto manifests=PluginCatalog::DiscoverOwned(root,enabled,&m_state->Messages);
     // GameInstance init may precede UE4SS game-thread identification; wait for an actual tick.
     RC::Unreal::Hook::FCallbackOptions options{};options.OwnerModName=TEXT("RuneSchema");options.HookName=TEXT("ModOwnedPluginInit");
@@ -371,9 +383,9 @@ void PluginHost::LoadCatalog(const std::vector<PluginCatalog::Plugin>& manifests
         if(!manifest.Enabled||manifest.Host!="game")continue;
         auto identity=manifest.Id;std::transform(identity.begin(),identity.end(),identity.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
         if(!m_state->SelectedIds.insert(identity).second){m_state->Messages.push_back(manifest.Id+": duplicate plugin identity rejected");continue;}
-        // The desktop Helpy frontend has no Unreal imports or viewport hook.
-        // Other client plugins retain the existing dedicated-server exclusion.
-        if(Storefront::IsDedicatedServer()&&manifest.Id!="RuneSchema.Helpy")continue;
+        // The desktop bridge and networking policy are available on dedicated hosts.
+        if(Storefront::IsDedicatedServer()&&manifest.Id!="RuneSchema.Helpy"&&manifest.Id!="RSNetworking"
+            &&!(manifest.ServerCompatible&&!manifest.ModOwner.empty()))continue;
         std::vector<std::filesystem::path> packages;
         try{packages=PluginCatalog::PakDirectories(manifest);}
         catch(const std::exception& error){
@@ -498,11 +510,11 @@ void PluginHost::OnUnrealInit(){
         uint32_t ignored=0;CallService("RuneSchema.Core","helpy.tools.push",message.c_str(),nullptr,0,&ignored);
         if(DesktopBridgeReady)m_state->Desktop.Push(message);
     };
-    nlohmann::json bootstrap;uint64_t bootstrapRevision=0;{
+    SpawnToolRequests::CatalogMap bootstrap;uint64_t bootstrapRevision=0;{
         std::lock_guard lock(SpawnToolRequests::Mutex);
-        bootstrap={{"Result",SpawnToolRequests::Result}};
+        bootstrap=SpawnToolRequests::Result;
         bootstrapRevision=SpawnToolRequests::Revision;
-    }SpawnToolRequests::PushUpdate("bootstrap",bootstrap,bootstrapRevision);
+    }SpawnToolRequests::PushUpdate("bootstrap",{{"Result",SpawnToolRequests::Expand(bootstrap)}},bootstrapRevision);
     ModLocalServices::Start();
     m_state->UnrealReady.store(true,std::memory_order_release);
 }
@@ -517,6 +529,8 @@ void PluginHost::Shutdown() noexcept {
     if(!m_state)return;
     SpawnToolRequests::PushUpdate={};
     for(auto iterator=m_state->LoadedPlugins.rbegin();iterator!=m_state->LoadedPlugins.rend();++iterator) {
+        std::unique_lock policyLock(MultiplayerPolicyLifetime,std::defer_lock);
+        if(iterator->Manifest.Id=="RSNetworking")policyLock.lock();
         if(!ModLocalServices::Drop(iterator->Manifest.Id))continue;
         if(iterator->Shutdown)try{iterator->Shutdown(iterator->Instance);}catch(...){}
         {std::scoped_lock lock(Gate);std::erase_if(Services,[&](const auto& value){return value.second.Owner==iterator->Manifest.Id;});std::erase_if(Capabilities,[&](const auto& value){return value.second==iterator->Manifest.Id;});std::erase_if(ActiveConnections,[&](const auto& value){return value.second==iterator->Manifest.Id;});}

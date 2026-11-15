@@ -25,7 +25,7 @@ int main(){
     HelpySettings::Configure(root);assert(!HelpySettings::OpenOnGameStart());
     assert(HelpySettings::CloseToTaskbar());assert(HelpySettings::SetBool("minimizeOnClose",false));assert(!HelpySettings::CloseToTaskbar());HelpySettings::Configure(root);assert(!HelpySettings::CloseToTaskbar());
     assert(HelpySettings::SetBool("minimizeOnClose",true)&&HelpySettings::CloseToTaskbar());
-    assert(!HelpySettings::ExitWhenGameCloses());assert(HelpySettings::SetBool("exitWithGame",true));
+    assert(HelpySettings::ExitWhenGameCloses());assert(HelpySettings::SetBool("exitWithGame",true));
     HelpySettings::Configure(root);assert(HelpySettings::ExitWhenGameCloses()&&HelpySettings::CloseToTaskbar());
     assert(HelpySettings::SetBool("exitWithGame",false)&&!HelpySettings::ExitWhenGameCloses()&&HelpySettings::CloseToTaskbar());
     assert(HelpySettings::ExtendFavoritesToGame());

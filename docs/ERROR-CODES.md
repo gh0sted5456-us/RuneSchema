@@ -4,7 +4,7 @@ Find a code from your log to see what happened and what to try next. Use the mes
 
 Open Helpy's **Diagnostics** for an overview, grouped issues and Live Log. You can copy an entry or follow its reference link here. The viewer leaves the original logs unchanged; recent activity includes normal messages, while notifications focus on warnings and errors.
 
-This page contains **98 legacy reference entries**, **227 structured diagnostic entries** and **19 bridge reason codes**. RS-JRN-001, RS-JRN-002 and RS-SPAWN-001 each have an older and a structured meaning. Follow the link from your message, or check its source and namespace to choose the matching entry. Links between the two meanings are included.
+This page contains **101 legacy reference entries**, **227 structured diagnostic entries** and **19 bridge reason codes**. RS-JRN-001, RS-JRN-002 and RS-SPAWN-001 each have an older and a structured meaning. Follow the link from your message, or check its source and namespace to choose the matching entry. Links between the two meanings are included.
 
 Structured reports in `RSDiagLog.jsonl` include their source, context and outcome. Not every operation emits every code. `Unknown` means the cause has not been identified; use the severity in the actual message. `Partial` means some changes may have occurred, and `Deferred` points to later or restart handling. `Skipped` or `Blocked` can describe one step while the rest of the mod continues.
 
@@ -1070,6 +1070,90 @@ Review cart results and retry only failed items after resolving their cause.
 Read each placard's result and resolve only failed entries. Verify the intended recipient and availability. Never resend the entire cart to compensate for a partial failure.
 
 [Direct link to RS-ITEM-001](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-item-001)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-ITEM-002" data-rs-severity="warning" markdown="1">
+
+### RS-ITEM-002: Automatic delivery item unavailable {#rs-item-002}
+
+**Items · Typical level: warning**
+
+An enabled mod lists an ItemData object that RuneSchema could not resolve.
+
+**Common reasons**
+
+The configured asset is missing, its provider is disabled, or the path names a different object type.
+
+**What RuneSchema does**
+
+Other items continue. RuneSchema reports each owner, delivery ID and path once per launch.
+
+**What to do next**
+
+Check the full ItemData object path and enable the mod that provides it.
+
+**Troubleshooting checks**
+
+Check the full object path in item-delivery.json and the active mod list. Other paths still run.
+
+[Direct link to RS-ITEM-002](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-item-002)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-ITEM-003" data-rs-severity="warning" markdown="1">
+
+### RS-ITEM-003: Automatic item delivery needs review {#rs-item-003}
+
+**Items · Typical level: warning**
+
+RuneSchema could not record a delivery or confirm its native character save.
+
+**Common reasons**
+
+An inventory mutation, receipt write, or native save outcome could not be verified.
+
+**What RuneSchema does**
+
+A receipt claimed before a grant stays held across restarts to prevent duplicates.
+
+**What to do next**
+
+Check RuneSchema.log and the character inventory or save history before reconciling a held receipt.
+
+**Troubleshooting checks**
+
+Keep the held receipt and inspect the character and logs. Removing a held row can cause a duplicate if the save actually succeeded.
+
+[Direct link to RS-ITEM-003](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-item-003)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-ITEM-004" data-rs-severity="warning" markdown="1">
+
+### RS-ITEM-004: Automatic item delivery unavailable {#rs-item-004}
+
+**Items · Typical level: warning**
+
+A delivery definition or native save contract could not be validated.
+
+**Common reasons**
+
+The definition file is invalid or the current game build changed a reflected save or inventory contract.
+
+**What RuneSchema does**
+
+The affected definition or runtime path is skipped.
+
+**What to do next**
+
+Check the enabled mod's item-delivery.json and verify the supported game build.
+
+**Troubleshooting checks**
+
+Verify the mod JSON and RuneSchema game compatibility. Correct the source and restart.
+
+[Direct link to RS-ITEM-004](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-item-004)
 
 </section>
 

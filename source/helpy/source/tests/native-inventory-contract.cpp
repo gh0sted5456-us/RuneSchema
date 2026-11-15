@@ -28,7 +28,7 @@ int main(int argc,char**argv){
     const auto saves=Read(root/"raw/src/Generator/CharacterSaveEditor.inl");
     Check(saves.find("XboxCharacterSaves::Candidates")!=saves.npos&&saves.find("XboxCharacterSaves::Character(source)")!=saves.npos&&saves.find("if(xbox||copyOnly)path=WriteSaveCopy")!=saves.npos,"Xbox and active character opening must validate and snapshot provider-owned payloads");
     Check(saves.find("CharacterSaveEditor::Identity(source)!=expected")<saves.find("if(xbox||copyOnly)path=WriteSaveCopy"),"Current character identity must be checked before its isolated snapshot is written");
-    Check(saves.contains("HostServices::ProfileDirectory()/\"characters\"")&&saves.contains("OriginalPath"),"Profile character copies must retain source identification without replacing native saves");
+    Check(saves.contains("RuneSchemaData::CharacterCopiesDirectory()")&&saves.contains("OriginalPath"),"Profile character copies must retain source identification without replacing native saves");
     const auto platform=Read(root/"raw/include/SDK/Helper/PlayerStatus.h");
     Check(platform.contains("AccountName(UObject* state,bool local=false)")&&platform.contains("TEXT(\"DisplayName\")")&&platform.contains("chars.Num()>129")&&platform.contains("DomPlatformData"),"Account display names require the exact bounded native platform-data contract");
     Check(platform.contains("if(local){const auto steam=SteamBuild::PersonaName();")&&platform.contains("return AccountName(AH::GetObjectRef(controller,TEXT(\"PlayerState\")),local);"),"Steam persona fallback must be limited to the verified local controller");

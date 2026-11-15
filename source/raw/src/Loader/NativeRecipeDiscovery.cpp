@@ -17,7 +17,6 @@
 
 namespace DragonWilds::NativeRecipeDiscovery {
 using namespace RC::Unreal;
-using Json=nlohmann::json;
 namespace {
 UDataTable* ProgressionTable(UClass* progressClass) {
     if(!progressClass)throw std::runtime_error("Native progress component class is unavailable");
@@ -85,7 +84,8 @@ Result Apply(const std::vector<Request>& requests,UClass* progressClass,std::set
     auto* manual=CastField<FBoolProperty>(Field(row,TEXT("bManuallyUnlocked")));
     auto* milestone=CastField<FBoolProperty>(Field(row,TEXT("bMilestoneUnlock")));
     auto* description=CastField<FStrProperty>(Field(row,TEXT("UnlockQueryString")));
-    if(!element||element->GetElementSize()!=sizeof(UObject*)||!element->GetPropertyClass().Get()
+    if(!element||element->GetArrayDim()!=1||element->GetOffset_Internal()!=0
+        ||element->GetElementSize()!=sizeof(UObject*)||!element->GetPropertyClass().Get()
         ||!query||!query->GetStruct()||query->GetStruct()->GetName()!=TEXT("UnlockMatchQuery")||!manual||!milestone||!description)
         throw std::runtime_error("Native progression query/recipe layout is unavailable");
     std::map<std::string,const Request*> unique;
@@ -113,9 +113,11 @@ Result Apply(const std::vector<Request>& requests,UClass* progressClass,std::set
         prepared.push_back(std::move(change));result.Detached+=before.size()-after.size();
     }catch(const std::exception& error){throw std::runtime_error("Progression table '"+RC::to_string(table->GetPathName())+"', row '"+RC::to_string(name.ToString())+"', UnlockedRecipes: "+error.what());}
     std::set<std::string> newOwned;
+    const auto tablePath=RC::to_string(table->GetPathName());
+    prepared.reserve(prepared.size()+unique.size());
     for(const auto& [path,request]:unique){
         const auto name=RegistryPatch::StableRowName("RS_RECIPE_DISCOVERY",path);
-        const auto key=RC::to_string(table->GetPathName())+":"+name;
+        const auto key=tablePath+":"+name;
         const FName rowName(RC::to_generic_string(name),FNAME_Add);
         if(table->FindRowUnchecked(rowName))throw std::runtime_error("Discovery row already exists; restart required or ownership collision: "+name);
         Prepared addition{rowName,{},std::make_unique<FManagedStruct>(row),false};
@@ -123,8 +125,18 @@ Result Apply(const std::vector<Request>& requests,UClass* progressClass,std::set
         PropertyHelper::CopyJsonValueToContainer(addition.After->GetData(),manual,false);
         PropertyHelper::CopyJsonValueToContainer(addition.After->GetData(),milestone,false);
         PropertyHelper::CopyJsonValueToContainer(addition.After->GetData(),description,request->Rule.Description);
-        PropertyHelper::CopyJsonValueToContainer(addition.After->GetData(),recipes,Json::array({path}));
-        if(Outputs(recipes,addition.After->GetData())!=std::vector<UObject*>{request->Recipe})throw std::runtime_error("Discovery output recipe did not verify: "+path);
+        auto* outputs=recipes->ContainerPtrToValuePtr<FScriptArray>(addition.After->GetData());
+        if(CastField<FObjectProperty>(element)&&recipes->GetArrayDim()==1) {
+            UECustom::FScriptArrayHelper outputArray(outputs,recipes);
+            auto* resolved=request->Recipe;
+            outputArray.Empty();
+            outputArray.Add(&resolved);
+        } else {
+            PropertyHelper::CopyJsonValueToContainer(addition.After->GetData(),recipes,nlohmann::json::array({path}));
+        }
+        if(outputs->Num()!=1||!outputs->GetData()
+            ||element->GetObjectPropertyValue(outputs->GetData())!=request->Recipe)
+            throw std::runtime_error("Discovery output recipe did not verify: "+path);
         prepared.push_back(std::move(addition));newOwned.insert(key);++result.Added;
     }
     std::size_t committed=0;

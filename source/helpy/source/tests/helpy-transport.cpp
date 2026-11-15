@@ -91,10 +91,10 @@ int main(){
         const auto folder=std::filesystem::temp_directory_path()/("helpy-diagnostic-sink-"+std::to_string(GetTickCount64()));std::filesystem::create_directories(folder/"Mods"/"RuneSchema");
         const auto root=folder/"Mods"/"RuneSchema";const auto original=PS::DiagnosticLogPaths::UseUE4SS;
         PS::DiagnosticLogPaths::UseUE4SS=false;
-        assert(PS::HelpyRuntimeMonitor::Write(root,{PS::Diagnostics::Id::PlayTimeReminder,"one\nline"}));
+        assert(PS::HelpyRuntimeMonitor::Write(root,{{PS::Diagnostics::Id::PlayTimeReminder,"one\nline"},{2026,11,0,8,11,22,33,123}}));
         std::ifstream input(root/"RuneSchema.log");const std::string contents((std::istreambuf_iterator<char>(input)),{});input.close();
-        assert(contents.find("[RS-PLAY-001]")!=std::string::npos&&contents.find("one line")!=std::string::npos&&!std::filesystem::exists(root/"UE4SS.log"));
-        PS::DiagnosticLogPaths::UseUE4SS=true;assert(PS::HelpyRuntimeMonitor::Write(root,{PS::Diagnostics::Id::ProcessCpuHigh,"sample"}));
+        assert(contents.starts_with("[2026-11-08T11:22:33.123Z]")&&contents.find("[RS-PLAY-001]")!=std::string::npos&&contents.find("one line")!=std::string::npos&&!std::filesystem::exists(root/"UE4SS.log"));
+        PS::DiagnosticLogPaths::UseUE4SS=true;assert(PS::HelpyRuntimeMonitor::Write(root,{{PS::Diagnostics::Id::ProcessCpuHigh,"sample"},{2026,11,0,8,11,22,33,123}}));
         assert(std::filesystem::exists(folder/"RuneSchema.log")&&!std::filesystem::exists(folder/"UE4SS.log"));
         PS::DiagnosticLogPaths::UseUE4SS=original;std::filesystem::remove_all(folder);
     }
@@ -106,6 +106,14 @@ int main(){
             assert(PS::MaskBufferedGameInput(true,120,100,20,count)==count);
             assert(PS::MaskBufferedGameInput(true,100,100,20,count)==(count==UINT(-1)?count:0));
         }
+        PS::HelpyXInputCapture capture;
+        XINPUT_STATE pad{17,{XINPUT_GAMEPAD_B,0,0,0,0,23000,0}};
+        capture.Apply(pad,true);assert(!pad.Gamepad.wButtons&&!pad.Gamepad.sThumbRX&&pad.dwPacketNumber!=17);
+        pad={18,{XINPUT_GAMEPAD_B|XINPUT_GAMEPAD_A,0,0,0,0,24000,0}};
+        capture.Apply(pad,false);assert(pad.Gamepad.wButtons==XINPUT_GAMEPAD_A&&!pad.Gamepad.sThumbRX);
+        pad={19,{}};capture.Apply(pad,false);
+        pad={20,{XINPUT_GAMEPAD_B,0,0,0,0,23000,0}};capture.Apply(pad,false);
+        assert(pad.Gamepad.wButtons==XINPUT_GAMEPAD_B&&pad.Gamepad.sThumbRX==23000&&pad.dwPacketNumber==20);
         for(const auto message:{WM_LBUTTONDBLCLK,WM_RBUTTONDBLCLK,WM_MBUTTONDBLCLK}){PS::HelpyOverlayFrames::Input event;assert(PS::HelpyOverlayFrames::WindowInput(message,0,0,event));assert(event.Kind==PS::HelpyOverlayFrames::InputKind::Button&&event.Code==(message==WM_LBUTTONDBLCLK?WM_LBUTTONDOWN:message==WM_RBUTTONDBLCLK?WM_RBUTTONDOWN:WM_MBUTTONDOWN));}}
     {PS::ItemGridPicker::State selected;char primary[1025]="/Game/Previous.Previous";selected.SelectedPath=primary;selected.SelectedRevision=123;
         for(unsigned i=0;i<64;++i){const std::string path="/Game/Selected"+std::to_string(i)+".Selected";const json row={{"Path",path},{"Name","Selected"}};assert(PS::ItemGridPicker::ApplySelection(selected,path,primary,sizeof(primary),true,true,&row,false));}
@@ -206,7 +214,7 @@ int main(){
     }
     RuneSchemaHostApi host{};host.CallService=HostCall;State state{&host};ConfigureTransport(&state);
     {const json admin={{"Kind","RuneSchemaServerControl1"},{"CanManage",true}};
-        StoreReceipt(&state,{{"_RequestId",90001},{"Status","Native role confirmed"},{"ServerControl",admin}});
+        StoreReceipt(&state,BuildReceipt({{"_RequestId",90001},{"Status","Native role confirmed"},{"ServerControl",admin}}));
         assert(state.Completed.at(90001).at("ServerControl")==admin);state.Completed.erase(90001);}
     const auto syncHost=[&](bool metadata=false){SyncHost(&state,true,metadata);state.NextHostRead=state.NextMetadataRead=std::chrono::steady_clock::time_point::max();};syncHost();
     {const auto previous=HostSnapshot;HostSnapshot={{"_RequestId",90002},{"_InProgress",false},{"Status","Recovered native role result"},{"ServerControl",{{"Kind","RuneSchemaServerControl1"},{"CanManage",true}}}};++HostRevision;syncHost();
@@ -218,28 +226,37 @@ int main(){
         assert(PS::RuneSchemaSettingsPanel::Remote({{"Action","HelpyNativeOverlay"},{"Payload",{{"Action",action}}}},reply)&&reply.at("Ready")==true&&reply.at("Api")=="D3D12");
         assert(HostCalls["HelpyNativeOverlay"]==before+1&&GuardedCalls["HelpyNativeOverlay"]==before+1);
     }
-    for(const auto* action:{"QuickLoadRead","AdditionalLoggingRead"}){json reply;const auto before=HostCalls[action],writes=SettingsWrites;
-        assert(CallCore(&state,{{"Action",action}},reply)&&reply.at("Ok")==true&&reply.at("ExpectedContents").get<std::string>().size()==10000);
-        assert(HostCalls[action]==before+2&&SettingsWrites==writes);}
-    {json reply;assert(CallCore(&state,{{"Action","CrashDumpRead"}},reply)&&reply.at("ExpectedContents").get<std::string>().size()==10000&&CrashOptionReads==2);}
+    for(const auto* action:{"QuickLoadRead","AdditionalLoggingRead"}){
+        json first,repeated;const auto before=HostCalls[action],writes=SettingsWrites;
+        const json request={{"Action",action}};
+        assert(CallCore(&state,request,first)&&first.at("Ok")==true&&first.at("ExpectedContents").get<std::string>().size()==10000);
+        const auto afterFirst=HostCalls[action];
+        assert(afterFirst==before+(std::string_view(action)=="QuickLoadRead"?2:1));
+        assert(CallCore(&state,request,repeated)&&repeated==first);
+        assert(HostCalls[action]==afterFirst+1&&SettingsWrites==writes);
+    }
+    {json reply;assert(CallCore(&state,{{"Action","CrashDumpRead"}},reply)&&reply.at("ExpectedContents").get<std::string>().size()==10000&&CrashOptionReads==1);}
     {json reply;const auto before=HostCalls["HelpyModMenuRead"];assert(CallCore(&state,{{"Action","HelpyModMenuRead"}},reply)&&reply.at("Available")==true&&reply.at("Snapshot").at("Padding").get<std::string>().size()==32000);assert(HostCalls["HelpyModMenuRead"]==before+2);}
     for(const auto* action:{"List","Activate","Deactivate"}){json reply;const auto before=HostCalls["HudExtensions"];assert(CallCore(&state,{{"Action","HudExtensions"},{"Payload",{{"Action",action}}}},reply)&&reply.at("Accepted")==true);assert(HostCalls["HudExtensions"]==before+1);}
-    {json manifest;assert(PS::HelpySourceCache::RemoteSnapshot(manifest)&&manifest.at("Padding").get<std::string>().size()==20000&&IconManifestReads==2);
+    {json manifest;assert(PS::HelpySourceCache::RemoteSnapshot(manifest)&&manifest.at("Padding").get<std::string>().size()==20000&&IconManifestReads==1);
         PS::HelpySourceCache::Current.Provisional=true;PS::HelpySourceCache::CachedSourcesAttempted=true;PS::HelpySourceCache::Next={};
         assert(PS::HelpySourceCache::Poll({})&&PS::HelpySourceCache::Ready()&&!PS::HelpySourceCache::Current.Provisional);
         assert(PS::HelpySourceCache::Fingerprint("/Game/UI/T_Power.T_Power")=="abcdef0123456789");
         PS::HelpySourceCache::Current={};}
     for(const auto* action:{"ModsRead","ModsSave","ModsImport","QuickLoadSave","AdditionalLoggingSave","CrashDumpSave"}){
-        json reply;assert(CallCore(&state,{{"Action",action}},reply)&&reply.at("Ok")==true&&reply.at("Root")=="D:/XboxGames/Active/RuneSchema");assert(GuardedCalls[action]==1);
+        json reply;const auto before=HostCalls[action];
+        assert(CallCore(&state,{{"Action",action}},reply)&&reply.at("Ok")==true&&reply.at("Root")=="D:/XboxGames/Active/RuneSchema");
+        assert(GuardedCalls[action]==1);
+        assert(HostCalls[action]==before+(std::string_view(action)=="ModsRead"?2:1));
     }
     assert(state.ToolsGeneration==41&&state.ToolsAvailable&&state.Players.size()==1); // No bootstrap push required.
     const auto unchangedRevision=state.ToolsRevision;syncHost();syncHost();
     assert(state.ToolsRevision==unchangedRevision); // Heartbeats do not invalidate row/order caches.
     const auto serverGrant=json{{"Action","GiveItems"},{"Player","/Server/Player/Remote"},{"Items",json::array({{{"Item","/Game/Items/Log.Log"},{"Quantity",1}}})}};
     assert(PS::SpawnToolRequests::TrySubmit(serverGrant)&&LastSubmission==serverGrant);
-    StoreReceipt(&state,{{"_RequestId",uint64_t(556)},{"JournalCatalog",{{"Entries",json::array({{{"Path","/Game/Journal/Native.Native"},{"Native",true},{"Pages",json::array({"native text"})}}})},{"HasMore",false}}}});
+    StoreReceipt(&state,BuildReceipt({{"_RequestId",uint64_t(556)},{"JournalCatalog",{{"Entries",json::array({{{"Path","/Game/Journal/Native.Native"},{"Native",true},{"Pages",json::array({"native text"})}}})},{"HasMore",false}}}}));
     json journalReceipt;assert(PS::SpawnToolRequests::TakeCompleted(556,journalReceipt)&&journalReceipt["JournalCatalog"]["Entries"][0]["Pages"][0]=="native text");
-    StoreReceipt(&state,{{"_RequestId",uint64_t(557)},{"InventorySnapshot",{{"PlayerGuid","fixture"},{"Items",json::array({{{"Name","Ash Logs"},{"Count",12}}})}}}});
+    StoreReceipt(&state,BuildReceipt({{"_RequestId",uint64_t(557)},{"InventorySnapshot",{{"PlayerGuid","fixture"},{"Items",json::array({{{"Name","Ash Logs"},{"Count",12}}})}}}}));
     json inventoryReceipt;assert(PS::SpawnToolRequests::TakeCompleted(557,inventoryReceipt)&&inventoryReceipt["InventorySnapshot"]["Items"][0]["Count"]==12);
     PS::RuneSchemaSettingsPanel::Load();assert(PS::RuneSchemaSettingsPanel::Loaded&&SettingsWrites==0);
     PS::RuneSchemaSettingsPanel::Draft["advancedLogging"]=true;PS::RuneSchemaSettingsPanel::Dirty=true;
@@ -409,7 +426,7 @@ int main(){
     assert(accessPrompt.Observe(HostGeneration+1,challenge));auto another=challenge;another["CharacterGuid"]="another-character";
     assert(accessPrompt.Observe(HostGeneration+1,another));another["Available"]=false;assert(!accessPrompt.Observe(HostGeneration+2,another));
     {
-        const auto oldSnapshot=HostSnapshot,oldResult=state.ToolsResult;const auto oldHostRevision=state.HostRevision;
+        const auto oldSnapshot=HostSnapshot;const auto oldResult=state.ToolsResult;const auto oldHostRevision=state.HostRevision;
         HostSnapshot["RemoteAccess"]=challenge;HostSnapshot["Items"]=json::array({{{"Name",std::string(20000,'x')}}});++HostRevision;
         syncHost(true);assert(LastHostRead["Category"]==-2&&LastHostRead["Revision"]==0&&state.HostRevision==oldHostRevision&&state.ToolsResult==oldResult);
         const auto calls=HostCalls["Read"];SyncHost(&state,false,true);assert(HostCalls["Read"]==calls);HostSnapshot=oldSnapshot;
@@ -560,6 +577,20 @@ int main(){
         assert(Search(0,"reject-current"));flushCatalog();assert(!For(0).Pending&&!For(0).LastError.empty());
     }
     {
+        decltype(state) reader{&host};reader.ToolsGeneration=HostGeneration;
+        const auto previous=HostSnapshot;
+        HostSnapshot["Padding"]=std::string(24000,'x');
+        for(const auto expectedCalls:{2u,1u}){
+            ++HostRevision;reader.NextHostRead={};
+            const auto before=HostCalls["Read"];
+            SyncHost(&reader);assert(reader.HostRead.valid());reader.HostRead.wait();SyncHost(&reader);
+            assert(HostCalls["Read"]==before+expectedCalls);
+            assert(reader.HostRevision==HostRevision&&reader.ToolsResult&&*reader.ToolsResult==HostSnapshot);
+            assert(reader.ToolsCatalog.at("Padding").get()==&reader.ToolsResult->at("Padding"));
+        }
+        HostSnapshot=previous;
+    }
+    {
         std::promise<void> release;HostRelease=release.get_future().share();BlockEntered=false;BlockAction=2;
         state.NextHostRead={};const auto lastPlayers=state.Players;
         auto refresh=std::async(std::launch::async,[&]{SyncHost(&state);});
@@ -568,7 +599,7 @@ int main(){
         if(responsive){uint32_t size=0;const auto message=json{{"Kind","bootstrap"},{"Generation",HostGeneration},{"Available",true},{"Payload",{{"Result",{{"Status","newer push"}}}}}}.dump();
             assert(ToolsPush(&state,message.c_str(),nullptr,0,&size)==RS_PLUGIN_OK);release.set_value();}
         if(state.HostRead.valid())state.HostRead.wait();SyncHost(&state);BlockAction=0;
-        assert(responsive&&BlockEntered&&state.ToolsResult["Status"]=="newer push"&&state.Players==lastPlayers);
+        assert(responsive&&BlockEntered&&state.ToolsResult&&state.ToolsResult->at("Status")=="newer push"&&state.Players==lastPlayers);
     }
     {
         std::promise<void> release;HostRelease=release.get_future().share();BlockEntered=false;BlockAction=3;

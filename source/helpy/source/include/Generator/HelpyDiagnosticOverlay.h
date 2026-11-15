@@ -21,6 +21,11 @@ namespace PS {
 class HelpyDiagnosticOverlay {
 public:
     enum class Mode{Notifications,Coordinates,Startup};
+    struct StartupPng {
+        UINT Width{},Height{};
+        std::vector<unsigned char> Pixels;
+        float Aspect()const{return Height?float(Width)/Height:1.f;}
+    };
 private:
     static constexpr const wchar_t* ClassName=L"RuneSchema.Helpy.DiagnosticToasts.v1";
     static constexpr COLORREF ColorKey=RGB(255,0,255);
@@ -36,7 +41,8 @@ private:
     float m_scale=1.0f;
     int m_width=390,m_gap=8;
     HICON m_logo{};bool m_viewMods=false;
-    HICON m_startupRune{},m_startupGame{},m_startupWheel{};float m_gameAspect=3.2f;Mode m_mode=Mode::Notifications;
+    StartupPng m_startupRune,m_startupGame,m_startupWheel;
+    Mode m_mode=Mode::Notifications;
     LoadingIndicator::StartupLayout m_startupLayout;
     std::chrono::steady_clock::time_point m_started{};bool m_animate=true;
     struct Layout {int DetailHeight=0,FooterHeight=0,Height=0;};
@@ -157,28 +163,74 @@ private:
         DrawTextW(dc,text.data(),static_cast<int>(text.size()),&rc,alignment|DT_NOPREFIX);
         SelectObject(dc,old);
     }
-    void StartupLogo(HDC dc,HICON logo,bool game,float alpha,COLORREF background){
-        if(!logo||alpha<=0)return;
-        const int width=std::max(1,int(std::lround(game?m_startupLayout.GameWidth:m_startupLayout.RuneSize))),height=game?std::max(1,int(width/m_gameAspect)):width;
-        const auto image=CreateCompatibleDC(dc);const auto bitmap=CreateCompatibleBitmap(dc,width,height);
-        if(!image||!bitmap){if(image)DeleteDC(image);if(bitmap)DeleteObject(bitmap);return;}
-        const auto prior=SelectObject(image,bitmap);const RECT bounds{0,0,width,height};const auto brush=CreateSolidBrush(background);
-        FillRect(image,&bounds,brush);DeleteObject(brush);DrawIconEx(image,0,0,logo,width,height,0,nullptr,DI_NORMAL);
-        const BLENDFUNCTION blend{AC_SRC_OVER,0,BYTE(std::lround(alpha*255)),0};
-        AlphaBlend(dc,(m_width-width)/2,int(std::lround(m_startupLayout.LogoY-height*.5f)),width,height,image,0,0,width,height,blend);
-        SelectObject(image,prior);DeleteObject(bitmap);DeleteDC(image);
+    struct StartupSurface {
+        HDC Dc=CreateCompatibleDC(nullptr);
+        HBITMAP Bitmap{};
+        HGDIOBJ Previous{};
+        uint32_t* Pixels{};
+        int Width,Height;
+        StartupSurface(int width,int height):Width(width),Height(height){
+            BITMAPINFO info{};
+            info.bmiHeader={sizeof(BITMAPINFOHEADER),width,-height,1,32,BI_RGB};
+            void* bits=nullptr;
+            if(Dc)Bitmap=CreateDIBSection(Dc,&info,DIB_RGB_COLORS,&bits,nullptr,0);
+            if(Bitmap&&bits){
+                Previous=SelectObject(Dc,Bitmap);
+                Pixels=static_cast<uint32_t*>(bits);
+                std::fill_n(Pixels,size_t(width)*height,0u);
+            }
+        }
+        ~StartupSurface(){if(Previous)SelectObject(Dc,Previous);if(Bitmap)DeleteObject(Bitmap);if(Dc)DeleteDC(Dc);}
+    };
+    static void BlendStartupPng(StartupSurface& dst,const StartupPng& image,float cx,float cy,
+                                float width,float height,float opacity,float angle=0.f){
+        if(image.Pixels.empty()||opacity<=0)return;
+        const float cosine=std::cos(angle),sine=std::sin(angle);
+        const float hx=(std::abs(cosine)*width+std::abs(sine)*height)*.5f;
+        const float hy=(std::abs(sine)*width+std::abs(cosine)*height)*.5f;
+        for(int y=std::max(0,int(std::floor(cy-hy)));y<std::min(dst.Height,int(std::ceil(cy+hy)));++y)
+            for(int x=std::max(0,int(std::floor(cx-hx)));x<std::min(dst.Width,int(std::ceil(cx+hx)));++x){
+                const float dx=x+.5f-cx,dy=y+.5f-cy;
+                const float u=(cosine*dx+sine*dy)/width+.5f,v=(-sine*dx+cosine*dy)/height+.5f;
+                if(u<0||u>=1||v<0||v>=1)continue;
+                const auto* rgba=&image.Pixels[(size_t(v*image.Height)*image.Width+size_t(u*image.Width))*4];
+                const unsigned alpha=unsigned(rgba[3]*opacity+.5f),keep=255-alpha;
+                if(!alpha)continue;
+                auto& out=dst.Pixels[size_t(y)*dst.Width+x];
+                const auto channel=[&](unsigned index,unsigned shift){
+                    return (rgba[index]*alpha+((out>>shift)&255)*keep+127)/255;
+                };
+                out=((alpha+((out>>24)*keep+127)/255)<<24)|(channel(0,16)<<16)|(channel(1,8)<<8)|channel(2,0);
+            }
     }
-    void StartupWheel(HDC dc,float angle,COLORREF background){
-        if(!m_startupWheel)return;
-        const int side=std::max(1,int(std::lround(m_startupLayout.WheelRadius*2)));
-        const auto image=CreateCompatibleDC(dc);const auto bitmap=CreateCompatibleBitmap(dc,side,side);
-        if(!image||!bitmap){if(image)DeleteDC(image);if(bitmap)DeleteObject(bitmap);return;}
-        const auto prior=SelectObject(image,bitmap);const RECT bounds{0,0,side,side};const auto brush=CreateSolidBrush(background);
-        FillRect(image,&bounds,brush);DeleteObject(brush);DrawIconEx(image,0,0,m_startupWheel,side,side,0,nullptr,DI_NORMAL);
-        const auto quad=LoadingIndicator::Quad({m_width*.5f,m_startupLayout.WheelY},m_startupLayout.WheelRadius,angle);
-        POINT target[3];for(int i=0;i<3;++i){const auto& p=quad[i==2?3:i];target[i]={LONG(std::lround(p.X)),LONG(std::lround(p.Y))};}
-        PlgBlt(dc,target,image,0,0,side,side,nullptr,0,0);
-        SelectObject(image,prior);DeleteObject(bitmap);DeleteDC(image);
+    void PaintStartup(StartupSurface& surface,double elapsed){
+        const Fonts fonts(m_theme,m_scale);
+        SetBkMode(surface.Dc,TRANSPARENT);
+        const auto split=m_fps.find('\n');
+        RECT label{Spacing(8),int(m_startupLayout.TextY),m_width-Spacing(8),int(m_startupLayout.TipY)};
+        Text(surface.Dc,fonts.Regular,RGB(255,255,255),Wide(m_fps.substr(0,split)),label,DT_CENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
+        if(split!=m_fps.npos){
+            RECT tip{Spacing(12),int(m_startupLayout.TipY),m_width-Spacing(12),surface.Height-Spacing(8)};
+            Text(surface.Dc,fonts.Small,RGB(255,255,255),Wide(m_fps.substr(split+1)),tip,DT_CENTER|DT_WORDBREAK|DT_END_ELLIPSIS);
+        }
+        GdiFlush();
+        const auto color=Color(m_theme.text);
+        for(int y=std::max(0,int(m_startupLayout.TextY));y<surface.Height;++y)
+            for(int x=0;x<surface.Width;++x){
+                auto& pixel=surface.Pixels[size_t(y)*surface.Width+x];
+                const auto coverage=std::max({pixel&255u,(pixel>>8)&255u,(pixel>>16)&255u});
+                pixel=(coverage<<24)|((GetRValue(color)*coverage/255)<<16)|
+                    ((GetGValue(color)*coverage/255)<<8)|(GetBValue(color)*coverage/255);
+            }
+        const auto animation=LoadingIndicator::Startup(elapsed,m_animate);
+        const float center=m_width*.5f,logoY=m_startupLayout.LogoY,side=m_startupLayout.RuneSize;
+        const float gameWidth=m_startupLayout.GameWidth;
+        BlendStartupPng(surface,m_startupGame,center,logoY,gameWidth,
+                        gameWidth/std::max(.2f,m_startupGame.Aspect()),1-animation.RuneAlpha);
+        BlendStartupPng(surface,m_startupRune,center,logoY,side,side,
+                        m_startupGame.Pixels.empty()?1.f:animation.RuneAlpha);
+        const float wheel=m_startupLayout.WheelRadius*2;
+        BlendStartupPng(surface,m_startupWheel,center,m_startupLayout.WheelY,wheel,wheel,1,animation.Angle);
     }
     void Paint(HDC dc,RECT bounds){
         const HBRUSH clear=CreateSolidBrush(ColorKey);
@@ -193,13 +245,7 @@ private:
         if(!m_fps.empty()){
             const int height=HudHeight();RECT box{0,0,m_width,height};
             const auto brush=CreateSolidBrush(bg);FillRect(dc,&box,brush);DeleteObject(brush);
-            if(m_mode==Mode::Startup){
-                const auto animation=LoadingIndicator::Startup(std::chrono::duration<double>(std::chrono::steady_clock::now()-m_started).count(),m_animate);
-                StartupLogo(dc,m_startupGame,true,1-animation.RuneAlpha,bg);StartupLogo(dc,m_startupRune?m_startupRune:m_logo,false,m_startupGame?animation.RuneAlpha:1.f,bg);
-                StartupWheel(dc,animation.Angle,bg);
-                const auto split=m_fps.find('\n');RECT label{Spacing(8),int(m_startupLayout.TextY),m_width-Spacing(8),int(m_startupLayout.TipY)};Text(dc,fonts.Regular,mainText,Wide(m_fps.substr(0,split)),label,DT_CENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
-                if(split!=m_fps.npos){RECT tip{Spacing(12),int(m_startupLayout.TipY),m_width-Spacing(12),height-Spacing(8)};Text(dc,fonts.Small,mainText,Wide(m_fps.substr(split+1)),tip,DT_CENTER|DT_WORDBREAK|DT_END_ELLIPSIS);}
-            }else if(m_mode==Mode::Coordinates&&m_fps.find('\n')!=m_fps.npos)Text(dc,fonts.Small,mainText,Wide(m_fps),box,DT_CENTER|DT_WORDBREAK);
+            if(m_mode==Mode::Coordinates&&m_fps.find('\n')!=m_fps.npos)Text(dc,fonts.Small,mainText,Wide(m_fps),box,DT_CENTER|DT_WORDBREAK);
             else Text(dc,fonts.Heading,mainText,Wide(m_fps),box,DT_CENTER|DT_VCENTER|DT_SINGLELINE);
             top=height+m_gap;
         }
@@ -265,6 +311,7 @@ private:
         if(message==WM_ERASEBKGND)return 1;
         if(message==WM_PAINT){
             PAINTSTRUCT paint{};const auto dc=BeginPaint(hwnd,&paint);RECT bounds{};GetClientRect(hwnd,&bounds);
+            if(self&&self->m_mode==Mode::Startup){EndPaint(hwnd,&paint);return 0;}
             const auto buffer=CreateCompatibleDC(dc);const auto bitmap=CreateCompatibleBitmap(dc,std::max(1L,bounds.right),std::max(1L,bounds.bottom));
             if(buffer&&bitmap){const auto prior=SelectObject(buffer,bitmap);if(self)self->Paint(buffer,bounds);BitBlt(dc,0,0,bounds.right,bounds.bottom,buffer,0,0,SRCCOPY);SelectObject(buffer,prior);}
             else if(self)self->Paint(dc,bounds);
@@ -282,19 +329,49 @@ private:
             ClassName,L"RuneSchema diagnostic notifications",WS_POPUP,0,0,420,90,nullptr,nullptr,module,this);
         if(!m_window)return false;
         m_logo=static_cast<HICON>(LoadImageW(module,MAKEINTRESOURCEW(IDI_RSMK),IMAGE_ICON,32,32,0));
-        SetLayeredWindowAttributes(m_window,ColorKey,244,LWA_COLORKEY|LWA_ALPHA);
+        if(m_mode!=Mode::Startup)SetLayeredWindowAttributes(m_window,ColorKey,244,LWA_COLORKEY|LWA_ALPHA);
         return true;
     }
 public:
-    bool HasStartupLogos()const{return m_startupRune||m_startupGame;}
-    void StartupLogos(HICON rune,HICON game,float aspect,HICON wheel=nullptr){if(m_startupRune)DestroyIcon(m_startupRune);if(m_startupGame)DestroyIcon(m_startupGame);if(m_startupWheel)DestroyIcon(m_startupWheel);m_startupRune=rune;m_startupGame=game;m_startupWheel=wheel;m_gameAspect=std::clamp(aspect,.2f,8.f);}
+    bool HasStartupLogos()const{return !m_startupRune.Pixels.empty()||!m_startupGame.Pixels.empty();}
+    void StartupLogos(StartupPng rune,StartupPng game,StartupPng wheel){
+        m_startupRune=std::move(rune);m_startupGame=std::move(game);m_startupWheel=std::move(wheel);
+    }
+#if defined(HELPY_PREVIEW)
+    bool PreviewStartupAlpha(const HelpyImGuiTheme::Theme& theme){
+        m_theme=theme;m_fps="Registering game content\nPreview loading tip";
+        m_startupLayout=LoadingIndicator::FitStartup(1280,720,1.f,1.f);
+        m_width=int(std::lround(m_startupLayout.Width));
+        for(double elapsed:{.25,4.25}){
+            StartupSurface image(m_width,int(std::ceil(m_startupLayout.Height)));
+            if(!image.Pixels)return false;
+            PaintStartup(image,elapsed);
+            if(image.Pixels[0]||image.Pixels[image.Width-1]||
+               image.Pixels[size_t(image.Height-1)*image.Width]||image.Pixels[size_t(image.Height)*image.Width-1])return false;
+            const auto visible=[&](int top,int bottom){
+                const auto begin=image.Pixels+size_t(std::clamp(top,0,image.Height))*image.Width;
+                const auto end=image.Pixels+size_t(std::clamp(bottom,0,image.Height))*image.Width;
+                return std::any_of(begin,end,[](uint32_t pixel){return (pixel>>24)>0;});
+            };
+            if(!visible(int(m_startupLayout.LogoY-20),int(m_startupLayout.LogoY+20))||
+               !visible(int(m_startupLayout.WheelY-8),int(m_startupLayout.WheelY+8))||
+               !visible(int(m_startupLayout.TextY),image.Height))return false;
+        }
+        return true;
+    }
+#endif
     void Hide(){if(m_window&&m_showing)ShowWindow(m_window,SW_HIDE);m_showing=false;}
-    void Close(){if(m_window){DestroyWindow(m_window);m_window=nullptr;}if(m_logo){DestroyIcon(m_logo);m_logo=nullptr;}StartupLogos(nullptr,nullptr,3.2f);if(m_registered){UnregisterClassW(ClassName,m_module);m_registered=false;}m_showing=false;m_game=nullptr;m_monitor=nullptr;m_nextUpdate={};}
+    void Close(){if(m_window){DestroyWindow(m_window);m_window=nullptr;}if(m_logo){DestroyIcon(m_logo);m_logo=nullptr;}StartupLogos({},{},{});if(m_registered){UnregisterClassW(ClassName,m_module);m_registered=false;}m_showing=false;m_game=nullptr;m_monitor=nullptr;m_nextUpdate={};}
     bool TakeModsRequest(){const bool requested=m_viewMods;m_viewMods=false;return requested;}
     void Update(HINSTANCE module,HWND game,const DiagnosticToastFeed::Feed& feed,const HelpyImGuiTheme::Theme& theme,bool show,std::string_view fps={},const ServerModVersions::Summary& versions={},Mode mode=Mode::Notifications,const HelpyHudLayout::Settings& hud={}){
         if(!show||!game||!IsWindow(game)||(feed.Empty()&&fps.empty())){Hide();return;}
         const auto label=mode==Mode::Coordinates?HelpyHudLayout::CoordinateText(std::string(fps),hud):std::string(fps);const bool fpsChanged=m_fps!=label;
-        const bool modeChanged=m_mode!=mode;m_mode=mode;
+        const bool modeChanged=m_mode!=mode;
+        if(m_window&&modeChanged&&(m_mode==Mode::Startup||mode==Mode::Startup)){
+            DestroyWindow(m_window);m_window=nullptr;m_showing=false;
+            if(m_logo){DestroyIcon(m_logo);m_logo=nullptr;}
+        }
+        m_mode=mode;
         const bool versionsChanged=m_versions!=versions;
         const auto now=std::chrono::steady_clock::now();if(m_showing&&now<m_nextUpdate&&!modeChanged&&!fpsChanged&&!versionsChanged&&m_cards.size()==feed.Visible().size())return;
         if(m_mode==Mode::Startup&&(!m_showing||modeChanged)){m_started=now;BOOL animate=TRUE;SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION,0,&animate,0);m_animate=animate!=FALSE;}
@@ -380,6 +457,20 @@ public:
         int x=m_mode==Mode::Startup?std::clamp(int(clientOrigin.x+(client.right-m_width)/2),bounds.MonitorLeft,std::max(bounds.MonitorLeft,bounds.MonitorRight-m_width)):placement.X;
         int y=m_mode==Mode::Startup?std::clamp(int(clientOrigin.y+(client.bottom-actualHeight)/2),bounds.MonitorTop,std::max(bounds.MonitorTop,bounds.MonitorBottom-actualHeight)):m_mode==Mode::Coordinates?std::clamp(int(clientOrigin.y+client.bottom)-actualHeight-margin,bounds.MonitorTop,std::max(bounds.MonitorTop,bounds.MonitorBottom-actualHeight)):placement.Y;
         if(hud.Custom){const auto box=m_mode==Mode::Coordinates?HelpyHudLayout::Coordinates(float(client.right),float(client.bottom),float(m_width),float(actualHeight),hud):HelpyHudLayout::Place(float(client.right),float(client.bottom),float(m_width),float(actualHeight),m_mode==Mode::Startup?hud.Loading:hud.Notifications);x=std::clamp(int(clientOrigin.x+box.X),bounds.MonitorLeft,std::max(bounds.MonitorLeft,bounds.MonitorRight-m_width));y=std::clamp(int(clientOrigin.y+box.Y),bounds.MonitorTop,std::max(bounds.MonitorTop,bounds.MonitorBottom-actualHeight));}
+        if(m_mode==Mode::Startup){
+            StartupSurface surface(m_width,actualHeight);
+            if(!surface.Pixels){Hide();return;}
+            PaintStartup(surface,std::chrono::duration<double>(now-m_started).count());
+            POINT position{x,y},origin{};
+            SIZE size{m_width,actualHeight};
+            BLENDFUNCTION blend{AC_SRC_OVER,0,255,AC_SRC_ALPHA};
+            if(!UpdateLayeredWindow(m_window,nullptr,&position,&size,surface.Dc,&origin,0,&blend,ULW_ALPHA)){
+                Hide();return;
+            }
+            if(!m_showing)ShowWindow(m_window,SW_SHOWNOACTIVATE);
+            m_showing=true;
+            return;
+        }
         const bool windowWasVisible=m_showing;
         RECT old{};GetWindowRect(m_window,&old);
         const bool frameChanged=!windowWasVisible||old.left!=x||old.top!=y||static_cast<int>(old.right-old.left)!=m_width||static_cast<int>(old.bottom-old.top)!=actualHeight;

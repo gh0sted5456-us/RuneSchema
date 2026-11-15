@@ -714,7 +714,6 @@ namespace DragonWilds {
             if(exists){m_appliedRegistryPatches.insert(patch.CanonicalId);continue;}
             if(!templateValue)throw std::runtime_error("HairPreset category has no structural template element");
             UECustom::FManagedValue prepared;array.InitializeValue(prepared);
-            struct ValueGuard{FProperty* Property;void* Data;~ValueGuard(){if(Property&&Data)Property->DestroyValue(Data);}} valueGuard{arrayProperty->GetInner(),prepared.GetData()};
             arrayProperty->GetInner()->CopySingleValue(prepared.GetData(),templateValue);
             auto values=ResolveRegistryValue(patch.Value,patch);
             if(values.value("BodyTypeCompatability","")=="both")values["BodyTypeCompatability"]="Both";

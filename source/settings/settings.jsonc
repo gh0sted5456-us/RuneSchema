@@ -55,7 +55,7 @@
     "accessPin": "",
     "allowClientItemGrants": false,
     "allowClientTemporarySpawns": false,
-    "maximumItemCount": 100,
+    "maximumItemCount": 0,
     "maximumSpawnCount": 100,
     "maximumNpcDurationSeconds": 300,
     "permittedPlayerGuids": [],

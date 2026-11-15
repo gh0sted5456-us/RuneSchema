@@ -319,7 +319,7 @@ inline bool PollSaved(){
     // Both the native host and desktop can display saved references before the
     // live census completes. Provisional sources never publish a live contract.
     if(!CachedSourcesAttempted){CachedSourcesAttempted=true;if(Current.Key.empty()){const auto file=Directory(false)/"sources.json";
-            CachedSourcesWorker=std::async(std::launch::async,[file]{try{if(std::filesystem::file_size(file)>2*1024*1024)return nlohmann::json{};std::ifstream input(file);return nlohmann::json::parse(input);}catch(...){return nlohmann::json{};}});}
+            CachedSourcesWorker=std::async(std::launch::async,[file]{try{std::ifstream input(file);return nlohmann::json::parse(input);}catch(...){return nlohmann::json{};}});}
     }
     if(CachedSourcesWorker.valid()&&CachedSourcesWorker.wait_for(std::chrono::seconds(0))==std::future_status::ready){
         try{auto value=CachedSourcesWorker.get();if(Current.Key.empty()&&AcceptRemote(value)){
@@ -337,8 +337,11 @@ inline bool Poll(const std::filesystem::path& root){
         const bool provisional=Current.Provisional;const bool accepted=AcceptRemote(value);Current.Provisional=Current.PresentationOnly;
         const bool promoted=provisional&&!Current.Provisional;if(promoted&&!accepted)++Revision;changed=changed||accepted||promoted;Error.clear();return changed;
     }catch(const std::exception& error){Error=error.what();return false;}}
+    // Skip the full plan copy unless a worker finished or a new inspection is due.
+    const bool finished=Worker.valid()&&Worker.wait_for(std::chrono::seconds(0))==std::future_status::ready;
+    if(!finished&&(Worker.valid()||(now<Next&&InspectingRevision==HelpyCacheSources::CurrentRevision())))return changed;
     const auto plan=HelpyCacheSources::Snapshot();
-    if(Worker.valid()&&Worker.wait_for(std::chrono::seconds(0))==std::future_status::ready){try{
+    if(finished){try{
         auto result=Worker.get();if(result.Versions!=plan.Versions){Next={};return false;}if(result.PlanRevision!=plan.Revision){
             if(result.ContentRevision!=plan.ContentRevision||result.FileKey.empty()){Next={};return false;}
             result=Replan(std::move(result),plan);

@@ -419,6 +419,8 @@ namespace DragonWilds {
     bool DragonWildsNpcLoader::OnInitialize()
     {
         m_summonNativeCredit=std::make_unique<Quests::Summons::NativeKillCredit>();
+        m_summonNativeCredit->Confirmed=[this](UObject* controller,UObject* victim){m_gameplayEvents.Kill(controller,victim);};
+        m_gameplayEvents.PublishRemote=[this](UObject* controller,const std::string& payload){return PublishPlayerActivity&&PublishPlayerActivity(controller,payload);};
         #include "NpcEventContracts.inl"
         m_events.Report=[](const std::string& message){PS::Log<LogLevel::Normal>(STR("Events: {}.\n"),PS::ToWideSafe(message.c_str()));};
         m_events.ReportFailure=[this](const std::string& message){ErrorOnce("event-failure:"+message,PS::ToWideSafe("Events: "+message));};
@@ -480,6 +482,9 @@ namespace DragonWilds {
                 try {
                     if(m_summonNativeCredit && m_gameThreadId.load(std::memory_order_relaxed)==GetCurrentThreadId())
                         m_summonNativeCredit->After(dispatch,source,function,parameters);
+                    // Helpy achievements: local player's crafts, unlocks, quests, skills and watched mod events.
+                    if(m_gameThreadId.load(std::memory_order_relaxed)==GetCurrentThreadId())
+                        m_gameplayEvents.Observe(dispatch,source,function,parameters);
                     static const FName onRepIdentity(TEXT("OnRep_IdentityPayload"),FNAME_Add);
                     static const FName receiveBeginPlay(TEXT("ReceiveBeginPlay"),FNAME_Add);
                     static const FName receiveEndPlay(TEXT("ReceiveEndPlay"),FNAME_Add);
@@ -769,32 +774,40 @@ namespace DragonWilds {
                 ReconcileShownVendorCells(deltaSeconds);
                 ReconcileNpcScales(deltaSeconds);
                 ReconcileNpcEquipment(deltaSeconds);
-                try {
-                    if(auto* world=FindLoadedWorld();world && world!=m_legacyNpcSweepWorld) {
-                        m_legacyNpcSweepWorld=world;
-                        PS::SlowWork::Measure("npcs.legacy",[&]{ScanLegacyPersistentNpcs(world);});
+                m_legacyNpcSweepElapsed+=deltaSeconds;
+                if(m_legacyNpcSweepElapsed>=0.5f){
+                    m_legacyNpcSweepElapsed=0;
+                    try {
+                        if(auto* world=FindLoadedWorld();world && world!=m_legacyNpcSweepWorld) {
+                            m_legacyNpcSweepWorld=world;
+                            PS::SlowWork::Measure("npcs.legacy",[&]{ScanLegacyPersistentNpcs(world);});
+                        }
+                    } catch(const std::exception& error) {
+                        WarnOnce("legacy-npc-sweep",PS::ToWideSafe(error.what()));
                     }
-                } catch(const std::exception& error) {
-                    WarnOnce("legacy-npc-sweep",PS::ToWideSafe(error.what()));
                 }
                 // The current game build no longer exposes a reflected
                 // day/night transition function.  Re-read its native actor
                 // fields at a bounded cadence, and only when a definition
                 // actually uses time gating.  This is one check per second,
                 // not an actor/world scan or a permanent background timer.
-                if(std::ranges::any_of(m_definitions,[](const auto& definition){
-                    return !definition.HelpyTemporary && definition.Enabled
-                        && (definition.Time!=TimeOfDay::Requirement::Any
-                            || std::ranges::any_of(definition.CategoryRules,[](const auto& rule){return rule.Time!=TimeOfDay::Requirement::Any;})
-                            || std::ranges::any_of(definition.Items,[](const auto& item){return item.contains("TimeOfDay");}));
-                })) {
-                    m_npcTimeElapsed+=deltaSeconds;
-                    if(m_npcTimeElapsed>=1.0) {
-                        m_npcTimeElapsed=0;
-                        m_npcTimeDirty=true;
+                m_npcTimeElapsed+=deltaSeconds;
+                if(m_npcTimeElapsed>=1.0){
+                    m_npcTimeElapsed=0;
+                    m_npcTimeDirty=m_npcTimeDirty||std::ranges::any_of(m_definitions,[](const auto& definition){
+                        return !definition.HelpyTemporary && definition.Enabled
+                            && (definition.Time!=TimeOfDay::Requirement::Any
+                                || std::ranges::any_of(definition.CategoryRules,[](const auto& rule){return rule.Time!=TimeOfDay::Requirement::Any;})
+                                || std::ranges::any_of(definition.Items,[](const auto& item){return item.contains("TimeOfDay");}));
+                    });
+                }
+                if(m_npcTimeDirty){
+                    const auto now=std::chrono::steady_clock::now();
+                    if(now>=m_nextNpcTimeCheck){
+                        m_nextNpcTimeCheck=now+std::chrono::milliseconds(250);
+                        ReconcileNpcTimeOfDay();
                     }
-                } else m_npcTimeElapsed=0;
-                if(m_npcTimeDirty)ReconcileNpcTimeOfDay();
+                }
                 if(m_events.NeedsTick())try {PS::SlowWork::Measure("quests.events",[&]{m_events.Tick(deltaSeconds);});}
                     catch(const std::exception& error){try{m_events.Reset();}catch(...){}ErrorOnce("event-tick",PS::ToWideSafe(error.what()));}
                 PumpQuestLocations(deltaSeconds);
@@ -3134,6 +3147,8 @@ namespace DragonWilds {
         m_retiredVendors.clear();
         m_npcNames.clear();
         m_legacyNpcSweepWorld=nullptr;
+        m_legacyNpcSweepElapsed=0.5f;
+        m_nextNpcTimeCheck={};
     }
 
     void DragonWildsNpcLoader::TrackSpawnedVendor(const std::string& key,AActor* actor)

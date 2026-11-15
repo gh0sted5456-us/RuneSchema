@@ -1,6 +1,8 @@
 #include "Runtime/RegistryBridge.h"
+#include "Runtime/MultiplayerRuntime.h"
 #include "../../../shared/CleanupNotice.h"
 #include "Core/HelpyRemoteAccess.h"
+#include "Core/NetworkPayloadLimits.h"
 #include "Runtime/NetworkContext.h"
 #include "../../../shared/HelpyAuthorityStatus.h"
 #include "Runtime/SlowWork.h"
@@ -16,6 +18,7 @@
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
+#include <utility>
 #include "nlohmann/json.hpp"
 #include "Runtime/HostServices.h"
 #include "Runtime/MappingBackbone.h"
@@ -58,7 +61,7 @@ constexpr auto PluginPresentationClass = TEXT("/RuneSchema/Networking/Extensions
 constexpr auto DamageNotifyClass = TEXT("/Game/Gameplay/Character/Player/AnimNotifies/AnimNotify_AttackDamagePoint.AnimNotify_AttackDamagePoint_C");
 constexpr int32_t Protocol = 1;
 constexpr size_t MaxEnvelopeBytes = 16 * 1024;
-constexpr size_t MaxActionPayloadBytes = 4 * 1024;
+constexpr size_t MaxActionPayloadBytes = PS::NetworkPayloadLimits::InlineBytes;
 constexpr uint32_t MaxRequestsPerSecond = 8;
 constexpr size_t MaxWorldInstances = 512;
 constexpr size_t MaxPresentationRoutes = 128;
@@ -225,7 +228,9 @@ std::string ParameterString(UFunction* function,void* parameters,const TCHAR* na
     auto* field=Parameter<FStrProperty>(function,name);if(!field||!parameters)throw std::runtime_error("Generic bridge string parameter contract changed");
     const auto& value=field->GetPropertyValue(field->ContainerPtrToValuePtr<void>(parameters));const auto& chars=value.GetCharArray();
     if(chars.Num()<1||!chars.GetData()||chars.GetData()[chars.Num()-1]!=0||chars.Num()>static_cast<int32_t>(limit+1))throw std::runtime_error("Generic bridge string parameter is invalid");
-    return RC::to_string(RC::StringType(chars.GetData(),chars.Num()-1));
+    auto text=RC::to_string(RC::StringType(chars.GetData(),chars.Num()-1));
+    if(text.size()>limit)throw std::runtime_error("Generic bridge string parameter exceeds its byte limit");
+    return text;
 }
 
 int64_t ParameterInt64(UFunction* function,void* parameters,const TCHAR* name) {
@@ -248,12 +253,10 @@ std::string PresentationRouteKey(const std::string& pluginId,const std::string& 
 }
 
 bool ValidatePresentationValue(const nlohmann::json& value,size_t depth,size_t& fields) {
-    if(depth>8)return false;
+    if(depth>8||++fields>512)return false;
     if(value.is_object()) {
-        if((fields+=value.size())>32)return false;
         for(const auto& [_,child]:value.items())if(!ValidatePresentationValue(child,depth+1,fields))return false;
     } else if(value.is_array()) {
-        if((fields+=value.size())>64)return false;
         for(const auto& child:value)if(!ValidatePresentationValue(child,depth+1,fields))return false;
     } else if(value.is_string()) {
         const auto text=value.get<std::string>();
@@ -308,13 +311,19 @@ UClass* RegistryBridge::ResolvePresentationClass() const {
     return type;
 }
 
-void RegistryBridge::ResetWorld() {
-    m_receivedCleanupRevision=0;
-    PS::HelpyRemoteAccess::Server.Reset();PS::HelpyRemoteAccess::ClientAllowed=false;PS::HelpyRemoteAccess::ClientTeleport=false;
+void RegistryBridge::ResetHelpyClientAccess() {
+    PS::HelpyRemoteAccess::ClientAllowed=false;PS::HelpyRemoteAccess::ClientTeleport=false;
     PS::SpawnToolRequests::CatalogProgress({{"RemoteAccess",{{"Allowed",false},{"Detail","Connect again after joining this world."}}}});
-    m_helpyAccessRevision=0;m_helpyAccessComponent.Reset();m_helpyAccessStatusRequested=false;
-    m_helpyAccessRefreshAt={};
-    m_helpyPinNoticeSent=false;
+    m_helpyAccessRevision=0;m_helpyAccessComponent.Reset();m_helpyPolicyController.Reset();
+    m_helpyPolicyGeneration=0;m_receivedHelpyPolicyRevision=0;m_helpyPinNoticeSent=false;
+}
+
+void RegistryBridge::ResetWorld() {
+    PS::MultiplayerRuntime::Reset();
+    m_receivedCleanupRevision=0;
+    PS::HelpyRemoteAccess::Server.Reset();
+    ResetHelpyClientAccess();
+    m_sentHelpyAuthorityVersion=0;m_helpyPolicyPeers.clear();
     m_helpyMutationRevision=0;m_helpyMutationComponent.Reset();m_helpyResultParts.Reset();
     PS::SpawnToolRequests::SetNetworkCompletion(0,{});
     for(const auto& pending:m_pendingClientActions)Trace("consumable.authority",pending.Caster.Get(),pending.Key,"consume",pending.Revision,pending.Correlation,
@@ -384,6 +393,7 @@ void RegistryBridge::SetRegistrySnapshot(std::string snapshot) {
         throw std::runtime_error("Server mod-list channel is reserved by RuneSchema");
     m_modDataRelay.Configure(relayChannels,&PS::ServerModList::Route);
     m_serverModsPublished=false;
+    PS::MultiplayerRuntime::Declare(parsed["entries"]);
     m_registrySnapshot=std::move(snapshot);
     m_manifestFingerprint=EffectiveRegistryFingerprint(m_registrySnapshot);
     Trace("registry.discovery",nullptr,"manifest","validate",0,{},"cooked_registry_validated","accepted","accepted");
@@ -811,7 +821,12 @@ void RegistryBridge::EnsurePlayerBridges() {
 void RegistryBridge::ObservePlayerLifecycle(UObject* source,UFunction* function) {
     if(!source||!function)return;
     const auto name=function->GetFName();if((name!=Names().BeginPlay&&name!=Names().EndPlay)||!source->IsA<AActor>())return;
-    if(name==Names().EndPlay&&m_characterAppearanceRoutes.empty())return;
+    PS::MultiplayerRuntime::ObserveActor(source,name==Names().BeginPlay);
+    if(name==Names().EndPlay){
+        m_helpyPolicyPeers.erase(source);
+        if(m_helpyPolicyController.Get()==source)ResetHelpyClientAccess();
+        if(m_characterAppearanceRoutes.empty())return;
+    }
     auto* playerType=DragonWilds::ActorHelper::ResolveClass(TEXT("/Script/Dominion.DominionPlayerCharacter"));
     if(!playerType||!source->IsA(playerType)
         || source->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject))
@@ -933,7 +948,7 @@ void RegistryBridge::ObservePresentationPre(UObject* source,UFunction* function,
         ||!ValidatePresentationValue(payload,0,fields))
         throw std::runtime_error("Presentation payload is not allow-listed or contains an asset reference");
     auto& seen=m_presentationAuthorityRevisions[routeKey+"|"+entity];
-    if(revision<=seen)throw std::runtime_error("Presentation revision is stale");seen=revision;
+    if(revision<=seen)throw std::runtime_error("Presentation revision is stale");
     const auto state=payload.value("state",std::string{});const bool loop=payload.value("loop",false);
     const auto instance="presentation:"+pluginId+":"+connection+":"+entity;
     if(state=="stop")RemoveWorldInstance(instance,"presentation stopped");
@@ -944,6 +959,7 @@ void RegistryBridge::ObservePresentationPre(UObject* source,UFunction* function,
             {"pluginId",pluginId},{"connection",connection},{"entityId",entity},{"payload",payload},
             {"revision",revision},{"startedAtUnixMs",started}}.dump());
     }
+    seen=revision;
     RecordDiagnostic(pluginId+"."+connection,entity,revision,"published",payload["key"].get<std::string>());
 }
 
@@ -952,25 +968,38 @@ void RegistryBridge::HandleGenericRequest(UObject* source,UFunction* function,vo
     const auto channel=ParameterString(function,parameters,TEXT("Channel"),64);
     const auto entity=ParameterString(function,parameters,TEXT("EntityId"),512);
     const auto action=ParameterString(function,parameters,TEXT("ActionKey"),64);
-    const auto payloadText=ParameterString(function,parameters,TEXT("Payload"),MaxActionPayloadBytes);
+    const auto payloadText=ParameterString(function,parameters,TEXT("Payload"),
+        channel=="mod.data"?PS::ModDataRelay::WirePacketBytes:MaxActionPayloadBytes);
     const auto revision=ParameterInt64(function,parameters,TEXT("Revision"));
     if(!Token(channel,64)||!Token(entity,512)||!Token(action,64)||revision<=0)throw std::runtime_error("Generic bridge envelope is invalid");
     const auto payload=nlohmann::json::parse(payloadText,[](int depth,nlohmann::json::parse_event_t,nlohmann::json&){if(depth>64)throw std::runtime_error("Bridge payload nesting exceeds its limit");return true;});if(!payload.is_object()||payload.size()>32)throw std::runtime_error("Generic bridge payload must be a bounded object");
     DragonWilds::ActorHelper::FunctionCall owner(source,TEXT("/Script/Engine.ActorComponent:GetOwner"));owner.Invoke();auto* caster=owner.Result<UObject*>();
     auto* actorClass=DragonWilds::ActorHelper::ResolveClass(TEXT("/Script/Engine.Actor"));if(!caster||!actorClass||!caster->IsA(actorClass))throw std::runtime_error("Generic bridge has no owning actor");
     DragonWilds::ActorHelper::FunctionCall authority(caster,TEXT("/Script/Engine.Actor:HasAuthority"));authority.Invoke();if(!authority.Result<bool>())return;
-    uint64_t diagnosticEpoch=0,diagnosticInstance=0;
-    if(payload.contains("diagnosticEpoch")&&payload["diagnosticEpoch"].is_number_unsigned())diagnosticEpoch=payload["diagnosticEpoch"].get<uint64_t>();
-    if(payload.contains("diagnosticBridgeInstance")&&payload["diagnosticBridgeInstance"].is_number_unsigned())diagnosticInstance=payload["diagnosticBridgeInstance"].get<uint64_t>();
-    const auto correlation=diagnosticEpoch>0&&diagnosticInstance>0&&diagnosticInstance<=1000000
-        ?BridgeDiagnostics::CorrelationFrom(diagnosticEpoch,diagnosticInstance,revision):DiagnosticCorrelation(caster,revision);
-    Trace(channel,caster,entity,action,revision,correlation,"server_envelope_received","accepted","accepted");
+    const bool relayChunk=channel=="mod.data"&&action=="chunk";
+    std::string correlation;
+    if(!relayChunk){
+        uint64_t diagnosticEpoch=0,diagnosticInstance=0;
+        if(payload.contains("diagnosticEpoch")&&payload["diagnosticEpoch"].is_number_unsigned())diagnosticEpoch=payload["diagnosticEpoch"].get<uint64_t>();
+        if(payload.contains("diagnosticBridgeInstance")&&payload["diagnosticBridgeInstance"].is_number_unsigned())diagnosticInstance=payload["diagnosticBridgeInstance"].get<uint64_t>();
+        correlation=diagnosticEpoch>0&&diagnosticInstance>0&&diagnosticInstance<=1000000
+            ?BridgeDiagnostics::CorrelationFrom(diagnosticEpoch,diagnosticInstance,revision):DiagnosticCorrelation(caster,revision);
+        Trace(channel,caster,entity,action,revision,correlation,"server_envelope_received","accepted","accepted");
+    }
     const auto ownerKey=DiagnosticOwner(caster)+"|"+channel;auto& window=m_requestWindows[ownerKey];const auto now=std::chrono::steady_clock::now();
     if(window.Started.time_since_epoch().count()==0||now-window.Started>=std::chrono::seconds(1)){window.Started=now;window.Count=0;}
-    if(++window.Count>MaxRequestsPerSecond) {Trace(channel,caster,entity,action,revision,correlation,"rate_limit_rejected","rejected","rate_limited",0,0,true);SendReceipt(source,channel,entity,revision,false,"rate_limited");if(channel=="mod.data")return;throw std::runtime_error("Generic bridge request rate limit exceeded");}
-    Trace(channel,caster,entity,action,revision,correlation,"rate_limit_accepted","accepted","accepted");
+    const auto requestsPerSecond=channel=="mod.data"?PS::ModDataRelay::PacketsPerSecond:MaxRequestsPerSecond;
+    if(++window.Count>requestsPerSecond) {
+        if(relayChunk)correlation=DiagnosticCorrelation(caster,revision);
+        Trace(channel,caster,entity,action,revision,correlation,"rate_limit_rejected","rejected","rate_limited",0,0,true);
+        SendReceipt(source,channel,entity,revision,false,"rate_limited");
+        if(channel=="mod.data")return;
+        throw std::runtime_error("Generic bridge request rate limit exceeded");
+    }
+    if(!relayChunk)Trace(channel,caster,entity,action,revision,correlation,"rate_limit_accepted","accepted","accepted");
     if(channel!="mod.data"&&revision<=window.Revision&&channel!="character.appearance") {Trace(channel,caster,entity,action,revision,correlation,"revision_stale","rejected","stale_revision",0,0,true);SendReceipt(source,channel,entity,revision,false,"stale_revision");throw std::runtime_error("Generic bridge request revision is stale");}
-    window.Revision=revision;Trace(channel,caster,entity,action,revision,correlation,"revision_accepted","accepted","accepted");
+    window.Revision=revision;
+    if(!relayChunk)Trace(channel,caster,entity,action,revision,correlation,"revision_accepted","accepted","accepted");
     try {
         if(channel=="character.appearance"){
             HandleCharacterAppearance(source,caster,function,entity,action,payloadText,revision);return;
@@ -981,12 +1010,20 @@ void RegistryBridge::HandleGenericRequest(UObject* source,UFunction* function,vo
                 ||!notify||!notify->HasAnyFunctionFlags(FUNC_Net)||!notify->HasAnyFunctionFlags(FUNC_NetClient))throw std::runtime_error("Native mod-data RPC contract is unavailable");
             const PS::WeakObjectHandle identity(source);if(identity.Get()!=source)throw std::runtime_error("Relay player component identity is unavailable");
             const auto peer="peer-"+std::to_string(identity.ObjectIndex)+"-"+std::to_string(identity.ObjectSerialNumber);
-            if(action=="subscribe"||action=="resync"){
+            const bool subscribing=action=="subscribe"||action=="resync";
+            const bool capacityAware=subscribing&&payload.contains("maxBytes");
+            if(subscribing){
+                const auto& version=payload.at("version");
+                if(!version.is_number_integer()||version.get<uint64_t>()==0||version.get<uint64_t>()>65535)
+                    throw std::runtime_error("Relay subscription version is invalid");
+                if(capacityAware&&!payload["maxBytes"].is_number_integer())
+                    throw std::runtime_error("Relay subscriber byte limit must be an integer");
                 if(entity==PS::ServerModList::Route.Key&&!m_serverModsPublished){
                     if(!m_serverModsReady)throw std::runtime_error("Enabled server mod list is unavailable");
                     m_modDataRelay.Publish(entity,m_enabledMods,++m_serverModSequence);m_serverModsPublished=true;
                 }
-                m_modDataRelay.Subscribe(peer,entity,payload.at("version").get<uint32_t>(),action=="resync");
+                m_modDataRelay.Subscribe(peer,entity,version.get<uint32_t>(),action=="resync",
+                    payload.value("maxBytes",PS::ModDataRelay::LegacyMaxBytes));
             }
             else if(action=="chunk"){
                 if(entity==PS::ServerModList::Route.Key)throw std::runtime_error("Only RuneSchema authority can publish the server mod list");
@@ -996,7 +1033,10 @@ void RegistryBridge::HandleGenericRequest(UObject* source,UFunction* function,vo
                 if(complete&&ModDataReceived)try{ModDataReceived(*complete);}catch(...){PS::Log<LogLevel::Verbose>(STR("[MOD-DATA][CONSUMER-FAILED] Server consumer rejected completed data; transport receipt remains independent.\n"));}
             }else throw std::runtime_error("Unsupported mod-data relay action");
             m_relayPeers[peer].Assign(source);
-            SendReceipt(source,channel,entity,revision,true,"accepted");return;
+            const auto detail=capacityAware
+                ?PS::ModDataRelay::CapacityReceipt+std::to_string(m_modDataRelay.Route(entity).Limit)
+                :"accepted";
+            SendReceipt(source,channel,entity,revision,true,detail);return;
         }
         if(channel=="system.compat") {
             if(action!="hello")throw std::runtime_error("Unsupported compatibility action verb");
@@ -1060,7 +1100,14 @@ void RegistryBridge::HandleGenericRequest(UObject* source,UFunction* function,vo
         }
         if(channel=="world.state") {
             if(action!="resync"||entity!="all")throw std::runtime_error("Unsupported world-state request");
-            SendNotification(source,channel,entity,revision,m_persistentStateEnvelope.empty()?nlohmann::json({{"kind","RuneSchemaWorldSnapshot"},{"revision",0},{"instances",nlohmann::json::array()}}).dump():m_persistentStateEnvelope);
+            auto snapshot=m_persistentStateEnvelope;
+            if(m_worldAuthorityComponent)snapshot=ReadString(m_worldAuthorityComponent,ResolveWorldContract().WorldStateEnvelope);
+            else if(m_authorityComponent){
+                const auto contract=ResolveContract();
+                if(!contract.Compact)snapshot=ReadString(m_authorityComponent,contract.PersistentStateEnvelope);
+            }
+            if(snapshot.empty())snapshot=nlohmann::json({{"kind","RuneSchemaWorldSnapshot"},{"revision",0},{"instances",nlohmann::json::array()}}).dump();
+            SendNotification(source,channel,entity,revision,snapshot);
             SendReceipt(source,channel,entity,revision,true,"World-state snapshot sent.");return;
         }
         if(AuthorityChannel) {
@@ -1073,6 +1120,13 @@ void RegistryBridge::HandleGenericRequest(UObject* source,UFunction* function,vo
             auto body=payload;
             if(channel=="helpy.authority")body["_BridgeRevision"]=revision;
             const auto detail=AuthorityChannel(caster,channel,entity,action,body.dump());
+            if(channel=="helpy.authority"&&action=="HelpyRemoteAccess"
+                &&payload.value("Query",false)&&payload.value("AccessUpdates",false)){
+                std::erase_if(m_helpyPolicyPeers,[](const auto& peer){return !peer.second.Get();});
+                auto* controller=DragonWilds::ActorHelper::GetObjectRef(caster,TEXT("Controller"));
+                if(controller&&(m_helpyPolicyPeers.contains(controller)||m_helpyPolicyPeers.size()<512))
+                    m_helpyPolicyPeers[controller].Assign(controller);
+            }
             if(channel=="helpy.authority"&&action=="Players")SendNotification(source,"helpy.players","all",revision,detail);
             if(channel=="helpy.authority"&&action=="InventoryMarks")SendNotification(source,"helpy.marks",entity,revision,detail);
             SendReceipt(source,channel,entity,revision,true,detail.empty()?"Authority action completed.":detail);return;
@@ -1092,6 +1146,45 @@ bool RegistryBridge::PublishCleanupNotice(UObject* controller,std::size_t remove
     SendNotification(component,"save.cleanup","cleanup",++m_outboundRevision,packet.dump());return true;
 }
 
+bool RegistryBridge::PublishPlayerActivity(UObject* controller,const std::string& payload) {
+    if(!controller||payload.empty()||payload.size()>1024||LocalController(controller))return false;
+    auto* pawn=ControllerPawn(controller);if(!ActorAuthority(pawn))return false;
+    auto* component=EnsureBridgeComponent(static_cast<AActor*>(pawn),true);if(!component)return false;
+    SendNotification(component,"helpy.activity","activity",++m_outboundRevision,payload);return true;
+}
+
+void RegistryBridge::ApplyHelpyAccessStatus(const nlohmann::json& access,bool success,const std::string& detail) {
+    const auto generation=PS::SpawnToolRequests::Generation.load();
+    const bool valid=success&&PS::HelpyAuthorityStatus::Valid(access);
+    const bool wasAllowed=PS::HelpyRemoteAccess::ClientReady(generation);
+    PS::HelpyRemoteAccess::ClientAllowed=valid&&access.value("Allowed",false);
+    PS::HelpyRemoteAccess::ClientTeleport=PS::HelpyRemoteAccess::ClientAllowed&&access.value("Teleport",false);
+    PS::HelpyRemoteAccess::ClientGeneration=generation;
+    const auto message=valid?access.value("Detail",std::string{}):detail;
+    PS::SpawnToolRequests::CatalogProgress({{"Status",message},{"RemoteAccess",valid?access:
+        nlohmann::json{{"Allowed",false},{"PinRequired",true},{"Detail",message}}}});
+    if(valid&&!wasAllowed&&access.value("Authenticated",false)&&PS::HelpyRemoteAccess::ClientAllowed)
+        PS::Log<LogLevel::Normal>(STR("[RS-NET-007] Client-server authority bridged. Self-service requests are validated and executed by the server for your current character.\n"));
+    else if(valid&&!m_helpyPinNoticeSent&&access.value("PinRequired",false)){
+        m_helpyPinNoticeSent=true;
+        PS::Log<LogLevel::Normal>(STR("[RS-NET-006] This RuneSchema world offers PIN access. Open Helpy to connect to server authority.\n"));
+    }
+}
+
+void RegistryBridge::PublishHelpyPolicy() {
+    if(!AuthorityChannel||m_helpyPolicyPeers.empty())return;
+    const auto revision=++m_outboundRevision;
+    std::erase_if(m_helpyPolicyPeers,[](const auto& peer){return !peer.second.Get();});
+    for(const auto& [key,identity]:m_helpyPolicyPeers)try{
+        auto* controller=identity.Get();if(!controller||controller!=key)continue;
+        auto* pawn=ControllerPawn(controller);if(!pawn||!pawn->IsA<AActor>())continue;
+        const auto components=static_cast<AActor*>(pawn)->GetComponentsByClass(ResolveContract().Type);
+        if(!components.Num())continue;
+        const auto status=AuthorityChannel(pawn,"helpy.authority","access-status","HelpyRemoteAccess",R"({"Action":"HelpyRemoteAccess","Query":true})");
+        SendNotification(components[0],"helpy.access","policy",revision,status);
+    }catch(const std::exception&){}
+}
+
 void RegistryBridge::ObserveClientTransport(UObject* source,UFunction* function,void* parameters) {
     if(!source||!function||!parameters)return;const auto name=function->GetFName();
     if(name!=Names().Receipt&&name!=Names().Notification)return;
@@ -1105,23 +1198,8 @@ void RegistryBridge::ObserveClientTransport(UObject* source,UFunction* function,
             auto fields=nlohmann::json::object();
             if(revision==m_helpyAccessRevision&&m_helpyAccessComponent.Get()==source
                 &&m_helpyAccessGeneration==PS::SpawnToolRequests::Generation.load()){
-                const auto access=nlohmann::json::parse(detail,nullptr,false);
-                const bool valid=success&&PS::HelpyAuthorityStatus::Valid(access);
-                const bool wasAllowed=PS::HelpyRemoteAccess::ClientReady(m_helpyAccessGeneration);
-                PS::HelpyRemoteAccess::ClientAllowed=valid&&access.value("Allowed",false);
-                PS::HelpyRemoteAccess::ClientTeleport=PS::HelpyRemoteAccess::ClientAllowed&&access.value("Teleport",false);
-                PS::HelpyRemoteAccess::ClientGeneration=m_helpyAccessGeneration;
-                const auto message=valid?access.value("Detail",std::string{}):detail;
-                fields["RemoteAccess"]=valid?access:nlohmann::json{{"Allowed",false},{"PinRequired",true},{"Detail",message}};
-                fields["Status"]=message;
-                if(valid&&!wasAllowed&&access.value("Authenticated",false)&&PS::HelpyRemoteAccess::ClientAllowed)
-                    PS::Log<LogLevel::Normal>(STR("[RS-NET-007] Client-server authority bridged. Self-service requests are validated and executed by the server for your current character.\n"));
-                else if(valid&&!m_helpyPinNoticeSent&&access.value("PinRequired",false)){
-                    m_helpyPinNoticeSent=true;
-                    PS::Log<LogLevel::Normal>(STR("[RS-NET-006] This RuneSchema world offers PIN access. Open Helpy to connect to server authority.\n"));
-                }
+                ApplyHelpyAccessStatus(nlohmann::json::parse(detail,nullptr,false),success,detail);
                 m_helpyAccessRevision=0;m_helpyAccessComponent.Reset();
-                m_helpyAccessRefreshAt=std::chrono::steady_clock::now()+std::chrono::seconds(5);
             }
             if(revision==m_helpyMutationRevision&&m_helpyMutationComponent.Get()==source
                 &&m_helpyMutationGeneration==PS::SpawnToolRequests::Generation.load()){
@@ -1140,8 +1218,29 @@ void RegistryBridge::ObserveClientTransport(UObject* source,UFunction* function,
         if(channel=="system.compat" && !success)
             PS::Log<LogLevel::Warning>(STR("{}\n"),PS::ToWideSafe(detail.c_str()));
     } else {
-        const auto payload=ParameterString(function,parameters,TEXT("Payload"),MaxActionPayloadBytes);(void)nlohmann::json::parse(payload);
+        const auto payload=ParameterString(function,parameters,TEXT("Payload"),MaxActionPayloadBytes);
+        if(channel=="helpy.access"){
+            auto* controller=m_helpyPolicyController.Get();
+            if(entity!="policy"||!controller||m_helpyPolicyGeneration!=PS::SpawnToolRequests::Generation.load())return;
+            auto* pawn=ControllerPawn(controller);if(!pawn)return;
+            DragonWilds::ActorHelper::FunctionCall owner(source,TEXT("/Script/Engine.ActorComponent:GetOwner"));owner.Invoke();
+            if(owner.Result<UObject*>()!=pawn)return;
+            const auto revision=ParameterInt64(function,parameters,TEXT("Revision"));
+            const auto access=nlohmann::json::parse(payload,nullptr,false);
+            if(PS::HelpyAuthorityStatus::AcceptUpdate(access,revision,m_receivedHelpyPolicyRevision))
+                ApplyHelpyAccessStatus(access,true,{});
+            return;
+        }
+        (void)nlohmann::json::parse(payload);
         DragonWilds::ActorHelper::FunctionCall owner(source,TEXT("/Script/Engine.ActorComponent:GetOwner"));owner.Invoke();
+        if(channel=="helpy.activity"){
+            // Achievement credit from the host. Accept it only on the owning local player's bridge.
+            auto* pawn=owner.Result<UObject*>();if(!pawn||!pawn->IsA<AActor>())return;
+            DragonWilds::ActorHelper::FunctionCall controller(pawn,TEXT("/Script/Engine.Pawn:GetController"));controller.Invoke();
+            if(!LocalController(controller.Result<UObject*>())||ControllerPawn(controller.Result<UObject*>())!=pawn)return;
+            if(ClientNotification)ClientNotification(pawn,channel,entity,payload);
+            return;
+        }
         if(channel=="save.cleanup"){
             auto* pawn=owner.Result<UObject*>();if(!pawn||!pawn->IsA<AActor>())return;
             DragonWilds::ActorHelper::FunctionCall controller(pawn,TEXT("/Script/Engine.Pawn:GetController"));controller.Invoke();
@@ -1160,7 +1259,7 @@ void RegistryBridge::ObserveClientTransport(UObject* source,UFunction* function,
             const auto packet=nlohmann::json::parse(payload);
             if(packet.value("sender",std::string{})!="authority")throw std::runtime_error("Server mod list sender is invalid");
             if(packet.at("sequence").get<int64_t>()<=m_receivedServerModSequence)return;
-            if(auto complete=m_serverModAssembly.Push(PS::ServerModList::Route,"authority",packet,PS::ModDataRelay::Clock::now())){
+            if(auto complete=m_serverModAssembly.Push(PS::ServerModList::Route,"authority",packet,PS::ModDataRelay::Clock::now(),true)){
                 const auto mods=PS::ServerModList::Decode(complete->Data);
                 m_receivedServerModSequence=complete->Sequence;
                 m_serverModNotice.Receive(owner.Result<UObject*>(),mods);
@@ -1422,15 +1521,19 @@ void RegistryBridge::SendCompatibilityAck(const std::string& remoteFingerprint,b
             m_receivedServerModSequence=0;
             DragonWilds::ActorHelper::FunctionCall mods(components[0],rpc);mods.Arg(TEXT("Channel"),std::string("mod.data"))
                 .Arg(TEXT("EntityId"),PS::ServerModList::Route.Key).Arg(TEXT("ActionKey"),std::string("subscribe"))
-                .Arg(TEXT("Payload"),std::string("{\"version\":1}")).Arg(TEXT("Revision"),++m_outboundRevision).Invoke();
+                .Arg(TEXT("Payload"),nlohmann::json{{"version",1},{"maxBytes",PS::ModDataRelay::MaxBytes}}.dump())
+                .Arg(TEXT("Revision"),++m_outboundRevision).Invoke();
         }
-        if(!m_helpyAccessStatusRequested&&!m_helpyAccessRevision){
-            m_helpyAccessStatusRequested=true;m_helpyAccessComponent.Assign(components[0]);
-            m_helpyAccessRevision=++m_outboundRevision;m_helpyAccessGeneration=PS::SpawnToolRequests::Generation.load();
-            m_helpyAccessRefreshAt=std::chrono::steady_clock::now()+std::chrono::seconds(15);
+        const auto generation=PS::SpawnToolRequests::Generation.load();
+        auto* controller=DragonWilds::ActorHelper::GetObjectRef(player,TEXT("Controller"));
+        if(controller&&(m_helpyPolicyController.Get()!=controller||m_helpyPolicyGeneration!=generation)){
+            ResetHelpyClientAccess();
+            m_helpyPolicyController.Assign(controller);m_helpyPolicyGeneration=generation;
+            m_helpyAccessComponent.Assign(components[0]);m_helpyAccessGeneration=generation;
+            m_helpyAccessRevision=++m_outboundRevision;
             DragonWilds::ActorHelper::FunctionCall access(components[0],rpc);access.Arg(TEXT("Channel"),std::string("helpy.authority"))
                 .Arg(TEXT("EntityId"),std::string("access-status")).Arg(TEXT("ActionKey"),std::string("HelpyRemoteAccess"))
-                .Arg(TEXT("Payload"),std::string("{\"Action\":\"HelpyRemoteAccess\",\"Query\":true}"))
+                .Arg(TEXT("Payload"),std::string(R"({"Action":"HelpyRemoteAccess","Query":true,"AccessUpdates":true})"))
                 .Arg(TEXT("Revision"),m_helpyAccessRevision).Invoke();
         }
         if(!resync)return;
@@ -1469,7 +1572,7 @@ bool RegistryBridge::RequestAuthority(const std::string& action,const std::strin
         if(!rpc||!rpc->HasAnyFunctionFlags(FUNC_Net|FUNC_NetServer))continue;
         const auto revision=++m_outboundRevision;
         if(action=="Players") {m_helpyRosterComponent.Assign(components[0]);m_helpyRosterRevision=revision;m_helpyRosterGeneration=PS::SpawnToolRequests::Generation.load();m_helpyRosterRequestedAt=std::chrono::steady_clock::now();}
-        if(action=="HelpyRemoteAccess") {m_helpyAccessComponent.Assign(components[0]);m_helpyAccessRevision=revision;m_helpyAccessGeneration=PS::SpawnToolRequests::Generation.load();m_helpyAccessRefreshAt=std::chrono::steady_clock::now()+std::chrono::seconds(15);}
+        if(action=="HelpyRemoteAccess") {m_helpyAccessComponent.Assign(components[0]);m_helpyAccessRevision=revision;m_helpyAccessGeneration=PS::SpawnToolRequests::Generation.load();}
         if(action=="GiveItems"||action=="MapTeleport"||action=="NativeServerAdmin"){
             m_helpyMutationComponent.Assign(components[0]);m_helpyMutationRevision=revision;m_helpyMutationGeneration=PS::SpawnToolRequests::Generation.load();
             m_helpyMutationDeadline=std::chrono::steady_clock::now()+std::chrono::seconds(60);m_helpyResultParts.Reset();
@@ -1551,6 +1654,14 @@ bool RegistryBridge::Attach(AGameModeBase* mode) {
     DragonWilds::ActorHelper::FunctionCall(component,TEXT("/Script/Engine.ActorComponent:SetIsReplicated"))
         .Arg(TEXT("ShouldReplicate"),true).Invoke();
     m_authorityComponent=component;
+    PS::PSConfig::Get()->StartHelpyAuthorityWatch();
+    try {
+        PS::MultiplayerRuntime::Attach(gameState,[this](const std::string& channel,const std::string& payload){
+            m_modDataRelay.Publish(channel,payload,++m_outboundRevision);
+        });
+    } catch (const std::exception& error) {
+        PS::Log<LogLevel::Warning>(STR("Multiplayer policy world attachment unavailable: {}.\n"),PS::ToWideSafe(error.what()));
+    }
     if(m_serverModsReady&&Storefront::IsDedicatedServer())m_serverModNotice.Receive(actor,PS::ServerModList::Decode(m_enabledMods));
     m_pendingMode.Reset();
     Trace("bridge.lifecycle",actor,"world","attach",0,{},"player_bridge_attachment_ready","accepted","accepted");
@@ -1783,12 +1894,12 @@ void RegistryBridge::StartRetryTick() {
     options.HookName=TEXT("RegistryBridgeDeferredAttach");
     m_retryTick=Hook::RegisterEngineTickPostCallback(
         [this](Hook::TCallbackIterationData<void>&,UEngine*,float deltaSeconds,bool){
-            if(m_helpyAccessStatusRequested&&std::chrono::steady_clock::now()>=m_helpyAccessRefreshAt){
-                m_helpyAccessRefreshAt=std::chrono::steady_clock::now()+std::chrono::seconds(5);
-                if(auto* world=m_buildingAuthorityWorld.Get();world&&PS::Network::Detect(world).Mode==PS::Network::Role::Client)try{
-                    m_helpyAccessRevision=0;m_helpyAccessComponent.Reset();
-                    (void)RequestAuthority("HelpyRemoteAccess","{\"Action\":\"HelpyRemoteAccess\",\"Query\":true}");
-                }catch(...){}
+            if(m_authorityComponent){
+                const auto version=PS::PSConfig::Get()->RefreshHelpyAuthority();
+                if(version!=m_sentHelpyAuthorityVersion){
+                    m_sentHelpyAuthorityVersion=version;
+                    PublishHelpyPolicy();
+                }
             }
             if(m_helpyMutationRevision&&std::chrono::steady_clock::now()>=m_helpyMutationDeadline){
                 if(m_helpyMutationGeneration==PS::SpawnToolRequests::Generation.load())PS::SpawnToolRequests::Publish({{"Status","Server result timed out; inspect your inventory or position before retrying. The request was not replayed."}});
@@ -1799,9 +1910,11 @@ void RegistryBridge::StartRetryTick() {
                 &&m_buildingHandshake.Due(std::chrono::steady_clock::now())){
                 try{SendCompatibilityAck(m_sessionAuthorityFingerprint,false);}catch(...){}
             }
+            PS::MultiplayerRuntime::Tick();
             TickModDataRelay(deltaSeconds);
             try{TickCharacterAppearances();}catch(const std::exception& error){m_appearancePending=false;RecordDiagnostic("character.appearance","delivery",0,"unavailable",error.what());}
-            PS::SlowWork::Measure("network.authority",[&]{TickAuthorityActions(deltaSeconds);TickConsumedOwnerPresentations();});
+            if(!m_consumptionPermits.empty()||!m_pendingClientActions.empty()||!m_pendingAuthorityActions.empty()||m_consumedOwnerPending)
+                PS::SlowWork::Measure("network.authority",[&]{TickAuthorityActions(deltaSeconds);TickConsumedOwnerPresentations();});
             if(m_pendingMode.Get() && !m_authorityComponent)
                 PS::SlowWork::Measure("network.attach",[&]{RetryAttach(deltaSeconds);});
         },options);
@@ -1812,7 +1925,7 @@ void RegistryBridge::TickModDataRelay(float deltaSeconds){
     if(m_relayPeers.empty())return;m_relayElapsed+=std::max(0.0f,deltaSeconds);if(m_relayElapsed<0.25f)return;m_relayElapsed=0;
     for(auto at=m_relayPeers.begin();at!=m_relayPeers.end();){auto* component=at->second.Get();
         if(!component||component->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed|RF_FinishDestroyed))){m_modDataRelay.Remove(at->first);at=m_relayPeers.erase(at);}else ++at;}
-    for(const auto& [peer,packet]:m_modDataRelay.Drain(4,PS::ModDataRelay::Clock::now()))try{
+    for(const auto& [peer,packet]:m_modDataRelay.Drain(PS::ModDataRelay::MaxDrainPackets,PS::ModDataRelay::Clock::now()))try{
         const auto at=m_relayPeers.find(peer);if(at==m_relayPeers.end())continue;auto* component=at->second.Get();if(!component)continue;
         SendNotification(component,"mod.data",packet.at("channel").get<std::string>(),packet.at("sequence").get<int64_t>(),packet.dump());
     }catch(const std::exception&){PS::Log<LogLevel::Verbose>(STR("[MOD-DATA][DELIVERY-UNAVAILABLE] Mod-data packet not delivered; subscriber may request a fresh snapshot.\n"));}
@@ -1939,15 +2052,22 @@ bool RegistryBridge::PublishActivation(const std::string& envelope) {
 }
 
 bool RegistryBridge::PublishPersistentState(const std::string& envelope) {
+    if(envelope.size()>MaxEnvelopeBytes)throw std::runtime_error("Persistent bridge envelope exceeds 16 KiB");
     if(m_worldAuthorityComponent) {
         if(!nlohmann::json::parse(envelope).is_object())return false;const auto world=ResolveWorldContract();
-        WriteString(m_worldAuthorityComponent,world.WorldStateEnvelope,envelope);WriteInt(m_worldAuthorityComponent,world.WorldStateRevision,ReadInt(m_worldAuthorityComponent,world.WorldStateRevision)+1);return true;
+        WriteString(m_worldAuthorityComponent,world.WorldStateEnvelope,envelope);
+        WriteInt(m_worldAuthorityComponent,world.WorldStateRevision,ReadInt(m_worldAuthorityComponent,world.WorldStateRevision)+1);
+        return true;
     }
     if(!m_authorityComponent)return false;
     if(!nlohmann::json::parse(envelope).is_object())return false;
     const auto contract=ResolveContract();
     if(contract.Compact) {
-        m_persistentStateEnvelope=envelope;++m_persistentRevision;PublishCompactPayload();return true;
+        auto previous=std::exchange(m_persistentStateEnvelope,envelope);
+        ++m_persistentRevision;
+        try{PublishCompactPayload();}
+        catch(...){m_persistentStateEnvelope=std::move(previous);--m_persistentRevision;throw;}
+        return true;
     }
     WriteString(m_authorityComponent,contract.PersistentStateEnvelope,envelope);
     WriteInt(m_authorityComponent,contract.PersistentStateRevision,ReadInt(m_authorityComponent,contract.PersistentStateRevision)+1);
@@ -1961,8 +2081,17 @@ bool RegistryBridge::UpsertWorldInstance(const std::string& instanceId,const std
         throw std::runtime_error("World instance record must be a bounded object");
     if(!m_worldInstances.contains(instanceId)&&m_worldInstances.size()>=MaxWorldInstances)
         throw std::runtime_error("World instance ledger capacity exceeded");
-    m_worldInstances[instanceId]=record;++m_worldLedgerRevision;
-    return PublishWorldSnapshot();
+    auto [at,inserted]=m_worldInstances.try_emplace(instanceId,record);
+    std::string previous;
+    if(!inserted)previous=std::exchange(at->second,record);
+    ++m_worldLedgerRevision;
+    try{return PublishWorldSnapshot();}
+    catch(...){
+        if(inserted)m_worldInstances.erase(at);
+        else at->second=std::move(previous);
+        --m_worldLedgerRevision;
+        throw;
+    }
 }
 
 bool RegistryBridge::RemoveWorldInstance(const std::string& instanceId,const std::string& reason) {
@@ -2147,6 +2276,7 @@ void RegistryBridge::Start() {
 void RegistryBridge::Stop() {
     PS::SpawnToolRequests::SetNetworkCompletion(0,{});
     for(auto* id:{&m_worldStarting,&m_worldReady,&m_retryTick,&m_authorityPre,&m_processEvent,&m_localProfileHook})if(*id!=Hook::ERROR_ID){Hook::UnregisterCallback(*id);*id=Hook::ERROR_ID;}
+    PS::PSConfig::Get()->StopHelpyAuthorityWatch();
     ResetWorld();m_started=false;
 }
 }

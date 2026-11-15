@@ -23,6 +23,7 @@
 #include "SDK/Classes/Custom/UInheritableComponentHandler.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "Core/JsonPatchDirective.h"
+#include "Core/RuntimeWidgetEvents.h"
 #include "Loader/Spawn/RuntimeSupport.h"
 #include "Runtime/Storefront.h"
 #include <Unreal/CoreUObject/UObject/UnrealType.hpp>
@@ -564,6 +565,14 @@ namespace DragonWilds {
         if(m_runtimeWidgetCallbackId==Hook::ERROR_ID)throw std::runtime_error("Blueprint $RuntimeWidget ProcessEvent observer registration failed");
     }
 
+    void DragonWildsBlueprintModLoader::RegisterRuntimeWidgetEvents(const nlohmann::json& rule)
+    {
+        if (m_runtimeWidgetAnyEvent) return;
+        m_runtimeWidgetAnyEvent = PS::RuntimeWidgetEvents::Collect(rule, [&](const std::string& name) {
+            m_runtimeWidgetEvents.emplace(to_generic_string(name), FNAME_Add);
+        });
+    }
+
     FName DragonWildsBlueprintModLoader::RuntimeWidgetOwnerClassPath(UClass* type)
     {
         if(!type)return NAME_None;
@@ -795,6 +804,7 @@ namespace DragonWilds {
                 ruleData,
                 modName
             });
+            RegisterRuntimeWidgetEvents(ruleData);
             m_runtimeWidgetOwnerClasses.insert(ownerClass);
             if(classPath.starts_with('/'))m_runtimeWidgetPathOwners.insert(ownerClass);
             m_runtimeOwnerClassPaths.clear();EnsureRuntimeWidgetObserver();
@@ -858,6 +868,7 @@ namespace DragonWilds {
                 ruleData,
                 modName
             });
+            RegisterRuntimeWidgetEvents(ruleData);
             m_runtimeWidgetOwnerClasses.insert(ownerClass);
             if(classPath.starts_with('/'))m_runtimeWidgetPathOwners.insert(ownerClass);
             m_runtimeOwnerClassPaths.clear();EnsureRuntimeWidgetObserver();
@@ -1153,44 +1164,9 @@ namespace DragonWilds {
         const nlohmann::json& data,
         UFunction* function)
     {
-        const auto when = data.find("$When");
-        if (when == data.end()) return true;
-
-        const auto matchesName = [&](const std::string& expected) {
-            std::string lowered = expected;
-            std::transform(lowered.begin(), lowered.end(), lowered.begin(),
-                [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
-            if (lowered == "any" || lowered == "always" || lowered == "resolved")
-                return true;
-            return function && RC::to_string(function->GetName()) == expected;
-        };
-
-        if (when->is_string())
-            return matchesName(when->get<std::string>());
-
-        if (!when->is_object())
-            throw std::runtime_error("Blueprint $RuntimeWidget $When must be a function name or object");
-
-        const auto functionFilter = when->find("Function");
-        if (functionFilter == when->end())
-            throw std::runtime_error("Blueprint $RuntimeWidget $When object requires Function");
-
-        if (functionFilter->is_string())
-            return matchesName(functionFilter->get<std::string>());
-        if (functionFilter->is_array())
-        {
-            if (functionFilter->empty())
-                throw std::runtime_error("Blueprint $RuntimeWidget $When Function array cannot be empty");
-            for (const auto& entry : *functionFilter)
-            {
-                if (!entry.is_string())
-                    throw std::runtime_error("Blueprint $RuntimeWidget $When Function array must contain strings");
-                if (matchesName(entry.get<std::string>())) return true;
-            }
-            return false;
-        }
-
-        throw std::runtime_error("Blueprint $RuntimeWidget $When Function must be a string or array");
+        return PS::RuntimeWidgetEvents::Match(data, [&](const std::string& name) {
+            return function && RC::to_string(function->GetName()) == name;
+        });
     }
 
     bool DragonWildsBlueprintModLoader::RuntimeUiRuleMatchesEvent(
@@ -1762,13 +1738,13 @@ namespace DragonWilds {
     {
         if (!source || (m_runtimeWidgetRules.empty() && m_runtimeUiRules.empty())) return;
 
+        const auto eventName = function ? function->GetFName() : NAME_None;
         // RuntimeUI is viewport-owned, but its logical lifetime is the live
         // owner screen. Character-select deactivation does not tear down the
         // UWorld, so remove transient UI when that owner closes instead of
         // letting it leak into later menus/gameplay.
-        if (function)
+        if (function && !m_runtimeUiRules.empty())
         {
-            const auto eventName = function->GetFName();
             static const FName destruct(TEXT("Destruct"),FNAME_Add),nativeDestruct(TEXT("NativeDestruct"),FNAME_Add),deactivated(TEXT("OnDeactivated"),FNAME_Add),bpDeactivated(TEXT("BP_OnDeactivated"),FNAME_Add);
             const bool ownerClosing =
                 eventName == destruct || eventName == nativeDestruct
@@ -1789,6 +1765,9 @@ namespace DragonWilds {
                     return;
             }
         }
+
+        if (!m_runtimeWidgetAnyEvent && (!function || !m_runtimeWidgetEvents.contains(eventName)))
+            return;
 
         std::unordered_set<UObject*> ownersToRefresh;
 

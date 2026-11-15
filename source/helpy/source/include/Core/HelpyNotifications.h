@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/RuneSchemaUpdateInfo.h"
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <cstdint>
@@ -26,12 +27,31 @@ class Store {
         Notices.push_back(std::move(next));++Revision;
     }
 public:
+    bool ObserveRelease(const std::string& installed,const std::string& version,uint64_t now){
+        using namespace RuneSchemaUpdateInfo;
+        if(!RuneSchemaUpdateInfo::Parse(installed))return false;
+        const bool newer=IsStableReleaseTag(version)&&Compare(installed,version)==Comparison::Newer;
+        for(auto& notice:Notices)if(notice.Kind=="schema-update"&&notice.Active){
+            const auto state=Compare(installed,notice.Version);
+            if(state==Comparison::Current||state==Comparison::Ahead){
+                notice.Resolved=true;notice.Active=false;++Revision;
+            }else if(newer&&Compare(notice.Version,version)==Comparison::Newer){
+                notice.Active=false;++Revision;
+            }
+        }
+        const auto seen=Compare(LastReleaseNotice,version);
+        if(!newer||seen==Comparison::Current||seen==Comparison::Ahead)return false;
+        LastReleaseNotice=version;++Revision;
+        Put({"release:"+version,"schema-update","RuneSchema","RuneSchema and Helpy "+version+" available",
+             "Check the release notes and choose the download for your platform. Availability can vary by site.",version,"",now});
+        return true;
+    }
     void Hotfix(const std::string& identity,const std::string& version,uint64_t now){
         for(auto& notice:Notices)if(notice.Kind=="hotfix"&&notice.Active!=(notice.Id==identity)){notice.Active=notice.Id==identity;++Revision;}
         Put({identity,"hotfix","RuneSchema","Emergency hotfix available: "+version,"Download and review the affected RuneSchema files with the game closed, then apply and restart Helpy.",version,"hotfix",now});
     }
     void AppliedHotfix(const std::string& identity){for(auto& notice:Notices)if(notice.Id==identity&&!notice.Resolved){notice.Resolved=true;++Revision;}}
-    std::string Game;
+    std::string Game,LastReleaseNotice;
     std::map<std::string,std::string> Versions;
     std::map<std::string,std::string> Fingerprints;
     std::vector<Notice> Notices;
@@ -78,11 +98,13 @@ public:
     bool VanillaPending()const{return std::any_of(Notices.begin(),Notices.end(),[](const auto& n){return n.Kind=="game-update"&&n.Active&&!n.Resolved&&!n.Dismissed;});}
     Json Document()const{
         auto entries=Json::array();for(const auto& n:Notices)entries.push_back({{"Id",n.Id},{"Kind",n.Kind},{"Source",n.Source},{"Title",n.Title},{"Detail",n.Detail},{"Version",n.Version},{"Action",n.Action},{"Created",n.Created},{"Read",n.Read},{"Dismissed",n.Dismissed},{"Resolved",n.Resolved},{"Active",n.Active}});
-        return {{"Format",1},{"Game",Game},{"Versions",Versions},{"Fingerprints",Fingerprints},{"Notices",std::move(entries)}};
+        return {{"Format",1},{"Game",Game},{"LastReleaseNotice",LastReleaseNotice},{"Versions",Versions},{"Fingerprints",Fingerprints},{"Notices",std::move(entries)}};
     }
     static Store Parse(const Json& doc){
         if(!doc.is_object()||!doc.at("Versions").is_object()||doc["Versions"].size()>2048||!doc.at("Notices").is_array()||doc["Notices"].size()>256)throw std::runtime_error("Notification history has an invalid shape.");
         Store result;result.Game=doc.value("Game",std::string{});if(!Text(result.Game,256))throw std::runtime_error("Invalid notification game version.");
+        result.LastReleaseNotice=doc.value("LastReleaseNotice",std::string{});
+        if(!RuneSchemaUpdateInfo::IsStableReleaseTag(result.LastReleaseNotice))result.LastReleaseNotice.clear();
         for(const auto& [id,version]:doc["Versions"].items()){if(!Text(id,256)||!version.is_string()||!Text(version.get_ref<const std::string&>(),128))throw std::runtime_error("Invalid notification mod version.");result.Versions[id]=version.get<std::string>();}
         if(doc.contains("Fingerprints")){const auto& fingerprints=doc["Fingerprints"];if(!fingerprints.is_object()||fingerprints.size()>2048)throw std::runtime_error("Invalid local mod fingerprints.");
             for(const auto& [id,value]:fingerprints.items()){if(!Text(id,256)||!value.is_string())throw std::runtime_error("Invalid local mod fingerprint.");const auto hash=value.get<std::string>();if(hash.size()!=64||hash.find_first_not_of("0123456789abcdef")!=hash.npos)throw std::runtime_error("Invalid local mod fingerprint.");result.Fingerprints[id]=hash;}}

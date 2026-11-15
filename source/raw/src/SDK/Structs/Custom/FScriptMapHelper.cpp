@@ -129,16 +129,7 @@ namespace UECustom {
             || static_cast<int64_t>(MapLayout.ValueOffset) + ValueProperty->GetSize() > size
             || alignment <= 0 || (alignment & (alignment - 1)))
             throw std::runtime_error("Invalid reflected map pair layout");
-        uint8* Pair = static_cast<uint8*>(FMemory::Malloc(size, alignment));
-        if (!Pair) throw std::bad_alloc();
-        PairPtr.Copy(Pair);
-
-        void* KeyPtr = Pair;
-        KeyProperty->InitializeValue(KeyPtr);
-
-        void* ValuePtr = Pair + MapLayout.ValueOffset;
-        ValueProperty->InitializeValue(ValuePtr);
-
+        PairPtr.Initialize(size, alignment, *KeyProperty, ValueProperty, MapLayout.ValueOffset);
     }
 
     void FScriptMapHelper::ForEachPair(const std::function<void(void*, void*)> Callback)

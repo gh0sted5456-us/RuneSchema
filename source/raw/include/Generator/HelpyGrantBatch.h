@@ -7,13 +7,19 @@
 #include <vector>
 
 namespace PS::HelpyGrants {
-inline constexpr int MaxSelection=64;
+inline constexpr int MaxSelection=64,MaxItemQuantity=10000;
 struct Grant { std::string item; int count=1; };
-inline void ValidateGrants(const std::vector<Grant>& grants) {
+inline void ValidateGrants(const std::vector<Grant>& grants,int maximumItemCount=0) {
     if(grants.empty() || grants.size()>MaxSelection)throw std::runtime_error("Select 1..64 distinct items.");
     std::set<std::string> unique;
-    for(const auto& g:grants) if(g.item.empty() || g.item.front()!='/' || g.item.size()>2048 || g.count<1 || g.count>10000 || !unique.insert(g.item).second)
-        throw std::runtime_error("Invalid, duplicate or excessive item request.");
+    int total=0;
+    for(const auto& g:grants){
+        if(g.item.empty() || g.item.front()!='/' || g.item.size()>2048 || g.count<1 || g.count>MaxItemQuantity || !unique.insert(g.item).second)
+            throw std::runtime_error("Invalid, duplicate or excessive item request.");
+        total+=g.count;
+    }
+    if(maximumItemCount>0&&total>maximumItemCount)
+        throw std::runtime_error("Helpy item grant exceeds the server quantity limit of "+std::to_string(maximumItemCount)+".");
 }
 // A grant may have changed inventory before confirmation fails. Never implicitly
 // retry it or claim an atomic rollback after that failure. Only a positively

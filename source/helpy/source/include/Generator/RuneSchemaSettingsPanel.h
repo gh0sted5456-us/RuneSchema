@@ -2,6 +2,7 @@
 #include "RuntimePaths.h"
 #include "Generator/HelpyBindingActions.h"
 #pragma once
+#include "Generator/HelpySupportPage.h"
 #include "Generator/HelpyTextInput.h"
 #include "Generator/HelpyImGuiTheme.h"
 #include "Generator/HelpyMenu.h"
@@ -16,6 +17,7 @@
 #include "Core/HelpyPreviewHooks.h"
 #include "Core/HelpyVulkanSetup.h"
 #include "Core/RuneSchemaDataRoot.h"
+#include "Core/SettingsFieldState.h"
 #include "SaveBackupStore.h"
 #include <nlohmann/json.hpp>
 #include <functional>
@@ -32,6 +34,7 @@ inline bool Loaded=false,Dirty=false;
 inline bool QuickToggleError=false;
 inline std::string Status;
 inline char Filter[128]{};
+inline bool ModifiedOnly=false; // Show only fields that differ from the shipped defaults or have unsaved edits.
 inline std::map<std::string,std::string> ArrayText;
 inline std::map<std::string,bool> ArrayErrors;
 inline std::string Label(std::string value){
@@ -44,7 +47,7 @@ inline void Accept(const json& result){Snapshot=result;Draft=result.at("Document
 inline void Load(){
     json result;if(!Remote||!Remote({{"Action","SettingsRead"}},result)){Status="RuneSchema settings service is unavailable. Update the matching core and RSMK together.";return;}
     if(!result.value("Ok",false)){Status=result.value("Status",std::string("Could not read settings.ini."));return;}
-    Accept(result);Status="The Helpy shortcut applies immediately. Cleanup follows its activation choice; other startup changes require a restart.";
+    Accept(result);Status="Helpy shortcuts and server access settings apply live. Cleanup follows its activation choice. Startup settings require a restart.";
 }
 inline json Patch(){json result=json::object();if(!Loaded)return result;
     for(const auto& [path,type]:Snapshot.at("Editable").items()){
@@ -91,16 +94,18 @@ inline void CachePreferences(){
     if(HelpyImGuiTheme::Status.starts_with("[RS-CFG-003]"))ImGui::TextWrapped("%s",HelpyImGuiTheme::Status.c_str());
 }
 inline int QuickSection=0;
-inline std::function<void()> ModMenuSettings;
+inline std::function<void()> ModMenuSettings,TopicSettings;
 inline void QuickSettings(){
-    HelpyFeatureSettings::Load();constexpr std::array allLabels{"Display","Startup","Cache","Performance","Saves","HUD","Controllers","Mod Menu 2"};
-    const auto labels=std::span(allLabels).first(HelpyFeatureSettings::Key&&ModMenuSettings?8:7);
+    HelpyFeatureSettings::Load();constexpr std::array allLabels{"Display","Startup","Cache","Performance","Saves","HUD","Controllers","Topics","Help","Mod Menu 2"};
+    const auto labels=std::span(allLabels).first(HelpyFeatureSettings::Key&&ModMenuSettings?10:9);
     HelpyMenu::Tabs("helpy-settings",labels,QuickSection);
     const bool body=HelpyMenu::BeginBody("Quick settings body",QuickSection);
     if(body){
     if(QuickSection==5)HelpyHudPanel::Render();
     if(QuickSection==6)ControllerSettingsPanel::Render([]{QuickSection=1;});
-    if(QuickSection==7&&ModMenuSettings)ModMenuSettings();
+    if(QuickSection==7&&TopicSettings)TopicSettings();
+    if(QuickSection==8)HelpySupportPage::Render();
+    if(QuickSection==9&&ModMenuSettings)ModMenuSettings();
     const auto hint=[](const std::string& text){if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)){
         PS::HelpyImGuiTheme::Tooltip("%s",text.c_str());}};
     if((QuickSection==1||QuickSection==4)&&!Loaded&&Status.empty())Load();
@@ -171,8 +176,8 @@ inline void QuickSettings(){
     if(ImGui::RadioButton("Open window at startup",&startup,1))HelpySettings::SetOpenOnGameStart(true);
     hint("The app runs as its own process. The system tray is beside the Windows clock; use the tray icon or your Helpy shortcut to open it. Startup changes apply next game launch.\n"+HelpySettings::Message());
     ImGui::EndDisabled();
-    if(PluginRuntimeServices::ExternalDesktop){bool exit=HelpySettings::ExitWhenGameCloses();if(HelpyImGuiTheme::Toggle("Exit Helpy when the game closes",&exit))HelpySettings::SetBool("exitWithGame",exit);
-        hint("Applies immediately. Helpy exits fully when its attached game or dedicated server process ends. A temporary bridge disconnect does not close it; starting Helpy offline still works. Off by default.\n"+HelpySettings::Message());}
+    if(PluginRuntimeServices::ExternalDesktop){bool exit=HelpySettings::ExitWhenGameCloses();if(HelpyImGuiTheme::Toggle("Exit Helpy when the attached game closes",&exit))HelpySettings::SetBool("exitWithGame",exit);
+        hint("Applies immediately. Helpy exits fully when its attached game or dedicated server process ends. A temporary bridge disconnect does not close it; starting Helpy offline still works. On by default for new settings.\n"+HelpySettings::Message());}
     bool minimize=HelpySettings::CloseToTaskbar();if(HelpyImGuiTheme::Toggle("Close to system tray",&minimize))HelpySettings::SetBool("minimizeOnClose",minimize);
     hint("X and Alt+F4 return Helpy to the system tray when enabled, or exit it when disabled. Applies immediately.\n"+HelpySettings::Message());
     auto& controllerTheme=HelpyImGuiTheme::Current;
@@ -185,7 +190,7 @@ inline void QuickSettings(){
     ImGui::BeginDisabled(!(InputBindings::ParsePad(HelpyBindingActions::Controller())&InputBindings::Guide)||HelpyEnvironment::Server());
     controllerChanged|=HelpyImGuiTheme::Toggle("Reserve Guide button in game",&controllerTheme.reserveControllerGuide);
     ImGui::EndDisabled();
-    hint("Requests exclusive Guide input from Windows GameInput while Dragonwilds has focus. Released when Helpy exits or its five-second bridge lease expires. Steam can read controllers independently; this cannot guarantee a global Guide-button lock.");
+    hint("Requests exclusive Guide input from Windows GameInput while Dragonwilds or Helpy has focus. Released when Helpy exits or its five-second bridge lease expires. Steam can read controllers independently; this cannot guarantee a global Guide-button lock.");
     if(controllerChanged)HelpyImGuiTheme::SaveCurrent();
     if(InputBindings::ParsePad(HelpyBindingActions::Controller())&InputBindings::Guide){
         ImGui::TextWrapped("If Steam or Game Bar also opens, disable its Guide-button action or choose the View + Menu shortcut. Helpy does not change their settings.");
@@ -334,7 +339,15 @@ inline void QuickSettings(){
 }
 inline void Field(const std::string& key,json& value,const std::string& path){
     ImGui::PushID(path.c_str());const auto label=path=="/persistence/cleanupOnWorldEntry"?std::string("Apply cleanup changes at next world entry"):Label(key);bool changed=false;
-    if(value.is_boolean()){bool v=value.get<bool>();if(HelpyImGuiTheme::Toggle(label.c_str(),&v)){value=v;changed=true;}}
+    if(path=="/itemDeliveryMode"){
+        constexpr std::array modes{"off","once","always"};
+        constexpr std::array choices{"Off","Deliver Once","Always Deliver"};
+        ImGui::TextUnformatted("Automatic item delivery");
+        for(std::size_t i=0;i<modes.size();++i)
+            if(ImGui::RadioButton(choices[i],value==modes[i])){value=modes[i];changed=true;}
+        ImGui::TextWrapped("The host delivers configured items from enabled RuneSchema mods after the character joins and inventory loads.");
+        ImGui::TextWrapped("Deliver Once tracks each item per character. Always Deliver repeats on a new join. A full inventory leaves items pending for the next join. Changes apply at game restart.");
+    }else if(value.is_boolean()){bool v=value.get<bool>();if(HelpyImGuiTheme::Toggle(label.c_str(),&v)){value=v;changed=true;}}
     else if(value.is_number_integer()||value.is_number_unsigned()){
         ImGui::TextWrapped("%s",label.c_str());int64_t v=value.get<int64_t>();ImGui::SetNextItemWidth(std::min(240.f,ImGui::GetContentRegionAvail().x));if(ImGui::InputScalar("##value",ImGuiDataType_S64,&v)){value=v;changed=true;}
     }else if(value.is_number()){ImGui::TextWrapped("%s",label.c_str());double v=value.get<double>();ImGui::SetNextItemWidth(std::min(240.f,ImGui::GetContentRegionAvail().x));if(ImGui::InputDouble("##value",&v)){value=v;changed=true;}}
@@ -351,6 +364,16 @@ inline void Field(const std::string& key,json& value,const std::string& path){
         if(ArrayErrors[path])ImGui::TextColored(HelpyImGuiTheme::Current.error,"Enter a JSON list, for example [\"value\"].");
     }
     if(changed)Dirty=true;
+    {   // Unsaved / non-default markers with a one-click reset to the shipped default.
+        const auto state=SettingsFieldState::For(Snapshot,Draft,path);
+        if(state.Unsaved){ImGui::TextColored(HelpyImGuiTheme::Current.accent,"Unsaved change");if(state.NonDefault)ImGui::SameLine();}
+        if(state.NonDefault){
+            const auto& fallback=Snapshot.at("Editable").at(path);
+            ImGui::TextDisabled("Default: %s",SettingsFieldState::DefaultText(fallback,path=="/helpyAuthority/accessPin").c_str());ImGui::SameLine();
+            if(ImGui::SmallButton("Reset to default")){value=fallback;ArrayText.erase(path);ArrayErrors.erase(path);Dirty=true;}
+            if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Puts the shipped default in the draft. Nothing is written until you save.");
+        }
+    }
     if(path=="/persistence/allowCorruptCharacterEntry"){
         ImGui::TextWrapped("Use Save Bypass by default. When off, Normal and Quick Launch use failure-only fallback after native rejection. Native loading runs once; no automatic reload. Restart required. Disable the standalone bypass first.");
         ImGui::TextWrapped("Dedicated servers use Less Restrictive loading and failure-only fallback by default; native world startup is unchanged.");
@@ -367,13 +390,14 @@ inline int ConfigSection=0;
 inline int ConfigGroup(const std::string& key){
     const auto name=Lower(key);
     if(name=="persistence"||name=="quicklaunch"||name=="loadmode")return 1;
+    if(name=="itemdeliverymode")return 5;
     if(name.find("network")!=name.npos||name=="helpyauthority"||name.find("relay")!=name.npos)return 3;
     if(name.find("cache")!=name.npos||name.find("pak")!=name.npos||name.find("registry")!=name.npos||name=="autoupdatemappings")return 2;
     if(name=="enabled"||name=="helpyhotkey"||name=="advancedlogging"||name=="archivelogs")return 0;
     return 4;
 }
 inline void Render(){
-    constexpr std::array labels{"General","Saves","Content","Network","Advanced"};
+    constexpr std::array labels{"General","Saves","Content","Network","Advanced","Item Delivery"};
     HelpyMenu::Tabs("runeschema-settings",labels,ConfigSection);
     if(!Loaded&&Status.empty())Load();
     if(Loaded)Dirty=!Patch().empty();
@@ -395,21 +419,28 @@ inline void Render(){
     if(!Loaded)return;
     ImGui::TextDisabled("%s",Snapshot.value("Path",std::string("settings/settings.ini")).c_str());
     HelpyTextInput::InputTextWithHint("##settings-filter","Filter settings...",Filter,sizeof(Filter));const auto filter=Lower(Filter);
+    ImGui::SameLine();ImGui::Checkbox("Changed from default",&ModifiedOnly);
+    ImGui::SameLine();ImGui::TextDisabled("%zu differ from defaults",SettingsFieldState::CountNonDefault(Snapshot,Draft));
+    const bool searching=!filter.empty()||ModifiedOnly;
     if(!HelpyMenu::BeginBody("RuneSchema settings body",ConfigSection)){HelpyMenu::EndBody();return;}
-    const auto matches=[&](const std::string& path){return filter.empty()||Lower(path+" "+Label(path.substr(path.find_last_of('/')+1))).find(filter)!=std::string::npos;};
+    const auto matches=[&](const std::string& path){
+        if(ModifiedOnly){const auto state=SettingsFieldState::For(Snapshot,Draft,path);if(!state.NonDefault&&!state.Unsaved)return false;}
+        return filter.empty()||Lower(path+" "+Label(path.substr(path.find_last_of('/')+1))).find(filter)!=std::string::npos;};
     const auto& editable=Snapshot.at("Editable");
     const auto render=[&](auto&& self,json& object,const std::string& prefix)->void{
         for(auto& [key,value]:object.items()){
-            if(prefix.empty()&&filter.empty()&&ConfigGroup(key)!=ConfigSection)continue;
+            if(prefix.empty()&&!searching&&ConfigGroup(key)!=ConfigSection)continue;
             const auto path=prefix+"/"+key;
             if(HelpyEnvironment::Server()&&path=="/quickLaunch")continue;
             if(value.is_object()){
                 bool has=false;for(const auto& [field,type]:editable.items())if(field.starts_with(path+"/")&&matches(field)){has=true;break;}
-                if(has&&ImGui::CollapsingHeader(Label(key).c_str(),filter.empty()?0:ImGuiTreeNodeFlags_DefaultOpen))self(self,value,path);
+                if(has&&ImGui::CollapsingHeader(Label(key).c_str(),searching?ImGuiTreeNodeFlags_DefaultOpen:0))self(self,value,path);
             }else if(editable.contains(path)&&matches(path))Field(key,value,path);
         }
     };
-    if(!filter.empty())ImGui::TextDisabled("Searching across every settings category");
+    if(searching)ImGui::TextDisabled("Searching across every settings category");
+    if(ConfigSection==5&&filter.empty()&&!editable.contains("/itemDeliveryMode"))
+        ImGui::TextWrapped("Item Delivery requires a matching RuneSchema core build.");
     render(render,Draft,"");
     if(!Snapshot.value("Backup",std::string{}).empty())ImGui::TextWrapped("Backup: %s",Snapshot["Backup"].get_ref<const std::string&>().c_str());
     HelpyMenu::EndBody();

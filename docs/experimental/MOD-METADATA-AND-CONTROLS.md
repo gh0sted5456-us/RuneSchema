@@ -31,13 +31,19 @@ when needed. Helpy never edits the manager's staging database.
 
 ## Enable or disable UE4SS loaders
 
-**Mods → UE4SS mods** uses cards by default. An enabled entry has a gray badge;
-a disabled entry has a black badge. **Compact** restores the table.
+**RuneSchema mods** and **UE4SS mods** use cards by default. Turn on **Compact
+view** from either list to use a table in both. RuneSchema rows keep their
+load-order controls, enable switch and actions menu in the table.
+An enabled UE4SS entry has a gray badge and a disabled entry has a black badge.
 
 Enable **Manage external UE4SS mods** to allow Helpy to edit this installation's
 `ue4ss/Mods/mods.txt`. Disabling an external mod also removes its `enabled.txt`
 override after backing it up in AppData. Changes take effect on the next launch.
 The inventory reports configured state separately from observed loader health.
+**J4S PAKLoader** marks a mod with a version 1 `paks/PAKLoader.json` marker.
+**Maxx's Mod Menu** marks a mod that declares settings in `modmenu.json` or
+`modmenu.txt`. Both badges appear on cards and in Compact view. Use
+**Refresh UE4SS inventory** after adding a descriptor.
 
 The **RuneSchema loaders** tab controls only a parent mod's `ue4ss/` loader.
 Helpy writes `<mod>/ue4ss/status.txt`:

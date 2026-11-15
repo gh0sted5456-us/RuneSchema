@@ -25,9 +25,12 @@ int main(int argc,char** argv) {
         &&building.contains("EnsureStabilityProfile(building,!definition.Declared)")
         &&registrar.contains("if(lane.Name==\"Buildings\")continue;"),
         "Cooked buildings must retain identity, overlay only authored loose settings and use the world registrar");
-    const auto import=main.find("->ImportCookedDefinitions();");
-    Require(import!=std::string::npos && import<main.find("PrefetchCookedAssets(plan)")
-        && import<main.find("->PrepareReferences();"),"Cooked definitions must precede recipe reference consumers");
+    const auto import=main.find("recipes.ImportCookedDefinitions();");
+    const auto prefetch=main.find("PrefetchCookedAssets(plan)");
+    const auto initialize=main.find("InitializeMods(EEngineLifecyclePhase::GameInstanceInit);");
+    const auto prepare=main.find("->PrepareReferences();");
+    Require(prepare!=std::string::npos && import<prefetch && prefetch<initialize && initialize<prepare,
+        "Recipe prefetch must start after cooked import and before GameInstance initialization and reference preparation");
     Require(main.contains("required loader is disabled: ") && main.contains("RegistryEnrollment::Reject"),
         "Disabling a required loader must not make enabled cooked IDs appear orphaned");
     Require(recipe.contains("CookedPakRegistryManifest::Definitions(\"Recipes\")")

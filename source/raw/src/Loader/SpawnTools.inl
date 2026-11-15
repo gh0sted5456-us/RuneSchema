@@ -1,10 +1,42 @@
 #include "Core/HelpySourceCache.h"
 #include "QuickMenuCatalog.inl"
 namespace {
+    PS::MapProjection::Projection ToolScornedEntrance(UWorld* world){
+        auto* type=ActorHelper::ResolveClass(TEXT("/Script/Dominion.TeleportationTarget"));
+        if(!type||!ActorHelper::IsActorClass(type))throw std::runtime_error("The native Rasthin's Rest entrance is unavailable");
+        using namespace DragonWilds::ReflectedContract;
+        auto* name=CastField<FNameProperty>(PropertyHelper::GetPropertyByName(type,TEXT("TargetName")));
+        if(!Fits(name,type->GetPropertiesSize())||name->GetArrayDim()!=1||name->GetElementSize()!=sizeof(FName))
+            throw std::runtime_error("The native Rasthin's Rest entrance contract changed");
+        TArray<UObject*> targets;
+        UECustom::UObjectGlobals::GetObjectsOfClass(type,targets,true);
+        if(targets.Num()<0||targets.Num()>512)throw std::runtime_error("Native teleport target roster exceeds its bound");
+        AActor* target=nullptr;
+        const FName entrance(PS::ScornedTravel::NativeTarget,FNAME_Find);
+        if(entrance.IsNone())throw std::runtime_error("The native Rasthin's Rest entrance name is unavailable");
+        for(auto* object:targets){
+            if(!ToolMapTravelAlive(object)||object->GetWorld()!=world||!object->IsA(type)
+                ||object->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject))
+                ||name->GetPropertyValue(name->ContainerPtrToValuePtr<void>(object))!=entrance)continue;
+            if(target)throw std::runtime_error("The native Rasthin's Rest entrance is ambiguous");
+            target=static_cast<AActor*>(object);
+        }
+        if(!target)throw std::runtime_error("The native Rasthin's Rest entrance is unavailable");
+        const auto at=ActorHelper::GetActorLocation(target);
+        return PS::ScornedTravel::LandingArea({at.X(),at.Y()},at.Z());
+    }
     std::pair<PS::MapProjection::Point,PS::MapProjection::Projection> ToolMapTarget(UWorld* world,const nlohmann::json& request){
         const auto& value=request.at("TargetLocation");
         if(!value.is_object()||!value.contains("X")||!value.contains("Y")||!value["X"].is_number()||!value["Y"].is_number())throw std::runtime_error("Select a valid map position");
-        const PS::MapProjection::Point point{value["X"].get<double>(),value["Y"].get<double>()};const auto projection=PS::HelpyMapRuntime::Projection(world);
+        const PS::MapProjection::Point point{value["X"].get<double>(),value["Y"].get<double>()};
+        if(request.value("ScornedEntrance",false)){
+            if(request.value("Action",std::string{})!="MapTeleport"||request.contains("TargetPlayer")||request.value("PartyPoint",false)
+                ||!world||!PS::ScornedTravel::Matches(RC::to_string(world->GetPathName()),point))
+                throw std::runtime_error("Choose the native Rasthin's Rest entrance in Ashenfall");
+            const auto landing=ToolScornedEntrance(world);
+            return {landing.Center,landing};
+        }
+        const auto projection=PS::HelpyMapRuntime::Projection(world);
         if(!projection.Contains(point))throw std::runtime_error("Selected position is outside the native world map");return {point,projection};
     }
     FVector ToolMapGround(UWorld* world,const nlohmann::json& request,AActor* pawn=nullptr){
@@ -175,7 +207,8 @@ namespace {
         PS::ConfigFiles::Write(file,draft.dump(2));
         if(nlohmann::json::parse(PS::ConfigFiles::Read(file,1024*1024))!=draft)throw std::runtime_error("Clone export verification failed");
     }
-    void GiveToolItem(UObject* controller,const std::string& path,int32_t count,bool equip=false,nlohmann::json* equipResult=nullptr) {
+    void GiveToolItem(UObject* controller,const std::string& path,int32_t count,bool equip=false,nlohmann::json* equipResult=nullptr,
+        const std::function<void()>& beforeGrant={}) {
         if(!controller || count<1 || count>10000)throw std::runtime_error("Item grant requires an authoritative player and quantity 1..10000");
         auto* item=ActorHelper::ResolveObject(RC::to_generic_string(path));
         auto* itemType=ActorHelper::ResolveClass(TEXT("/Script/Dominion.ItemData"));
@@ -211,7 +244,9 @@ namespace {
         std::set<PS::EquipmentDelivery::Guid> existing;bool captured=false;std::string captureError;
         if(equip&&equipResult)try{existing=PS::EquipmentDelivery::Capture(controller,path);captured=true;}catch(const std::exception& error){captureError=error.what();}catch(...){captureError="Equipment inventory snapshot unavailable";}
         ActorHelper::FunctionCall give(inventory,givePath);give.Arg(TEXT("ItemData"),item).Arg(TEXT("Count"),count)
-            .Arg(TEXT("DurabilityPercentage"),1.0f).JsonArg(TEXT("GameplayTags"),nlohmann::json::object()).Invoke();
+            .Arg(TEXT("DurabilityPercentage"),1.0f).JsonArg(TEXT("GameplayTags"),nlohmann::json::object());
+        if(beforeGrant)beforeGrant();
+        give.Invoke();
         ActorHelper::FunctionCall afterCall(inventory,countPath);afterCall.Arg(TEXT("ItemData"),item).Invoke();const auto after=afterCall.Result<int32_t>();
         if(!give.Result<bool>() || int64_t(after)-before!=count)throw std::runtime_error("Native inventory grant could not be confirmed");
         // Delivery is already confirmed. Equipment errors are a separate receipt
@@ -237,7 +272,7 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
     if(!controller || controller->GetWorld()!=player->GetWorld())
         throw std::runtime_error("Helpy authority request has no owning server controller");
 
-    const auto& policy=PS::PSConfig::Get()->GetSettings().helpyAuthority;
+    const auto& policy=PS::PSConfig::Get()->LiveHelpyAuthority();
     const auto playerGuid=GetPlayerCharacterGuid(controller);
     if(ActorHelper::GetObjectRef(controller,TEXT("Pawn"))!=player)
         throw std::runtime_error("Helpy remote request requires the current owned character");
@@ -253,17 +288,32 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
         PS::Log<LogLevel::Normal>(STR("[SERVER-CONTROL] Native administration operation '{}' completed; no account credentials were logged.\n"),PS::ToWideSafe(request.at("Operation").get<std::string>()));
         return "Native administration result sent to the requesting owner connection.";
     }
+    const auto isAllowlisted=[&]{
+        const auto normalize=[](std::string_view value){std::string out;for(const unsigned char c:value)if(std::isxdigit(c))out.push_back(static_cast<char>(std::toupper(c)));return out;};
+        const auto actual=normalize(playerGuid);
+        if(!actual.empty()&&std::ranges::any_of(policy.permittedPlayerGuids,[&](const auto& value){return normalize(value)==actual;}))return true;
+        if(policy.permittedPlayerNames.empty())return false;
+        auto* state=ActorHelper::GetObjectRef(controller,TEXT("PlayerState"));
+        if(!state)return false;
+        ActorHelper::FunctionCall getName(state,TEXT("/Script/Engine.PlayerState:GetPlayerName"));getName.Invoke();
+        const auto value=getName.Result<FString>();const auto& chars=value.GetCharArray();
+        if(chars.Num()<=1||chars.Num()>=256||!chars.GetData())return false;
+        const auto name=RC::to_string(RC::StringType(chars.GetData(),chars.Num()-1));
+        return std::find(policy.permittedPlayerNames.begin(),policy.permittedPlayerNames.end(),name)!=policy.permittedPlayerNames.end();
+    };
     if(action=="HelpyRemoteAccess"){
         if(payload.size()>256)throw std::runtime_error("Remote access request exceeds its size limit");
-        PS::HelpyPlayerAccess::Observe(controller);
+        // A client request can enroll its character. Server policy pushes only read access.
+        if(request.contains("_BridgeRevision"))PS::HelpyPlayerAccess::Observe(controller);
         const bool saved=PS::NativeServerAdminRuntime::HelpyAuthorized(controller,playerGuid);
-        const bool enabled=saved||(policy.allowPinAccess&&PS::HelpyRemoteAccess::Sessions::ValidPin(policy.accessPin));
+        const bool explicitAccess=saved||isAllowlisted();
+        const bool enabled=explicitAccess||(policy.allowPinAccess&&PS::HelpyRemoteAccess::Sessions::ValidPin(policy.accessPin));
         const auto status=[&](bool allowed,bool authenticated,std::string detail){return PS::HelpyRemoteAccess::AccessStatus(enabled,allowed,authenticated,
-            saved||policy.allowClientItemGrants,saved||policy.allowClientTeleport,playerGuid,std::move(detail)).dump();};
+            saved||policy.allowClientItemGrants,saved||policy.allowClientTeleport,playerGuid,std::move(detail),policy.maximumItemCount).dump();};
         if(request.value("Disconnect",false)){PS::HelpyRemoteAccess::Server.Revoke(peerKey);return status(false,false,"Remote access disconnected.");}
         if(request.value("Query",false)){
-            const bool allowed=saved||PS::HelpyRemoteAccess::Server.Allowed(peerKey,worldKey,policy.allowPinAccess,policy.accessPin,PS::HelpyRemoteAccess::Sessions::Clock::now(),false);
-            return status(allowed,saved,allowed?"Server authority access is active for your current character.":enabled
+            const bool allowed=explicitAccess||PS::HelpyRemoteAccess::Server.Allowed(peerKey,worldKey,policy.allowPinAccess,policy.accessPin,PS::HelpyRemoteAccess::Sessions::Clock::now(),false);
+            return status(allowed,allowed,allowed?"Server authority access is active for your current character.":enabled
                 ?"This world requires a PIN for self-service item delivery and teleportation.":"PIN self-service is disabled by this host.");
         }
         if(playerGuid.empty())throw std::runtime_error("Remote access requires an initialized character identity");
@@ -281,7 +331,7 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
         if(request.contains("ProfileAction")){
             const auto operation=request.at("ProfileAction").get<std::string>();const auto id=request.at("RequestId").get<uint64_t>();if(!id)throw std::runtime_error("Invalid profile request");
             if(operation=="Publish"){
-                PS::InventoryMarkService::Call({{"Action","ReceivePublicProfile"},{"CharacterGuid",guid},{"Profile",request.at("Profile")}});
+                PS::InventoryMarkService::Call({{"Action","ReceivePublicProfile"},{"CharacterGuid",guid},{"Profile",request.at("Profile")},{"Achievements",request.contains("Achievements")?request["Achievements"]:nlohmann::json(nullptr)}});
                 return nlohmann::json{{"Kind","HelpyProfilePublished1"},{"RequestId",id},{"CharacterGuid",guid}}.dump();
             }
             if(operation!="Read")throw std::runtime_error("Invalid profile operation");
@@ -289,32 +339,28 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
             bool ambiguous=false;auto* target=FindPlayerControllerByGuid(targetGuid,ambiguous);if(!target||ambiguous||target->GetWorld()!=player->GetWorld())throw std::runtime_error("Profile target is not connected");
             ActorHelper::FunctionCall local(target,TEXT("/Script/Engine.Controller:IsLocalController"));local.Invoke();
             const auto result=PS::InventoryMarkService::Call({{"Action","ReadPublicProfile"},{"CharacterGuid",targetGuid},{"Local",local.Result<bool>()}});
-            return nlohmann::json{{"Kind","HelpyProfile1"},{"RequestId",id},{"CharacterGuid",targetGuid},{"Profile",result.at("Profile")}}.dump();
+            nlohmann::json reply{{"Kind","HelpyProfile1"},{"RequestId",id},{"CharacterGuid",targetGuid},{"Profile",result.at("Profile")}};
+            if(result.contains("Achievements")&&result["Achievements"].is_object())reply["Achievements"]=result["Achievements"];
+            return reply.dump();
         }
         const auto& batch=request.at("Batch");
         if(payload.size()>3500||guid.empty()||batch.at("CharacterGuid")!=guid||ActorHelper::GetObjectRef(controller,TEXT("Pawn"))!=player)
             throw std::runtime_error("A player may sync only their own active character marks");
         return PS::InventoryMarkService::Call({{"Action","ReceiveMarks"},{"Batch",batch}}).dump();
     }
-    std::string playerName;
-    if(auto* state=ActorHelper::GetObjectRef(controller,TEXT("PlayerState"))) {
-        ActorHelper::FunctionCall getName(state,TEXT("/Script/Engine.PlayerState:GetPlayerName"));getName.Invoke();
-        const auto value=getName.Result<FString>();const auto& chars=value.GetCharArray();
-        if(chars.Num()>1&&chars.Num()<256&&chars.GetData())playerName=RC::to_string(RC::StringType(chars.GetData(),chars.Num()-1));
-    }
     if(action=="Players") {
         nlohmann::json roster=nlohmann::json::array();
         for(const auto& connected:GetConnectedPlayersInLoadOrder()) {
-            bool ambiguous=false;auto* target=FindPlayerControllerByGuid(connected.Guid,ambiguous);
-            if(!target||ambiguous||target->GetWorld()!=player->GetWorld())continue;
+            auto* target=connected.Controller.Get();
+            if(!target||target->GetWorld()!=player->GetWorld())continue;
             roster.push_back({{"Name",connected.Name},{"Guid",connected.Guid},
                 {"PlayerId",PS::PlayerStatusRuntime::PlayerId(ActorHelper::GetObjectRef(target,TEXT("PlayerState")))},
                 {"Platform",PS::PlayerStatusRuntime::ControllerPlatform(target)},{"PlatformAccountName",PS::PlayerStatusRuntime::ControllerAccountName(target)},
                 {"RoleStatus",PS::PlayerStatusRuntime::Read(target)}});
             PS::PlayerStatusRuntime::Color(ActorHelper::GetObjectRef(target,TEXT("PlayerState")),roster.back());
+            if(auto* pawn=ActorHelper::GetObjectRef(target,TEXT("Pawn")))
+                roster.back()["StatWire"]=PS::PartyStatWire::Encode(PS::PlayerVitals::Details(pawn,true),PS::PlayerVitals::Now());
         }
-        for(auto& row:roster){bool ambiguous=false;auto* target=FindPlayerControllerByGuid(row.at("Guid").get<std::string>(),ambiguous);
-            if(target&&!ambiguous)if(auto* pawn=ActorHelper::GetObjectRef(target,TEXT("Pawn")))row["StatWire"]=PS::PartyStatWire::Encode(PS::PlayerVitals::Details(pawn,true),PS::PlayerVitals::Now());}
         // The bridge has a bounded envelope; preserve the roster if a very large
         // server exceeds it, rather than sending a truncated stat message.
         auto response=nlohmann::json{{"Kind","HelpyPlayers1"},{"Players",roster}};
@@ -322,16 +368,10 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
         if(response.dump().size()>3900)for(auto& row:response["Players"])row.erase("PlatformAccountName");
         return response.dump();
     }
-    const auto permitted=[&]{
-        const auto normalize=[](std::string_view value){std::string out;for(const unsigned char c:value)if(std::isxdigit(c))out.push_back(static_cast<char>(std::toupper(c)));return out;};
-        const auto actual=normalize(playerGuid);
-        if(!actual.empty()&&std::ranges::any_of(policy.permittedPlayerGuids,[&](const auto& value){return normalize(value)==actual;}))return true;
-        return !playerName.empty()&&std::find(policy.permittedPlayerNames.begin(),policy.permittedPlayerNames.end(),playerName)!=policy.permittedPlayerNames.end();
-    };
     PS::HelpyPlayerAccess::Observe(controller);
     const bool savedAccess=PS::NativeServerAdminRuntime::HelpyAuthorized(controller,playerGuid);
     const bool pinAccess=PS::HelpyRemoteAccess::Server.Allowed(peerKey,worldKey,policy.allowPinAccess,policy.accessPin);
-    const bool allowlisted=permitted();
+    const bool allowlisted=isAllowlisted();
     if(!savedAccess&&!allowlisted&&!(pinAccess&&(action=="GiveItems"||action=="MapTeleport")))
         throw std::runtime_error("Remote access denied. Connect with the server's world PIN in Settings > Server access, or ask for allowlist access.");
     if((pinAccess||savedAccess)&&!allowlisted){
@@ -345,18 +385,18 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
         if(!request.contains("Items") || !request["Items"].is_array() || request["Items"].empty()
             || request["Items"].size()>PS::HelpyGrants::MaxSelection)
             throw std::runtime_error("Helpy item grant must contain 1..64 item rows");
-        int64_t total=0;
+        std::vector<PS::HelpyGrants::Grant> grants;
         for(const auto& row:request["Items"]) {
-            if(!row.is_object() || !row.contains("Item") || !row["Item"].is_string())
+            if(!row.is_object() || !row.contains("Item") || !row["Item"].is_string() ||
+                !row.contains("Count") || !row["Count"].is_number_integer())
                 throw std::runtime_error("Helpy item grant contains an invalid item row");
-            const auto item=row["Item"].get<std::string>();
-            const int count=row.value("Count",0);
-            if(item.empty() || item.size()>1024 || item.front()!='/' || count<1)
+            const auto& item=row["Item"].get_ref<const std::string&>();
+            const auto count=row["Count"].get<double>();
+            if(item.size()>1024 || count<1 || count>PS::HelpyGrants::MaxItemQuantity)
                 throw std::runtime_error("Helpy item grant contains an invalid path or quantity");
-            total+=count;
-            if(total>std::clamp(policy.maximumItemCount,1,10000))
-                throw std::runtime_error("Helpy item grant exceeds the server quantity limit");
+            grants.push_back({item,static_cast<int>(count)});
         }
+        PS::HelpyGrants::ValidateGrants(grants,policy.maximumItemCount);
     } else if(action=="MapTeleport"){
         if(!savedAccess&&!policy.allowClientTeleport)throw std::runtime_error("This server does not allow client Helpy teleportation");
         if(request.contains("TargetPlayer")||request.value("PartyPoint",false))
@@ -537,8 +577,9 @@ void DragonWildsSpawnLoader::PumpSpawnTools(PS::WorkSlice& work) {
         }else if(GetGameMode(m_readyWorld)) {
             auto rows=nlohmann::json::array();
             for(const auto& connected:GetConnectedPlayersInLoadOrder()) {
-                if(rows.size()>=256)break;bool ambiguous=false;auto* controller=FindPlayerControllerByGuid(connected.Guid,ambiguous);
-                if(!controller||ambiguous||controller->GetWorld()!=m_readyWorld)continue;
+                if(rows.size()>=256)break;
+                auto* controller=connected.Controller.Get();
+                if(!controller||controller->GetWorld()!=m_readyWorld)continue;
                 bool isLocal=false;try{ActorHelper::FunctionCall local(controller,TEXT("/Script/Engine.Controller:IsLocalController"));local.Invoke();isLocal=local.Result<bool>();}catch(...){}
                 rows.push_back({{"Name",connected.Name},{"Path",RC::to_string(controller->GetPathName())},{"Guid",connected.Guid},
                     {"IsLocal",isLocal},
@@ -546,9 +587,13 @@ void DragonWildsSpawnLoader::PumpSpawnTools(PS::WorkSlice& work) {
                     {"Platform",PS::PlayerStatusRuntime::ControllerPlatform(controller)},{"PlatformAccountName",PS::PlayerStatusRuntime::ControllerAccountName(controller)},
                     {"RoleStatus",PS::PlayerStatusRuntime::Read(controller)}});
                 PS::PlayerStatusRuntime::Color(ActorHelper::GetObjectRef(controller,TEXT("PlayerState")),rows.back());
+                if(auto* pawn=ActorHelper::GetObjectRef(controller,TEXT("Pawn"))){
+                    auto& row=rows.back();
+                    row["Stats"]=PS::PlayerVitals::Details(pawn,true);
+                    row["Health"]=row["Stats"]["Health"];
+                    row["Equipment"]=PS::PlayerLoadoutPresentation::Cached(controller,connected.Guid,PS::SpawnToolRequests::CurrentGeneration());
+                }
             }
-            for(auto& row:rows){bool ambiguous=false;auto* target=FindPlayerControllerByGuid(row.at("Guid").get<std::string>(),ambiguous);
-                if(target&&!ambiguous)if(auto* pawn=ActorHelper::GetObjectRef(target,TEXT("Pawn"))){row["Stats"]=PS::PlayerVitals::Details(pawn,true);row["Health"]=row["Stats"]["Health"];row["Equipment"]=PS::PlayerLoadoutPresentation::Cached(target,row.value("Guid",std::string{}),PS::SpawnToolRequests::CurrentGeneration());}}
             auto roles=PS::PlayerStatus::Snapshot(rows,PS::SpawnToolRequests::Generation.load());
             PS::NetworkStatus::Current.Publish(networkRole,PS::SpawnToolRequests::Generation.load(),rows.size());
             PS::SpawnToolRequests::CatalogProgress({{"Players",std::move(rows)},{"PlayerRoles",std::move(roles)}});
@@ -682,7 +727,9 @@ void DragonWildsSpawnLoader::PumpSpawnTools(PS::WorkSlice& work) {
         if(PS::HelpyQueryService::HasPending()) {
             work.Started();PS::SlowWork::Measure("helpy.catalog.query",[&]{PS::HelpyQueryService::PumpOne(false,runCatalogWindow);});
         }else if(g_quickCatalogIndex.active)PS::SlowWork::Measure("helpy.catalog.index",[&]{g_quickCatalogIndex.Tick(work);});
-        else if(PS::HelpyActivity::BackgroundAllowed()){work.Started();PS::SlowWork::Measure("helpy.catalog.passive",[&]{PS::AssetSearch::PumpItemCatalog();});}
+        else if(PS::HelpyActivity::BackgroundAllowed(PS::AssetSearch::HasPendingLearnedItems())){
+            work.Started();PS::SlowWork::Measure("helpy.catalog.passive",[]{PS::AssetSearch::PumpItemCatalog(PS::HelpyActivity::BackgroundAllowed());});
+        }
     }
     auto request=PS::SpawnToolRequests::Take();if(!request)return;
     const bool f2Spawn=request->value("_Source",std::string{}).starts_with("Helpy")&&request->value("Action",std::string{})=="Spawn";
@@ -1156,7 +1203,9 @@ void DragonWildsSpawnLoader::PumpSpawnTools(PS::WorkSlice& work) {
             if(target.contains("Z")&&target["Z"].is_number()){
                 const auto z=target["Z"].get<double>();if(std::isfinite(z)&&z>=projection.MinZ&&z<=projection.MaxZ)height=z;
             }
-            ToolMapTravelBegin(world,selected,pawn,projection,point,request->value("NearMarker",false),height);return;
+            const bool scorned=request->value("ScornedEntrance",false);
+            const auto authoredFloor=scorned?std::optional<double>{(projection.MinZ+projection.MaxZ)*.5}:std::nullopt;
+            ToolMapTravelBegin(world,selected,pawn,projection,point,!scorned&&request->value("NearMarker",false),height,authoredFloor);return;
         }
         if(action=="DismissHelpyNpcs"||(action=="Spawn"&&request->value("NPC",false))) {
             auto* npcs=DragonWildsNpcLoader::HelpyInstance;

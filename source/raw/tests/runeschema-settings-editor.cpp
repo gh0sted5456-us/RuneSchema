@@ -13,6 +13,7 @@ int main(int argc,char** argv)try{
     auto initial=RuneSchemaSettingsEditor::Read(root);Need(initial.at("Ok").get<bool>());
     Need(initial["Editable"]["/archiveLogs"]==false&&initial["Document"]["archiveLogs"]==false);
     Need(initial["Editable"]["/logsInUE4SS"]==false&&initial["Document"]["logsInUE4SS"]==false);
+    Need(initial["Editable"]["/itemDeliveryMode"]=="once"&&initial["Document"]["itemDeliveryMode"]=="once");
     Need(!initial["Editable"].contains("/futureSection/keep"));
     Need(!initial["Editable"].contains("/persistence/recovery")&&!initial["Editable"].contains("/worldSaveCleanup/backupBeforePrune"));
     Need(initial["Editable"]["/persistence/blanketCleanup"]==false
@@ -73,10 +74,20 @@ int main(int argc,char** argv)try{
     const auto hostSaved=save(json{{"/helpyAuthority/allowPinAccess",true},{"/helpyAuthority/accessPin","Private-test-48219"},
         {"/helpyAuthority/allowClientItemGrants",true},{"/helpyAuthority/allowClientTeleport",true},
         {"/helpyAuthority/permittedPlayerGuids",json::array({"0123456789abcdef0123456789abcdef"})}},ConfigFiles::Read(file));
-    Need(hostSaved.at("Ok")==true&&hostSaved.at("RestartRequired")==true);
+    Need(hostSaved.at("Ok")==true&&hostSaved.at("HostPolicyChanged")==true&&hostSaved.at("RestartRequired")==false);
+    const auto mixed=save(json{{"/helpyAuthority/maximumItemCount",250},{"/advancedLogging",false}},ConfigFiles::Read(file));
+    Need(mixed.at("Ok")==true&&mixed.at("HostPolicyChanged")==true&&mixed.at("RestartRequired")==true);
+    const auto live=save(json{{"/helpyAuthority/maximumItemCount",0}},ConfigFiles::Read(file));
+    Need(live.at("Ok")==true&&live.at("HostPolicyChanged")==true&&live.at("RestartRequired")==false);
     const auto hostRestart=DecodeSettings(DecodeIniDocument(ConfigFiles::Read(file)).dump()).helpyAuthority;
-    Need(hostRestart.allowPinAccess&&hostRestart.accessPin=="Private-test-48219"&&hostRestart.allowClientItemGrants&&hostRestart.allowClientTeleport
+    Need(hostRestart.maximumItemCount==0&&hostRestart.allowPinAccess&&hostRestart.accessPin=="Private-test-48219"&&hostRestart.allowClientItemGrants&&hostRestart.allowClientTeleport
         &&hostRestart.permittedPlayerGuids==std::vector<std::string>{"0123456789abcdef0123456789abcdef"});
+    for(const auto* mode:{"off","always","once"}){
+        const auto change=save(json{{"/itemDeliveryMode",mode}},ConfigFiles::Read(file));
+        Need(change.at("Ok")==true&&change.at("RestartRequired")==true);
+        Need(DecodeItemDeliveryMode(DecodeIniDocument(ConfigFiles::Read(file)))==mode);
+    }
+    Need(save(json{{"/itemDeliveryMode","typo"}},ConfigFiles::Read(file)).at("Ok")==false);
     auto explicitBlanket=seeded;explicitBlanket["persistence"]["blanketCleanup"]=true;
     ConfigFiles::Write(file,EncodeIniDocument(explicitBlanket));
     const auto seededText=ConfigFiles::Read(file);Need(RuneSchemaSettingsEditor::PrepareModMenuFields(root).at("Ok")==true&&ConfigFiles::Read(file)==seededText);

@@ -17,10 +17,22 @@ int main()try{using namespace PS::HelpyInputMode;Selection selected;selected.Upd
     XINPUT_GAMEPAD idle{};idle.sThumbLX=1000;Check(!Active(idle));idle.sThumbLX=12000;Check(Active(idle));
     PS::HelpyControllerInput::DeviceRead=[](bool){return Reading{};};
     ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize={800,600};io.Fonts->Build();XINPUT_GAMEPAD pad{};pad.wButtons=XINPUT_GAMEPAD_A;pad.sThumbLX=20000;
-    PS::HelpyControllerInput::Poll(0,&pad);ImGui::NewFrame();Check(ImGui::IsKeyDown(ImGuiKey_GamepadFaceDown)&&ImGui::IsKeyDown(ImGuiKey_GamepadDpadRight)&&!ImGui::IsKeyDown(ImGuiKey_GamepadLStickRight));PS::HelpyControllerInput::Observe(0);Check(PS::HelpyControllerInput::Selection.Controller);
+    PS::HelpyControllerInput::Poll(0,&pad);ImGui::NewFrame();Check(ImGui::IsKeyDown(ImGuiKey_GamepadFaceDown)&&!ImGui::IsKeyDown(ImGuiKey_GamepadDpadRight)&&!ImGui::IsKeyDown(ImGuiKey_GamepadLStickRight));PS::HelpyControllerInput::Observe(0);Check(PS::HelpyControllerInput::Selection.Controller);
     ImGui::Begin("Controller glyph feedback");const auto gold=PS::HelpyControllerInput::HintColor(true),neutral=PS::HelpyControllerInput::HintColor(false);Check(gold!=neutral);
     auto* draw=ImGui::GetWindowDrawList();const auto before=draw->VtxBuffer.Size;PS::HelpyControllerInput::DrawGlyph({100,100},12,0,2);bool highlighted=false;for(int i=before;i<draw->VtxBuffer.Size;++i)highlighted|=draw->VtxBuffer[i].col==gold;Check(highlighted);
-    Check(PS::HelpyControllerInput::HintsHeight(320)>PS::HelpyControllerInput::HintsHeight(1800));ImGui::End();ImGui::EndFrame();
+    namespace Input=PS::HelpyControllerInput;
+    const auto controllerHints=Input::HintItems("Guide",false,true);
+    Check(Input::HintsHeight(320,controllerHints)>Input::HintsHeight(1800,controllerHints));
+    const auto itemHints=Input::DesktopHints("Ctrl+F2",false,true,false,false);
+    Check(Input::HintsHeight(320,itemHints)>Input::HintsHeight(1800,itemHints));
+    Check(std::any_of(itemHints.begin(),itemHints.end(),[](const Input::Hint& hint){
+        return hint.Mouse==Input::MouseHint::Left&&hint.Key=="Ctrl";
+    }));
+    const auto mapHints=Input::DesktopHints("Ctrl+F2",false,false,true,true);
+    Check(std::any_of(mapHints.begin(),mapHints.end(),[](const Input::Hint& hint){
+        return hint.Mouse==Input::MouseHint::Wheel;
+    }));
+    ImGui::End();ImGui::EndFrame();
     pad={};PS::HelpyControllerInput::Poll(0,&pad);ImGui::NewFrame();Check(!ImGui::IsKeyDown(ImGuiKey_GamepadFaceDown)&&!ImGui::IsKeyDown(ImGuiKey_GamepadDpadRight));ImGui::EndFrame();PS::HelpyControllerInput::Poll(1,&pad);Check(!(io.ConfigFlags&ImGuiConfigFlags_NavEnableGamepad));Check(!PS::HelpyControllerInput::Initialized);ImGui::DestroyContext();
     {
         PS::HelpyTouchpadTap tap;Touchpad touch;Check(!tap.Poll(true,1,touch,0));touch.Down=true;touch.Fingers=1;touch.X=.5f;touch.Y=.5f;Check(!tap.Poll(true,1,touch,.1));touch.Down=false;touch.Fingers=0;Check(tap.Poll(true,1,touch,.2));
@@ -36,6 +48,11 @@ int main()try{using namespace PS::HelpyInputMode;Selection selected;selected.Upd
         Check(std::abs(full.X-2*half.X)<.001f&&std::abs(full.X-15)<.001f);
         Check(std::sqrt(diagonal.X*diagonal.X+diagonal.Y*diagonal.Y)<=full.X+.001f);
         Check(Motion(32767,0,-1,900).X==0&&Motion(32767,0,10,900).X<=45.001f);
+        // Tuning: a smaller dead zone admits gentle input; the assist scale slows motion; bad values are clamped.
+        Check(Motion(6000,0,1.f/60,900,{.12f}).X>0&&Motion(6000,0,1.f/60,900).X==0);
+        Check(std::abs(Motion(32767,0,1.f/60,900,{.27f,.5f}).X-7.5f)<.001f);
+        Check(std::abs(Motion(32767,0,1.f/60,900,{.27f,0.f}).X-3.75f)<.001f&&Motion(32767,0,1.f/60,900,{NAN,NAN}).X==full.X);
+        Check(Motion(20000,0,1.f/60,900,{.9f}).X>0); // Dead zone is capped at 50%.
         ImGui::CreateContext();auto& pointerIo=ImGui::GetIO();pointerIo.IniFilename=nullptr;pointerIo.DisplaySize={800,600};pointerIo.DeltaTime=1.f/60;pointerIo.Fonts->Build();pointerIo.ConfigInputTrickleEventQueue=false;
         PS::HelpyControllerInput::DeviceRead=[](bool){return Reading{};};PS::HelpyControllerInput::Selection.Controller=false;
         XINPUT_GAMEPAD cursorPad{};pointerIo.AddMousePosEvent(100,100);
@@ -50,6 +67,21 @@ int main()try{using namespace PS::HelpyInputMode;Selection selected;selected.Upd
         cursorPad={};cursorPad.sThumbLX=20000;PS::HelpyControllerInput::Feed(cursorPad);ImGui::NewFrame();GImGui->NavId=123456;
         Check(!ImGui::IsKeyDown(ImGuiKey_GamepadDpadRight));PS::HelpyControllerInput::Observe(0);Check(PS::HelpyControllerInput::Selection.Controller);
         GImGui->NavId=0;PS::HelpyControllerInput::NavigationCanvas=0;ImGui::EndFrame();
+        cursorPad={};
+        ImGuiWindow* scrollWindow=nullptr;
+        for(int i=0;i<3;++i){
+            ImGui::NewFrame();ImGui::Begin("Scroll target");
+            ImGui::BeginChild("Content",{200,120});
+            ImGui::Dummy({100,800});scrollWindow=ImGui::GetCurrentWindow();
+            ImGui::EndChild();ImGui::End();ImGui::EndFrame();
+        }
+        Check(scrollWindow&&scrollWindow->ScrollMax.y>0);
+        ImGui::SetNavWindow(scrollWindow);
+        cursorPad.sThumbLY=-32767;
+        PS::HelpyControllerInput::Feed(cursorPad);ImGui::NewFrame();
+        PS::HelpyControllerInput::Observe(0);
+        Check(scrollWindow->ScrollTarget.y>0&&scrollWindow->ScrollTarget.y<FLT_MAX&&!ImGui::IsKeyDown(ImGuiKey_GamepadDpadDown));
+        ImGui::EndFrame();
         const auto saved=PS::HelpyImGuiTheme::DocumentFrom(PS::HelpyImGuiTheme::Current,200);
         Check(saved["input"].contains("cursor")&&saved["input"]["cursorSpeed"]==900.f);
         ImGui::DestroyContext();
@@ -59,7 +91,7 @@ int main()try{using namespace PS::HelpyInputMode;Selection selected;selected.Upd
     for(const auto& [type,expected]:layouts){
         SDL_VirtualJoystickDesc desc{};SDL_INIT_INTERFACE(&desc);desc.type=SDL_JOYSTICK_TYPE_GAMEPAD;desc.naxes=6;desc.nbuttons=16;desc.button_mask=0xffff;desc.axis_mask=0x3f;desc.name="RuneSchema private controller fixture";
         SDL_VirtualJoystickTouchpadDesc touchpad{2};if(expected==PlayStation){desc.ntouchpads=1;desc.touchpads=&touchpad;}
-        const auto id=SDL_AttachVirtualJoystick(&desc);Check(id!=0);const auto mapping=std::string("*,RuneSchema fixture,a:b0,b:b1,x:b2,y:b3,guide:b4,touchpad:b5,back:b6,start:b7,leftstick:b8,rightstick:b9,leftx:a0,lefty:a1,rightx:a2,righty:a3,lefttrigger:a4,righttrigger:a5,type:")+type+",platform:Windows,";
+        const auto id=SDL_AttachVirtualJoystick(&desc);Check(id!=0);const auto mapping=std::string("*,RuneSchema fixture,a:b0,b:b1,x:b2,y:b3,guide:b4,touchpad:b5,back:b6,start:b7,leftstick:b8,rightstick:b9,dpright:b10,leftx:a0,lefty:a1,rightx:a2,righty:a3,lefttrigger:a4,righttrigger:a5,type:")+type+",platform:Windows,";
         Check(SDL_SetGamepadMapping(id,mapping.c_str()));auto* joystick=SDL_OpenJoystick(id);Check(joystick!=nullptr);Check(SDL_SetJoystickVirtualButton(joystick,0,true));Check(SDL_SetJoystickVirtualAxis(joystick,0,20000));
         const auto reading=Read(true);Check(reading.Connected&&(reading.Pad.wButtons&XINPUT_GAMEPAD_A)&&reading.Pad.sThumbLX==20000&&reading.Glyphs==expected);
         // Drivers can post fresh events asynchronously; verify that prior unused events are drained.
@@ -76,7 +108,12 @@ int main()try{using namespace PS::HelpyInputMode;Selection selected;selected.Upd
             Check(PS::HelpyControllerInput::ReportedGlyphs==expected&&PS::HelpyControllerInput::Selection.Controller);
             Check(ImGui::GetCurrentContext()->NavWindow&&ImGui::GetCurrentContext()->NavId);
             Check(SDL_SetJoystickVirtualButton(joystick,0,true));frame();Check(SDL_SetJoystickVirtualButton(joystick,0,false));frame();Check(activated==1);
-            Check(SDL_SetJoystickVirtualAxis(joystick,0,25000));frame();frame();Check(SDL_SetJoystickVirtualAxis(joystick,0,0));frame();frame();Check(ImGui::GetCurrentContext()->NavId==tile);
+            Check(SDL_SetJoystickVirtualAxis(joystick,0,25000));frame();frame();
+            Check(ImGui::GetCurrentContext()->NavId!=tile);
+            Check(SDL_SetJoystickVirtualAxis(joystick,0,0));frame();
+            Check(SDL_SetJoystickVirtualButton(joystick,10,true));frame();frame();
+            Check(SDL_SetJoystickVirtualButton(joystick,10,false));frame();frame();
+            Check(ImGui::GetCurrentContext()->NavId==tile);
             Check(SDL_SetJoystickVirtualButton(joystick,0,true));frame();Check(SDL_SetJoystickVirtualButton(joystick,0,false));frame();Check(activated==2);
             constexpr std::array labels{"First","Second","Third"};int category=0,tab=0;ImGuiID content=0;XINPUT_GAMEPAD menuPad{};ImGui::FocusWindow(nullptr);
             const auto menuFrame=[&]{PS::HelpyControllerInput::Feed(menuPad);ImGui::NewFrame();ImGui::SetNextWindowPos({0,0});ImGui::SetNextWindowSize({800,600});ImGui::Begin("controller two-pane menu");
@@ -118,7 +155,7 @@ int main()try{using namespace PS::HelpyInputMode;Selection selected;selected.Upd
                 }PS::HelpyImGuiTheme::EndPanel();ImGui::Button("Details");PS::HelpyImGuiTheme::EndPanel();ImGui::End();PS::HelpyControllerInput::ResolvePaneNavigation();ImGui::EndFrame();};
             bayFrame();bayFrame();menuPad.wButtons=XINPUT_GAMEPAD_DPAD_DOWN;bayFrame();menuPad={};bayFrame();Check(GImGui->NavId==card);
             ImGui::DestroyContext();
-            std::cout<<type<<": cold-start focus, confirm, stick navigation and two-pane categories passed.\n";
+            std::cout<<type<<": cold-start focus, confirm, D-pad navigation and two-pane categories passed.\n";
         }
         {
             PS::HelpyControllerInput::KeepShortcuts=true;PS::HelpyControllerInput::Suspend();
@@ -185,11 +222,16 @@ int main()try{using namespace PS::HelpyInputMode;Selection selected;selected.Upd
             Check(PS::HelpyControllerInput::DragLatched&&pointerIo.MouseDown[0]);
             Check(SDL_SetJoystickVirtualAxis(joystick,2,32767));for(int move=0;move<15;++move)pointerFrame();Check(SDL_SetJoystickVirtualAxis(joystick,2,0));pointerFrame();
             Check(GImGui->DragDropActive&&dropped==0);
+            Check(SDL_SetJoystickVirtualAxis(joystick,1,20000));pointerFrame();
+            Check(PS::HelpyControllerInput::DragLatched&&GImGui->DragDropActive&&!ImGui::IsKeyDown(ImGuiKey_GamepadDpadDown));
+            Check(SDL_SetJoystickVirtualAxis(joystick,1,0));pointerFrame();
             Check(SDL_SetJoystickVirtualButton(joystick,9,true));pointerFrame();Check(!PS::HelpyControllerInput::DragLatched&&!pointerIo.MouseDown[0]);Check(SDL_SetJoystickVirtualButton(joystick,9,false));pointerFrame();Check(dropped==1);
             Check(SDL_SetJoystickVirtualButton(joystick,9,true));pointerFrame();Check(SDL_SetJoystickVirtualButton(joystick,9,false));pointerFrame();Check(PS::HelpyControllerInput::DragLatched);
             PS::HelpyControllerInput::Suspend();pointerFrame(false);Check(!PS::HelpyControllerInput::DragLatched&&!pointerIo.MouseDown[0]&&dropped==1);
             Check(SDL_SetJoystickVirtualAxis(joystick,2,16000));pointerFrame();Check(SDL_SetJoystickVirtualAxis(joystick,2,0));pointerFrame();
-            Check(SDL_SetJoystickVirtualAxis(joystick,0,20000));pointerFrame();Check(!PS::HelpyControllerInput::PointerMode);Check(SDL_SetJoystickVirtualAxis(joystick,0,0));pointerFrame();
+            Check(SDL_SetJoystickVirtualAxis(joystick,0,20000));pointerFrame();Check(PS::HelpyControllerInput::PointerMode);Check(SDL_SetJoystickVirtualAxis(joystick,0,0));pointerFrame();
+            Check(SDL_SetJoystickVirtualButton(joystick,10,true));pointerFrame();Check(!PS::HelpyControllerInput::PointerMode);
+            Check(SDL_SetJoystickVirtualButton(joystick,10,false));pointerFrame();
             ImGui::DestroyContext();PS::HelpyControllerInput::KeepShortcuts=false;
             std::cout<<type<<": pointer clicks, latched grab/drop, thumb buttons and safe handoff passed.\n";
         }

@@ -23,6 +23,13 @@ int main(){
     assert(Compare("0.8.0.1b","0.8.0.1b")==Comparison::Current);
     assert(Compare("0.8.0.1b","0.8.0.2")==Comparison::Newer);
     assert(Compare("0.8.0.1b","0.8.0.1e")==Comparison::DifferentBuild);
+    assert(Parse("v1.0.0.J00001")&&Parse("RuneSchema-1.0.0.J00ABC"));
+    assert(!Parse("1.0.1.J00001")&&!Parse("1.0.0.j00001")&&!Parse("1.0.0.J0001")&&!Parse("1.0.0.J000001")&&!Parse("1.0.0.J0A/01"));
+    assert(Compare("1.0.0.0","1.0.0.J00001")==Comparison::Newer);
+    assert(Compare("1.0.0.J00009","v1.0.0.J0000A")==Comparison::Newer);
+    assert(Compare("1.0.0.J00010","1.0.0.J00009")==Comparison::Ahead);
+    assert(Compare("1.0.0.J00001","v1.0.0.J00001")==Comparison::Current);
+    assert(MainVersion("inline constexpr char Version[] = \"1.0.0.J00001\";\n")=="1.0.0.J00001");
     assert(MainVersion("inline constexpr char Version[] = \"0.7.7.9m\";\n")=="0.7.7.9m");
     assert(!MainVersion("<html>Version: latest</html>")&&!MainVersion("char Version[] = \"oops\";"));
     const auto post=[](const char* title,long long date){return nlohmann::json{{"title",title},{"date",date},{"url","https://steamcommunity.com/games/1374490/announcements/detail/123"},{"feedname","steam_community_announcements"}};};

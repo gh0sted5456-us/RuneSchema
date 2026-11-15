@@ -6,6 +6,8 @@ int main(){
     using namespace HelpyHotfixInfo;
     assert(Tag("0.8.1.0hf","0.8.1.0")&&Tag("v0.8.1.0-hf","0.8.1.0"));
     for(const auto* tag:{"0.8.1.0","0.8.1.0hf1","0.8.2.0hf","0.8.1.0hf+extra","0.8hf"})assert(!Tag(tag,"0.8.1.0"));
+    assert(Tag("v1.0.0.J00001-hf","1.0.0.J00001"));
+    assert(!Tag("1.0.0.J00002hf","1.0.0.J00001")&&!Tag("1.0.0.0hf","1.0.0.J00001"));
     const std::string tag="0.8.1.0hf",name="RuneSchema-"+tag+"-Win64-hotfix.zip";
     Json asset={{"id",2},{"state","uploaded"},{"size",100},{"name",name},{"digest","sha256:"+std::string(64,'a')},{"browser_download_url","https://github.com/gh0sted5456-us/RuneSchema/releases/download/"+tag+"/"+name}};
     Json release={{"id",1},{"draft",false},{"prerelease",true},{"tag_name",tag},{"published_at","2026-11-03T00:00:00Z"},{"assets",Json::array({asset})}};

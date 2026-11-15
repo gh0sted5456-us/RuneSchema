@@ -122,8 +122,13 @@ int main() try
         Write(folder/"plugin.json",
             std::string("{\"SchemaVersion\":1,\"Id\":\"")+id+"\",\"Version\":\"1.0.0\"}");
     }
-    Write(orderRoot/"plugins.txt","GammaOrder:1\nAlphaOrder:1\nBetaOrder:1\n");
-    const auto ordered=PS::PluginCatalog::Discover(orderRoot);
+    Write(orderRoot/"GammaOrder/plugin.json",std::string(300*1024,' ')+R"({"Id":"GammaOrder","Version":"1.0.0"})");
+    Write(orderRoot/"plugins.txt","\xEF\xBB\xBF" "GammaOrder:1\n#"+std::string(300*1024,' ')
+        +"\ninvalid entry\nAlphaOrder:1\nBetaOrder:1\n");
+    std::vector<std::string> orderDiagnostics;
+    const auto ordered=PS::PluginCatalog::Discover(orderRoot,&orderDiagnostics);
+    Check(orderDiagnostics.size()==1&&orderDiagnostics.front().find("line 3")!=std::string::npos,
+        "only the malformed order line is ignored and reported");
     Check(ordered.size()==3,"ordered plugin fixture is complete");
     Check(ordered[0].Id=="GammaOrder"&&ordered[1].Id=="AlphaOrder"&&ordered[2].Id=="BetaOrder",
         "plugins.txt top-to-bottom order is preserved when dependencies do not constrain it");

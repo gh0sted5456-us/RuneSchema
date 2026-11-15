@@ -20,7 +20,9 @@ class InventoryMarkRelay {
     void Profiles(Object* world,Clock::time_point now,const std::function<bool(const std::string&,const std::string&)>& forward){
         if(now<ProfileNext)return;
         if(ProfilePending.empty()){
-            if(now>=PublishAt){const auto profile=InventoryMarkService::Call({{"Action","PublicProfile"}});ProfilePending={{"Action","InventoryMarks"},{"ProfileAction","Publish"},{"RequestId",++ProfileSerial},{"CharacterGuid",Character},{"Profile",profile.at("Profile")}};}
+            if(now>=PublishAt){const auto profile=InventoryMarkService::Call({{"Action","PublicProfile"}});ProfilePending={{"Action","InventoryMarks"},{"ProfileAction","Publish"},{"RequestId",++ProfileSerial},{"CharacterGuid",Character},{"Profile",profile.at("Profile")}};
+                // Optional mod achievement summary; older hosts ignore the extra field.
+                if(profile.contains("Achievements")&&profile["Achievements"].is_object()&&profile["Achievements"].dump().size()<=1024)ProfilePending["Achievements"]=profile["Achievements"];}
             else {
                 using namespace RC::Unreal;auto* type=EquipmentDelivery::AH::ResolveClass(TEXT("/Script/Dominion.DominionPlayerState"));TArray<Object*> states;
                 if(type)UECustom::UObjectGlobals::GetObjectsOfClass(type,states,true);if(states.Num()<0||states.Num()>256)throw std::runtime_error("Profile roster bound exceeded");
@@ -40,7 +42,7 @@ public:
         const auto ack=Json::parse(payload);
         if(!ProfilePending.empty()&&ack.value("RequestId",uint64_t{})==ProfilePending.at("RequestId").get<uint64_t>()&&ack.at("CharacterGuid")==ProfilePending.at("CharacterGuid")){
             const bool publish=ProfilePending.at("ProfileAction")=="Publish";if(ack.value("Kind",std::string{})!=(publish?"HelpyProfilePublished1":"HelpyProfile1"))return;
-            if(publish)PublishAt=Clock::now()+std::chrono::seconds(15);else InventoryMarkService::Call({{"Action","ReceivePublicProfile"},{"CharacterGuid",ack.at("CharacterGuid")},{"Profile",ack.at("Profile")}});
+            if(publish)PublishAt=Clock::now()+std::chrono::seconds(15);else InventoryMarkService::Call({{"Action","ReceivePublicProfile"},{"CharacterGuid",ack.at("CharacterGuid")},{"Profile",ack.at("Profile")},{"Achievements",ack.contains("Achievements")?ack["Achievements"]:nlohmann::json(nullptr)}});
             ProfilePending=Json::object();ProfileRetry={};Next=Clock::now()+std::chrono::milliseconds(500);return;
         }
         if(Pending.empty())return;for(const auto* field:{"CharacterGuid","Version","Offset","Next","Done"})if(ack.at(field)!=Pending.at(field))return;

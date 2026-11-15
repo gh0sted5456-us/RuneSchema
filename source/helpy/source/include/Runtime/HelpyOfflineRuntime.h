@@ -11,7 +11,6 @@ inline void InvalidateSources(){SourceDocument={};}
 inline nlohmann::json Sources(const std::filesystem::path& assigned,const std::filesystem::path& file){
     const auto root=RuntimeModPath::Resolve(assigned);const auto stamp=std::filesystem::last_write_time(file);
     if(SourceDocument.is_object()&&SourceRoot==root&&SourceFile==file&&SourceStamp==stamp)return SourceDocument;
-    if(std::filesystem::file_size(file)>2*1024*1024)throw std::runtime_error("Saved sources exceed the offline presentation bound");
     std::ifstream input(file,std::ios::binary);auto value=nlohmann::json::parse(input,[](int depth,nlohmann::json::parse_event_t,nlohmann::json&){if(depth>32)throw std::runtime_error("Saved source nesting exceeds its bound");return true;});
     const auto settings=RuneSchemaSettingsEditor::Read(root/"settings");if(!settings.value("Ok",false))return {{"Ready",false}};
     nlohmann::json mods;{std::lock_guard lock(ModManager::Gate);mods=ModManager::Read(root,settings.at("Document").at("loadOrder").at("enabled").get<bool>());}

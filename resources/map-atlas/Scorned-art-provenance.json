@@ -1,0 +1,16 @@
+{
+  "SourceAsset": "/Game/Art/UI/Map/T_WorldMap_Landmass.T_WorldMap_Landmass",
+  "SourceRasterSHA256": "a65ae656f36d9dd143cf8c3775cb279ec27337f153e782ecdfc24744685654d7",
+  "DisplayAtlasPixelBounds": [
+    3,
+    370,
+    644,
+    992
+  ],
+  "Attribution": "RuneScape: Dragonwilds artwork \u00a9 Jagex.",
+  "MaskSource": "https://www.dragonwilds.gg/viewer/data/regions.json",
+  "MaskSHA256": "e39aa8e716c3231e7241601e5e180508521096e6ed03d7060547e3ce47babaab",
+  "DisplayRegistration": "Native and published atlas images compared at 2048 pixels. Identity transform gave the lowest sampled pixel error.",
+  "OutputSHA256": "e5244e1b37a8f2a9dcf401efd886595e5a7c97ffdbd8530c8cbc465ceb2463be",
+  "Usage": "Crop from the native game raster for the illustrated inset. Live pins use measured world geometry."
+}

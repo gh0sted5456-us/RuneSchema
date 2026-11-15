@@ -28,7 +28,7 @@ inline constexpr const char* Title(Page page) {
     case Page::ModMenu2:return "Mod Menu 2";
     case Page::Mods:return "Mods";
     case Page::SaveRecovery:return "Save Recovery";
-    case Page::Items:return "Players";
+    case Page::Items:return "Items";
     case Page::Creation:return "Clone";
     case Page::Recipes:return "Recipes";
     case Page::Spawns:return "Spawns";
@@ -68,9 +68,10 @@ inline constexpr const char* Description(Page page) {
     }
     return "";
 }
-struct Workspaces {bool Authoring=false,Tools=false,LiveLog=false,SaveEditor=false,ServerTools=false,Journal=true,ModMenu=false;};
+struct Workspaces {bool Authoring=false,Tools=false,LiveLog=false,SaveEditor=false,ServerTools=false,Journal=true,ModMenu=false,Clone=false,Recipes=false;};
 inline constexpr bool Visible(Page page,const Workspaces& enabled={}) {
     switch(page){case Page::ModMenu2:return enabled.ModMenu;case Page::Authoring:return enabled.Authoring;
+    case Page::Creation:return enabled.Clone;case Page::Recipes:return enabled.Recipes;
     case Page::LiveLog:return enabled.LiveLog;case Page::SaveEditor:return true;case Page::Journal:return enabled.Journal;default:return true;}
 }
 inline constexpr bool Available(Page page,const Workspaces& enabled,bool dedicatedServer) {

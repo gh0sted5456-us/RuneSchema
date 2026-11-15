@@ -44,6 +44,7 @@ For new cooked features and other loader families:
    - [Cooked-only repair items: boundary and native evidence](COOKED-REPAIR-KIT.md)
 10. [Blueprint and Lua companions](PSEUDO-LOADERS.md)
 11. [Guided authoring tools](ADVANCED-AUTHORING-TOOLS.md)
+    - [Mod achievements for Helpy profiles](MOD-ACHIEVEMENTS.md)
 12. [Examples](EXAMPLES.md), [all loader pages](LOADER-WALKTHROUGHS.md#open-the-detailed-loader-reference), and [JSON schemas](SCHEMAS.md)
 
 ## Servers: host and maintain

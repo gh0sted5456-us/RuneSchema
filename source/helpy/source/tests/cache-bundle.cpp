@@ -1,6 +1,7 @@
 #include "Core/HelpyIconPack.h"
 #include "Core/CacheBundleItems.h"
 #include "Core/HelpyCacheOwnership.h"
+#include "../../../raw/include/Core/LearnedItemCatalog.h"
 #include <cassert>
 #include <iostream>
 #include <thread>
@@ -77,6 +78,28 @@ int main(){try{
     assert(CacheBundleStore::Commit(cache,root,snapshot,locale,{row})==0);
     auto references=CacheBundleStore::Read(cache,root,snapshot,locale,"items");assert(references.size()==1&&references[0]["PersistenceID"]==row.PersistenceID);
     assert(references[0]["Data"]["CacheSourceVerified"]==true);
+    {
+        const auto learned=fixture/"learned-cache"/"item-icons";
+        assert(CacheBundleStore::Commit(learned,root,snapshot,locale,{row})==1);
+        auto refreshed=row;refreshed.Data["Icon"]="/ExampleMount/Art/T_Updated.T_Updated";
+        auto found=nativeUnknown;
+        found["PersistenceID"]=row.PersistenceID;found["Icon"]=refreshed.Data.at("Icon");
+        auto second=found;second["Path"]="/ExampleMount/Items/DA_Second.DA_Second";second["Name"]="Second discovery";second["PersistenceID"]="second-native-id";
+        auto disabled=second;disabled["SourceName"]="disabled";disabled["Path"]="/ExampleMount/Items/DA_Disabled.DA_Disabled";
+        LearnedItemCatalog::Store discoveries;
+        discoveries.Observe(learned,snapshot,locale,Json::array({found,second,disabled}));
+        assert(discoveries.HasWork());discoveries.Shutdown();assert(discoveries.Error.empty()&&!discoveries.HasWork());
+        refreshed.PersistenceID.clear();
+        refreshed.Data["PersistenceID"]="";refreshed.Data["PersistenceIDKnown"]=false;
+        assert(CacheBundleStore::Commit(learned,learned.parent_path(),snapshot,locale,{refreshed})==0);
+        const auto learnedRows=CacheBundleStore::Read(learned,root,snapshot,locale,"items");
+        assert(learnedRows.size()==2);
+        const CacheBundleItems::Index learnedIndex(learnedRows,{});
+        const auto match=learnedIndex.Page("Health Tincture","",40).at("Rows");
+        assert(match.size()==1&&match[0]["Icon"]=="/ExampleMount/Art/T_Updated.T_Updated");
+        assert(match[0]["PersistenceID"]==row.PersistenceID&&match[0]["PersistenceIDKnown"]==true);
+        assert(learnedIndex.Page("second-native-id","",40).at("Rows").size()==1);
+    }
     auto journal=original;journal["Kind"]="journal";journal["Path"]="/ExampleMount/Journal/DA_Note.DA_Note";journal["Data"]={{"Name","A note"},{"Pages",{"Native text"}},{"Icon","/ExampleMount/Art/T_Note.T_Note"}};
     const auto note=CacheBundle::Parse(journal);assert(CacheBundleStore::Commit(cache,root,snapshot,locale,{note})==1);
     const auto journalFolder=fixture/"journal";
@@ -135,6 +158,14 @@ int main(){try{
         const CacheBundleItems::Index armor(set);
         const auto query="__helpyfamily:"+ItemFamily::Key("Hard Leather Body (Dyed Black, Mirror Trim)");
         const auto first=armor.Page(query,"",2),last=armor.Page(query,first.at("NextCursor"),2);
+        const auto filtered=query+" ck dyEd mirror";
+        const auto firstFiltered=armor.Page(filtered,"",2);
+        const auto lastFiltered=armor.Page(filtered,firstFiltered.at("NextCursor"),2);
+        assert(firstFiltered.at("Rows")==first.at("Rows")&&firstFiltered.at("HasMore")==true);
+        assert(lastFiltered.at("Rows")==last.at("Rows")&&lastFiltered.at("HasMore")==false);
+        const auto shortQuery=armor.Page("ck","",8);
+        assert(shortQuery.at("Rows").size()==4);
+        assert(armor.Page("hard mirror impossible","",8).at("Rows").empty());
         assert(first.at("Rows").size()==2&&first.at("HasMore")==true);
         assert(last.at("Rows").size()==1&&last.at("HasMore")==false);
         assert(first.at("Rows")[0].at("Name")=="Hard Leather Body (Dyed Black, Mirror Trim)");

@@ -31,6 +31,8 @@ namespace PS {
         const auto error = glz::read<glz::opts{.error_on_unknown_keys = false, .error_on_missing_keys = false}>(candidate, json);
         if (error) throw std::runtime_error(glz::format_error(error, json));
         const auto source=nlohmann::json::parse(json);
+        if(candidate.helpyAuthority.maximumItemCount<0)
+            throw std::runtime_error("Helpy maximumItemCount must be zero or a positive whole number");
         for(const auto& player:candidate.helpyAuthority.authorizedPlayers)
             if(!HelpyPlayerAuthorization::Valid(player))throw std::runtime_error("Invalid saved Helpy player authorization");
         if(candidate.helpyAuthority.allowPinAccess&&!HelpyRemoteAccess::Sessions::ValidPin(candidate.helpyAuthority.accessPin))

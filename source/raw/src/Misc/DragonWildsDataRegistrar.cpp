@@ -82,6 +82,8 @@ namespace DragonWilds {
         struct NetworkRegistryAudit {
             bool Valid = false;
             std::size_t Count = 0;
+            FMapProperty* ReverseProperty = nullptr;
+            FArrayProperty* ArrayProperty = nullptr;
             std::unordered_set<UObject*> Objects;
             std::vector<UObject*> OrderedObjects;
             std::vector<std::string> OrderedPaths;
@@ -120,8 +122,11 @@ namespace DragonWilds {
                 reverseProperty->ContainerPtrToValuePtr<void>(subsystem));
             FScriptArrayHelper entries(arrayProperty, array);
             std::vector<std::string> orderedPaths;
-            orderedPaths.reserve(static_cast<std::size_t>(entries.Num()));
+            const auto count = static_cast<std::size_t>(entries.Num());
+            orderedPaths.reserve(count);
+            result.OrderedObjects.reserve(count);
             std::unordered_set<UObject*> seen;
+            seen.reserve(count);
             for (int32 index = 0; index < entries.Num(); ++index)
             {
                 UObject* object = nullptr;
@@ -171,6 +176,8 @@ namespace DragonWilds {
                 return result;
             }
             result.Valid = true;
+            result.ReverseProperty = reverseProperty;
+            result.ArrayProperty = arrayProperty;
             result.Count = orderedPaths.size();
             result.Objects = std::move(seen);
             result.Fingerprint = PS::NetworkIdentityPlan::Fingerprint(orderedPaths);
@@ -2070,6 +2077,16 @@ namespace DragonWilds {
 
         bool complete = true;
 
+        // Reuse the reflected field within this synchronous registration pass.
+        std::unordered_map<UClass*, FStrProperty*> identityFields;
+        const auto identityField = [&](UClass* type) -> FStrProperty* {
+            if (!type) return nullptr;
+            auto [entry, inserted] = identityFields.try_emplace(type, nullptr);
+            if (inserted)
+                entry->second = CastField<FStrProperty>(PropertyHelper::GetPropertyByName(
+                    type, TEXT("PersistenceID")));
+            return entry->second;
+        };
         std::unordered_map<RC::StringType, UObject*> known;
         UECustom::FScriptMapHelper idMap(idMapProperty, idMapProperty->ContainerPtrToValuePtr<void>(subsystem));
         idMap.ForEachPair([&](void* keyPtr, void* valuePtr) {
@@ -2079,10 +2096,7 @@ namespace DragonWilds {
             if (key->GetCharArray().Num() > 1 && value)
             {
                 const auto identity = RC::StringType(**key);
-                auto* property = value->GetClassPrivate()
-                    ? CastField<FStrProperty>(PropertyHelper::GetPropertyByName(
-                        value->GetClassPrivate(), TEXT("PersistenceID")))
-                    : nullptr;
+                auto* property = identityField(value->GetClassPrivate());
                 const auto roundTrip = property
                     ? property->GetPropertyValue(
                         property->ContainerPtrToValuePtr<void>(value))
@@ -2151,11 +2165,7 @@ namespace DragonWilds {
                 || m_rejectedManifestAssets.contains(candidate)
                 || (excludedClass && candidate->IsA(excludedClass)))
                 continue;
-            auto* candidateClass = candidate->GetClassPrivate();
-            auto* idProperty = candidateClass
-                ? CastField<FStrProperty>(PropertyHelper::GetPropertyByName(
-                    candidateClass, TEXT("PersistenceID")))
-                : nullptr;
+            auto* idProperty = identityField(candidate->GetClassPrivate());
             if (!idProperty)
             {
                 PS::Log<LogLevel::Warning>(STR(
@@ -2245,7 +2255,8 @@ namespace DragonWilds {
                     throw std::runtime_error(
                         "duplicate PersistenceID resolves to multiple live assets");
 
-                const auto networkId = EnsureNetworkIdentity(candidate, subsystem);
+                const auto networkId = EnsureNetworkIdentity(candidate, subsystem,
+                    baselineAudit.ReverseProperty, baselineAudit.ArrayProperty);
                 if (networkId < 0)
                 {
                     throw std::runtime_error("network registry rejected the asset");
@@ -2436,20 +2447,9 @@ namespace DragonWilds {
     }
 
     int32_t DragonWildsDataRegistrar::EnsureNetworkIdentity(
-        UObject* dataAsset, UObject* subsystem)
+        UObject* dataAsset, UObject* subsystem,
+        FMapProperty* reverseProperty, FArrayProperty* arrayProperty)
     {
-        auto* subsystemClass = subsystem->GetClassPrivate();
-        auto* reverseProperty = CastField<FMapProperty>(
-            PropertyHelper::GetPropertyByName(subsystemClass, TEXT("DataToNetIdMap")));
-        auto* arrayProperty = CastField<FArrayProperty>(
-            PropertyHelper::GetPropertyByName(subsystemClass, TEXT("NetIdToData")));
-        if (!reverseProperty || !arrayProperty)
-        {
-            PS::Log<LogLevel::Warning>(STR("Network data registry was not found on {}.\n"),
-                subsystemClass->GetName());
-            return -1;
-        }
-
         UECustom::FScriptMapHelper reverse(
             reverseProperty, reverseProperty->ContainerPtrToValuePtr<void>(subsystem));
         auto* array = arrayProperty->ContainerPtrToValuePtr<FScriptArray>(subsystem);

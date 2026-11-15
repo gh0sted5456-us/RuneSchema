@@ -38,6 +38,10 @@ int main()
     {std::ofstream(luaOnly/"ue4ss"/"scripts"/"main.lua")<<"print('loaded')";}
     assert(LooksLikeRuneSchemaMod(luaOnly));
 
+    const auto delivery=root/"ItemDelivery";fs::create_directories(delivery);
+    {std::ofstream(delivery/"item-delivery.json")<<"{}";}
+    assert(LooksLikeRuneSchemaMod(delivery));
+
     const auto legacy=root/"LegacyPakMod";
     fs::create_directories(legacy/"old");
     {std::ofstream(legacy/"old"/"Legacy.pak")<<"";}

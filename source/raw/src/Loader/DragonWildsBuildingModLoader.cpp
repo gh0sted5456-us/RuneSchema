@@ -2663,9 +2663,10 @@ namespace DragonWilds {
 
             const bool reportDeferred = !source
                 || std::strcmp(source, "bounded-retry") != 0;
-            if (!ApplyUnlocksToWorld(worldContext, reportDeferred))
+            const auto unlock = ApplyUnlocksToWorld(worldContext, reportDeferred);
+            if (!unlock.Applied)
             {
-                if (PS::Storefront::IsDedicatedServer()
+                if (!unlock.ProgressComponents && PS::Storefront::IsDedicatedServer()
                     && source && std::strcmp(source, "world-ready") == 0)
                 {
                     // A headless world normally has no player ProgressComponent
@@ -2679,7 +2680,9 @@ namespace DragonWilds {
                         "[SERVER][BUILDING-UNLOCK][AWAITING-PLAYER] World registry is ready; unlock delivery will begin when a player ProgressComponent becomes available.\n"));
                     return true;
                 }
-                m_lastRecoveryFailure = "live player ProgressComponent was not ready";
+                m_lastRecoveryFailure = unlock.ProgressComponents
+                    ? "Live progress was found, but mod building unlocks could not be verified"
+                    : "Waiting for a live player progress component";
                 return false;
             }
 
@@ -2746,7 +2749,7 @@ namespace DragonWilds {
                 : m_lastRecoveryFailure,
             {},{},"BuildingWorldRecovery","Finalization"),
             STR(
-            "[BUILDING-RECOVERY][TIMEOUT] Recovery stopped after {} seconds: {}. Buildings remain isolated; other RuneSchema systems continue.\n"),
+            "[BUILDING-RECOVERY][TIMEOUT] Timed retry ended after {} seconds: {}. Recovery can retry on the next native player or progress callback.\n"),
             BuildingRecoveryTimeoutSeconds,
             PS::ToWideSafe(m_lastRecoveryFailure.empty()
                 ? "world readiness could not be verified"
@@ -2927,35 +2930,38 @@ namespace DragonWilds {
         return true;
     }
 
-    size_t DragonWildsBuildingModLoader::ApplyUnlocksToWorld(
+    DragonWildsBuildingModLoader::WorldUnlockResult DragonWildsBuildingModLoader::ApplyUnlocksToWorld(
         UObject* worldContext, bool reportDeferred)
     {
-        if (!m_progressComponentClass || m_unlocks.empty()) return 0;
+        WorldUnlockResult result;
+        if (!m_progressComponentClass || m_unlocks.empty()) return result;
 
         auto* targetWorld = worldContext ? worldContext->GetWorld() : nullptr;
+        const auto apply = [&](UObject* candidate) {
+            if (!candidate || !candidate->IsA(m_progressComponentClass)
+                || candidate->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject | RF_ArchetypeObject
+                    | RF_BeginDestroyed | RF_FinishDestroyed | RF_NeedLoad | RF_NeedPostLoad))
+                || (targetWorld && candidate->GetWorld() != targetWorld)) return;
+            ++result.ProgressComponents;
+            if (ApplyUnlocks(candidate)) ++result.Applied;
+        };
+
+        // A native progress callback already identifies the live component.
+        // Use it even when the current world census has not found it yet.
+        apply(worldContext);
+
         TArray<UObject*> candidates;
-        UECustom::UObjectGlobals::GetObjectsOfClass(
-            m_progressComponentClass, candidates, true);
-
-        size_t applied = 0;
+        UECustom::UObjectGlobals::GetObjectsOfClass(m_progressComponentClass, candidates, true);
         for (auto* candidate : candidates)
-        {
-            if (!candidate || candidate->HasAnyFlags(static_cast<EObjectFlags>(
-                    RF_ClassDefaultObject | RF_ArchetypeObject
-                    | RF_BeginDestroyed | RF_FinishDestroyed)))
-                continue;
-            if (targetWorld && candidate->GetWorld() != targetWorld)
-                continue;
-            if (ApplyUnlocks(candidate)) ++applied;
-        }
+            if (candidate != worldContext) apply(candidate);
 
-        if (!applied && reportDeferred)
+        if (!result.Applied && reportDeferred)
         {
             PS::Log<LogLevel::Verbose>(STR(
-                "[BUILDING-UNLOCK][DEFERRED] No live ProgressComponent was ready for world '{}'; native progress callbacks remain active.\n"),
-                worldContext ? worldContext->GetPathName() : TEXT("<any>"));
+                "[BUILDING-UNLOCK][DEFERRED] World '{}' has {} live progress component(s) and no verified unlocks.\n"),
+                worldContext ? worldContext->GetPathName() : TEXT("<any>"), result.ProgressComponents);
         }
-        return applied;
+        return result;
     }
 
     void DragonWildsBuildingModLoader::NotifyBuildingUnlocks(

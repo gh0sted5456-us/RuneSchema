@@ -40,8 +40,21 @@ int main(int argc,char** argv)try{
     SetEnvironmentVariableW(L"SteamGameId",previousSize?previous:nullptr);
     for(int i=0;i<200&&!fs::exists(report);++i)Sleep(25);assert(fs::is_regular_file(report));
     const auto result=HelpyDesktop::Json::parse(ConfigFiles::Read(report));assert(result.at("PackageResult")==APPMODEL_ERROR_NO_PACKAGE&&!result.at("InheritedSteamContext").get<bool>());
-    fs::create_directories(root/"Helpy");fs::copy_file(source,root/"Helpy/Helpy.exe");fs::copy_file(source.parent_path()/"SDL3.dll",root/"Helpy/SDL3.dll");
+    fs::create_directories(root/"Helpy");fs::copy_file(executable,root/"Helpy/Helpy.exe");fs::copy_file(source.parent_path()/"SDL3.dll",root/"Helpy/SDL3.dll");
     assert(Application(root)==root/"Helpy/Helpy.exe"&&InstanceName(root)==name);
     assert(RuntimePaths::ModFromBinary(Application(root))==root);
+    assert(HelpyDesktop::Enabled(root));
+    const auto settings=root/"Helpy/settings/settings.jsonc";
+    const auto comment="//"+std::string(80*1024,' ')+"\n";
+    ConfigFiles::Write(settings,comment+R"({"enabled":false})");
+    assert(!HelpyDesktop::Enabled(root));
+    ConfigFiles::Write(settings,comment+R"({"enabled":true})");
+    assert(HelpyDesktop::Enabled(root));
+    const auto installed=root/"Helpy/Helpy.exe";
+    fs::resize_file(installed,16*1024*1024);
+    assert(Application(root)==installed);
+    fs::resize_file(installed,0);
+    bool empty=false;try{Application(root);}catch(const std::exception& error){empty=std::string_view(error.what()).find("is empty")!=std::string_view::npos;}
+    assert(empty);
     std::cout<<"Desktop launch is outside the game package and does not inherit Steam session state.\n";
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}

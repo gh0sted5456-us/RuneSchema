@@ -16,10 +16,24 @@ inline constexpr std::array Tips{
     "Tip: Initial Assets includes map filters; item-icon caches stay separate."
 };
 inline size_t TipIndex(double elapsed){if(!std::isfinite(elapsed)||elapsed<0)return 0;return static_cast<size_t>(std::fmod(std::floor(elapsed/7.0),static_cast<double>(Tips.size())));}
-// Deliberate hold/crossfade/hold/crossfade, not a spinning logo or a cut.
-inline constexpr double HoldSeconds=4.0,BlendSeconds=4.0,CycleSeconds=2*(HoldSeconds+BlendSeconds);
 inline constexpr double ExitSeconds=.65,RevealSeconds=.18;
 inline float Smooth(float t){t=std::clamp(t,0.f,1.f);return t*t*(3-2*t);}
+struct Rotation {size_t First=0,Next=0;float Fade=0;};
+inline Rotation Cycle(double elapsed,size_t count,double seconds){
+    if(count<2||!std::isfinite(elapsed)||elapsed<0||!std::isfinite(seconds)||seconds<=0)return {};
+    const double phase=std::fmod(elapsed,seconds*count)/seconds;
+    const auto first=static_cast<size_t>(phase)%count;
+    return {first,(first+1)%count,Smooth(static_cast<float>((phase-std::floor(phase))*2-1))};
+}
+inline std::array<float,3> Logos(double elapsed,bool animate,bool game,bool platform,double seconds){
+    if(!animate)return {0,1,0};
+    const std::array<size_t,3> order{game?0u:1u,game?1u:2u,2u};
+    const auto phase=Cycle(elapsed,1u+game+platform,seconds);
+    std::array<float,3> alpha{};
+    alpha[order[phase.First]]=1-phase.Fade;
+    alpha[order[phase.Next]]+=phase.Fade;
+    return alpha;
+}
 enum class ExitKind {Dragonwilds,RuneSchema};
 struct ExitFrame {float Progress=0,Travel=0,Fade=1,RuneOpacity=0,GameOpacity=1;bool Finished=false;};
 struct Exit {
@@ -77,14 +91,5 @@ inline std::array<Part,3> SplitLogo(const std::vector<std::uint8_t>& rgba,int wi
     }
     return result;
 }
-inline float Blend(double elapsed,bool animate=true){
-    if(!animate)return 1;
-    if(!std::isfinite(elapsed)||elapsed<0)elapsed=0;
-    const auto phase=std::fmod(elapsed,CycleSeconds);
-    const auto smooth=[](double value){const auto t=static_cast<float>(value);return t*t*(3-2*t);};
-    if(phase<HoldSeconds)return 0;
-    if(phase<HoldSeconds+BlendSeconds)return smooth((phase-HoldSeconds)/BlendSeconds);
-    if(phase<2*HoldSeconds+BlendSeconds)return 1;
-    return 1-smooth((phase-(2*HoldSeconds+BlendSeconds))/BlendSeconds);
-}
+inline float Blend(double elapsed,bool animate=true){return Logos(elapsed,animate,true,false,8)[1];}
 }

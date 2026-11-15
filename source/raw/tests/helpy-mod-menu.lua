@@ -1,6 +1,7 @@
 local file=assert(io.open(assert(arg[1]),"rb"));local source=file:read("*a");file:close()
 local shared,scheduled,commands,publications,stopped={},{},{},0,false
 local latest,host={},false
+local function example()for _,page in ipairs(latest.Pages)do if page.Id=="Example" then return page end end end
 ModRef={GetSharedVariable=function(_,key)return shared[key] end,SetSharedVariable=function(_,key,value)shared[key]=value end}
 for _,name in ipairs({"RegisterHook","RegisterKeyBind","NotifyOnNewObject","StaticFindObject","FindAllOf"}) do _G[name]=function()error("Mod Menu 2 must not install or open the original game menu")end end
 ExecuteInGameThread=function()error("unexpected thread hop")end
@@ -11,7 +12,7 @@ local config="; keep this comment\r\nEnabled = true\r\nShape = 10 ; shape commen
 local written=0
 RuneSchemaModMenuExchange=function(text)
     local json=assert(RuneSchemaTestJson);local request,problem=json.decode(text);assert(request,problem)
-    if request.Op=="catalog" then return '{"Pages":[{"Folder":"Example","Path":"C:/Mods/Example"}]}' end
+    if request.Op=="catalog" then return '{"Pages":[{"Folder":"Example","Path":"C:/Mods/Example"},{"Folder":"Broken","Path":"C:/Mods/Broken","Error":"Unreadable menu schema"}]}' end
     if request.Op=="read" then return json.encodeFlat({Exists=true,Text=request.Path:match("modmenu.json$") and schema or config},{"Exists","Text"}) end
     if request.Op=="write" then assert(request.Expected==config);config=request.Text;written=written+1;return '{"Saved":true}' end
     if request.Op=="publish" then assert(type(request.Snapshot.Pages)=="table");latest=request.Snapshot;publications=publications+1;return '{"Accepted":true}' end
@@ -25,6 +26,7 @@ local adapted=source:gsub("local json = {}","local json = {}; RuneSchemaTestJson
 assert(load(adapted,"@helpy-mod-menu.lua"))()
 assert(shared["ModMenu.version"]=="2.0.2" and shared["ModMenu.Example.Enabled"]==true and shared["ModMenu.Example.Shape"]==10)
 assert(publications==1 and written==0 and #scheduled==1)
+assert(#latest.Pages==2 and latest.Pages[1].Id=="Broken" and latest.Pages[1].Errors[1]=="Unreadable menu schema")
 local function tick(command)if command then commands[#commands+1]='{"Active":true,"HostAuthority":'..tostring(host)..',"Command":'..command..'}' end;local fn=table.remove(scheduled,1);assert(fn);fn()end
 tick('{"Op":"set","Id":"Example","Key":"Shape","Value":25,"Expected":10}')
 assert(written==1 and shared["ModMenu.Example.Shape"]==25 and shared["ModMenu.Example.rev"]==1)
@@ -37,14 +39,14 @@ shared["ModMenu.request.set"]="Example#1|Enabled=false|Shape=30";tick()
 assert(shared["ModMenu.Example.Enabled"]==false and shared["ModMenu.Example.Shape"]==30)
 shared["ModMenu.request.open"]="Example#1|row=Shape";tick()
 assert(publications>=5 and latest.OpenRow=="Shape" and latest.OpenId=="Example")
-assert(latest.Pages[1].Helpy.layout=="character" and #latest.Pages[1].Helpy.tabs==2)
+assert(example().Helpy.layout=="character" and #example().Helpy.tabs==2)
 local beforeWrites=written;tick('{"Op":"set","Id":"Example","Key":"ServerLimit","Value":20,"Expected":10}')
 assert(written==beforeWrites and shared["ModMenu.Example.ServerLimit"]==10)
 host=true;tick('{"Op":"set","Id":"Example","Key":"ServerLimit","Value":20,"Expected":10}')
 assert(written==beforeWrites+1 and shared["ModMenu.Example.ServerLimit"]==20)
 tick('{"Op":"page","Id":"Example","Rect":"view:10,20,800,600"}')
 shared["Example.preview"]="Local\\RuneSchema.CharacterPreview.123.JBBB";tick()
-assert(latest.Pages[1].PreviewChannel==shared["Example.preview"] and shared["ModMenu.rect"]=="view:10,20,800,600")
+assert(example().PreviewChannel==shared["Example.preview"] and shared["ModMenu.rect"]=="view:10,20,800,600")
 config=config:gsub("Shape = 30","Shape = 31");beforeWrites=written
 tick('{"Op":"set","Id":"Example","Key":"Shape","Value":35,"Expected":30}')
 assert(written==beforeWrites and config:find("Shape = 31",1,true))
@@ -70,8 +72,8 @@ shared,scheduled,commands={},{},{};RuneSchemaModMenuExchange=nativeBridge;host=f
 schema=[[{"id":"Example","name":"Character","settings":[{"key":"Shape","type":"slider","min":0,"max":100,"default":10},{"key":"Enabled","type":"toggle","default":true},{"key":"Style","type":"choice","options":["A","B"],"default":"A"},{"key":"Caption","type":"text","maxLength":40,"default":"old"}],"--Helpy":{"schema":1,"layout":"character","controls":{"Shape":"dial","Style":"radial"},"settings":[{"key":"Hip","type":"dial","min":0,"max":5,"default":1}],"templates":{"id":"appearance","version":1,"keys":["Shape","Enabled","Style","Caption","Hip"],"contextVariable":"Example.character"}}}]]
 config="; keep\nShape = 10\nEnabled = true\nStyle = A\nCaption = old\nHip = 1\nUnknown = retained\n"
 shared['Example.character']='character-a';assert(load(adapted))()
-assert(latest.Pages[1].Helpy.templates.id=='appearance' and latest.Pages[1].TemplateContext=='character-a')
-assert(#latest.Pages[1].Settings==5 and latest.Pages[1].Settings[1].presentation=='dial' and latest.Pages[1].Settings[3].presentation=='radial' and latest.Pages[1].Settings[5].presentation=='dial')
+assert(example().Helpy.templates.id=='appearance' and example().TemplateContext=='character-a')
+assert(#example().Settings==5 and example().Settings[1].presentation=='dial' and example().Settings[3].presentation=='radial' and example().Settings[5].presentation=='dial')
 local apply='{"Op":"template_apply","Id":"Example","TemplateId":"appearance","TemplateVersion":1,"Revision":0,"Context":"character-a","Expected":{"Shape":10,"Enabled":true,"Style":"A","Caption":"old","Hip":1},"Values":{"Shape":25,"Enabled":false,"Style":"B","Caption":"new","Hip":2}}'
 local beforeWrites=written;tick(apply)
 assert(written==beforeWrites+1 and shared['ModMenu.Example.Shape']==25 and shared['ModMenu.Example.Enabled']==false and shared['ModMenu.Example.Hip']==2 and shared['ModMenu.Example.rev']==1)
@@ -89,13 +91,13 @@ ExecuteInGameThreadWithDelay=function()error("fixture scheduler failure")end;ass
 ExecuteInGameThreadWithDelay=scheduler
 local radialOptions={};for i=1,13 do radialOptions[i]='"Option'..i..'"' end
 schema='{"id":"Example","settings":[],"--Helpy":{"schema":1,"settings":[{"key":"LargeChoice","type":"radial","options":['..table.concat(radialOptions,",")..'],"default":"Option1"}]}}'
-shared={};scheduled={};RuneSchemaModMenuExchange=nativeBridge;assert(load(adapted))();assert(latest.Pages[1].Settings[1].type=="choice" and latest.Pages[1].Settings[1].presentation==nil)
+shared={};scheduled={};RuneSchemaModMenuExchange=nativeBridge;assert(load(adapted))();assert(example().Settings[1].type=="choice" and example().Settings[1].presentation==nil)
 -- RGB/RGBA colors retain string configs and validate live edits and complete templates.
 commands[#commands+1]='{"Active":false}';tick()
 shared,scheduled,commands={},{},{};RuneSchemaModMenuExchange=nativeBridge
 schema=[[{"id":"Example","settings":[{"key":"Tint","type":"text","default":"#112233"}],"--Helpy":{"schema":1,"controls":{"Tint":"color"},"settings":[{"key":"Accent","type":"color","alpha":true,"default":"#44556680"}],"templates":{"id":"colors","version":1,"keys":["Tint","Accent"]}}}]]
 config="Tint = #112233\nAccent = #44556680\nUnknown = retained\n"
-assert(load(adapted))();assert(latest.Pages[1].Settings[1].presentation=='color' and latest.Pages[1].Settings[2].colorAlpha==true)
+assert(load(adapted))();assert(example().Settings[1].presentation=='color' and example().Settings[2].colorAlpha==true)
 local beforeWrites=written
 tick('{"Op":"set","Id":"Example","Key":"Tint","Expected":"#112233","Value":"#FF0088"}')
 assert(written==beforeWrites+1 and shared['ModMenu.Example.Tint']=='#FF0088' and config:find('Unknown = retained',1,true))
@@ -109,7 +111,7 @@ tick(colorTemplate:gsub('#10203040','#102030'));assert(written==beforeWrites)
 tick(colorTemplate);assert(written==beforeWrites+1 and shared['ModMenu.Example.Tint']=='#ABCDEF' and shared['ModMenu.Example.Accent']=='#10203040')
 commands[#commands+1]='{"Active":false}';tick()
 shared,scheduled,commands={},{},{};schema=[[{"id":"Example","settings":[],"--Helpy":{"schema":1,"settings":[{"key":"Bad","type":"color","default":"#112233payload"},{"key":"BadAlpha","type":"color","alpha":"true","default":"#11223344"},{"key":"DefaultColor","type":"color"}]}}]]
-config='';assert(load(adapted))();assert(#latest.Pages[1].Settings==1 and shared['ModMenu.Example.DefaultColor']=='#FFFFFF' and shared['ModMenu.Example.Bad']==nil)
+config='';assert(load(adapted))();assert(#example().Settings==1 and shared['ModMenu.Example.DefaultColor']=='#FFFFFF' and shared['ModMenu.Example.Bad']==nil)
 commands[#commands+1]='{"Active":false}';tick()
 -- Large pages exercise legacy rows, Helpy-only rows, tab keys and the full write path.
 local function capacity(count,split)
@@ -123,7 +125,7 @@ local function capacity(count,split)
     end
     schema='{"id":"Example","settings":['..table.concat(legacy,',')..'],"--Helpy":{"schema":1,"settings":['..table.concat(extra,',')..'],"tabs":[{"name":"All","keys":['..table.concat(keys,',')..']}],"templates":{"id":"capacity","version":1,"keys":['..table.concat(keys,',')..']}}}'
     config='Unknown = retained\n';assert(load(adapted))()
-    local page=latest.Pages[1];assert(#page.Settings==math.min(count,1024) and #page.Helpy.tabs[1].keys==math.min(count,1024))
+    local page=example();assert(#page.Settings==math.min(count,1024) and #page.Helpy.tabs[1].keys==math.min(count,1024))
     local beforeWrites=written
     local apply='{"Op":"template_apply","Id":"Example","TemplateId":"capacity","TemplateVersion":1,"Revision":0,"Context":"","Expected":{'..table.concat(expected,',')..'},"Values":{'..table.concat(values,',')..'}}'
     if count<=1024 then

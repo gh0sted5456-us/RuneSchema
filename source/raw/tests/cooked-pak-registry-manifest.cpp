@@ -175,6 +175,7 @@ int main()
     rejectDocument({{"LoaderDefinitions",{{"Journals",{{"/Example/Journal/Empty.",nlohmann::json::object()}}}}}});
     rejectDocument({{"LoaderDefinitions",{{"Journals",{{journal,1}}}}}});
     rejectDocument({{"NativeRegistries",nlohmann::json::object()}});
+    auto nullNative=metadata;nullNative["NativeRegistries"]=nullptr;rejectDocument(nullNative);
     auto oversized=metadata;
     for(int i=0;i<4097;++i)oversized["LoaderDefinitions"]["Lore"]["/Example/Note"+std::to_string(i)+".Note"] = nlohmann::json::object();
     rejectDocument(oversized);

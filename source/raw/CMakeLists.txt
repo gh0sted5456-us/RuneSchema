@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 
 # Framework and bundled Helpy share this release version.
-project(RuneSchema VERSION 0.8.1.0 LANGUAGES CXX RC)
+project(RuneSchema VERSION 0.9.0.0 LANGUAGES CXX RC)
 
 # Reject leftover source files from the postponed RSDK Workspace/Inspector branch.
 file(GLOB_RECURSE RUNESCHEMA_DEFERRED_FILES
@@ -52,6 +52,8 @@ FetchContent_Declare(
     GIT_TAG ${RUNESCHEMA_UE4SS_TAG}
 )
 FetchContent_MakeAvailable(UE4SS)
+file(STRINGS "${ue4ss_SOURCE_DIR}/UE4SS/generated_src/version.cache" RUNESCHEMA_UE4SS_VERSION_CACHE LIMIT_COUNT 1)
+string(REGEX MATCH "^[0-9]+[.][0-9]+[.][0-9]+" RUNESCHEMA_UE4SS_VERSION "${RUNESCHEMA_UE4SS_VERSION_CACHE}")
 option(RUNESCHEMA_BUILD_MANAGED_UE4SS_HOST "Retired: custom UE4SS hosts are not supported" OFF)
 if(RUNESCHEMA_BUILD_MANAGED_UE4SS_HOST)
     message(FATAL_ERROR "RuneSchema must run on an unmodified UE4SS.dll. Configure RUNESCHEMA_BUILD_MANAGED_UE4SS_HOST=OFF.")
@@ -117,6 +119,49 @@ add_library(${TARGET} SHARED
     src/Core/CharacterEntryRecovery.cpp
     src/Core/PersistencePruner.cpp)
 
+add_library(RuneSchemaUE4SSBridgePlugin SHARED plugins/SisterContentPlugin.cpp)
+target_include_directories(RuneSchemaUE4SSBridgePlugin PRIVATE include)
+set_target_properties(RuneSchemaUE4SSBridgePlugin PROPERTIES OUTPUT_NAME "RuneSchema.UE4SS.Bridge")
+add_dependencies(${TARGET} RuneSchemaUE4SSBridgePlugin)
+
+add_library(RuneSchemaPakLoader SHARED
+    ../ue4ss/pak-loader/PakLoader.cpp ../ue4ss/pak-loader/StartupMount.cpp)
+set_target_properties(RuneSchemaPakLoader PROPERTIES OUTPUT_NAME "runeschema-pakloader")
+target_include_directories(RuneSchemaPakLoader PRIVATE include)
+target_compile_definitions(RuneSchemaPakLoader PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_link_libraries(RuneSchemaPakLoader PRIVATE UE4SS safetyhook Zydis)
+add_library(pak-loader-fixture SHARED EXCLUDE_FROM_ALL ../ue4ss/pak-loader/FixtureMod.cpp)
+target_link_libraries(pak-loader-fixture PRIVATE UE4SS)
+add_executable(pak-loader-test EXCLUDE_FROM_ALL tests/pak-loader.cpp)
+target_include_directories(pak-loader-test PRIVATE include)
+add_dependencies(pak-loader-test RuneSchemaPakLoader)
+if(WIN32)
+    set_target_properties(pak-loader-test PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:UE4SS>")
+endif()
+
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../../docs/examples/SisterContentExample/Example.cpp")
+    add_library(SisterContentExample SHARED EXCLUDE_FROM_ALL
+        ../../docs/examples/SisterContentExample/Example.cpp)
+    target_link_libraries(SisterContentExample PRIVATE UE4SS)
+    set_target_properties(SisterContentExample PROPERTIES OUTPUT_NAME main
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/examples/SisterContentExample/dlls")
+endif()
+
+add_library(RuneSchemaMultiplayerPlugin SHARED plugins/MultiplayerPlugin.cpp src/Core/ConfigFiles.cpp)
+set_target_properties(RuneSchemaMultiplayerPlugin PROPERTIES OUTPUT_NAME "RuneSchema.Multiplayer"
+    MSVC_RUNTIME_LIBRARY MultiThreaded)
+target_include_directories(RuneSchemaMultiplayerPlugin PRIVATE include)
+target_link_libraries(RuneSchemaMultiplayerPlugin PRIVATE nlohmann_json::nlohmann_json)
+target_compile_definitions(RuneSchemaMultiplayerPlugin PRIVATE
+    RS_MULTIPLAYER_VERSION="${PROJECT_VERSION}" NOMINMAX WIN32_LEAN_AND_MEAN UNICODE _UNICODE)
+target_compile_options(RuneSchemaMultiplayerPlugin PRIVATE /utf-8 /Zc:preprocessor)
+add_executable(multiplayer-policy-plugin-test EXCLUDE_FROM_ALL tests/multiplayer-policy-plugin.cpp)
+target_include_directories(multiplayer-policy-plugin-test PRIVATE include)
+target_link_libraries(multiplayer-policy-plugin-test PRIVATE nlohmann_json::nlohmann_json)
+target_compile_options(multiplayer-policy-plugin-test PRIVATE /utf-8 /Zc:preprocessor)
+add_dependencies(multiplayer-policy-plugin-test RuneSchemaMultiplayerPlugin)
+
 # Compile-time isolation for private template acceptance. Empty in ordinary builds.
 set(RUNESCHEMA_PRIVATE_TEMPLATE_TEST_DOCUMENTS "" CACHE PATH "PRIVATE test Documents root; never distribute this build")
 if(RUNESCHEMA_PRIVATE_TEMPLATE_TEST_DOCUMENTS)
@@ -143,6 +188,8 @@ target_compile_definitions(${TARGET} PRIVATE
     NOMINMAX
     WIN32_LEAN_AND_MEAN
     _CRT_SECURE_NO_WARNINGS
+    RUNESCHEMA_UE4SS_PIN="${RUNESCHEMA_UE4SS_TAG}"
+    RUNESCHEMA_UE4SS_VERSION="${RUNESCHEMA_UE4SS_VERSION}"
 )
 target_link_libraries(${TARGET} PRIVATE
     RuneSchemaJsonCore

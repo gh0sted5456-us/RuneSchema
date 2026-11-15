@@ -33,30 +33,44 @@ namespace {
 HMODULE Module{};
 constexpr RuneSchemaPluginDescriptor Descriptor{sizeof(RuneSchemaPluginDescriptor),RUNESCHEMA_PLUGIN_API_VERSION,
     "RuneSchema.Helpy","RSMK (RuneSchema Modding Kit)",PS::HelpyBranding::Version};
+using SharedSnapshot=std::shared_ptr<const nlohmann::json>;
+using CatalogPieces=std::map<std::string,SharedSnapshot,std::less<>>;
+CatalogPieces ShareCatalog(const SharedSnapshot& snapshot){
+    CatalogPieces fields;
+    for(auto it=snapshot->begin();it!=snapshot->end();++it)if(it.key()!="Players")
+        fields.emplace(it.key(),SharedSnapshot(snapshot,&it.value()));
+    return fields;
+}
 struct State {const RuneSchemaHostApi* Host{};std::unique_ptr<PS::HelpyStandaloneWindow> Window;
     struct CatalogReply {nlohmann::json Request;bool Accepted=false;uint64_t Connection=0,Generation=0;};
     PS::ProcessExitFuture<CatalogReply> CatalogSubmit;std::deque<nlohmann::json> CatalogQueue;
     struct IconRequest {std::string Icon;uint64_t Connection,Generation;};
     PS::ProcessExitFuture<nlohmann::json> IconSubmit;std::deque<IconRequest> IconQueue;
+    // Only the pending host read owns this buffer, across successive workers.
+    std::vector<char> HostReadBuffer;
     PS::ProcessExitFuture<nlohmann::json> HostRead;bool ReadingMetadata=false;uint64_t ReadingRevision=0,ReadingConnection=0;
     std::atomic<uint64_t> ConnectionEpoch=0;
     std::atomic<bool> RelayOnly=false;
     std::atomic<bool> ToolsAvailable=false,ToolsWaiting=false;std::atomic<uint64_t> ToolsGeneration=1;
-    std::mutex ToolsMutex;uint64_t ToolsRevision=0; nlohmann::json ToolsResult=nlohmann::json::object(),ToolsCatalog=nlohmann::json::object(),Players=nlohmann::json::array();std::deque<nlohmann::json> IconResults;
+    std::mutex ToolsMutex;uint64_t ToolsRevision=0; SharedSnapshot ToolsResult;CatalogPieces ToolsCatalog;nlohmann::json Players=nlohmann::json::array();std::deque<nlohmann::json> IconResults;
     std::map<uint64_t,nlohmann::json> Completed;std::map<uint64_t,std::string> IconDictionary;std::deque<nlohmann::json> QueryResults;uint64_t HostRevision=0;std::chrono::steady_clock::time_point NextHostRead{};
     nlohmann::json MapGroundReply=nlohmann::json::object();std::chrono::steady_clock::time_point NextMetadataRead{};
     bool LoggedQuery=false,LoggedRows=false,LoggedIcon=false;std::atomic<bool> InventoryReady=false;};
-bool CallCore(State* state,const nlohmann::json& request,nlohmann::json& response) {
+bool CallCore(State* state,const nlohmann::json& request,nlohmann::json& response,
+              std::vector<char>* readBuffer=nullptr) {
     try {
     if(!state||!state->Host)return false;
     const auto input=request.dump();
     const auto action=request.value("Action",std::string{});
     const bool hudExtension=action=="HudExtensions";
     const bool hudRead=hudExtension&&request.at("Payload").value("Action",std::string{})=="List";
-    const bool readOnly=action=="Read"||action=="AuthoringSnapshot"||action=="SettingsRead"||action=="QuickLoadRead"||action=="AdditionalLoggingRead"||action=="ModsRead"||action=="IconCacheOwnership"||action=="IconCacheSources"||action=="CrashDumpRead"||action=="HelpyModMenuRead"||hudRead;
-    uint32_t size=0;thread_local std::vector<char> output(8192);
+    const bool readOnly=action=="GameplayEvents"||action=="Read"||action=="AuthoringSnapshot"||action=="SettingsRead"||action=="QuickLoadRead"||action=="AdditionalLoggingRead"||action=="ModsRead"||action=="IconCacheOwnership"||action=="IconCacheBuildRead"||action=="IconCacheSources"||action=="CrashDumpRead"||action=="HelpyModMenuRead"||hudRead;
+    uint32_t size=0;
+    thread_local std::vector<char> threadOutput;
+    auto& output=readBuffer?*readBuffer:threadOutput;
     const bool maximum=action=="Completed"||action=="SettingsSave"||action=="ModsSave"||action=="ModsImport"||action=="QuickLoadSave"||action=="AdditionalLoggingSave"||action=="CrashDumpSave";
-    uint32_t capacity=(readOnly||action=="HelpyNativeOverlay"||hudExtension)?8192:maximum?RUNESCHEMA_PLUGIN_MAX_MESSAGE:4096;
+    uint32_t capacity=(action=="HelpyNativeOverlay"||hudExtension)?8192:maximum?RUNESCHEMA_PLUGIN_MAX_MESSAGE:4096;
+    if(readOnly)capacity=static_cast<uint32_t>(std::clamp<size_t>(output.size(),8192,RUNESCHEMA_PLUGIN_MAX_MESSAGE));
     if(output.size()<capacity)output.resize(capacity);
     auto code=state->Host->CallService(Descriptor.Id,"runeschema.tools",input.c_str(),output.data(),capacity,&size);
     if(readOnly&&code==RS_PLUGIN_BUFFER_TOO_SMALL&&size>capacity&&size<=RUNESCHEMA_PLUGIN_MAX_MESSAGE){capacity=size;if(output.size()<capacity)output.resize(capacity);code=state->Host->CallService(Descriptor.Id,"runeschema.tools",input.c_str(),output.data(),capacity,&size);}
@@ -93,25 +107,31 @@ int32_t RS_PLUGIN_CALL InventoryService(void* context,const char* requestJson,ch
         std::memcpy(response,text.c_str(),*size);return RS_PLUGIN_OK;
     }catch(...){return RS_PLUGIN_FAILED;}
 }
-void StoreReceipt(State* state,const nlohmann::json& result) {
+std::pair<uint64_t,nlohmann::json> BuildReceipt(const nlohmann::json& result) {
     // Progress retains the mutation slot; only final acknowledgements complete it.
-    if(result.value("_InProgress",false))return;
-    const auto id=result.value("_RequestId",uint64_t{});if(!id)return;
+    if(result.value("_InProgress",false))return {};
+    const auto id=result.value("_RequestId",uint64_t{});if(!id)return {};
     nlohmann::json receipt={{"Status",result.value("Status",std::string("Completed."))}};
     for(const auto* key:{"InventorySnapshot","EquipmentAction","InventoryAction","StorageResult","JournalCatalog","GrantResults","SpawnResult","SpawnDefinition","CloneResult","CloneSource","CloneAppearance","ItemDetails","MapSnapshot","MapBuildings","MapPoint","RecipeExportResult","RecipeWorkspaceCatalog","RecipeWorkspaceSource","ItemOverrideExportResult","KitMetadata","NativeContracts","ServerControl"})
         if(result.contains(key))receipt[key]=result[key];
-    state->Completed[id]=std::move(receipt);while(state->Completed.size()>16)state->Completed.erase(state->Completed.begin());
+    return {id,std::move(receipt)};
+}
+void StoreReceipt(State* state,std::pair<uint64_t,nlohmann::json> receipt){
+    if(!receipt.first)return;
+    state->Completed[receipt.first]=std::move(receipt.second);while(state->Completed.size()>16)state->Completed.erase(state->Completed.begin());
 }
 // Called under ToolsMutex for both push and read recovery. No world-scoped
 // roster, role, receipt or icon reply may leak into the next session.
 void ResetToolsSession(State* state){
-    state->ToolsResult=nlohmann::json::object();state->ToolsCatalog=nlohmann::json::object();state->Players=nlohmann::json::array();
+    state->ToolsResult.reset();state->ToolsCatalog.clear();state->Players=nlohmann::json::array();
     state->MapGroundReply=nlohmann::json::object();state->IconResults.clear();state->IconDictionary.clear();state->Completed.clear();state->QueryResults.clear();
     state->HostRevision=0;state->LoggedQuery=false;state->LoggedRows=false;state->LoggedIcon=false;
 }
 int32_t RS_PLUGIN_CALL DesktopConnection(void* context,const char* input,char*,uint32_t,uint32_t* size){
     auto* state=static_cast<State*>(context);if(!state||!input||!size)return RS_PLUGIN_INVALID_ARGUMENT;
-    try{const auto value=nlohmann::json::parse(input);PS::PluginRuntimeServices::GameProcessId=value.at("Pid").get<uint32_t>();
+    try{const auto value=nlohmann::json::parse(input);const auto pid=value.at("Pid").get<uint32_t>();
+        PS::PluginRuntimeServices::GameProcessId=pid;
+        ++PS::PluginRuntimeServices::ConnectionEpoch;
         {std::lock_guard lock(state->ToolsMutex);++state->ConnectionEpoch;ResetToolsSession(state);state->ToolsAvailable=false;state->ToolsWaiting=false;state->ToolsGeneration=1;++state->ToolsRevision;}
         PS::PluginRuntimeServices::ConnectionChanged=true;PS::LazyCatalog::BackendSignal(1);*size=0;return RS_PLUGIN_OK;
     }catch(...){return RS_PLUGIN_INVALID_ARGUMENT;}
@@ -122,17 +142,26 @@ int32_t RS_PLUGIN_CALL ToolsPush(void* context,const char* requestJson,char*,uin
     try {
         const auto message=nlohmann::json::parse(requestJson);const auto kind=message.value("Kind",std::string{});std::string diagnostic;
         auto payload=message.value("Payload",nlohmann::json::object());const auto generation=message.value("Generation",uint64_t{1});
+        SharedSnapshot incoming;CatalogPieces fields;std::pair<uint64_t,nlohmann::json> receipt;
+        auto players=nlohmann::json();
+        if(kind=="bootstrap")incoming=std::make_shared<const nlohmann::json>(payload.value("Result",nlohmann::json::object()));
+        else if(kind=="catalog"||kind=="result"||kind=="clear"){
+            if((kind=="catalog"||kind=="result")&&payload.contains("Players")&&payload["Players"].is_array())players=payload["Players"];
+            if(kind=="result")receipt=BuildReceipt(payload);
+            incoming=std::make_shared<const nlohmann::json>(std::move(payload));
+            if(kind=="catalog")fields=ShareCatalog(incoming);
+        }
         {
             std::lock_guard lock(state->ToolsMutex);
             if(generation<state->ToolsGeneration.load()){*size=0;return RS_PLUGIN_OK;}
             if(generation!=state->ToolsGeneration.load())ResetToolsSession(state);
             state->ToolsAvailable=message.value("Available",false);state->ToolsWaiting=message.value("Waiting",false);
             state->ToolsGeneration=generation;if(kind!="icon")++state->ToolsRevision;
-            if(kind=="bootstrap")state->ToolsResult=payload.value("Result",nlohmann::json::object());
+            if(kind=="bootstrap")state->ToolsResult.swap(incoming);
             else if(kind=="mapground")state->MapGroundReply=std::move(payload);
             else if(kind=="catalog") {
-                if(payload.contains("Players")&&payload["Players"].is_array())state->Players=payload["Players"];
-                for(auto it=payload.begin();it!=payload.end();++it)state->ToolsCatalog[it.key()]=it.value();
+                if(players.is_array())state->Players.swap(players);
+                for(auto& [key,value]:fields)state->ToolsCatalog[key].swap(value);
             }
             else if(kind=="query") {
                 if(payload.contains("CatalogWindow")&&payload["CatalogWindow"].is_object()) {
@@ -164,19 +193,19 @@ int32_t RS_PLUGIN_CALL ToolsPush(void* context,const char* requestJson,char*,uin
                 if(!state->LoggedIcon){diagnostic="RSMK "+std::string(PS::HelpyBranding::Version)+" native icon reply received.";state->LoggedIcon=true;}
                 state->IconResults.push_back(std::move(payload));while(state->IconResults.size()>16)state->IconResults.pop_front();}
             else if(kind=="result"){
-                if(payload.contains("Players")&&payload["Players"].is_array())state->Players=payload["Players"];
-                if(payload.contains("PlayersDelta")&&payload["PlayersDelta"].is_object()) {
-                    const auto& delta=payload["PlayersDelta"];if(delta.value("Reset",false))state->Players=nlohmann::json::array();
+                if(players.is_array())state->Players.swap(players);
+                if(incoming->contains("PlayersDelta")&&incoming->at("PlayersDelta").is_object()) {
+                    const auto& delta=incoming->at("PlayersDelta");if(delta.value("Reset",false))state->Players=nlohmann::json::array();
                     if(delta.contains("Removed")&&delta["Removed"].is_array())for(const auto& path:delta["Removed"])if(path.is_string())
                         for(auto it=state->Players.begin();it!=state->Players.end();)it=it->value("Path",std::string{})==path.get<std::string>()?state->Players.erase(it):++it;
                     const auto upsert=[&](const nlohmann::json& row){if(!row.is_object())return;const auto path=row.value("Path",std::string{});if(path.empty())return;for(auto& existing:state->Players)if(existing.value("Path",std::string{})==path){existing=row;return;}state->Players.push_back(row);};
                     if(delta.contains("Added")&&delta["Added"].is_array())for(const auto& row:delta["Added"])upsert(row);
                     if(delta.contains("Updated")&&delta["Updated"].is_array())for(const auto& row:delta["Updated"])upsert(row);
                 }
-                state->ToolsResult=payload;StoreReceipt(state,payload);
+                state->ToolsResult.swap(incoming);StoreReceipt(state,std::move(receipt));
             }
             else if(kind=="profile")PS::PluginRuntimeServices::ProfileChanged=true;
-            else if(kind=="clear"){ResetToolsSession(state);state->ToolsResult=payload;}
+            else if(kind=="clear"){ResetToolsSession(state);state->ToolsResult.swap(incoming);}
         }
         if(!diagnostic.empty()&&state->Host&&state->Host->Log)state->Host->Log(RS_LOG_INFO,Descriptor.Id,diagnostic.c_str());
         PS::LazyCatalog::BackendSignal(generation);*size=0;return RS_PLUGIN_OK;
@@ -205,7 +234,8 @@ void PumpCatalog(State* state){
         auto result=state->CatalogSubmit.get();
         if(result.Connection!=state->ConnectionEpoch.load()||result.Generation!=state->ToolsGeneration.load())result.Accepted=true;
         if(!result.Accepted&&ItemInspection(result.Request)){
-            std::lock_guard lock(state->ToolsMutex);StoreReceipt(state,{{"_RequestId",result.Request.at("_RequestId")},{"Status","Native details are unavailable; retry when the runtime is ready."}});state->ToolsWaiting=false;
+            auto receipt=BuildReceipt({{"_RequestId",result.Request.at("_RequestId")},{"Status","Native details are unavailable; retry when the runtime is ready."}});
+            std::lock_guard lock(state->ToolsMutex);StoreReceipt(state,std::move(receipt));state->ToolsWaiting=false;
         }else if(!result.Accepted){auto& request=result.Request;request["RuntimeGeneration"]=request.value("ClientGeneration",uint64_t{});
             request["Reset"]=false;request["HasMore"]=false;request["Error"]="The runtime did not accept this request. Retry when the world is ready.";
             PS::LazyCatalog::ApplyWindow(request,0);}
@@ -245,11 +275,26 @@ void SyncHost(State* state,bool force=false,bool metadata=false) {
         const auto now=std::chrono::steady_clock::now();auto& next=metadata?state->NextMetadataRead:state->NextHostRead;if(!force&&now<next)return;
         next=now+std::chrono::seconds(metadata?5:2);
         uint64_t revision;{std::lock_guard lock(state->ToolsMutex);revision=metadata?0:state->HostRevision;state->ReadingRevision=state->ToolsRevision;state->ReadingConnection=state->ConnectionEpoch.load();}
-        const auto read=[state,revision,metadata]{nlohmann::json value;CallCore(state,{{"Action","Read"},{"Revision",revision},{"Category",metadata?-2:-1}},value);return value;};
+        const auto read=[state,revision,metadata]{
+            nlohmann::json value;
+            CallCore(state,{{"Action","Read"},{"Revision",revision},{"Category",metadata?-2:-1}},value,&state->HostReadBuffer);
+            return value;
+        };
         if(!force){state->ReadingMetadata=metadata;state->HostRead=std::async(std::launch::async,read);return;}
         reply=read();
     }
     if(!reply.is_object())return;
+    SharedSnapshot incoming;CatalogPieces fields;std::pair<uint64_t,nlohmann::json> receipt;
+    auto players=nlohmann::json();
+    if(reply.contains("Snapshot")&&reply["Snapshot"].is_object()){
+        auto& snapshot=reply["Snapshot"];
+        if(!metadata){
+            receipt=BuildReceipt(snapshot);
+            if(snapshot.contains("Players")&&snapshot["Players"].is_array())players=snapshot["Players"];
+        }
+        incoming=std::make_shared<const nlohmann::json>(std::move(snapshot));
+        fields=ShareCatalog(incoming);
+    }
     std::lock_guard lock(state->ToolsMutex);
     const auto generation=reply.value("Generation",state->ToolsGeneration.load());
     if(generation<state->ToolsGeneration.load())return;
@@ -257,8 +302,9 @@ void SyncHost(State* state,bool force=false,bool metadata=false) {
         const bool newWorld=generation!=state->ToolsGeneration.load();if(newWorld)ResetToolsSession(state);
         bool changed=newWorld||state->ToolsAvailable.load()!=reply.value("Available",false)||state->ToolsWaiting.load()!=reply.value("Waiting",false);
         state->ToolsGeneration=generation;state->ToolsAvailable=reply.value("Available",false);state->ToolsWaiting=reply.value("Waiting",false);
-        if(reply.contains("Snapshot"))for(const auto* key:{"ServerMods","RemoteAccess"})if(reply["Snapshot"].contains(key)){
-            const auto& value=reply["Snapshot"][key];if(!state->ToolsCatalog.contains(key)||state->ToolsCatalog[key]!=value){state->ToolsCatalog[key]=value;changed=true;}
+        for(const auto* key:{"ServerMods","RemoteAccess"})if(const auto it=fields.find(key);it!=fields.end()){
+            auto& current=state->ToolsCatalog[key];
+            if(!current||*current!=*it->second){current.swap(it->second);changed=true;}
         }
         if(changed)++state->ToolsRevision;return;
     }
@@ -272,10 +318,11 @@ void SyncHost(State* state,bool force=false,bool metadata=false) {
     }
     state->ToolsGeneration=generation;state->ToolsAvailable=reply.value("Available",false);state->ToolsWaiting=reply.value("Waiting",false);
     state->HostRevision=reply.value("Revision",state->HostRevision);
-    if(reply.contains("Snapshot")&&reply["Snapshot"].is_object()){
-        const auto& snapshot=reply["Snapshot"];state->ToolsResult=snapshot;StoreReceipt(state,snapshot);
-        if(snapshot.contains("Players")&&snapshot["Players"].is_array())state->Players=snapshot["Players"];
-        for(auto it=snapshot.begin();it!=snapshot.end();++it)if(it.key()!="Players")state->ToolsCatalog[it.key()]=it.value();
+    if(incoming){
+        StoreReceipt(state,std::move(receipt));
+        if(players.is_array())state->Players.swap(players);
+        state->ToolsResult.swap(incoming);
+        for(auto& [key,value]:fields)state->ToolsCatalog[key].swap(value);
     }
     ++state->ToolsRevision;PS::LazyCatalog::BackendSignal(generation);
 }
@@ -294,18 +341,29 @@ void ConfigureTransport(State* state) {
         };
         PS::SpawnToolRequests::RemoteCompleted=[state](uint64_t id,nlohmann::json& receipt){std::lock_guard lock(state->ToolsMutex);const auto found=state->Completed.find(id);if(found==state->Completed.end())return false;receipt=std::move(found->second);state->Completed.erase(found);return true;};
         PS::SpawnToolRequests::RemoteReadQuick=[state](uint64_t& revision,int category,nlohmann::json& snapshot){
-            PumpCatalog(state);SyncHost(state,false,category==-2);std::lock_guard lock(state->ToolsMutex);if(revision==state->ToolsRevision)return false;
-            if(category==-2){snapshot=nlohmann::json::object();for(const auto* key:{"ServerMods","RemoteAccess"})if(state->ToolsCatalog.contains(key))snapshot[key]=state->ToolsCatalog[key];revision=state->ToolsRevision;return true;}
-            snapshot=state->ToolsResult;snapshot["_Category"]=category;
-            if(!state->MapGroundReply.empty())snapshot["MapGround"]=state->MapGroundReply;
-            if(!state->QueryResults.empty()) {snapshot["_QueryResults"]=nlohmann::json::array();for(auto& row:state->QueryResults)snapshot["_QueryResults"].push_back(std::move(row));state->QueryResults.clear();}
-            const auto copy=[&](const char* key){if(state->ToolsCatalog.contains(key))snapshot[key]=state->ToolsCatalog[key];};
-            snapshot["Players"]=state->Players;copy("PlayerRoles");copy("ServerMods");copy("RemoteAccess");
+            PumpCatalog(state);SyncHost(state,false,category==-2);
+            SharedSnapshot result;CatalogPieces catalog;
+            nlohmann::json players,mapGround;std::deque<nlohmann::json> queries;uint64_t current;
+            {
+                std::lock_guard lock(state->ToolsMutex);if(revision==state->ToolsRevision)return false;
+                catalog=state->ToolsCatalog;current=state->ToolsRevision;
+                if(category!=-2){
+                    result=state->ToolsResult;players=state->Players;mapGround=state->MapGroundReply;
+                    queries.swap(state->QueryResults);
+                }
+            }
+            const auto copy=[&](const char* key){if(const auto it=catalog.find(key);it!=catalog.end())snapshot[key]=*it->second;};
+            snapshot=result?*result:nlohmann::json::object();
+            if(category==-2){copy("ServerMods");copy("RemoteAccess");revision=current;return true;}
+            snapshot["_Category"]=category;
+            if(!mapGround.empty())snapshot["MapGround"]=std::move(mapGround);
+            if(!queries.empty())snapshot["_QueryResults"]=nlohmann::json(std::move(queries));
+            snapshot["Players"]=std::move(players);copy("PlayerRoles");copy("ServerMods");copy("RemoteAccess");
             if(category==0){copy("Items");copy("CookedVisuals");copy("CatalogIssues");}
-            else if(category==1||category==2){if(state->ToolsCatalog.contains("Definitions")&&state->ToolsCatalog["Definitions"].is_array()){
-                snapshot["Definitions"]=nlohmann::json::array();for(const auto& row:state->ToolsCatalog["Definitions"]){const auto type=row.value("Type",std::string{});if((category==1&&(type=="AI"||type=="NPC"))||(category==2&&type=="Resource"))snapshot["Definitions"].push_back(row);}}}
+            else if(category==1||category==2){if(const auto it=catalog.find("Definitions");it!=catalog.end()&&it->second->is_array()){
+                snapshot["Definitions"]=nlohmann::json::array();for(const auto& row:*it->second){const auto type=row.value("Type",std::string{});if((category==1&&(type=="AI"||type=="NPC"))||(category==2&&type=="Resource"))snapshot["Definitions"].push_back(row);}}}
             for(const auto* key:{"CatalogReady","_CatalogIndexing","CatalogStatus","RegistryRecords","UnresolvedAssets","MetadataUnavailable","UnclassifiedRecords","CatalogAI","CatalogResources","CatalogCoverage","IndexStage","IndexDone","IndexTotal","IndexHasTotal","IndexFinished","IndexDetail"})copy(key);
-            revision=state->ToolsRevision;return true;
+            revision=current;return true;
         };
         PS::SpawnToolRequests::RemoteCancel=[state]{nlohmann::json ignored;CallCore(state,{{"Action","Cancel"}},ignored);};
         PS::SpawnToolRequests::RemoteAvailable=[state]{return state->ToolsAvailable.load();};
@@ -329,7 +387,7 @@ extern "C" __declspec(dllexport) int32_t RS_PLUGIN_CALL RuneSchemaPlugin_Initial
         !host->Log||!host->RegisterCapability||!host->RegisterService||!host->CallService)return RS_PLUGIN_INCOMPATIBLE_API;
     *instance=nullptr;
     auto* state=new(std::nothrow) State{host};if(!state)return RS_PLUGIN_FAILED;
-    state->ToolsCatalog=nlohmann::json::object();state->ToolsRevision=1;
+    state->ToolsRevision=1;
     PS::PluginRuntimeServices::Set(host);
     constexpr const char* capabilities[]{"helpy.navigation","helpy.item-lab","helpy.recipe-studio","helpy.map","authoring.live-preview","authoring.export"};
     for(const auto* capability:capabilities)if(host->RegisterCapability(Descriptor.Id,capability)!=RS_PLUGIN_OK){delete state;return RS_PLUGIN_DUPLICATE;}

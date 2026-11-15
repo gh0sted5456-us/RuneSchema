@@ -13,6 +13,7 @@
 #include "HelpyDesktopLaunch.h"
 #include "HelpyDesktopShortcut.h"
 #include <shellapi.h>
+#include <algorithm>
 #include <map>
 #include <cstring>
 #include <cstdio>
@@ -27,12 +28,18 @@ uint32_t ConnectedPid=0;
 Json OfflineEnvironment;
 std::filesystem::path AssignedRoot,AssignedCache;
 std::filesystem::path LogFile;std::mutex LogMutex;
-void RS_PLUGIN_CALL Log(uint32_t level,const char*,const char* message){
-    if(!message)return;OutputDebugStringA((std::string("[Helpy.exe] ")+message+"\n").c_str());
-    try{std::lock_guard lock(LogMutex);if(LogFile.empty())return;std::filesystem::create_directories(LogFile.parent_path());std::error_code error;
+void RS_PLUGIN_CALL Log(uint32_t level,const char* plugin,const char* message) noexcept {
+    if(!message)return;
+    try{
+        std::string line(message,strnlen_s(message,16384));
+        std::replace_if(line.begin(),line.end(),[](char c){return c=='\r'||c=='\n';},' ');
+        const std::string source(plugin?plugin:"",strnlen_s(plugin,128));
+        const auto label=PS::PluginCatalog::Token(source)?"[Helpy] [plugin="+source+"] ":"[Helpy] ";
+        OutputDebugStringA(("[Helpy.exe] "+label+line+"\n").c_str());
+        std::lock_guard lock(LogMutex);if(LogFile.empty())return;std::filesystem::create_directories(LogFile.parent_path());std::error_code error;
         if(std::filesystem::file_size(LogFile,error)>2*1024*1024&&!error){auto previous=LogFile;previous+=L".previous";std::filesystem::remove(previous,error);error.clear();std::filesystem::rename(LogFile,previous,error);}
         SYSTEMTIME time{};GetSystemTime(&time);char stamp[40]{};std::snprintf(stamp,sizeof(stamp),"%04u-%02u-%02uT%02u:%02u:%02u.%03uZ",time.wYear,time.wMonth,time.wDay,time.wHour,time.wMinute,time.wSecond,time.wMilliseconds);
-        std::ofstream output(LogFile,std::ios::app);output<<'['<<stamp<<"] ["<<(level==RS_LOG_ERROR?"error":level==RS_LOG_WARNING?"warning":"info")<<"] [Helpy] "<<std::string_view(message).substr(0,16384)<<'\n';
+        std::ofstream output(LogFile,std::ios::app);output<<'['<<stamp<<"] ["<<(level==RS_LOG_ERROR?"error":level==RS_LOG_WARNING?"warning":"info")<<"] "<<label<<line<<'\n';
     }catch(...){}
 }
 void Notify(const char* service,const Json& value){
@@ -59,7 +66,12 @@ int32_t RS_PLUGIN_CALL Call(const char* caller,const char* service,const char* i
     if(!caller||(std::string_view(caller)!="RuneSchema.Helpy"&&!FrontendPlugins.Authorized(caller))||!service||!input||!size||capacity>RUNESCHEMA_PLUGIN_MAX_MESSAGE||(!response&&capacity))return RS_PLUGIN_INVALID_ARGUMENT;
     try{
         if(strnlen_s(input,RUNESCHEMA_PLUGIN_MAX_MESSAGE+1)>RUNESCHEMA_PLUGIN_MAX_MESSAGE)return RS_PLUGIN_INVALID_ARGUMENT;
-        if(std::string_view(service)=="helpy.host")return Reply({{"Process","Helpy"},{"ApiVersion",1}},response,capacity,size);
+        if(std::string_view(service)=="helpy.host"){
+            Json identity={{"Process","Helpy"},{"ApiVersion",1}};
+            if(std::string_view(caller)=="RuneSchema.ModMenu2"&&Json::parse(input).value("ModMenuRuntime",false))
+                identity["RuntimeRoot"]=PS::RuntimeModPath::Text(AssignedRoot);
+            return Reply(identity,response,capacity,size);
+        }
         if(std::string_view(service)!="runeschema.tools"){
             Service local;{std::lock_guard lock(ServicesMutex);const auto found=Services.find(service);if(found==Services.end()){*size=0;return RS_PLUGIN_NOT_FOUND;}local=found->second;}
             return local.Callback(local.Context,input,response,capacity,size);
@@ -108,17 +120,21 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR,int){
     try{
         wchar_t file[32768]{};if(!GetModuleFileNameW(nullptr,file,32768))throw std::runtime_error("Cannot locate Helpy.exe");
         const auto executable=std::filesystem::path(file);auto root=PS::RuntimePaths::ModFromBinary(executable);
-        std::string platform;bool startHidden=false,explicitRoot=false;int argc=0;auto argv=CommandLineToArgvW(GetCommandLineW(),&argc);
+        std::string platform;bool startHidden=false,explicitRoot=false;uint32_t gamePid=0;int argc=0;auto argv=CommandLineToArgvW(GetCommandLineW(),&argc);
         if(!argv)throw std::runtime_error("Cannot read desktop arguments");
         for(int i=1;i<argc;++i){const std::wstring_view option=argv[i];
             if(option==L"--runtime-root"&&i+1<argc){root=argv[++i];explicitRoot=true;}
             else if(option==L"--platform"&&i+1<argc){const auto value=std::wstring_view(argv[++i]);platform=std::string(value.begin(),value.end());}
             else if(option==L"--smoke-test")smoke=true;
             else if(option==L"--start-hidden")startHidden=true;
+            else if(option==L"--game-pid"&&i+1<argc){
+                const std::wstring pid=argv[++i];
+                if(pid.empty()||pid.find_first_not_of(L"0123456789")!=pid.npos||(gamePid=std::stoul(pid))==0)throw std::runtime_error("Invalid game process ID");
+            }else if(option==L"--game-started")continue; // Older game bridges supply the PID through the connection.
             else{LocalFree(argv);throw std::runtime_error("Use --runtime-root <RuneSchema folder> and --platform steam|gamepass|epic|server");}
         }LocalFree(argv);
         const auto binding=executable.parent_path()/"runtime.json";
-        if(!explicitRoot&&std::filesystem::is_regular_file(binding)){const auto value=Json::parse(PS::ConfigFiles::Read(binding,16384));root=std::filesystem::u8path(value.at("Root").get<std::string>());if(platform.empty())platform=value.at("Platform").get<std::string>();}
+        if(!explicitRoot&&std::filesystem::is_regular_file(binding)){const auto value=Json::parse(PS::ConfigFiles::Read(binding));root=std::filesystem::u8path(value.at("Root").get<std::string>());if(platform.empty())platform=value.at("Platform").get<std::string>();}
         root=std::filesystem::weakly_canonical(root);
         AssignedRoot=root;
         const auto plugin=PS::RuntimePaths::HelpyBinary(root,"Helpy.dll");
@@ -135,7 +151,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR,int){
         LogFile=(PS::DiagnosticLogPaths::UseUE4SS?PS::DiagnosticLogPaths::UE4SS(root):PS::RuneSchemaData::PlatformDirectory(platform.c_str())/"diagnostics")/"Helpy-Desktop.log";
         const auto installed=PS::HelpyDesktopLaunch::Application(root);
         if(!std::filesystem::equivalent(executable,installed)){
-            PS::HelpyDesktopLaunch::Start(root,platform,startHidden);return 0;
+            PS::HelpyDesktopLaunch::Start(root,platform,startHidden,gamePid);return 0;
         }
         if(PS::HelpyDesktopLaunch::InGameContext())throw std::runtime_error("Helpy still belongs to a game session; exit it and open it from Windows Explorer");
         try{const auto directory=PS::RuneSchemaData::Directory()/"core/HELPY/vulkan";
@@ -148,7 +164,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR,int){
         if(GetLastError()==ERROR_ALREADY_EXISTS){if(!startHidden)SetEvent(activate);CloseHandle(activate);CloseHandle(singleton);return 0;}
         if(!smoke)try{PS::HelpyDesktopShortcut::Ensure(installed,platform,PS::RuneSchemaData::PlatformDirectory(platform));}catch(const std::exception& error){Log(RS_LOG_WARNING,"RuneSchema.Helpy",error.what());}
         OfflineEnvironment={{"Storefront",platform=="gamepass"?"Game Pass/WinGDK":"Steam/Epic"},{"Platform",platform=="epic"?"Epic Games":"Steam"},{"DedicatedServer",platform=="server"},{"NativeIconCaptureAvailable",false},{"UpdateChecksAvailable",true},{"DesktopStartHidden",startHidden}};
-        Bridge.Connect(root);
+        PS::HelpyGameLifetime game;game.Observe(gamePid);
+        Bridge.Connect(root);game.Observe(Bridge.Pid.load());
         PS::HelpyPaths::Configure(PS::RuntimePaths::Helpy(root));
         OfflineEnvironment["RuneSchemaVersion"]=RuneSchemaPlugin_Query()->Version;
         shutdown=RuneSchemaPlugin_Shutdown;
@@ -157,7 +174,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR,int){
         const auto unreal=RuneSchemaPlugin_OnUnrealInit;
         if(unreal(instance)!=RS_PLUGIN_OK||!Ready())throw std::runtime_error("Helpy desktop window could not start; check its plugin settings");
         worker=std::jthread([root](std::stop_token stop){
-            PS::HelpyPushPacing pushPacing;std::string lastFailure;const auto stopped=CreateEventW(nullptr,TRUE,FALSE,nullptr);
+            PS::HelpyPushPacing pushPacing;bool reportedOutage=false;const auto stopped=CreateEventW(nullptr,TRUE,FALSE,nullptr);
             {std::stop_callback cancel(stop,[stopped]{if(stopped)SetEvent(stopped);});bool update=true;
             while(!stop.stop_requested()){
                 try{
@@ -169,9 +186,13 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR,int){
                         if(!Bridge.Pid.load()&&Bridge.Connect(root)){
                             Connection(Bridge.Pid.load());Json ignored;if(Bridge.Exchange({{"Op","Call"},{"Request",{{"Action","HelpyVisibility"},{"Visible",Visible.load()},{"CaptureInput",CaptureInput.load()}}},{"Capacity",4096}},ignored))Deliver(ignored);
                         }
-                        Json reply;if(Bridge.Pid.load()&&Bridge.Exchange({{"Op","Poll"}},reply)){Deliver(reply);pushPacing.Polled(GetTickCount64());}else Connection(0);
+                        Json reply;if(Bridge.Pid.load()&&Bridge.Exchange({{"Op","Poll"}},reply)){Deliver(reply);pushPacing.Polled(GetTickCount64());reportedOutage=false;}else Connection(0);
                     }
-                }catch(const std::exception& error){std::lock_guard lock(RpcMutex);Bridge.Disconnect();Connection(0);if(lastFailure!=error.what()){lastFailure=error.what();Log(RS_LOG_WARNING,"RuneSchema.Helpy",("[RS-UI-002] "+lastFailure).c_str());}}
+                }catch(const std::exception& error){
+                    std::lock_guard lock(RpcMutex);Bridge.Disconnect();Connection(0);
+                    if(!std::exchange(reportedOutage,true))
+                        Log(RS_LOG_WARNING,"RuneSchema.Helpy",("[RS-UI-002] "+std::string(error.what())).c_str());
+                }
                 if(stop.stop_requested())break;
                 const bool attached=Bridge.Pid.load()!=0,notifications=attached&&Bridge.Notifications();
                 const auto interval=!attached?2000u:notifications?(Visible.load()?2000u:5000u):(Visible.load()?200u:2000u);
@@ -182,7 +203,6 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR,int){
         });
         const auto requestQuit=[](){EnumWindows([](HWND window,LPARAM){DWORD pid=0;const auto thread=GetWindowThreadProcessId(window,&pid);wchar_t name[128]{};GetClassNameW(window,name,128);if(pid==GetCurrentProcessId()&&std::wstring_view(name)==L"RuneSchema.Helpy.Window")PostThreadMessageW(thread,WM_QUIT,0,0);return TRUE;},0);};
         if(smoke){Sleep(1500);std::ofstream(root/"desktop-smoke.json")<<Json{{"Ready",Ready()},{"TrayReady",DesktopStatus().value("TrayReady",false)},{"WindowVisible",DesktopStatus().value("WindowVisible",false)},{"DesktopPid",GetCurrentProcessId()},{"GamePid",Bridge.Pid.load()},{"RuntimeRoot",root.string()},{"StartHidden",startHidden}}.dump(2);requestQuit();}
-        PS::HelpyGameLifetime game;
         while(Ready()){
             game.Observe(Bridge.Pid.load());
             if(game.Exited()&&PS::HelpySettings::ExitWhenGameCloses()){Log(RS_LOG_INFO,"RuneSchema.Helpy","Attached game process ended; exiting Helpy by preference.");requestQuit();}

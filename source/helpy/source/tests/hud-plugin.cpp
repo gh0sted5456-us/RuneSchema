@@ -7,19 +7,31 @@
 #include <cstring>
 #include <set>
 #include <string>
+#include <string_view>
 #include <cstdio>
 static std::set<std::string> Capabilities,Services;
-static RuneSchemaServiceFn ExtensionService=nullptr;
+static RuneSchemaServiceFn ExtensionService=nullptr,NativeService=nullptr;
 static bool CompatibleCore=false;
 static void RS_PLUGIN_CALL Log(uint32_t,const char*,const char*){}
 static int32_t RS_PLUGIN_CALL Capability(const char*,const char* name){Capabilities.emplace(name);return RS_PLUGIN_OK;}
-static int32_t RS_PLUGIN_CALL Service(const char*,const char* name,RuneSchemaServiceFn callback,void*){Services.emplace(name);if(std::string(name)=="hud.extensions")ExtensionService=callback;return RS_PLUGIN_OK;}
+static int32_t RS_PLUGIN_CALL Service(const char*,const char* name,RuneSchemaServiceFn callback,void*){Services.emplace(name);if(std::string_view(name)=="hud.extensions")ExtensionService=callback;else if(std::string_view(name)=="hud.helpy")NativeService=callback;return RS_PLUGIN_OK;}
 static int32_t RS_PLUGIN_CALL Core(const char*,const char*,const char* request,char* output,uint32_t capacity,uint32_t* size){
     if(!CompatibleCore||std::strcmp(request,R"({"Action":"HudCapabilities"})"))return RS_PLUGIN_NOT_FOUND;
     const char response[]=R"({"InputOwnership":true,"Extensions":true})";*size=sizeof(response);if(capacity<*size)return RS_PLUGIN_BUFFER_TOO_SMALL;std::memcpy(output,response,sizeof(response));return RS_PLUGIN_OK;
 }
 int main(int argc,char** argv){
-    assert(argc==2);PS::HudSurfaceOwner owner;
+    assert(argc==2);
+    if(std::string_view(argv[1])=="--desktop-input-window"){
+        const auto instance=GetModuleHandleW(nullptr);
+        WNDCLASSW windowClass{};windowClass.lpfnWndProc=DefWindowProcW;windowClass.hInstance=instance;windowClass.lpszClassName=L"RuneSchema.Helpy.Window";
+        assert(RegisterClassW(&windowClass));
+        const auto name=std::to_wstring(GetCurrentProcessId());
+        assert(CreateWindowExW(0,windowClass.lpszClassName,name.c_str(),WS_POPUP,0,0,1,1,nullptr,nullptr,instance,nullptr));
+        assert(SetTimer(nullptr,0,10000,nullptr));
+        MSG msg{};while(GetMessageW(&msg,nullptr,0,0)>0){if(msg.message==WM_CLOSE||msg.message==WM_TIMER)break;DispatchMessageW(&msg);}
+        return 0;
+    }
+    PS::HudSurfaceOwner owner;
     assert(owner.CanOpen(1,false,false)&&!owner.CanOpen(0,true,false));
     owner.Open(1,false);assert(owner.CanOpen(2,true,true)&&!owner.CanOpen(2,false,true));
     owner.Open(2,true);assert(!owner.CanOpen(1,true,true)&&!owner.CanOpen(1,false,true));
@@ -64,6 +76,7 @@ int main(int argc,char** argv){
     assert(api->Call(first,R"({"Action":"Status"})",nullptr,0,&bytes)==RS_HUD_BUFFER_TOO_SMALL&&bytes==sizeof(output));
     assert(api->Call(first,R"({"Action":"Status"})",output,sizeof(output),&bytes)==RS_HUD_OK&&std::strstr(output,"Fixture.One"));
     assert(api->Call(second,R"({"Action":"GuideReservation","Enabled":true})",output,sizeof(output),&bytes)==RS_HUD_INVALID_ARGUMENT);
+    assert(api->Call(second,R"({"Action":"DesktopInput","Enabled":true})",output,sizeof(output),&bytes)==RS_HUD_INVALID_ARGUMENT);
     assert(api->Call(second,R"({"Action":"Open","Interactive":true})",output,sizeof(output),&bytes)==RS_HUD_INVALID_ARGUMENT);
     assert(api->Call(second,"[]",output,sizeof(output),&bytes)==RS_HUD_INVALID_ARGUMENT);
     api->CloseClient(first);assert(api->Call(first,R"({"Action":"Status"})",output,sizeof(output),&bytes)==RS_HUD_NOT_FOUND);
@@ -84,7 +97,20 @@ int main(int argc,char** argv){
     DWORD closedHandles=0;assert(GetProcessHandleCount(GetCurrentProcess(),&closedHandles));
     std::fprintf(stderr,"HUD handle counts: registration=%lu, complete lifecycle=%lu, after 100 full lifecycles=%lu\n",originalHandles,steadyHandles,closedHandles);
     assert(closedHandles<=steadyHandles);
-    shutdown(instance);
+    wchar_t executable[32768]{};assert(GetModuleFileNameW(nullptr,executable,32768));
+    auto arguments=std::wstring(L"\"")+executable+L"\" --desktop-input-window";
+    STARTUPINFOW startup{sizeof(startup)};PROCESS_INFORMATION child{};
+    assert(CreateProcessW(executable,arguments.data(),nullptr,nullptr,FALSE,CREATE_NO_WINDOW,nullptr,nullptr,&startup,&child));
+    const auto name=std::to_wstring(child.dwProcessId);HWND window=nullptr;
+    for(const auto until=GetTickCount64()+5000;!window&&GetTickCount64()<until;Sleep(10))window=FindWindowW(L"RuneSchema.Helpy.Window",name.c_str());
+    assert(window&&NativeService);
+    const auto xinput=LoadLibraryExW(L"xinput1_4.dll",nullptr,LOAD_LIBRARY_SEARCH_SYSTEM32);assert(xinput);
+    const auto request=std::string("{\"Action\":\"DesktopInput\",\"Enabled\":true,\"AppPid\":")+std::to_string(child.dwProcessId)+",\"Window\":"+std::to_string(reinterpret_cast<uintptr_t>(window))+"}";
+    assert(NativeService(nullptr,request.c_str(),output,sizeof(output),&bytes)==RS_PLUGIN_OK&&std::strstr(output,"true"));
+    assert(NativeService(nullptr,R"({"Action":"DesktopInput","Enabled":false})",output,sizeof(output),&bytes)==RS_PLUGIN_OK&&std::strstr(output,"true"));
+    assert(PostThreadMessageW(child.dwThreadId,WM_CLOSE,0,0)&&WaitForSingleObject(child.hProcess,5000)==WAIT_OBJECT_0);
+    CloseHandle(child.hThread);CloseHandle(child.hProcess);
+    shutdown(instance);FreeLibrary(xinput);
     assert(api->RegisterClient("AfterShutdown",GetCurrentProcessId(),&first)==RS_HUD_UNAVAILABLE);
     FreeLibrary(library);
 }

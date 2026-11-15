@@ -15,7 +15,7 @@ fs::path SaveInput(const json& args) {
     return path;
 }
 fs::path WriteSaveCopy(const fs::path& folder,const std::string& prefix,const json& value,const fs::path& original={}) {
-    HelpyKitFiles::NoRedirect(folder);fs::create_directories(folder);auto text=value.dump(2);
+    RuneSchemaData::Safe(folder);fs::create_directories(folder);auto text=value.dump(2);
     if(!original.empty()){
         std::ifstream encoding(original,std::ios::binary);char bom[2]{};encoding.read(bom,2);
         if(static_cast<unsigned char>(bom[0])==0xff&&static_cast<unsigned char>(bom[1])==0xfe){
@@ -49,7 +49,7 @@ json Authoring(const std::string& operation,const json& args) {
         const auto yaw=args.value("Yaw",0.0);if(!std::isfinite(yaw))throw std::runtime_error("NPC yaw must be finite");
         auto npc=desktopSave.Npc.at("NPC");npc["Id"]=id;npc["Enabled"]=false;npc["Location"]=location;npc["Rotation"]={{"Pitch",0},{"Yaw",yaw},{"Roll",0}};
         DragonWilds::HumanNpc::Validate(npc);
-        return {{"File",SavePathText(WriteSaveCopy(HostServices::ExportsDirectory()/"npcs",id,npc))},{"Document",npc},{"Status","Disabled NPC definition exported. Original save untouched."}};
+        return {{"File",SavePathText(WriteSaveCopy(RuneSchemaData::ResolveSaveRoot(HostServices::ExportsDirectory()/"npcs"),id,npc))},{"Document",npc},{"Status","Disabled NPC definition exported. Original save untouched."}};
     }
     if(operation=="CleanupInspect") {
         ResetAuthoring();if(!args.value("Offline",false))throw std::runtime_error("Confirm this character save is offline before inspection");
@@ -67,7 +67,7 @@ json Authoring(const std::string& operation,const json& args) {
     if(operation=="CleanupPreview")return desktopSave.Preview.Preview(desktopSave.Source,args,SaveCleanup::ReadRegistry());
     if(operation=="CleanupExport") {
         const auto plan=desktopSave.Preview.Consume(desktopSave.Source,args.value("Token",std::string{}),args.value("Confirm",false),SaveCleanup::ReadRegistry());
-        return {{"File",SavePathText(WriteSaveCopy(HostServices::ExportsDirectory()/"saves","cleaned",plan.Save,desktopSave.Path))},{"Removed",plan.Removed},{"Status","Verified cleaned copy exported. Original untouched; selected mods may recreate their content."}};
+        return {{"File",SavePathText(WriteSaveCopy(RuneSchemaData::ResolveSaveRoot(HostServices::ExportsDirectory()/"saves"),"cleaned",plan.Save,desktopSave.Path))},{"Removed",plan.Removed},{"Status","Verified cleaned copy exported. Original untouched; selected mods may recreate their content."}};
     }
     throw std::runtime_error("Unsupported save-authoring operation");
 }

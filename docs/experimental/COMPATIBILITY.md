@@ -120,6 +120,11 @@ FURL construction/destruction and `RegisterLoadMapPreCallback`. The loaded host
 must export the exact imported APIs. "Latest UE4SS" alone is insufficient to
 compare two installations.
 
+At startup, RuneSchema logs an older or newer UE4SS build when the loaded host's
+version or a known commit establishes the order. It reports other same-version
+revisions without guessing which came first. Version notices are advisory;
+features still depend on the native capabilities and exports they require.
+
 Record the exact Proton version and the UE4SS version/commit from its fresh
 startup banner. Enable `PROTON_LOG=1` using
 [Proton's runtime options](https://github.com/ValveSoftware/Proton#runtime-config-options)

@@ -33,6 +33,7 @@ struct StreamState {
     std::set<std::string> Scopes;
     std::deque<std::string> PausedLines;
     size_t PausedBytes=0;
+    bool RestartPending=false;
     std::uint64_t Selected=0,Revision=~std::uint64_t{};
 };
 inline std::array<StreamState,4> Streams;
@@ -54,13 +55,21 @@ inline std::uint64_t RevealId=0;
 inline bool SelectRuneSchemaTab=false;
 inline auto Path(size_t index=0){return Streams[index].File.empty()?LiveLog::LogPath(HostServices::ModDirectory(),static_cast<LiveLog::Stream>(index)):Streams[index].File;}
 inline void Shutdown(){OnEntry={};OnBackfillEntry={};OnUE4SSEntry={};for(auto& stream:Streams)if(stream.Worker.valid())try{(void)stream.Worker.get();}catch(...){}if(ExportWorker.valid())try{(void)ExportWorker.get();}catch(...){};}
+inline void RestartRuneSchemaRead(){
+    auto& state=Streams[0];
+    state.RestartPending=state.Worker.valid();state.Cursor={};state.NextRead={};state.File.clear();
+    state.History.Clear();state.PausedLines.clear();state.PausedBytes=0;
+    state.Selected=0;RevealId=0;
+}
 inline void Poll(size_t index,bool background=false,int intervalMs=0){
     auto& state=Streams[index];auto& Worker=state.Worker;auto& Cursor=state.Cursor;auto& History=state.History;
     auto& ReadError=state.ReadError;auto& Status=state.Status;auto& Selected=state.Selected;auto& NextRead=state.NextRead;
     if(ExportWorker.valid()&&ExportWorker.wait_for(std::chrono::seconds(0))==std::future_status::ready){try{Streams[ExportStream].Status=ExportWorker.get();}catch(...){Streams[ExportStream].Status="Export failed.";}}
     if(Preview)return;
     if(Worker.valid()&&Worker.wait_for(std::chrono::seconds(0))==std::future_status::ready){
-        try{auto batch=Worker.get();Cursor=std::move(batch.Next);ReadError=std::move(batch.Error);
+        const bool discard=std::exchange(state.RestartPending,false);
+        try{auto batch=Worker.get();if(discard)return;
+            Cursor=std::move(batch.Next);ReadError=std::move(batch.Error);
             if(batch.Reset||(!state.File.empty()&&state.File!=batch.File)){History.Clear();Selected=0;Status="Log rotated or changed; showing the new file.";if(index==1)UE4SSLiveReady=false;}
             state.File=std::move(batch.File);
             if(batch.Skipped)Status="Showing the recent log tail; the original full log is unchanged.";
@@ -83,9 +92,9 @@ inline void Poll(size_t index,bool background=false,int intervalMs=0){
                     }
                 }
             }
-            if(index==0&&!batch.More&&(!batch.Error.empty()||batch.Next.Started))RuneSchemaLiveReady=true;
+            if(index==0&&!batch.More&&ReadError.empty()&&Cursor.Started)RuneSchemaLiveReady=true;
             if(index==1&&!batch.More&&batch.Error.empty()&&batch.Next.Started)UE4SSLiveReady=true;
-        }catch(const std::exception& error){ReadError=error.what();}
+        }catch(const std::exception& error){if(!discard)ReadError=error.what();}
     }
     if(index==0&&!state.Paused&&!state.PausedLines.empty()){
         while(!state.PausedLines.empty()){

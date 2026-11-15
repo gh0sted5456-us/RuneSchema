@@ -83,6 +83,8 @@ struct Theme {
     int inputMode=0,controllerGlyphs=0,controllerShortcut=1;
     bool reserveControllerGuide=true,controllerTouchpad=true,controllerCursor=true;
     float controllerCursorSpeed=900.f;
+    float controllerDeadZone=.27f;      // Right-stick radius ignored as drift (0.08-0.50).
+    bool controllerCursorAssist=true;   // Slow the pointer while it is over a control.
     std::string quickSendPlayerGuid;
     bool navigationCollapsed=false,navigationPinned=false;
     bool autoInstallAuthoringDotNet{true};
@@ -91,9 +93,11 @@ struct Theme {
     std::string fpsHotkey{"F10"},fpsControllerBinding{"None"},controllerBinding,helpyKeyboardBinding;
     std::string backgroundFile;
     float backgroundStrength{.12f};
+    bool splashGameLogo=true,splashRuntimeLogo=true,splashBackgrounds=true;
+    float splashLogoSeconds=8.f;
     bool dpiAware{true},autoReload{true},textBold{false},verboseTooltips{false},itemGridView{true},itemInternalNames{false},aiGridView{false},advancedMode{false};
     bool automaticUpdateChecks{true};
-    bool ue4ssManageExternal{false},ue4ssCompact{false};
+    bool ue4ssManageExternal{false},modsCompact{false};
     bool resourceDiagnostics{true},gpuResourceDiagnostics{true},ue4ssDiagnostics{true},playTimeReminders{true},startupResourceAlerts{false};
     int resourceCpuThreshold{90},resourceMemoryThreshold{90},resourceGpuThreshold{98},ue4ssLogBudget{100},ue4ssOverlapSeconds{5};
     bool updateArtwork{true},updateWorldMap{true},updateMapFilters{true};
@@ -107,6 +111,7 @@ struct Theme {
     std::string fontFamily{"Segoe UI"};
     std::vector<LiveLog::ColorRule> logColors;
     bool diagnosticToastsEnabled{true};
+    bool achievementPopups{true}, achievementSound{true};
     bool diagnosticRegistryActivity{false};
     int diagnosticToastLimit{4},diagnosticToastDuration{6};
     int diagnosticHistoryDays{14},diagnosticHistorySessions{10},diagnosticHistoryMB{20};
@@ -313,21 +318,22 @@ inline nlohmann::json ColorJson(const ImVec4& v){return nlohmann::json::array({v
 inline nlohmann::json DocumentFrom(const Theme& t,int iconCacheMB) {
     return {
         {"version",21},{"autoReload",t.autoReload},{"windowOpacity",t.windowOpacity},
-        {"workspaces",{{"authoring",t.workspaces.Authoring},{"tools",t.workspaces.Tools},{"liveLog",t.workspaces.LiveLog},{"saveEditor",t.workspaces.SaveEditor},{"serverTools",t.workspaces.ServerTools},{"journal",t.workspaces.Journal}}},
+        {"workspaces",{{"authoring",t.workspaces.Authoring},{"tools",t.workspaces.Tools},{"liveLog",t.workspaces.LiveLog},{"saveEditor",t.workspaces.SaveEditor},{"serverTools",t.workspaces.ServerTools},{"journal",t.workspaces.Journal},{"clone",t.workspaces.Clone},{"recipes",t.workspaces.Recipes}}},
         {"display",{{"dpiAware",t.dpiAware},{"userScale",t.userScale},{"fontScale",t.fontScale},{"density",t.density},{"fontFamily",t.fontFamily},{"textBold",t.textBold},{"verboseTooltips",t.verboseTooltips},{"tooltipDelay",t.tooltipDelay}}},
         {"views",{{"quickSendPlayerGuid",t.quickSendPlayerGuid},{"advancedMode",t.advancedMode},{"itemGrid",t.itemGridView},{"itemInternalNames",t.itemInternalNames},{"itemPageSize",t.itemPageSize},{"itemGridColumns",t.itemGridColumns},{"itemGridRows",t.itemGridRows},{"itemGridFitRows",t.itemGridFitRows},{"itemShowPlaceholders",t.itemShowPlaceholders},{"aiGrid",t.aiGridView},{"itemResultHeight",t.itemResultHeight},{"aiResultHeight",t.aiResultHeight},{"itemCategory",t.itemCategory},{"itemSource",t.itemSource},{"itemBayBrowseRatio",t.itemBayBrowseRatio},{"dockedBayHeight",t.dockedBayHeight},{"itemCartWidth",t.itemCartWidth}}},
         {"cache",{{"iconCacheMB",std::clamp(iconCacheMB,0,16384)},{"loadOrder",HelpyRuntimePreferences::CacheFirst.load()?"cacheFirst":"gameFirst"},{"passiveRefresh",HelpyRuntimePreferences::PassiveRefresh.load()}}},
         {"monitoring",{{"resources",t.resourceDiagnostics},{"gpu",t.gpuResourceDiagnostics},{"ue4ss",t.ue4ssDiagnostics},{"playTimeReminders",t.playTimeReminders},{"startupResourceAlerts",t.startupResourceAlerts},{"cpuThreshold",t.resourceCpuThreshold},{"memoryThreshold",t.resourceMemoryThreshold},{"gpuThreshold",t.resourceGpuThreshold},{"luaMessages",t.ue4ssLogBudget},{"overlapSeconds",t.ue4ssOverlapSeconds}}},
-        {"input",{{"mode",t.inputMode},{"glyphs",t.controllerGlyphs},{"shortcut",t.controllerShortcut},{"binding",t.controllerBinding},{"keyboardBinding",t.helpyKeyboardBinding},{"hudBindings",t.hudBindings},{"reserveGuide",t.reserveControllerGuide},{"touchpad",t.controllerTouchpad},{"cursor",t.controllerCursor},{"cursorSpeed",t.controllerCursorSpeed},{"controllerBindings",t.controllerBindings}}},
+        {"input",{{"mode",t.inputMode},{"glyphs",t.controllerGlyphs},{"shortcut",t.controllerShortcut},{"binding",t.controllerBinding},{"keyboardBinding",t.helpyKeyboardBinding},{"hudBindings",t.hudBindings},{"reserveGuide",t.reserveControllerGuide},{"touchpad",t.controllerTouchpad},{"cursor",t.controllerCursor},{"cursorSpeed",t.controllerCursorSpeed},{"deadZone",t.controllerDeadZone},{"cursorAssist",t.controllerCursorAssist},{"controllerBindings",t.controllerBindings}}},
         {"navigation",{{"collapsed",t.navigationCollapsed},{"pinned",t.navigationPinned}}},
         {"authoring",{{"autoInstallDotNet",t.autoInstallAuthoringDotNet}}},
-        {"mods",{{"manageExternalUE4SS",t.ue4ssManageExternal},{"compactUE4SS",t.ue4ssCompact}}},
+        {"mods",{{"manageExternalUE4SS",t.ue4ssManageExternal},{"compactView",t.modsCompact}}},
         {"updates",{{"automaticChecks",t.automaticUpdateChecks},{"artwork",t.updateArtwork},{"worldMap",t.updateWorldMap},{"mapFilters",t.updateMapFilters}}},
         {"preview",{{"quality",t.previewQuality},{"animation",t.previewAnimate},{"details",t.previewDetails},{"scaleUsePortrait",t.scaleUsePortrait},{"scaleReferenceIcon",t.scaleReferenceIcon}}},
         {"runtime",{{"timeUnit",t.runtimeTimeUnit},{"helpyFpsLimit",t.helpyFpsLimit},{"showFps",t.showFps},{"fpsRefreshMs",t.fpsRefreshMs},{"showGameFps",t.showGameFps},{"showCoordinates",t.showCoordinates},{"showStartupProgress",t.showStartupProgress},{"fpsHotkey",t.fpsHotkey},{"fpsControllerBinding",t.fpsControllerBinding},{"gameOverlay",t.gameOverlay},{"nativeOverlay",t.nativeOverlay},{"overlayOpacity",t.overlayOpacity},{"overlaySize",t.overlaySize},{"overlayUiScale",t.overlayUiScale}}},
         {"background",{{"file",t.backgroundFile},{"strength",t.backgroundStrength}}},
+        {"splash",{{"gameLogo",t.splashGameLogo},{"runtimeLogo",t.splashRuntimeLogo},{"rotateBackgrounds",t.splashBackgrounds},{"logoSeconds",t.splashLogoSeconds}}},
         {"liveLog",{{"colorRules",LiveLog::WriteColors(t.logColors)}}},
-        {"notifications",{{"enabled",t.diagnosticToastsEnabled},{"visibleLimit",t.diagnosticToastLimit},{"durationSeconds",t.diagnosticToastDuration},{"registryActivity",t.diagnosticRegistryActivity}}},
+        {"notifications",{{"enabled",t.diagnosticToastsEnabled},{"achievements",t.achievementPopups},{"achievementSound",t.achievementSound},{"visibleLimit",t.diagnosticToastLimit},{"durationSeconds",t.diagnosticToastDuration},{"registryActivity",t.diagnosticRegistryActivity}}},
         {"diagnosticHistory",{{"ageDays",t.diagnosticHistoryDays},{"maxSessions",t.diagnosticHistorySessions},{"maxStorageMB",t.diagnosticHistoryMB}}},
         {"diagnosticPresentation",{{"splitRatio",t.diagnosticSplitRatio},{"developerMode",t.diagnosticDeveloperMode}}},
         {"colors",{
@@ -388,7 +394,7 @@ inline void Reload(bool createIfMissing=true) {
         next.windowOpacity=ReadFloat(doc,"windowOpacity",next.windowOpacity,0.60f,1.0f);
         const auto display=doc.value("display",nlohmann::json::object());
         const auto navigation=doc.value("navigation",nlohmann::json::object());next.navigationCollapsed=navigation.value("collapsed",false);next.navigationPinned=navigation.value("pinned",false);
-        const auto mods=doc.value("mods",nlohmann::json::object());next.ue4ssManageExternal=mods.value("manageExternalUE4SS",false);next.ue4ssCompact=mods.value("compactUE4SS",false);
+        const auto mods=doc.value("mods",nlohmann::json::object());next.ue4ssManageExternal=mods.value("manageExternalUE4SS",false);next.modsCompact=mods.value("compactView",mods.value("compactUE4SS",false));
         const auto monitoring=doc.value("monitoring",nlohmann::json::object());
         next.resourceDiagnostics=monitoring.value("resources",true);next.gpuResourceDiagnostics=monitoring.value("gpu",true);next.ue4ssDiagnostics=monitoring.value("ue4ss",true);next.playTimeReminders=monitoring.value("playTimeReminders",true);
         next.startupResourceAlerts=monitoring.value("startupResourceAlerts",false);
@@ -400,7 +406,7 @@ inline void Reload(bool createIfMissing=true) {
         next.updateWorldMap=doc.value("updates",nlohmann::json::object()).value("worldMap",true);
         next.updateMapFilters=doc.value("updates",nlohmann::json::object()).value("mapFilters",true);
         const auto notifications=doc.value("notifications",nlohmann::json::object());
-        next.diagnosticToastsEnabled=notifications.value("enabled",true);
+        next.diagnosticToastsEnabled=notifications.value("enabled",true);next.achievementPopups=notifications.value("achievements",true);next.achievementSound=notifications.value("achievementSound",true);
         next.diagnosticRegistryActivity=notifications.value("registryActivity",false);
         next.diagnosticToastLimit=ReadInt(notifications,"visibleLimit",4,1,10);
         next.diagnosticToastDuration=ReadInt(notifications,"durationSeconds",6,2,15);
@@ -414,7 +420,7 @@ inline void Reload(bool createIfMissing=true) {
         try{next.logColors=LiveLog::ReadColors(doc.value("liveLog",nlohmann::json::object()).value("colorRules",nlohmann::json::array()));}catch(...){next.logColors.clear();}
         next.dpiAware=display.value("dpiAware",true);next.userScale=ReadFloat(display,"userScale",1.18f,0.60f,2.50f);
         next.fontScale=ReadFloat(display,"fontScale",1.34f,0.70f,1.75f);next.density=ReadFloat(display,"density",1.14f,0.65f,1.50f);try{next.fontFamily=display.value("fontFamily",std::string("Segoe UI"));}catch(...){next.fontFamily="Segoe UI";}next.textBold=display.value("textBold",false);next.verboseTooltips=display.value("verboseTooltips",false);next.tooltipDelay=ReadFloat(display,"tooltipDelay",next.tooltipDelay,0.0f,2.0f);
-        const auto workspaces=doc.value("workspaces",nlohmann::json::object());next.workspaces={workspaces.value("authoring",false),workspaces.value("tools",false),workspaces.value("liveLog",false),workspaces.value("saveEditor",false),workspaces.value("serverTools",false),workspaces.value("journal",true)};
+        const auto workspaces=doc.value("workspaces",nlohmann::json::object());next.workspaces={workspaces.value("authoring",false),workspaces.value("tools",false),workspaces.value("liveLog",false),workspaces.value("saveEditor",false),workspaces.value("serverTools",false),workspaces.value("journal",true),false,workspaces.value("clone",false),workspaces.value("recipes",false)};
         const auto preview=doc.value("preview",nlohmann::json::object());next.previewQuality=ReadInt(preview,"quality",2,0,2);next.previewAnimate=preview.value("animation",false);next.previewDetails=preview.value("details",false);next.scaleUsePortrait=preview.value("scaleUsePortrait",true);next.scaleReferenceIcon=preview.value("scaleReferenceIcon",std::string{});
         const auto views=doc.value("views",nlohmann::json::object());next.advancedMode=views.value("advancedMode",false);next.itemGridView=views.value("itemGrid",true);next.itemInternalNames=views.value("itemInternalNames",false);next.aiGridView=views.value("aiGrid",false);next.itemResultHeight=ReadFloat(views,"itemResultHeight",320.0f,180.0f,900.0f);next.aiResultHeight=ReadFloat(views,"aiResultHeight",320.0f,180.0f,900.0f);try{const auto value=views.value("itemCategory",std::string("All"));if(value=="All"||value=="Weapons"||value=="Armor"||value=="Consumables"||value=="Ammo"||value=="Resources"||value=="Tools"||value=="Building"||value=="Quest"||value=="Misc")next.itemCategory=value;}catch(...){}
         try{const auto value=views.value("itemSource",std::string("all"));const auto kind=ItemSource::Decode(value);if(value==ItemSource::Token(kind)||(ContentSource::Valid(value)&&value==HelpyCacheSources::Lower(value)))next.itemSource=value;}catch(...){}
@@ -440,7 +446,7 @@ inline void Reload(bool createIfMissing=true) {
         next.hudBindings=input.value("hudBindings",nlohmann::json::object());if(!next.hudBindings.is_object()||next.hudBindings.size()>256)throw std::runtime_error("Invalid HUD bindings.");
         for(auto& [id,binding]:next.hudBindings.items()){if(id.empty()||id.size()>256)throw std::runtime_error("Invalid HUD binding identity.");binding={{"Keyboard",InputBindings::Text(InputBindings::Parse(binding.value("Keyboard",std::string("None"))))},{"Controller",InputBindings::PadText(InputBindings::ParsePad(binding.value("Controller",std::string("None"))))}};}
         next.helpyKeyboardBinding=input.value("keyboardBinding",std::string{});if(!next.helpyKeyboardBinding.empty())try{next.helpyKeyboardBinding=InputBindings::Text(InputBindings::Parse(next.helpyKeyboardBinding));}catch(const std::exception&){next.helpyKeyboardBinding.clear();}
-        next.controllerBinding=input.value("binding",std::string{});if(!next.controllerBinding.empty())try{next.controllerBinding=InputBindings::PadText(InputBindings::ParsePad(next.controllerBinding));}catch(const std::exception&){next.controllerBinding.clear();}next.controllerBindings=HelpyControllerBindings::Validate(input.value("controllerBindings",nlohmann::json::object()));next.reserveControllerGuide=input.value("reserveGuide",true);next.controllerTouchpad=input.value("touchpad",true);next.controllerCursor=input.value("cursor",true);next.controllerCursorSpeed=ReadFloat(input,"cursorSpeed",900.f,200.f,1800.f);
+        next.controllerBinding=input.value("binding",std::string{});if(!next.controllerBinding.empty())try{next.controllerBinding=InputBindings::PadText(InputBindings::ParsePad(next.controllerBinding));}catch(const std::exception&){next.controllerBinding.clear();}next.controllerBindings=HelpyControllerBindings::Validate(input.value("controllerBindings",nlohmann::json::object()));next.reserveControllerGuide=input.value("reserveGuide",true);next.controllerTouchpad=input.value("touchpad",true);next.controllerCursor=input.value("cursor",true);next.controllerCursorSpeed=ReadFloat(input,"cursorSpeed",900.f,200.f,1800.f);next.controllerDeadZone=ReadFloat(input,"deadZone",.27f,.08f,.5f);next.controllerCursorAssist=input.value("cursorAssist",true);
         next.autoInstallAuthoringDotNet=doc.value("authoring",nlohmann::json::object()).value("autoInstallDotNet",true);
         next.overlayOpacity=ReadFloat(runtime,"overlayOpacity",.88f,.60f,1.f);
         next.overlaySize=ReadFloat(runtime,"overlaySize",.9f,.45f,.98f);
@@ -448,6 +454,11 @@ inline void Reload(bool createIfMissing=true) {
         next.fpsHotkey=runtime.value("fpsHotkey",std::string("F10"));
         try{next.fpsHotkey=InputBindings::Text(InputBindings::Parse(next.fpsHotkey));}catch(const std::exception&){next.fpsHotkey="F10";}
         next.fpsControllerBinding=runtime.value("fpsControllerBinding",std::string("None"));try{next.fpsControllerBinding=InputBindings::PadText(InputBindings::ParsePad(next.fpsControllerBinding));}catch(const std::exception&){next.fpsControllerBinding="None";}
+        const auto splash=doc.value("splash",nlohmann::json::object());
+        next.splashGameLogo=splash.value("gameLogo",true);
+        next.splashRuntimeLogo=splash.value("runtimeLogo",true);
+        next.splashBackgrounds=splash.value("rotateBackgrounds",true);
+        next.splashLogoSeconds=ReadFloat(splash,"logoSeconds",8.f,2.f,30.f);
         const auto background=doc.value("background",nlohmann::json::object());
         next.backgroundFile=background.value("file",std::string{});if(!BackgroundPolicy::Filename(next.backgroundFile))next.backgroundFile.clear();
         next.backgroundStrength=ReadFloat(background,"strength",.12f,0,.3f);
@@ -543,7 +554,7 @@ inline bool SearchIconButton(const char* id,float logicalSize=0.0f) {
 }
 
 inline bool ControllerNavigation=false,EnterNextSection=false;
-struct PaneNavigationScope {ImGuiWindow* Source=nullptr;ImGuiNavItemData Saved;bool Section=false;};
+struct PaneNavigationScope {ImGuiWindow* Source=nullptr;ImGuiNavItemData Saved;bool Section=false;ImGuiWindow* PreviousFocus=nullptr;};
 inline std::vector<PaneNavigationScope> PaneNavigationStack;
 inline ImGuiContext* PaneNavigationContext=nullptr;inline int PaneNavigationFrame=-1;
 inline ImGuiWindow* PaneNavigationSource=nullptr;inline ImGuiNavItemData PaneNavigationBest;
@@ -555,7 +566,10 @@ inline bool BeginPanel(const char* id,const ImVec2& size=ImVec2(0,0),ImGuiChildF
     const bool visible=ImGui::BeginChild(id,size,contained?childFlags:childFlags|ImGuiChildFlags_NavFlattened,windowFlags);
     PaneNavigationScope scope;scope.Section=contained;auto* window=ImGui::GetCurrentWindow();
     if(contained&&visible)HelpyControllerPanes::Register(window);
-    if(contained&&EnterNextSection){EnterNextSection=false;ImGui::FocusWindow(window);ImGui::NavInitWindow(window,false);ImGui::SetNavCursorVisible(true);}
+    if(contained&&EnterNextSection){
+        EnterNextSection=false;scope.PreviousFocus=context.NavWindow;
+        ImGui::FocusWindow(window);ImGui::NavInitWindow(window,false);ImGui::SetNavCursorVisible(true);
+    }
     if(context.NavWindow&&window->RootWindowForNav==context.NavWindow->RootWindowForNav&&window!=context.NavWindow&&context.NavMoveScoringItems&&!(context.NavMoveFlags&(ImGuiNavMoveFlags_IsTabbing|ImGuiNavMoveFlags_AlsoScoreVisibleSet))&&ImGui::IsWindowChildOf(window,context.NavWindow,false)){
         scope.Source=context.NavWindow;scope.Saved=context.NavMoveResultOther;context.NavMoveResultOther.Clear();
     }
@@ -573,7 +587,12 @@ inline void EndPanel(){
         }
         if(Nearer(scope.Saved,context.NavMoveResultOther))context.NavMoveResultOther=scope.Saved;
     }
-    if(scope.Section&&context.NavWindow&&context.NavWindow->RootWindowForNav==ImGui::GetCurrentWindow()&&context.NavInputSource==ImGuiInputSource_Gamepad){const auto* window=ImGui::GetCurrentWindow();const auto a=window->Pos,b=ImVec2(a.x+window->Size.x,a.y+window->Size.y);HelpyFocusHighlight::Draw(window->DrawList,a,b,ImGui::GetColorU32(Current.accent),Current.X(Current.childRounding),false,Current.X(2));}
+    auto* pane=ImGui::GetCurrentWindow();
+    if(scope.PreviousFocus&&context.NavWindow==pane&&!pane->DC.NavLayersActiveMaskNext){
+        ImGui::FocusWindow(scope.PreviousFocus,ImGuiFocusRequestFlags_UnlessBelowModal);
+        ImGui::SetNavCursorVisible(true);
+    }
+    if(scope.Section&&context.NavWindow&&context.NavWindow->RootWindowForNav==pane&&context.NavInputSource==ImGuiInputSource_Gamepad){const auto* window=ImGui::GetCurrentWindow();const auto a=window->Pos,b=ImVec2(a.x+window->Size.x,a.y+window->Size.y);HelpyFocusHighlight::Draw(window->DrawList,a,b,ImGui::GetColorU32(Current.accent),Current.X(Current.childRounding),false,Current.X(2));}
     ImGui::EndChild();
 }
 inline bool BeginScroll(const char* id,const ImVec2& size=ImVec2(0,0),bool border=false,bool section=false) {

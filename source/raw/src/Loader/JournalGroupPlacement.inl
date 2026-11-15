@@ -100,10 +100,8 @@ bool PlaceJournalGroup(UObject* category,UObject* entry,const PS::JournalPlaceme
     if(!selected) {
         if(!requested.CreateIfMissing)throw std::runtime_error("Journal group Id was not found");
         UECustom::FManagedValue value;list.InitializeValue(value);
-        try {
-            *id->ContainerPtrToValuePtr<FName>(value.GetData())=groupId;
-            PropertyHelper::SetTextPropertyValueFromJsonValue(name->ContainerPtrToValuePtr<void>(value.GetData()),name,requested.DisplayName);
-        } catch(...) {group->DestroyValue(value.GetData());throw;}
+        *id->ContainerPtrToValuePtr<FName>(value.GetData())=groupId;
+        PropertyHelper::SetTextPropertyValueFromJsonValue(name->ContainerPtrToValuePtr<void>(value.GetData()),name,requested.DisplayName);
         list.Add(value);changed=true;
         list.ForEachElement([&](void* value) {if(*id->ContainerPtrToValuePtr<FName>(value)==groupId)selected=value;});
     } else if(!requested.DisplayName.empty()
@@ -134,8 +132,7 @@ bool PlaceJournalGroup(UObject* category,UObject* entry,const PS::JournalPlaceme
         if(!creating)throw std::runtime_error("Existing journal group lookup is not initialized; placement deferred");
         UECustom::FManagedValue pair;groupMap.InitializePair(pair);
         *static_cast<FName*>(groupMap.GetKeyPtr(pair.GetData()))=groupId;
-        try {AddJournalMapEntry(entryMap,entryMap->ContainerPtrToValuePtr<void>(groupMap.GetValuePtr(pair.GetData())),key,entry);}
-        catch(...) {container->DestroyValue(groupMap.GetValuePtr(pair.GetData()));throw;}
+        AddJournalMapEntry(entryMap,entryMap->ContainerPtrToValuePtr<void>(groupMap.GetValuePtr(pair.GetData())),key,entry);
         groupMap.Add(pair);groupMap.Rehash();changed=true;
     }
     if(changed) {stagedGroups.Commit(liveGroups);stagedData.Commit(liveData);stagedMap.Commit(liveMap);}

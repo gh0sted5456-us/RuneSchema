@@ -131,13 +131,29 @@ inline void ClearSharedCart(){SharedCart.Clear();CartStatus.clear();}
 inline void HeldItem(const json& row,const char* kind="Item"){
     auto* texture=ItemIconCache::Get(IconForRow(row));DragFeedback::Held(kind,ItemPresentation::Name(row).c_str(),texture&&texture->Status==ImTextureStatus_OK?texture->GetTexRef():ImTextureRef{});
 }
-inline void DragItem(const json& row){
+inline void DragItem(const json& row,const std::vector<std::string>* selection=nullptr){
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::ItemRects[row.value("Path",std::string{})]=HelpyPreviewHooks::LastRect();
 #endif
     if(!ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID|ImGuiDragDropFlags_SourceNoPreviewTooltip))return;
-    try{auto compact=ItemTransfer::Compact(row);compact["Name"]=ItemPresentation::Name(row);compact["Icon"]=IconForRow(row);const auto data=compact.dump();ImGui::SetDragDropPayload("RS_ITEM_ROW",data.c_str(),data.size()+1);}catch(const std::exception&){}
-    HeldItem(row);ImGui::EndDragDropSource();
+    const auto path=row.value("Path",std::string{});
+    const bool group=selection&&selection->size()>1&&std::find(selection->begin(),selection->end(),path)!=selection->end();
+    const auto* current=ImGui::GetDragDropPayload();
+    if(current&&current->DataFrameCount>=0)
+        ImGui::SetDragDropPayload(current->DataType,current->Data,current->DataSize,ImGuiCond_Once);
+    else try {
+        if(group) {
+            const auto data=json(*selection).dump();
+            ImGui::SetDragDropPayload("RS_CART_SELECTION",data.c_str(),data.size()+1,ImGuiCond_Once);
+        }else{
+            auto compact=ItemTransfer::Compact(row);compact["Name"]=ItemPresentation::Name(row);compact["Icon"]=IconForRow(row);
+            const auto data=compact.dump();
+            ImGui::SetDragDropPayload("RS_ITEM_ROW",data.c_str(),data.size()+1,ImGuiCond_Once);
+        }
+    }catch(const std::exception&){}
+    if(group){const auto title=std::to_string(selection->size())+" selected";DragFeedback::Held("Items",title.c_str());}
+    else HeldItem(row);
+    ImGui::EndDragDropSource();
 }
 // Quick actions can be hidden in an editor without disabling item transfers.
 inline std::optional<json> AcceptItemDrop(std::string& error) {
@@ -246,8 +262,12 @@ inline bool SourceControl(State& state,const json& catalog,uint64_t revision,con
 }
 inline int MaxStack(const json& row){try{const auto it=row.find("MaxStackSize");if(it!=row.end()){if(it->is_number_integer())return std::clamp(it->get<int>(),1,10000);if(it->is_number_unsigned())return std::clamp(static_cast<int>(it->get<unsigned>()),1,10000);if(it->is_number_float())return std::clamp(static_cast<int>(it->get<double>()),1,10000);}}catch(...){}return 1;}
 inline const json* Find(const json& catalog,const char* selected) {
-    if(!selected||!*selected||!catalog.contains("Items")||!catalog["Items"].is_array())return nullptr;
-    for(const auto& row:catalog["Items"])if(row.value("Path",std::string{})==selected)return &row;return nullptr;
+    if(!selected||!*selected)return nullptr;
+    const auto items=catalog.find("Items");if(items==catalog.end()||!items->is_array())return nullptr;
+    const std::string_view wanted(selected);
+    // Called every frame by the docked bay and authoring panel: compare in place, no per-row copies.
+    for(const auto& row:*items){const auto path=row.find("Path");if(path!=row.end()&&path->is_string()&&path->get_ref<const std::string&>()==wanted)return &row;}
+    return nullptr;
 }
 inline std::string Title(const json& catalog,const std::string& path){const auto* row=Find(catalog,path.c_str());return row?ItemPresentation::Name(*row):path;}
 inline json BuildActionItems(const json& catalog,const State& state,const std::string& clickedPath,bool fullStack) {
@@ -312,6 +332,29 @@ inline size_t SendSelectionToCart(const json& catalog,State& state,char* selecte
     CartStatus="Added "+std::to_string(added)+" of "+std::to_string(total)+" selected items to the cart.";
     if(added<total)CartStatus+=" Unavailable items or the cart limit prevented the rest; those items remain selected.";
     return added;
+}
+inline bool MatchesDraggedSelection(const ImGuiPayload& payload,const State& state){
+    const auto data=json(state.SelectedPaths).dump();
+    return state.SelectedPaths.size()>1&&payload.Data&&payload.DataSize==static_cast<int>(data.size()+1)
+        &&std::memcmp(payload.Data,data.c_str(),data.size()+1)==0;
+}
+inline bool CartPayload(const ImGuiPayload* payload){
+    return payload&&(payload->IsDataType("RS_CART_SELECTION")||payload->IsDataType("RS_ITEM_ROW"));
+}
+inline void AcceptCartDrop(const json& catalog,State& state,char* selected,size_t selectedCapacity){
+    constexpr auto preview=ImGuiDragDropFlags_AcceptBeforeDelivery;
+    if(const auto* group=ImGui::AcceptDragDropPayload("RS_CART_SELECTION",preview)){
+        if(!group->IsDelivery())return;
+        if(MatchesDraggedSelection(*group,state))SendSelectionToCart(catalog,state,selected,selectedCapacity);
+        else CartStatus="Selection changed while dragging. Grab the selected items again.";
+    }else if(const auto* payload=ImGui::AcceptDragDropPayload("RS_ITEM_ROW",preview)){
+        if(!payload->IsDelivery())return;
+        try{
+            const auto item=ItemTransfer::Decode(payload->Data,payload->DataSize);
+            const auto* row=Find(catalog,item.at("Path").get_ref<const std::string&>().c_str());
+            AddToCart(row?*row:item);
+        }catch(const std::exception& error){CartStatus=error.what();}
+    }
 }
 inline bool SelectionCheck(const ImVec2& at,bool selected){
     const float side=ImGui::GetFrameHeight();const ImVec2 end(at.x+side,at.y+side);auto* draw=ImGui::GetWindowDrawList();
@@ -512,6 +555,11 @@ inline void ContextMenu(const json& catalog,const json& row,const std::string& p
     HelpyPreviewHooks::ViewFamily=HelpyPreviewHooks::LastRect();
 #endif
     const auto provider=ItemSource::Provider(origin);
+    const bool canRefresh=HelpyCachedCatalog::Connected()&&!HelpyIconPacks::Busy()&&!HelpyIconPacks::Building();
+    if(ImGui::MenuItem("Refresh item icon from game",nullptr,false,canRefresh))
+        HelpyIconPacks::RefreshNative(path,{});
+    if(ImGui::MenuItem("Refresh this mod's icons from game",nullptr,false,canRefresh&&provider.starts_with("mods/")&&HelpyRuntimePreferences::IconCacheLimitMB.load()>0))
+        HelpyIconPacks::RefreshNative({},provider);
     if(ImGui::MenuItem("Show Mod Family",nullptr,false,!family.empty()&&origin.Group==ItemSource::Kind::Modded&&!provider.empty())){state.PendingFamilyKey=family;state.PendingFamilyProvider=provider;}
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::ViewModFamily=HelpyPreviewHooks::LastRect();
@@ -601,7 +649,7 @@ inline void PlacardTitle(const std::string& name,const ImVec2& min,const ImVec2&
 }
 // All item surfaces (browser, recipe nodes, creation slots, cart) share this
 // renderer. Compact cards keep the same artwork, title, badge and border rules.
-inline void DrawPlacard(const json& row,const ImVec2& min,const ImVec2& max,bool selected=false,bool hovered=false,float footerLeftInset=0) {
+inline void DrawPlacard(const json& row,const ImVec2& min,const ImVec2& max,bool selected=false,bool hovered=false,float footerLeftInset=0,bool controllerFocused=false) {
     const auto& theme=HelpyImGuiTheme::Current;auto* draw=ImGui::GetWindowDrawList();
     const auto path=ItemPresentation::Text(row,"Path");const auto* details=ItemDetails::Find(path);
     const auto name=ItemPresentation::Name(row,HelpyImGuiTheme::Current.itemInternalNames);
@@ -619,7 +667,7 @@ inline void DrawPlacard(const json& row,const ImVec2& min,const ImVec2& max,bool
     const auto border=masterwork?HelpyImGuiTheme::Mix(theme.border,theme.accentHover,0.42f):theme.border;
     draw->AddRectFilled(min,max,ImGui::GetColorU32(HelpyImGuiTheme::Mix(selected?theme.selection:theme.panelAlt,theme.controlHover,fade*0.7f)),theme.X(theme.childRounding));
     const auto& item=ImGui::GetCurrentContext()->LastItemData;
-    const bool focused=ImGui::IsItemFocused()&&ImGui::GetIO().NavVisible&&item.Rect.Min.x==min.x&&item.Rect.Min.y==min.y&&item.Rect.Max.x==max.x&&item.Rect.Max.y==max.y;
+    const bool focused=controllerFocused||(ImGui::IsItemFocused()&&ImGui::GetIO().NavVisible&&item.Rect.Min.x==min.x&&item.Rect.Min.y==min.y&&item.Rect.Max.x==max.x&&item.Rect.Max.y==max.y);
     HelpyFocusHighlight::Draw(draw,min,max,ImGui::GetColorU32(focused?theme.accent:selected?theme.accentHover:HelpyImGuiTheme::Mix(border,theme.accent,fade*0.75f)),theme.X(theme.childRounding),focused,theme.X(selected?2.0f:1.0f));
     const float extent=std::max(1.0f,std::min({theme.Y(theme.gridIconSize),width-theme.X(20),height-footer-theme.Y(12)}));
     const ImVec2 artMin(compact?min.x+theme.X(6):min.x+(width-extent)*0.5f,min.y+(height-footer-extent)*0.5f),artMax(artMin.x+extent,artMin.y+extent);
@@ -803,9 +851,26 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
         HelpyMenu::NextControl("Clear selection");if(ImGui::SmallButton("Clear selection")){state.SelectedPaths.clear();state.SelectedRows=json::object();state.SelectedPath.clear();selected[0]=0;state.SelectedRevision=0;out.Changed=true;}
         }
     }
+    if(quickActions&&allowMulti){
+        HelpyControllerInput::ItemBayFrame=ImGui::GetFrameCount();HelpyControllerInput::ItemBayMultiSelect=state.MultiSelect;
+        if(HelpyControllerInput::Selection.Controller&&!ImGui::IsAnyItemActive()&&!ImGui::GetIO().WantTextInput&&!ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId)&&ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)&&ImGui::IsKeyPressed(ImGuiKey_GamepadStart,false))SendSelectionToCart(catalog,state,selected,selectedCapacity);
+        const bool dropping=CartPayload(ImGui::GetDragDropPayload());
+        const bool canDrop=SharedCart.Delivery()==0;
+        ImGui::BeginDisabled((state.SelectedPaths.empty()&&!dropping)||!canDrop);
+        const auto label=(dropping?std::string("Drop into cart"):"Send to cart ("+std::to_string(state.SelectedPaths.size())+")")+"###send-selection-to-cart";
+        if(ImGui::Button(label.c_str(),{ImGui::GetContentRegionAvail().x,0})&&!dropping)SendSelectionToCart(catalog,state,selected,selectedCapacity);
+#if defined(HELPY_PREVIEW)
+        HelpyPreviewHooks::BaySendToCart=HelpyPreviewHooks::LastRect();
+        HelpyPreviewHooks::BaySendFocus={ImGui::GetItemID(),ImGui::GetCurrentWindow()->ID};
+#endif
+        if(canDrop&&ImGui::BeginDragDropTarget()){
+            AcceptCartDrop(catalog,state,selected,selectedCapacity);
+            ImGui::EndDragDropTarget();
+        }
+        ImGui::EndDisabled();
+    }
     const float availableLogical=ImGui::GetContentRegionAvail().y/std::max(0.01f,theme.Scale()*theme.density);
-    const float selectionHeight=quickActions&&allowMulti?ImGui::GetFrameHeightWithSpacing()/std::max(.01f,theme.Scale()*theme.density):0.f;
-    const float maxPane=std::max(1.0f,availableLogical-selectionHeight-(fillSpace?56.0f:quickActions?ItemPaging::CartHeight(SharedCart.Entries().size(),theme.advancedMode)+80.0f:100.0f));
+    const float maxPane=std::max(1.0f,availableLogical-(fillSpace?56.0f:quickActions?ItemPaging::CartHeight(SharedCart.Entries().size(),theme.advancedMode)+80.0f:100.0f));
     const float gapLogical=ImGui::GetStyle().ItemSpacing.y/std::max(0.01f,theme.Scale()*theme.density);
     const float desiredPane=fillSpace?maxPane:state.GridView&&theme.itemGridFitRows
         ?ItemBayLayout::RowsHeight(theme.itemGridRows,theme.gridCardHeight,gapLogical,theme.contentPaddingY)+2.0f
@@ -846,7 +911,7 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
 #endif
                     const bool check=quickActions&&allowMulti&&SelectionCheck({rowPos.x+theme.X(4),rowPos.y+(itemHeight-ImGui::GetFrameHeight())*.5f},selectedThis);
                     if(clicked&&fits){const bool additive=ImGui::GetIO().KeyCtrl||ImGui::GetIO().KeyShift||state.MultiSelect||check||(quickActions&&allowMulti&&ControllerConfirm());if(ApplySelection(state,path,selected,selectedCapacity,additive,allowMulti,&row,!(quickActions&&allowMulti&&additive))){out.Changed=true;}}
-                    if(fits)DragItem(row);
+                    if(fits)DragItem(row,quickActions&&allowMulti?&state.SelectedPaths:nullptr);
                     ImGui::EndDisabled();const float pad=theme.X(4.0f);const ImVec2 iconMin(rowPos.x+pad+(quickActions&&allowMulti?ImGui::GetFrameHeight()+pad:0.f),rowPos.y+(itemHeight-iconSize)*0.5f),iconMax(iconMin.x+iconSize,iconMin.y+iconSize);
                     if(!iconPath.empty())HelpyIconTrace::Event("render-row",iconPath,"name='"+name+"' row="+std::to_string(rowIndex));
                     if(iconPath.empty()||!ItemIconCache::Draw(iconPath,iconMin,iconMax,true))DrawPlaceholder(iconMin,iconMax,theme);
@@ -881,10 +946,11 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
 #if defined(HELPY_PREVIEW)
                         HelpyPreviewHooks::ItemFocus[path]={ImGui::GetItemID(),ImGui::GetCurrentWindow()->ID};
 #endif
-                        DrawPlacard(row,cardMin,cardMax,selectedThis,ImGui::IsItemHovered()||ImGui::IsItemFocused(),quickActions&&allowMulti?ImGui::GetFrameHeight()+theme.X(12):0.f);
+                        const bool controllerFocused=fits&&ImGui::IsItemFocused()&&HelpyControllerInput::Selection.Controller&&!HelpyControllerInput::PointerMode;
+                        DrawPlacard(row,cardMin,cardMax,selectedThis,ImGui::IsItemHovered()||ImGui::IsItemFocused(),quickActions&&allowMulti?ImGui::GetFrameHeight()+theme.X(12):0.f,controllerFocused);
                         const bool check=quickActions&&allowMulti&&SelectionCheck({cardMin.x+theme.X(6),cardMax.y-theme.Y(42)+std::max(0.f,(theme.Y(42)-ImGui::GetFrameHeight())*.5f)},selectedThis);
                         if(clicked&&fits){const bool additive=ImGui::GetIO().KeyCtrl||ImGui::GetIO().KeyShift||state.MultiSelect||check||(quickActions&&allowMulti&&ControllerConfirm());if(ApplySelection(state,path,selected,selectedCapacity,additive,allowMulti,&row,!(quickActions&&allowMulti&&additive))){out.Changed=true;}}
-                        if(fits)DragItem(row);
+                        if(fits)DragItem(row,quickActions&&allowMulti?&state.SelectedPaths:nullptr);
                         ContextMenu(catalog,row,path,name,selected,selectedCapacity,state,out,allowMulti,true,quickActions);if(HelpyImGuiTheme::TooltipReady(std::string("item:")+path+":"+std::to_string(rowIndex),ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)))VerboseTooltip(row,name,path,allowMulti,fits,!(quickActions&&allowMulti&&(state.MultiSelect||state.SelectedPaths.size()>1||ImGui::GetIO().KeyCtrl||ImGui::GetIO().KeyShift||check)));
                         ImGui::PopID();ImGui::PopID();if(col<columns-1&&rowIndex+1<total)ImGui::SameLine();
                     }
@@ -902,18 +968,6 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
     ImGui::PopID();
     }
     PageControls(state,state.Matches.size(),lazy.HasMore&&lazy.LastError.empty(),lazy.Pending||populationWait);
-    if(quickActions&&allowMulti){
-        HelpyControllerInput::ItemBayFrame=ImGui::GetFrameCount();HelpyControllerInput::ItemBayMultiSelect=state.MultiSelect;
-        if(HelpyControllerInput::Selection.Controller&&!ImGui::IsAnyItemActive()&&!ImGui::GetIO().WantTextInput&&!ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId)&&ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)&&ImGui::IsKeyPressed(ImGuiKey_GamepadStart,false))SendSelectionToCart(catalog,state,selected,selectedCapacity);
-        ImGui::BeginDisabled(state.SelectedPaths.empty()||SharedCart.Delivery()!=0);
-        const auto label="Send to cart ("+std::to_string(state.SelectedPaths.size())+")";
-        if(ImGui::Button(label.c_str(),{ImGui::GetContentRegionAvail().x,0}))SendSelectionToCart(catalog,state,selected,selectedCapacity);
-#if defined(HELPY_PREVIEW)
-        HelpyPreviewHooks::BaySendToCart=HelpyPreviewHooks::LastRect();
-        HelpyPreviewHooks::BaySendFocus={ImGui::GetItemID(),ImGui::GetCurrentWindow()->ID};
-#endif
-        ImGui::EndDisabled();
-    }
     if(lazy.LastError.empty()&&state.Matches.empty()&&!populationWait&&lazy.Started){
         ImGui::TextDisabled("No matching items in the loaded runtime window.");
 #if defined(HELPY_PREVIEW)
@@ -997,7 +1051,7 @@ inline Result RenderShared(const json& catalog,uint64_t revision,bool fillSpace=
         Bay.RowsRevision=rowsRevision;
     }
     if(!RenderingDetachedBay&&DetachedBay){ImGui::TextDisabled("Item Bay is in its separate window.");HelpyMenu::NextControl("Dock back");if(ImGui::SmallButton("Dock back"))DetachedBay=false;}
-    if((DockedBay||DetachedBay)&&!RenderingDetachedBay){Result result;result.SelectedPaths=Bay.Picker.SelectedPaths;result.SelectedCount=result.SelectedPaths.size();result.SelectedTitle=Title(Bay.Catalog,Bay.Selected);result.SelectedRow=Find(Bay.Catalog,Bay.Selected);return result;}
+    if((DockedBay||DetachedBay)&&!RenderingDetachedBay){Result result;result.SelectedPaths=Bay.Picker.SelectedPaths;result.SelectedCount=result.SelectedPaths.size();result.SelectedRow=Find(Bay.Catalog,Bay.Selected);result.SelectedTitle=result.SelectedRow?ItemPresentation::Name(*result.SelectedRow):std::string(Bay.Selected);return result;}
     if(!RenderingDetachedBay){if(ImGui::SmallButton(Bay.Expanded?"Restore pane":"Expand pane"))Bay.Expanded=!Bay.Expanded;
 #if defined(HELPY_PREVIEW)
         HelpyPreviewHooks::BayExpand=HelpyPreviewHooks::LastRect();

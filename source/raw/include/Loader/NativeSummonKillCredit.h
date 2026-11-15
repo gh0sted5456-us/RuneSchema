@@ -4,6 +4,7 @@
 #include "SDK/Helper/ReflectedContract.h"
 #include "Loader/QuestObjectReference.h"
 #include "Unreal/Hooks.hpp"
+#include <functional>
 #include <vector>
 
 namespace DragonWilds::Quests::Summons {
@@ -11,6 +12,10 @@ namespace DragonWilds::Quests::Summons {
 // credited instigator on the caster's existing callback, then restores the
 // borrowed parameter buffer before the caller can reuse it for another player.
 class NativeKillCredit {
+public:
+    // Optional observer for confirmed kills: (credited player controller, victim). Authority side only.
+    std::function<void(RC::Unreal::UObject*,RC::Unreal::UObject*)> Confirmed;
+private:
     struct Frame {
         RC::Unreal::UObject* Source;
         RC::Unreal::UFunction* Function;
@@ -115,8 +120,11 @@ public:
             m_frames.erase(m_frames.begin()+index-1);
             if(frame.Reserved && !dispatch.OriginalFunctionCallPrevented()) {
                 auto* player=Resolve(frame.Player);auto* victim=Resolve(frame.Victim);
-                if(player && victim && Identity(player->GetWorld())==frame.World)
+                if(player && victim && Identity(player->GetWorld())==frame.World) {
                     NotifyConfirmedKill(player,victim);
+                    // Achievement feed: after native dispatch and the cooked-mod listeners.
+                    if(Confirmed)if(auto* controller=PlayerController(player))Confirmed(controller,victim);
+                }
             }
             return;
         }

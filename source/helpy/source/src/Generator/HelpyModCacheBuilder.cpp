@@ -34,7 +34,7 @@ void Start(const fs::path& input,bool creation,bool installNet,const std::string
     const auto resource=FindResourceW(nullptr,MAKEINTRESOURCEW(State.Repair?IDR_RUNESCHEMA_REPAIR:IDR_CACHE_BUILDER),RT_RCDATA);
     const auto bytes=resource?SizeofResource(nullptr,resource):0;const auto loaded=resource?LoadResource(nullptr,resource):nullptr;
     const auto data=loaded?static_cast<const char*>(LockResource(loaded)):nullptr;
-    if(!data||bytes==0||bytes>2*1024*1024)throw std::runtime_error("The built-in cache builder is unavailable. Update Helpy.exe.");
+    if(!data||bytes==0)throw std::runtime_error("The built-in cache or repair script is unavailable. Update Helpy.exe.");
     const auto script=State.Job/"builder.ps1";ConfigFiles::Write(script,std::string_view(data,bytes));
     ConfigFiles::Write(State.Job/"control.json",nlohmann::json{{"Action","run"},{"OwnerPid",GetCurrentProcessId()}}.dump());
     wchar_t windows[32768]{};if(!GetWindowsDirectoryW(windows,32768))throw std::runtime_error("Windows directory unavailable.");

@@ -26,6 +26,11 @@ Follow [documentation channels](docs/DOCUMENTATION-CHANNELS.md). Maintainers
 publish verified runtime ZIPs; source archives and small binary patches are not
 complete installations. Keep existing release tags and downloads intact.
 
+For the 1.0.0 series, use a unique serial such as `1.0.0.J00001` for the
+runtime display version, package and tag. `J0` identifies Jonesy builds. Assign
+the four uppercase base-36 characters in ascending order, starting at `0001`,
+and keep the numeric CMake and Windows versions at `1.0.0.0`.
+
 Before publishing, check versions, required files, hashes and license contents
 in the actual ZIP. Use the supported build launcher or
 `build/package-licenses.ps1 -FinalizeBuild`, then run

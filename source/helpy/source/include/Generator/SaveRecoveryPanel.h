@@ -5,10 +5,11 @@
 #include "Core/HelpyEnvironment.h"
 #include "Core/RuneSchemaDataRoot.h"
 #include "Generator/HelpyMenu.h"
-#include <TlHelp32.h>
+#include "Core/HelpyGameProcess.h"
 #include <set>
 
 namespace PS::SaveRecoveryPanel {
+using HelpyGameProcess::GameStopped;
 namespace fs=std::filesystem;using Json=nlohmann::json;
 struct Row {SaveBackups::Entry Backup;bool World=false;std::string Slot;fs::path Target;std::string RequestState;};
 struct Data {std::vector<Row> Rows;bool Stopped=false,Automatic=false,WorldRecovery=false;std::string Runtime,Status;};
@@ -24,13 +25,6 @@ inline fs::path Root(){
     return RuneSchemaData::Directory();
 }
 inline std::string DefaultPlatform(){using K=HelpyEnvironment::Kind;switch(HelpyEnvironment::Current){case K::Steam:return "steam";case K::Epic:return "epic";case K::GamePass:return "gamepass";case K::Dedicated:return "server";default:return {};}}
-inline bool GameStopped(){
-    const auto handle=CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS,0);if(handle==INVALID_HANDLE_VALUE)throw std::runtime_error("Cannot verify whether Dragonwilds is closed");
-    struct Close{HANDLE Value;~Close(){CloseHandle(Value);}}close{handle};PROCESSENTRY32W entry{};entry.dwSize=sizeof(entry);
-    if(!Process32FirstW(handle,&entry))throw std::runtime_error("Cannot inspect active game processes");
-    do{std::wstring name(entry.szExeFile);for(auto& c:name)c=towlower(c);if(name.starts_with(L"rsdragonwilds"))return false;}while(Process32NextW(handle,&entry));
-    if(GetLastError()!=ERROR_NO_MORE_FILES)throw std::runtime_error("Game process inspection did not complete");return true;
-}
 inline fs::path WorldRoot(const std::string& runtime){
     if(runtime!="server")return RuneSchemaData::GameSavedDirectory()/"SaveGames";
     const auto binaries=HostServices::ModDirectory().parent_path().parent_path().parent_path();
@@ -47,7 +41,7 @@ inline std::string State(const fs::path& directory,const std::string& guid,const
     return {};
 }
 inline Data Scan(const fs::path& root,const std::string& runtime){
-    Data data;data.Runtime=runtime;data.Stopped=GameStopped();const auto characters=SaveBackups::Directory(root,runtime),worlds=WorldBackups::Directory(root,runtime);
+    Data data;data.Runtime=runtime;data.Stopped=HelpyGameProcess::GameStopped();const auto characters=SaveBackups::Directory(root,runtime),worlds=WorldBackups::Directory(root,runtime);
     data.Automatic=SaveBackups::Automatic(characters);
     data.WorldRecovery=WorldBackups::Enabled(worlds);
     std::map<std::string,fs::path> targets;std::set<std::string> duplicates;

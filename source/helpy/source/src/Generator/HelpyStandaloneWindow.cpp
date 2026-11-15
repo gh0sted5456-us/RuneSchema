@@ -1,5 +1,6 @@
 #include "Core/ProcessExitFuture.h"
 #include "Generator/HelpyStandaloneWindow.h"
+#include "Runtime/HelpyGuideReservation.h"
 #include "Runtime/HelpyModManager.h"
 #include <optional>
 #include "Generator/HelpyImGuiTheme.h"
@@ -54,7 +55,11 @@
 #include "Generator/LiveLogPanel.h"
 #include "Generator/DiagnosticsPanel.h"
 #include "Generator/StructuredLogFeed.h"
+#include "Core/DiagnosticSession.h"
 #include "Generator/HelpyDiagnosticOverlay.h"
+#include "Generator/HelpyAchievementOverlay.h"
+#include "Runtime/HelpyAchievements.h"
+#include "Core/HelpyCoreLink.h"
 #include "Generator/ModsPanel.h"
 #include "Generator/NotificationsPanel.h"
 #include "Generator/HelpyControllerInput.h"
@@ -80,6 +85,7 @@
 #include <vector>
 #include <random>
 #include <filesystem>
+#include <format>
 #include <wincodec.h>
 #include <wrl/client.h>
 
@@ -88,6 +94,33 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND,UINT,WPARAM,LP
 namespace PS {
 namespace {
 constexpr UINT ToggleMessage=WM_APP+0x521,ReloadMessage=WM_APP+0x522,StopMessage=WM_APP+0x523;
+
+HRESULT AcquireRenderTarget(ID3D11Device* device,IDXGISwapChain* swap,ID3D11RenderTargetView** target){
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> buffer;
+    const auto result=swap->GetBuffer(0,IID_PPV_ARGS(&buffer));
+    return FAILED(result)?result:device->CreateRenderTargetView(buffer.Get(),nullptr,target);
+}
+
+HRESULT ResizeRenderTarget(ID3D11Device* device,ID3D11DeviceContext* context,IDXGISwapChain* swap,
+                           ID3D11RenderTargetView*& target,UINT width,UINT height){
+    if(!width||!height)return S_OK;
+    context->OMSetRenderTargets(0,nullptr,nullptr);
+    if(target){target->Release();target=nullptr;}
+    const auto resized=swap->ResizeBuffers(0,width,height,DXGI_FORMAT_UNKNOWN,0);
+    // DXGI retains the old buffers when it rejects a resize.
+    const auto acquired=AcquireRenderTarget(device,swap,&target);
+    return FAILED(acquired)?acquired:resized;
+}
+
+std::string GraphicsFailure(const wchar_t* surface,const char* operation,HRESULT result){
+    return std::format("{} {} failed (HRESULT 0x{:08X}).",std::filesystem::path(surface).string(),
+                       operation,static_cast<uint32_t>(result));
+}
+
+void PresentSurface(IDXGISwapChain* swap,const wchar_t* surface){
+    const auto result=swap->Present(0,0);
+    if(FAILED(result))throw std::runtime_error(GraphicsFailure(surface,"presentation",result));
+}
 #if defined(HELPY_PREVIEW)
 bool PreviewUpdatesTab=false;
 bool PreviewBackgroundsTab=false;
@@ -124,6 +157,7 @@ ID3D11ShaderResourceView* BrandTexture=nullptr;
 ID3D11ShaderResourceView* BrandAccentTexture=nullptr;
 ID3D11ShaderResourceView* GameBrandTexture=nullptr;
 ID3D11ShaderResourceView* LoadingRingTexture=nullptr;
+ID3D11ShaderResourceView* ScornedReferenceTexture=nullptr;
 ID3D11ShaderResourceView* HomeBannerTexture=nullptr;
 struct HomeDetailImage {ID3D11ShaderResourceView* Texture=nullptr;UINT Width=0,Height=0;};
 std::array<HomeDetailImage,3> HomeDetailImages{};
@@ -151,6 +185,7 @@ void OpenHomeLink(size_t index){
 double SplashStarted=std::numeric_limits<double>::quiet_NaN();
 bool SplashEntered=false;
 HelpySplash::Exit SplashExit;
+float SplashExitPlatformAlpha=0;
 HelpySplash::Exit HomeExit;
 Page HomeExitTarget=Page::Home;
 double HomeRevealStarted=std::numeric_limits<double>::quiet_NaN();
@@ -244,6 +279,7 @@ DiagnosticCenterHistory::Service DiagnosticHistory;
 DiagnosticCenterMutes::Manager DiagnosticMutes;
 HelpyDiagnosticOverlay DiagnosticOverlay;
 HelpyDiagnosticOverlay CoordinatesOverlay;
+HelpyAchievementOverlay AchievementOverlay;
 HelpyDiagnosticOverlay StartupOverlay;
 DiagnosticToastFeed::Options DiagnosticOptions(){const auto& t=HelpyImGuiTheme::Current;return {t.diagnosticToastsEnabled,t.diagnosticToastLimit,t.diagnosticToastDuration,t.diagnosticRegistryActivity};}
 std::chrono::steady_clock::time_point NextPlayerRefresh{};
@@ -301,15 +337,25 @@ void RenderDiagnosticIcon(ImDrawList* dl,ImVec2 p,float size,ImU32 color,
 }
 ImVec2 HudViewport{},HudOrigin{};
 HelpyHudLayout::Rect CoordinatesBox(const HelpyImGuiTheme::Theme& theme,ImVec2 viewport){const auto label=HelpyHudLayout::CoordinateText(HelpyCoordinates::Label,HelpyFeatureSettings::Hud);const auto text=ImGui::CalcTextSize(label.c_str());return HelpyHudLayout::Coordinates(viewport.x,viewport.y,text.x+theme.X(24),text.y+theme.Y(16),HelpyFeatureSettings::Hud);}
-RECT HudSurfaceBounds(int width,int height,bool map,bool coordinates,bool loading,bool diagnostics){
+HelpyHudLayout::Rect AwardBounds(const HelpyImGuiTheme::Theme& theme, float width, float height) {
+    namespace A = AchievementToastTimeline;
+    const float scale = std::min({theme.Scale(), width / (A::Width + 24), height / (A::Height + A::Margin * 2)});
+    const float cardWidth = A::Width * scale, cardHeight = (A::Height + A::Margin) * scale;
+    return {(width - cardWidth) * .5f, A::Top(height, scale, 0.f), cardWidth, cardHeight};
+}
+RECT HudSurfaceBounds(int width,int height,bool map,bool coordinates,bool loading,bool diagnostics,bool award){
     float left=float(width),top=float(height),right=0,bottom=0;const auto& layout=HelpyFeatureSettings::Hud;
     const auto include=[&](HelpyHudLayout::Rect box){left=std::min(left,box.X);top=std::min(top,box.Y);right=std::max(right,box.X+box.W);bottom=std::max(bottom,box.Y+box.H);};
     if(map)include(HelpyHudLayout::Map(float(width),float(height),layout));
     if(coordinates)include(CoordinatesBox(HelpyImGuiTheme::Current,{float(width),float(height)}));
     if(loading)include(HelpyHudLayout::Place(float(width),float(height),768,480,layout.Loading));
     if(diagnostics)include({0,0,float(width),float(height)});
+    const auto card=AwardBounds(HelpyImGuiTheme::Current,float(width),float(height));
+    if(award)include(card);
     const LONG w=std::clamp(LONG(std::ceil(right)-std::floor(left)),160L,LONG(HelpyOverlayFrames::MaxWidth)),h=std::clamp(LONG(std::ceil(bottom)-std::floor(top)),120L,LONG(HelpyOverlayFrames::MaxHeight));
-    const LONG x=std::clamp(LONG(std::floor(left)),0L,std::max(0L,LONG(width)-w)),y=std::clamp(LONG(std::floor(top)),0L,std::max(0L,LONG(height)-h));return {x,y,x+w,y+h};
+    const LONG x=std::clamp(LONG(std::floor(left)),award?std::max(0L,LONG(std::ceil(card.X+card.W))-w):0L,std::max(0L,LONG(width)-w));
+    const LONG y=std::clamp(LONG(std::floor(top)),award?std::max(0L,LONG(std::ceil(card.Y+card.H))-h):0L,std::max(0L,LONG(height)-h));
+    return {x,y,x+w,y+h};
 }
 void RenderCoordinates(const HelpyImGuiTheme::Theme& t){
     if(!t.showCoordinates||HelpyCoordinates::Label.empty())return;
@@ -424,7 +470,12 @@ static_assert([]{
         for(size_t j=0;j<i;++j)if(PageIcon(pages[i])==PageIcon(pages[j]))return false;
     }return true;
 }(),"Every navigation destination must have a distinct icon");
-bool NavItem(Page page,const HelpyImGuiTheme::Theme& t,const std::vector<int>& sidebarDefaults) {
+void OpenSidebarPage(Page page,const HelpyImGuiTheme::Theme& t) {
+    Sidebar.Navigate();
+    const auto target=page==Page::Items?LastPlayersPage:page==Page::Map?LastWorldPage:page==Page::Tools?LastToolsPage:page;
+    CurrentPage=HelpyNavigation::Available(target,t.workspaces,HelpyEnvironment::Server())?target:page;
+}
+bool NavItem(Page page,const HelpyImGuiTheme::Theme& t,const std::vector<int>& sidebarDefaults,bool reveal) {
     const bool active=HelpyNavigation::Parent(CurrentPage)==page;ImGui::PushID(static_cast<int>(page));
     const float w=ImGui::GetContentRegionAvail().x;const bool compact=w<t.X(120.0f);
     const float textWidth=std::max(1.0f,w-t.X(46.0f));
@@ -438,6 +489,7 @@ bool NavItem(Page page,const HelpyImGuiTheme::Theme& t,const std::vector<int>& s
     ImGui::GetWindowDrawList()->AddRectFilled(at,{at.x+w,at.y+h},ImGui::GetColorU32(background),t.X(6));
     ImGui::PushStyleColor(ImGuiCol_Header,{0,0,0,0});ImGui::PushStyleColor(ImGuiCol_HeaderHovered,{0,0,0,0});ImGui::PushStyleColor(ImGuiCol_HeaderActive,{0,0,0,0});
     const bool clicked=ImGui::Selectable("##nav",active,ImGuiSelectableFlags_None,ImVec2(w,h));
+    if(active&&reveal&&!ImGui::IsItemVisible())ImGui::SetScrollHereY(.5f);
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::Navigation[PageTitle(page)]=HelpyPreviewHooks::LastRect();
 #endif
@@ -461,13 +513,11 @@ bool NavItem(Page page,const HelpyImGuiTheme::Theme& t,const std::vector<int>& s
     ImGui::PopStyleColor(3);ImGui::PopID();
     if(clicked){
         if(page==Page::BugReport){if(!BugReportPanel::Open())CurrentPage=Page::BugReport;return true;}
-        Sidebar.Navigate();
-        const auto target=page==Page::Items?LastPlayersPage:page==Page::Map?LastWorldPage:page==Page::Tools?LastToolsPage:page;
-        CurrentPage=HelpyNavigation::Available(target,t.workspaces,HelpyEnvironment::Server())?target:page;
+        OpenSidebarPage(page,t);
     }return clicked;
 }
 
-void RenderWorkspaceTabs(const HelpyImGuiTheme::Theme& t){
+void RenderWorkspaceTabs(const HelpyImGuiTheme::Theme& t,bool arriving){
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::WorkspaceTabs.clear();
 #endif
@@ -480,7 +530,13 @@ void RenderWorkspaceTabs(const HelpyImGuiTheme::Theme& t){
     const auto tab=[&](Page page){
         if(!HelpyNavigation::Available(page,t.workspaces,HelpyEnvironment::Server()))return;
         const auto label=HelpyNavigation::TabTitle(page);
-        const bool clicked=HelpyMenu::Tab(label,CurrentPage==page,used,width);
+        bool down=false;
+        const bool map=page==Page::Map&&!DetachedWorkspaces[0];
+        const bool clicked=HelpyMenu::Tab(label,CurrentPage==page,used,width,map?&down:nullptr,arriving);
+        if(down){
+            MapPanel::FocusCanvas=true;
+            CurrentPage=page;
+        }
 #if defined(HELPY_PREVIEW)
         HelpyPreviewHooks::WorkspaceTabs[label]=HelpyPreviewHooks::LastRect();
 #endif
@@ -511,7 +567,8 @@ bool ReadBrandPixels(const char* asset,UINT& width,UINT& height,std::vector<unsi
     if(FAILED(CoCreateInstance(CLSID_WICImagingFactory,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&factory))))return false;
     ComPtr<IWICStream> bundled;
     auto opened=factory->CreateDecoderFromFilename(HelpyPaths::Asset(asset).c_str(),nullptr,GENERIC_READ,WICDecodeMetadataCacheOnLoad,&decoder);
-    const auto bundledId=std::string_view(asset)=="nexus.png"?IDR_NEXUS_ICON:std::string_view(asset)=="loading-ring.png"?IDR_LOADING_WHEEL:0;
+    const auto bundledId=std::string_view(asset)=="nexus.png"?IDR_NEXUS_ICON:std::string_view(asset)=="loading-ring.png"?IDR_LOADING_WHEEL:
+        std::string_view(asset)=="Scorned-Art.png"?IDR_SCORNED_ART:0;
     if(FAILED(opened)&&bundledId){
         const auto resource=FindResourceW(nullptr,MAKEINTRESOURCEW(bundledId),RT_RCDATA);
         const auto loaded=resource?LoadResource(nullptr,resource):nullptr;const auto size=resource?SizeofResource(nullptr,resource):0;
@@ -541,19 +598,27 @@ ID3D11ShaderResourceView* LoadBrand(ID3D11Device* device,const char* asset="Rune
     if(logoLayer)for(size_t index=0;index<pixels.size();index+=4)HelpyBranding::LogoLayer(pixels.data()+index,static_cast<unsigned>(index/4%width),width,logoLayer==2);
     return UploadBrandPixels(device,width,height,pixels);
 }
-std::pair<HICON,float> StartupIcon(const char* asset,bool game){
-    UINT width=0,height=0;std::vector<unsigned char> pixels;if(!ReadBrandPixels(asset,width,height,pixels))return {};
-    using G=HelpyBranding::GameWordmark;const int left=game?int(width*G::Left):0,top=game?int(height*G::Top):0;
-    const int sourceWidth=game?std::max(1,int(width*(G::Right-G::Left))):int(width),sourceHeight=game?std::max(1,int(height*(G::Bottom-G::Top))):int(height);
-    const float scale=std::min({1.f,1024.f/sourceWidth,512.f/sourceHeight});const int w=std::max(1,int(sourceWidth*scale)),h=std::max(1,int(sourceHeight*scale));
-    BITMAPINFO info{};info.bmiHeader={sizeof(BITMAPINFOHEADER),w,-h,1,32,BI_RGB};void* bits=nullptr;const auto color=CreateDIBSection(nullptr,&info,DIB_RGB_COLORS,&bits,nullptr,0);if(!color||!bits){if(color)DeleteObject(color);return {};}
-    auto* target=static_cast<unsigned char*>(bits);
-    for(int y=0;y<h;++y)for(int x=0;x<w;++x){const auto* pixel=pixels.data()+(size_t(top+y*sourceHeight/h)*width+left+x*sourceWidth/w)*4;auto* out=target+(size_t(y)*w+x)*4;out[0]=pixel[2]*pixel[3]/255;out[1]=pixel[1]*pixel[3]/255;out[2]=pixel[0]*pixel[3]/255;out[3]=pixel[3];}
-    std::vector<unsigned char> maskBytes(size_t((w+15)/16)*2*h);const auto mask=CreateBitmap(w,h,1,1,maskBytes.data());ICONINFO icon{TRUE,0,0,mask,color};const auto result=mask?CreateIconIndirect(&icon):nullptr;if(mask)DeleteObject(mask);DeleteObject(color);return {result,float(w)/h};
+HelpyDiagnosticOverlay::StartupPng ReadStartupPng(const char* asset,bool game=false){
+    HelpyDiagnosticOverlay::StartupPng result;
+    UINT width=0,height=0;
+    std::vector<unsigned char> pixels;
+    if(!ReadBrandPixels(asset,width,height,pixels))return result;
+    using G=HelpyBranding::GameWordmark;
+    const int left=game?int(width*G::Left):0,top=game?int(height*G::Top):0;
+    const int sourceWidth=game?std::max(1,int(width*(G::Right-G::Left))):int(width);
+    const int sourceHeight=game?std::max(1,int(height*(G::Bottom-G::Top))):int(height);
+    const float scale=std::min({1.f,1024.f/sourceWidth,512.f/sourceHeight});
+    result.Width=std::max(1,int(sourceWidth*scale));result.Height=std::max(1,int(sourceHeight*scale));
+    result.Pixels.resize(size_t(result.Width)*result.Height*4);
+    for(UINT y=0;y<result.Height;++y)for(UINT x=0;x<result.Width;++x){
+        const auto from=(size_t(top+y*sourceHeight/result.Height)*width+left+x*sourceWidth/result.Width)*4;
+        std::memcpy(result.Pixels.data()+(size_t(y)*result.Width+x)*4,pixels.data()+from,4);
+    }
+    return result;
 }
 
 void LoadBrandTextures(ID3D11Device* device) {
-    if(!StartupOverlay.HasStartupLogos()){auto rune=StartupIcon("RuneSchema.png",false),game=StartupIcon("dragonwilds.png",true),wheel=StartupIcon("loading-ring.png",false);StartupOverlay.StartupLogos(rune.first,game.first,game.second>0?game.second:3.2f,wheel.first);}
+    if(!StartupOverlay.HasStartupLogos())StartupOverlay.StartupLogos(ReadStartupPng("RuneSchema.png"),ReadStartupPng("dragonwilds.png",true),ReadStartupPng("loading-ring.png"));
     const auto vortex=HelpyModManager::FindVortex();RuntimeDetailsPanel::VortexInstalled=!vortex.empty();
     if(!vortex.empty()){
         HICON icon{};if(ExtractIconExW(vortex.c_str(),0,nullptr,&icon,1)&&icon){
@@ -580,6 +645,10 @@ void LoadBrandTextures(ID3D11Device* device) {
     HelpyBackgrounds::Upload=[device](const HelpyBackgrounds::Pixels& pixels){return UploadBrandPixels(device,pixels.Width,pixels.Height,pixels.Data);};
     GameBrandTexture=LoadBrand(device,"dragonwilds.png");
     HomeBannerTexture=LoadBrand(device,"home-banner.png");
+    MapPanel::LoadScornedArtwork=[device,attempted=false]() mutable{
+        if(!attempted){attempted=true;ScornedReferenceTexture=LoadBrand(device,"Scorned-Art.png");}
+        return ImTextureRef(ScornedReferenceTexture);
+    };
     const std::array detailAssets{"github-details.png","nexus-details.png","curseforge-details.png"};
     for(size_t i=0;i<detailAssets.size();++i){auto& image=HomeDetailImages[i];std::vector<unsigned char> pixels;
         if(ReadBrandPixels(detailAssets[i],image.Width,image.Height,pixels))image.Texture=UploadBrandPixels(device,image.Width,image.Height,pixels);
@@ -626,6 +695,8 @@ void LoadBrandTextures(ID3D11Device* device) {
     ItemGridPicker::ModLogo=ImTextureRef(BrandTexture);ItemGridPicker::ModLogoAccent=ImTextureRef(BrandAccentTexture);
 }
 void ReleaseBrandTextures(bool shutdownBackgrounds=true) {
+    MapPanel::LoadScornedArtwork={};
+    if(ScornedReferenceTexture){ScornedReferenceTexture->Release();ScornedReferenceTexture=nullptr;}
     if(RuntimeDetailsPanel::ModManagerIcon.GetTexID()){reinterpret_cast<ID3D11ShaderResourceView*>(RuntimeDetailsPanel::ModManagerIcon.GetTexID())->Release();RuntimeDetailsPanel::ModManagerIcon={};}
     SourceBanners::Shutdown();
     PlayerPortraitPicker::ReleaseTextures();PartyMemberView::SteamIcon={};PartyMemberView::EpicIcon={};PartyMemberView::XboxIcon={};
@@ -646,6 +717,77 @@ void DrawThemedLogo(ImDrawList* draw,ImVec2 a,ImVec2 b,const HelpyImGuiTheme::Th
     if(BrandTexture)draw->AddImage(ImTextureRef(BrandTexture),a,b,{0,0},{1,1},ImGui::GetColorU32(ImVec4(1,1,1,opacity)));
     if(BrandAccentTexture){auto tint=theme.accent;tint.w=opacity;draw->AddImage(ImTextureRef(BrandAccentTexture),a,b,{0,0},{1,1},ImGui::GetColorU32(tint));}
 }
+void RenderGamerPoints(const HelpyImGuiTheme::Theme& theme) {
+    const auto* unlock = AchievementOverlay.Current();
+    const auto& frame = AchievementOverlay.Frame();
+    if (!unlock || !frame.Visible || frame.Alpha <= 0) return;
+
+    const auto bounds = AwardBounds(theme, HudViewport.x, HudViewport.y);
+    const float scale = bounds.W / AchievementToastTimeline::Width;
+    const float x = bounds.X - HudOrigin.x;
+    const float y = bounds.Y - HudOrigin.y + bounds.H * frame.Offset;
+    const ImVec2 a{x, y}, b{x + bounds.W, y + AchievementToastTimeline::Height * scale};
+    auto* draw = ImGui::GetForegroundDrawList();
+    const auto color = [&](ImVec4 value, float opacity = 1.f) {
+        value.w = frame.Alpha * opacity;
+        return ImGui::GetColorU32(value);
+    };
+    const float rounding = 11 * scale;
+    draw->AddRectFilled({a.x + 2 * scale, a.y + 4 * scale}, {b.x + 2 * scale, b.y + 4 * scale},
+        color({0,0,0,1}, .55f), rounding);
+    draw->AddRectFilled(a, b, color(theme.panelAlt, .98f), rounding);
+    draw->AddRect(a, b, color(theme.accent, .68f), rounding);
+
+    auto* regular = ImGui::GetFont();
+    auto* bold = UiBoldFont ? UiBoldFont : regular;
+    if (frame.Rune > 0 || frame.Brackets < 1) {
+        const float size = 70 * scale;
+        const ImVec2 mark{(a.x + b.x - size) * .5f, (a.y + b.y - size) * .5f};
+        constexpr const char* pieces[] = {"[", "R", "]"};
+        for (size_t i = 0; i < SplashSprites.size(); ++i) {
+            const float opacity = i == 1 ? frame.Rune : 1.f - frame.Brackets;
+            if (opacity <= 0) continue;
+            const float step = i == 0 ? -1.f : i == 2 ? 1.f : 0.f;
+            const float shift = step * frame.Brackets * 73 * scale;
+            const float lift = std::abs(step) * frame.Brackets * 9 * scale;
+            const auto& sprite = SplashSprites[i];
+            if (sprite.Texture) {
+                draw->AddImage(ImTextureRef(sprite.Texture), {mark.x + sprite.Bounds.x * size + shift, mark.y + sprite.Bounds.y * size - lift},
+                    {mark.x + sprite.Bounds.z * size + shift, mark.y + sprite.Bounds.w * size - lift},
+                    {0,0}, {1,1}, color({1,1,1,1}, opacity));
+                if (i == 1 && BrandAccentTexture)
+                    draw->AddImage(ImTextureRef(BrandAccentTexture), mark, {mark.x + size, mark.y + size},
+                        {0,0}, {1,1}, color(theme.accent, opacity));
+            } else {
+                const float fontSize = 34 * scale;
+                const float width = bold->CalcTextSizeA(fontSize, FLT_MAX, 0.f, pieces[i]).x;
+                draw->AddText(bold, fontSize, {mark.x + (size - width) * .5f + step * 23 * scale + shift,
+                    mark.y + (size - fontSize) * .5f - lift}, color(theme.accent, opacity), pieces[i]);
+            }
+        }
+    }
+    if (frame.Text <= 0) return;
+
+    const auto gold = color(theme.accent, frame.Text);
+    constexpr float valueSize = 22;
+    const std::string points = "+" + std::to_string(unlock->Points);
+    const float valueWidth = bold->CalcTextSizeA(valueSize * scale, FLT_MAX, 0, points.c_str()).x;
+    const float badgeWidth = std::max(72 * scale, valueWidth + 20 * scale);
+    const ImVec2 badge{b.x - badgeWidth - 15 * scale, y + 20 * scale};
+    draw->AddRectFilled(badge, {badge.x + badgeWidth, badge.y + 52 * scale}, color(theme.accent, .15f * frame.Text), 8 * scale);
+    draw->AddRect(badge, {badge.x + badgeWidth, badge.y + 52 * scale}, color(theme.accent, .48f * frame.Text), 8 * scale);
+    draw->AddText(bold, valueSize * scale, {badge.x + (badgeWidth - valueWidth) * .5f, badge.y + 6 * scale}, gold, points.c_str());
+    const float labelWidth = bold->CalcTextSizeA(10 * scale, FLT_MAX, 0, "POINTS").x;
+    draw->AddText(bold, 10 * scale, {badge.x + (badgeWidth - labelWidth) * .5f, badge.y + 33 * scale}, gold, "POINTS");
+
+    const float left = x + 22 * scale;
+    draw->PushClipRect({left, y}, {badge.x - 10 * scale, b.y}, true);
+    draw->AddText(bold, 11 * scale, {left, y + 14 * scale}, gold, "RUNESCHEMA GAMER POINTS");
+    draw->AddText(bold, 19 * scale, {left, y + 34 * scale}, color(theme.text, frame.Text), unlock->Title.c_str());
+    const auto detail = unlock->Description.empty() ? unlock->ModName : unlock->Description;
+    draw->AddText(regular, 12 * scale, {left, y + 62 * scale}, color(theme.textDisabled, frame.Text), detail.c_str());
+    draw->PopClipRect();
+}
 struct HomeDestination { Page Target; const char* Label; const char* Description; };
 void DrawRuneExit(ImDrawList* draw,ImVec2 a,ImVec2 b,const HelpyImGuiTheme::Theme& theme,const HelpySplash::ExitFrame& exit,float opacity=1){
     if(!SplashSprites[0].Texture||!SplashSprites[1].Texture||!SplashSprites[2].Texture){DrawThemedLogo(draw,a,b,theme,opacity*exit.Fade);return;}
@@ -659,7 +801,7 @@ void DrawRuneExit(ImDrawList* draw,ImVec2 a,ImVec2 b,const HelpyImGuiTheme::Them
 constexpr std::array HomeDestinations{
     HomeDestination{Page::SaveRecovery,"Save Recovery",HelpyNavigation::Description(Page::SaveRecovery)},
     HomeDestination{Page::Mods,"Mods",HelpyNavigation::Description(Page::Mods)},
-    HomeDestination{Page::Items,"Players","Inventory, gear, clones and character saves."},
+    HomeDestination{Page::Items,"Items","Browse items, build carts and inspect gear."},
     HomeDestination{Page::Map,"World","Ashenfall map, party, spawning and journal."},
     HomeDestination{Page::Settings,"Settings","Appearance, item caches and RuneSchema settings."},
     HomeDestination{Page::Tools,"Tools",HelpyNavigation::Description(Page::Tools)},
@@ -809,7 +951,8 @@ void RenderHome(const HelpyImGuiTheme::Theme& theme){
         PreviewHomeQuickPopup=HelpyPreviewHooks::WindowRect();
 #endif
         ImGui::Separator();
-        if(HelpyImGuiTheme::SoftButton("Close",{ImGui::GetContentRegionAvail().x,0}))ImGui::CloseCurrentPopup();
+        const bool back=!HelpyMenu::WidgetActiveAtFrameStart&&HelpyMenu::PopupDepthAtFrameStart==1&&ImGui::GetCurrentContext()->OpenPopupStack.Size==1&&ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight,false);
+        if(HelpyImGuiTheme::SoftButton("Close",{ImGui::GetContentRegionAvail().x,0})||back)ImGui::CloseCurrentPopup();
 #if defined(HELPY_PREVIEW)
         HelpyPreviewHooks::AuthoringButtons["Close quick settings"]=HelpyPreviewHooks::LastRect();
 #endif
@@ -926,8 +1069,7 @@ void RenderInformationBar(const HelpyImGuiTheme::Theme& t,bool runtimeBadge=true
 #endif
 }
 bool RuneSchemaUpdateAvailable(){const auto& state=HelpyUpdates::Current();return
-    RuneSchemaUpdateInfo::Compare(HelpyEnvironment::RuneSchemaVersion,state.MainVersion)==RuneSchemaUpdateInfo::Comparison::Newer
-    ||RuneSchemaUpdateInfo::Compare(HelpyEnvironment::RuneSchemaVersion,state.ReleaseVersion)==RuneSchemaUpdateInfo::Comparison::Newer;}
+    RuneSchemaUpdateInfo::Compare(HelpyEnvironment::RuneSchemaVersion,state.ReleaseVersion)==RuneSchemaUpdateInfo::Comparison::Newer;}
 void RenderRuntimeBadge(const HelpyImGuiTheme::Theme& t,float logicalSize) {
     const float size=std::min(t.Y(logicalSize),t.X(logicalSize));
     const bool shared=HelpyEnvironment::SharedStoreBadge();
@@ -1007,21 +1149,29 @@ void RenderStartupProgress(const HelpyImGuiTheme::Theme& theme,ImVec2 origin,ImV
     HelpyPreviewHooks::StartupWheelBounds={wheel.x-layout.WheelRadius,wheel.y-layout.WheelRadius,wheel.x+layout.WheelRadius,wheel.y+layout.WheelRadius};
 #endif
 }
+double SplashElapsed(){
+    if(!std::isfinite(SplashStarted))SplashStarted=ImGui::GetTime();
+#if defined(HELPY_PREVIEW)
+    if(HelpyPreviewHooks::SplashElapsed)return *HelpyPreviewHooks::SplashElapsed;
+#endif
+    return ImGui::GetTime()-SplashStarted;
+}
 void RenderSplash(const HelpyImGuiTheme::Theme& theme){
     static int lastFrame=-2;static bool focusPending=false;if(lastFrame+1!=ImGui::GetFrameCount())focusPending=true;lastFrame=ImGui::GetFrameCount();
     RenderInformationBar(theme,false);
     const auto origin=ImGui::GetCursorScreenPos(),available=ImGui::GetContentRegionAvail();
-    if(!std::isfinite(SplashStarted))SplashStarted=ImGui::GetTime();const BOOL animate=ClientAreaAnimations;
-    const double now=ImGui::GetTime();double elapsed=now-SplashStarted;
-#if defined(HELPY_PREVIEW)
-    // Screenshot fixtures sample exact phases independently of compiler/GPU
-    // contention. Shipping animation continues to use the real UI clock.
-    if(HelpyPreviewHooks::SplashElapsed)elapsed=*HelpyPreviewHooks::SplashElapsed;
-#endif
-    const float blend=SplashExit.Active?SplashExit.InitialBlend:HelpySplash::Blend(elapsed,animate!=FALSE);
+    const BOOL animate=ClientAreaAnimations;
+    const double now=ImGui::GetTime(),elapsed=SplashElapsed();
+    using Kind=HelpyEnvironment::Kind;
+    const auto runtime=HelpyEnvironment::Current;
+    auto* platform=runtime==Kind::Steam?SteamTexture:runtime==Kind::Epic?EpicTexture:runtime==Kind::GamePass?XboxTexture:nullptr;
+    const bool hasPlatform=platform||runtime==Kind::Dedicated;
+    const auto logos=HelpySplash::Logos(elapsed,animate!=FALSE,theme.splashGameLogo&&GameBrandTexture,theme.splashRuntimeLogo&&hasPlatform,theme.splashLogoSeconds);
+    const float platformAlpha=SplashExit.Active?SplashExitPlatformAlpha:logos[2];
+    const float blend=SplashExit.Active?SplashExit.InitialBlend:logos[1];
     const auto exit=SplashExit.At(now,animate!=FALSE);
 #if defined(HELPY_PREVIEW)
-    HelpyPreviewHooks::SplashBlend=blend;HelpyPreviewHooks::SplashAnimated=animate!=FALSE;
+    HelpyPreviewHooks::SplashBlend=blend;HelpyPreviewHooks::SplashPlatformAlpha=platformAlpha;HelpyPreviewHooks::SplashAnimated=animate!=FALSE;
     HelpyPreviewHooks::SplashExiting=SplashExit.Active;HelpyPreviewHooks::SplashExitProgress=SplashExit.Active?exit.Progress:0;
 #endif
     const float artHeight=std::min(theme.Y(190),available.y*.38f),logoGap=std::min(theme.Y(26),available.y*.06f),buttonGap=std::min(theme.Y(16),available.y*.035f),buttonHeight=std::min(theme.Y(42),available.y*.12f);
@@ -1034,7 +1184,8 @@ void RenderSplash(const HelpyImGuiTheme::Theme& theme){
     const float groupHeight=artHeight+logoGap+ImGui::GetTextLineHeight()+buttonGap+buttonHeight+tipsHeight+(downloadHint?theme.Y(100):0);
     const ImVec2 center{origin.x+available.x*.5f,origin.y+std::max(0.f,(available.y-groupHeight)*.42f)+artHeight*.5f};
     auto* draw=ImGui::GetWindowDrawList();
-    const float gameAlpha=SplashExit.Active?exit.GameOpacity:1-blend,runeAlpha=SplashExit.Active?exit.RuneOpacity:(!BrandTexture&&!GameBrandTexture?1.f:blend);
+    const float gameAlpha=SplashExit.Active?exit.GameOpacity*(1-platformAlpha):logos[0];
+    const float runeAlpha=SplashExit.Active?exit.RuneOpacity*(1-platformAlpha):blend;
     if(GameBrandTexture&&gameAlpha>0){using G=HelpyBranding::GameWordmark;const float width=std::min(theme.X(540),available.x*.84f),height=width*G::Aspect;const ImVec2 a{center.x-width*.5f,center.y-height*.5f},b{center.x+width*.5f,center.y+height*.5f};
         const auto color=ImGui::GetColorU32(ImVec4(1,1,1,gameAlpha*(SplashExit.Active?exit.Fade:1)));
         if(SplashExit.Active&&SplashExit.Kind==HelpySplash::ExitKind::Dragonwilds){
@@ -1044,10 +1195,16 @@ void RenderSplash(const HelpyImGuiTheme::Theme& theme){
             draw->AddImage(ImTextureRef(GameBrandTexture),{a.x,seam+down},{b.x,b.y+down},{G::Left,G::Split},{G::Right,G::Bottom},color);
         }else draw->AddImage(ImTextureRef(GameBrandTexture),a,b,{G::Left,G::Top},{G::Right,G::Bottom},color);
     }
-    if((BrandTexture||!GameBrandTexture)&&runeAlpha>0){const float size=artHeight;const ImVec2 a{center.x-size*.5f,center.y-size*.5f},b{a.x+size,a.y+size};
+    if(runeAlpha>0){const float size=artHeight;const ImVec2 a{center.x-size*.5f,center.y-size*.5f},b{a.x+size,a.y+size};
         if(SplashExit.Active&&SplashExit.Kind==HelpySplash::ExitKind::RuneSchema&&SplashSprites[0].Texture&&SplashSprites[1].Texture&&SplashSprites[2].Texture){
             DrawRuneExit(draw,a,b,theme,exit,runeAlpha);
         }else DrawThemedLogo(draw,a,b,theme,runeAlpha*(SplashExit.Active?exit.Fade:1));
+    }
+    if(platformAlpha>0&&hasPlatform){
+        auto tint=theme.accent;tint.w=platformAlpha*(SplashExit.Active?exit.Fade:1.f);
+        const float side=artHeight*.68f;
+        if(platform)draw->AddImage(ImTextureRef(platform),{center.x-side*.5f,center.y-side*.5f},{center.x+side*.5f,center.y+side*.5f},{0,0},{1,1},ImGui::GetColorU32(tint));
+        else HelpyImGuiTheme::DrawIcon(HelpyImGuiTheme::Icon::Server,center,side,tint);
     }
     ImGui::PushStyleVar(ImGuiStyleVar_Alpha,ImGui::GetStyle().Alpha*(SplashExit.Active?exit.Fade:1));
     ImGui::SetCursorScreenPos({origin.x,center.y+artHeight*.5f+logoGap});
@@ -1125,7 +1282,10 @@ void RenderSplash(const HelpyImGuiTheme::Theme& theme){
         ImGui::SetCursorScreenPos({center.x-badge.x*.5f,tipBottom+(remaining-badge.y)*.5f});RenderRuntimeBadge(theme,logicalSize);
     }
     ImGui::PopStyleVar();
-    if(!SplashExit.Active&&(entered||(!RuntimeDetailsPanel::Open&&ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)&&(ImGui::IsKeyPressed(ImGuiKey_Enter,false)||controllerConfirm))))SplashExit.Begin(now,blend);
+    if(!SplashExit.Active&&(entered||(!RuntimeDetailsPanel::Open&&ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)&&(ImGui::IsKeyPressed(ImGuiKey_Enter,false)||controllerConfirm)))){
+        SplashExitPlatformAlpha=platformAlpha;
+        SplashExit.Begin(now,platformAlpha<1?blend/(1-platformAlpha):0.f);
+    }
     if(SplashExit.Active&&SplashExit.At(now,animate!=FALSE).Finished){SplashEntered=true;CurrentPage=Page::Home;HomeRevealStarted=animate?now:now-HelpySplash::RevealSeconds;}
 }
 
@@ -1382,10 +1542,10 @@ void RenderUpdatesAndRuntime(const HelpyImGuiTheme::Theme& t) {
     ImGui::EndDisabled();
     if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)&&HelpyUpdates::CooldownSeconds()>0)PS::HelpyImGuiTheme::Tooltip("Next manual check in %d seconds",HelpyUpdates::CooldownSeconds());
     const auto link=[&](const char* label,const wchar_t* url){if(HelpyImGuiTheme::SoftButton(label))ShellExecuteW(nullptr,L"open",url,nullptr,nullptr,SW_SHOWNORMAL);};
-    ImGui::SameLine();link("GitHub releases",L"https://github.com/gh0sted5456-us/RuneSchema/releases/latest");
+    ImGui::SameLine();link("GitHub releases",GitHubLatestUrl);
     ImGui::SameLine();link("Main branch",L"https://github.com/gh0sted5456-us/RuneSchema/tree/main");
-    link("Nexus Mods",L"https://www.nexusmods.com/runescapedragonwilds/mods/570");
-    ImGui::TextWrapped("Nexus version comparison opens the listing in your browser. Its login/anti-bot protections are not bypassed; automatic checks use GitHub.");
+    link("Nexus Mods",NexusFilesUrl);ImGui::SameLine();link("CurseForge",CurseForgeFilesUrl);
+    ImGui::TextWrapped("Automatic checks use GitHub. Download links open in your browser.");
     if(state.CheckedAt){const auto now=std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
         ImGui::TextDisabled("Last check: %lld minute(s) ago · cached between launches",std::max<std::int64_t>(0,(now-state.CheckedAt)/60));}
     if(!state.CacheError.empty())ImGui::TextWrapped("%s",state.CacheError.c_str());
@@ -1407,6 +1567,8 @@ void RenderDiagnosticsSettings(const HelpyImGuiTheme::Theme& t) {
     ImGui::SeparatorText("Diagnostic notifications");
     changed|=HelpyImGuiTheme::Toggle("Enable on-screen log toasts",&theme.diagnosticToastsEnabled);
     changed|=HelpyImGuiTheme::Toggle("Show routine registry synchronization notices",&theme.diagnosticRegistryActivity);
+    changed|=HelpyImGuiTheme::Toggle("Show RuneSchema Gamer Points popups",&theme.achievementPopups);
+    changed|=HelpyImGuiTheme::Toggle("Play Gamer Points chime",&theme.achievementSound);
     ImGui::TextWrapped("Registry handshakes and nonblocking content differences stay in Diagnostics by default. Blocked operations, unrelated warnings and errors still appear.");
     ImGui::SetNextItemWidth(t.X(250));
     changed|=ImGui::SliderInt("Maximum visible toasts",&theme.diagnosticToastLimit,1,10);
@@ -1416,6 +1578,8 @@ void RenderDiagnosticsSettings(const HelpyImGuiTheme::Theme& t) {
     if(ImGui::SmallButton("Reset notification defaults")){
         const HelpyImGuiTheme::Theme defaults{};
         theme.diagnosticToastsEnabled=defaults.diagnosticToastsEnabled;
+        theme.achievementPopups=defaults.achievementPopups;
+        theme.achievementSound=defaults.achievementSound;
         theme.diagnosticRegistryActivity=defaults.diagnosticRegistryActivity;
         theme.diagnosticToastLimit=defaults.diagnosticToastLimit;
         theme.diagnosticToastDuration=defaults.diagnosticToastDuration;
@@ -1738,7 +1902,6 @@ void RenderServerAccess(bool hostConfiguration=true){
     ImGui::TextUnformatted("World PIN");ImGui::SetNextItemWidth(std::min(300.f,ImGui::GetContentRegionAvail().x));
     HelpyTextInput::InputText("##world-pin",ServerPin,sizeof(ServerPin),ImGuiInputTextFlags_Password);
     ImGui::BeginDisabled(SpawnToolRequests::IsWaiting()||!SpawnToolRequests::IsAvailable());
-    if(ImGui::Button("Refresh access"))SpawnToolRequests::TrySubmit({{"Action","HelpyRemoteAccess"},{"Query",true}});
     HelpyMenu::NextControl("Submit PIN");
     if(ImGui::Button("Submit PIN")){
         if(SpawnToolRequests::TrySubmit({{"Action","HelpyRemoteAccess"},{"Pin",std::string(ServerPin)}}))SecureZeroMemory(ServerPin,sizeof(ServerPin));
@@ -1748,13 +1911,20 @@ void RenderServerAccess(bool hostConfiguration=true){
     if(!access.empty()){
         ImGui::TextWrapped("Server response: %s",access.value("Detail",std::string{}).c_str());
         const auto guid=access.value("CharacterGuid",std::string{});if(!guid.empty()){ImGui::TextWrapped("Your character: %s",guid.c_str());if(ImGui::Button("Copy character GUID"))ImGui::SetClipboardText(guid.c_str());}
-        if(access.value("Allowed",false))ImGui::TextWrapped("Enabled: item delivery %s; teleport %s.",access.value("ItemDelivery",false)?"yes":"no",access.value("Teleport",false)?"yes":"no");
+        if(access.value("Allowed",false)){
+            ImGui::TextWrapped("Enabled: item delivery %s; teleport %s.",access.value("ItemDelivery",false)?"yes":"no",access.value("Teleport",false)?"yes":"no");
+            if(access.value("ItemDelivery",false)&&access.contains("MaximumItemCount")){
+                const auto limit=access.value("MaximumItemCount",0);
+                if(limit>0)ImGui::TextWrapped("Server limit: %d items per request.",limit);
+                else ImGui::TextUnformatted("Server limit: none.");
+            }
+        }
     }
     else ImGui::TextDisabled("Connect after joining the world. A PIN is never saved by the client.");
     if(hostConfiguration&&ImGui::CollapsingHeader("Host configuration (this installation)")){
         using namespace RuneSchemaSettingsPanel;
         if(!Loaded&&Status.empty())Load();
-        ImGui::TextWrapped("Configure this installation before hosting. Choose an 8-64 character PIN and enable the actions you want. Keep the server settings file private. Save, then restart the host/server.");
+        ImGui::TextWrapped("A running host applies these settings automatically. Choose an 8-64 character PIN and enable the actions you want. Set the maximum item count to 0 for no server limit.");
         if(Loaded){
             for(const auto* key:{"allowPinAccess","accessPin","allowClientItemGrants","allowClientTeleport","maximumItemCount","permittedPlayerGuids","permittedPlayerNames"}){
                 const auto path=std::string("/helpyAuthority/")+key;
@@ -1780,7 +1950,47 @@ void RenderServerAccessPrompt(){
     }
 }
 int SettingsCategory=0;
+void RenderHelpyTopics(){
+    static int topic=0;
+    constexpr std::array labels{"Items","World Tools","Diagnostics","Mods","Save Recovery"};
+    HelpyMenu::Tabs("helpy-topics",labels,topic,false);
+    auto& theme=HelpyImGuiTheme::Current;
+    bool changed=false;
+    const auto open=[&](const char* label,Page page){
+        if(HelpyImGuiTheme::SoftButton(label))OpenSidebarPage(page,theme);
+    };
+    switch(topic){
+    case 0:
+        changed|=HelpyImGuiTheme::Toggle("Show Clone tab",&theme.workspaces.Clone);
+        changed|=HelpyImGuiTheme::Toggle("Show Recipes tab",&theme.workspaces.Recipes);
+        if(HelpyImGuiTheme::SoftButton("Item cache settings"))RuneSchemaSettingsPanel::QuickSection=2;
+        break;
+    case 1:
+        changed|=HelpyImGuiTheme::Toggle("Show Journal tab",&theme.workspaces.Journal);
+        changed|=HelpyImGuiTheme::Toggle("Show session tools",&theme.workspaces.Tools);
+        if(HelpyImGuiTheme::SoftButton("Map HUD settings"))RuneSchemaSettingsPanel::QuickSection=5;
+        open("Open World",Page::Map);
+        break;
+    case 2:
+        changed|=HelpyImGuiTheme::Toggle("Show Diagnostics in navigation",&theme.workspaces.LiveLog);
+        if(HelpyImGuiTheme::SoftButton("Diagnostics settings"))SettingsCategory=4;
+        break;
+    case 3:
+        changed|=HelpyImGuiTheme::Toggle("Compact mod list",&theme.modsCompact);
+        open("Open Mods",Page::Mods);
+        break;
+    case 4:
+        if(HelpyImGuiTheme::SoftButton("Save and backup settings"))RuneSchemaSettingsPanel::QuickSection=4;
+        open("Open Save Recovery",Page::SaveRecovery);
+        break;
+    }
+    if(changed){
+        if(!theme.workspaces.Recipes){DetachedWorkspaces[1]=false;HelpyTaskbar::Current.Restore(HelpyTaskbar::Window::Recipes);}
+        HelpyImGuiTheme::SaveCurrent();
+    }
+}
 void RenderSettingsPage(const HelpyImGuiTheme::Theme& t){
+    RuneSchemaSettingsPanel::TopicSettings=RenderHelpyTopics;
     auto& selected=SettingsCategory;
     constexpr std::array labels{"Helpy","Server access","RuneSchema","Appearance","Diagnostics","Backgrounds","Updates & runtime","Workspaces"};
 #if defined(HELPY_PREVIEW)
@@ -1866,10 +2076,10 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
     const float totalLogical=ImGui::GetContentRegionAvail().x/std::max(0.01f,t.Scale());
     const float minimumContent=360.0f;
     const float dynamicMax=std::max(t.navigationMinWidth,totalLogical-minimumContent-t.splitterWidth-t.contentGutter);
-    SidebarWidthLogical=std::clamp(SidebarWidthLogical,t.navigationMinWidth,std::min(t.navigationMaxWidth,dynamicMax));
+    const float visibleWidth=std::clamp(SidebarWidthLogical,t.navigationMinWidth,std::min(t.navigationMaxWidth,dynamicMax));
 
     ImGui::PushStyleColor(ImGuiCol_ChildBg,t.navigation);
-    HelpyImGuiTheme::BeginPanel("##helpy-nav",ImVec2(t.X(collapsed?72.f:SidebarWidthLogical),0),false,0,true);
+    HelpyImGuiTheme::BeginPanel("##helpy-nav",ImVec2(t.X(collapsed?72.f:visibleWidth),0),false,0,true);
 #if defined(HELPY_PREVIEW)
     const auto railAt=ImGui::GetWindowPos(),railSize=ImGui::GetWindowSize();HelpyPreviewHooks::NavigationRail={railAt.x,railAt.y,railAt.x+railSize.x,railAt.y+railSize.y};
     HelpyPreviewHooks::NavigationCollapsed=collapsed;
@@ -1911,6 +2121,10 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
     }
     ImGui::Dummy(ImVec2(1,t.Y(4.0f)));ImGui::Separator();ImGui::Dummy(ImVec2(1,t.Y(5.0f)));
     const auto sidebarDefaults=HelpyNavigationOrder::SidebarDefaults();
+    static std::optional<Page> revealed;
+    const auto route=HelpyNavigation::Parent(CurrentPage);
+    const bool reveal=revealed!=route;
+    revealed=route;
     std::vector<Page> routes,lowerRoutes;bool lower=false;
     for(int id:HelpyNavigationOrder::Ordered(HelpyNavigationOrder::SidebarSurface,sidebarDefaults)){
         if(id==HelpyNavigationOrder::SidebarDivider){lower=true;continue;}
@@ -1928,13 +2142,13 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
     lowerHeight=std::min(lowerHeight,budget*(routes.empty()?1.f:.5f));
     const float routeLimit=std::max(1.f,budget-lowerHeight);
     if(HelpyImGuiTheme::BeginPanel("##helpy-destinations",ImVec2(0,std::max(1.f,std::min(routeHeight,routeLimit))),false))
-        for(auto page:routes)NavItem(page,t,sidebarDefaults);
+        for(auto page:routes)NavItem(page,t,sidebarDefaults,reveal);
     PS::HelpyImGuiTheme::EndPanel();
     const auto divider=ImGui::GetCursorScreenPos();const float dividerWidth=std::max(1.f,ImGui::GetContentRegionAvail().x),dividerHeight=t.Y(8);
     ImGui::InvisibleButton("##sidebar-divider",{dividerWidth,dividerHeight});
     ImGui::GetWindowDrawList()->AddLine({divider.x,divider.y+dividerHeight*.5f},{divider.x+dividerWidth,divider.y+dividerHeight*.5f},ImGui::GetColorU32(t.separator));
     NavigationOrder::Drag(HelpyNavigationOrder::SidebarSurface,static_cast<Page>(HelpyNavigationOrder::SidebarDivider),sidebarDefaults,"Navigation divider");
-    if(HelpyImGuiTheme::BeginPanel("##helpy-lower-destinations",{0,std::max(1.f,lowerHeight)},false))for(auto page:lowerRoutes)NavItem(page,t,sidebarDefaults);
+    if(HelpyImGuiTheme::BeginPanel("##helpy-lower-destinations",{0,std::max(1.f,lowerHeight)},false))for(auto page:lowerRoutes)NavItem(page,t,sidebarDefaults,reveal);
     PS::HelpyImGuiTheme::EndPanel();
     const float runtimeLogical=collapsed?(HelpyEnvironment::SharedStoreBadge()?16.f:24.f):HelpyBranding::RuntimeIconSize;
     const auto runtimeSize=RuntimeBadgeSize(t,runtimeLogical);
@@ -1949,7 +2163,7 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
     const bool splitHover=ImGui::IsItemHovered(),splitActive=ImGui::IsItemActive();
     if(splitHover||splitActive)ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
     if(splitActive&&ImGui::GetIO().MouseDelta.x!=0.0f) {
-        SidebarWidthLogical+=ImGui::GetIO().MouseDelta.x/std::max(0.01f,t.Scale());
+        SidebarWidthLogical=visibleWidth+ImGui::GetIO().MouseDelta.x/std::max(0.01f,t.Scale());
         SidebarWidthLogical=std::clamp(SidebarWidthLogical,t.navigationMinWidth,std::min(t.navigationMaxWidth,dynamicMax));HelpyImGuiTheme::Current.navigationWidth=SidebarWidthLogical;
     }
     static bool navDirty=false;if(splitActive)navDirty=true;if(navDirty&&!ImGui::IsMouseDown(ImGuiMouseButton_Left)){HelpyImGuiTheme::SaveCurrent();navDirty=false;}
@@ -1961,12 +2175,13 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
     HelpyImGuiTheme::BeginPanel("##helpy-content",ImVec2(0,0),false,ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse);
     static std::optional<Page> navigationPage;static bool navigationPending=false;
     if(navigationPage!=CurrentPage){navigationPage=CurrentPage;navigationPending=true;}
-    if(CurrentPage!=Page::Home&&navigationPending&&HelpyControllerInput::Selection.Controller&&!ImGui::IsAnyItemActive()&&!ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId)){
+    const bool controllerArrival=navigationPending&&HelpyControllerInput::Selection.Controller;
+    if(CurrentPage!=Page::Home&&controllerArrival&&!ImGui::IsAnyItemActive()&&!ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId)){
         auto* window=ImGui::GetCurrentWindow();ImGui::FocusWindow(window,ImGuiFocusRequestFlags_UnlessBelowModal);
         if(ImGui::GetCurrentContext()->NavWindow==window){ImGui::NavInitWindow(window,true);ImGui::SetNavCursorVisible(true);navigationPending=false;}
     }
     RenderInformationBar(t,false);
-    RenderWorkspaceTabs(t);
+    RenderWorkspaceTabs(t,controllerArrival&&!navigationPending);
     static HelpyUiMotion::PageFade pageFade;
     float pageAlpha=pageFade.Alpha(static_cast<int>(CurrentPage),ImGui::GetTime(),ClientAreaAnimations!=FALSE);
 #if defined(HELPY_PREVIEW)
@@ -2023,12 +2238,14 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
                 case Page::SaveEditor:SpawnToolsPanel::RefreshSnapshot(0);SaveEditorPanel::Render(SpawnToolsPanel::UiSnapshot,SpawnToolsPanel::UiRevision);break;
                 case Page::Journal:JournalPanel::Render();break;
                 case Page::DedicatedServer:
-                    if(HelpyImGuiTheme::SoftButton("Players & items"))CurrentPage=Page::Items;
+                    if(HelpyImGuiTheme::SoftButton("Items"))CurrentPage=Page::Items;
                     ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Map & teleportation"))CurrentPage=Page::Map;
                     ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Spawns"))CurrentPage=Page::Spawns;
                     ServerControlPanel::Render([]{RenderServerAccess(HelpyEnvironment::Server()||RuntimeConnectionPanel::Read().Host);});
                     break;
-                case Page::Settings:RenderSettingsPage(t);break;
+                case Page::Settings:
+                    if(controllerArrival&&!navigationPending)HelpyControllerInput::EnterSection();
+                    RenderSettingsPage(t);break;
                 case Page::Authoring:AuthoringPanel::SessionTools=[] {SpawnToolsPanel::RenderSessionCleanup();};AuthoringPanel::OpenSpawns=[] {CurrentPage=Page::Spawns;};AuthoringPanel::Render();break;
                 case Page::Spawns:{
 #if defined(HELPY_PREVIEW)
@@ -2060,10 +2277,11 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
                         HelpyPreviewHooks::MenuTabs["cache-return"]=HelpyPreviewHooks::LastRect();
 #endif
                     }
+                    if(controllerArrival&&!navigationPending&&!ImGui::GetCurrentContext()->NavId)HelpyControllerInput::EnterSection();
                     HelpyMenu::Categories("utilities",labels,section);CurrentTool=routes[section];
                     auto surface=t.panel;surface.w=std::max(.94f,surface.w);ImGui::PushStyleColor(ImGuiCol_ChildBg,surface);
                     ImGui::PushID(section);
-                    const bool details=HelpyImGuiTheme::BeginPanel("##tool-details",{0,0},true,ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse,true);
+                    const bool details=HelpyImGuiTheme::BeginPanel("##tool-details",{0,0},true,ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse);
                     if(details&&HelpyMenu::BeginBody("Utility body",section))switch(CurrentTool){
                     case Tool::CacheBuilder:
                         RenderAuthorToolsDownload();
@@ -2170,6 +2388,7 @@ bool HelpyStandaloneWindow::OpenPopup(bool desktop) {
     LazyCatalog::FirstOpen(SpawnToolRequests::CurrentGeneration());QueuePlayerRefresh(true);return true;
 }
 void HelpyStandaloneWindow::ClosePopup(){
+    HelpySupportPage::Close();
 #if defined(HELPY_PREVIEW)
     ++HelpyPreviewHooks::HideRequests;
 #endif
@@ -2222,7 +2441,19 @@ void HelpyStandaloneWindow::ThreadMain() {
     WNDCLASSEXW wc{sizeof(wc),CS_CLASSDC,WndProc,0,0,m_module,nullptr,LoadCursorW(nullptr,IDC_ARROW),nullptr,nullptr,L"RuneSchema.Helpy.Window",nullptr};
     wc.hIcon=static_cast<HICON>(LoadImageW(m_module,MAKEINTRESOURCEW(IDI_RSMK),IMAGE_ICON,32,32,LR_SHARED));
     wc.hIconSm=static_cast<HICON>(LoadImageW(m_module,MAKEINTRESOURCEW(IDI_RSMK),IMAGE_ICON,16,16,LR_SHARED));
+    std::string diagnosticStart;
+    DWORD diagnosticPid=0;
+    uint64_t nextDiagnosticAttach=0;
+    const auto diagnosticOwner=[](){
+        return PluginRuntimeServices::ExternalDesktop?PluginRuntimeServices::GameProcessId.load():GetCurrentProcessId();
+    };
+    const auto currentDiagnostic=[&](std::string_view record){
+        return diagnosticPid&&diagnosticPid==diagnosticOwner()&&DiagnosticSession::Includes(diagnosticStart,record);
+    };
+    HelpyCoreLink::Link coreLink;
     const auto cleanup=[&](void*){
+        coreLink.Stop();
+        try{nlohmann::json ignored;if(PluginRuntimeServices::ExternalDesktop&&RuneSchemaSettingsPanel::Remote)RuneSchemaSettingsPanel::Remote({{"Action","HelpyNativeOverlay"},{"Payload",{{"Action","DesktopInput"},{"Enabled",false}}}},ignored);}catch(...){}
         try{nlohmann::json ignored;if(RuneSchemaSettingsPanel::Remote)RuneSchemaSettingsPanel::Remote({{"Action","HelpyNativeOverlay"},{"Payload",{{"Action","GuideReservation"},{"Enabled",false}}}},ignored);}catch(...){}
         try{nlohmann::json ignored;if(RuneSchemaSettingsPanel::Remote)RuneSchemaSettingsPanel::Remote({{"Action","HelpyVisibility"},{"Visible",false}},ignored);}catch(...){}
         m_publishedWindow=nullptr;ClosePopup();m_nativeOverlay.Shutdown();HelpyControllerInput::Shutdown();m_tray.Remove();
@@ -2230,8 +2461,11 @@ void HelpyStandaloneWindow::ThreadMain() {
         NotificationsPanel::Shutdown();
         ModMetadataPanel::Shutdown();
         ModSaveFilesPanel::Shutdown();
+        AchievementsPanel::CloseModWindow();
         ModMenu2Panel::Shutdown();
-        DiagnosticHistory.Queue(DiagnosticStore,true);DiagnosticHistory.Close();
+        if(!DiagnosticStore.Events().empty())DiagnosticHistory.Queue(DiagnosticStore,true);
+        DiagnosticHistory.Close();
+        HelpyAchievements::Shutdown();AchievementOverlay.Close();
         DiagnosticOverlay.Close();CoordinatesOverlay.Close();StartupOverlay.Close();HelpyCoordinates::Shutdown();HelpyStartupProgress::Shutdown();StructuredLogFeed::Shutdown();DiagnosticsPanel::Shutdown();
         LiveLogPanel::OnEntry={};LiveLogPanel::OnBackfillEntry={};LiveLogPanel::OnUE4SSEntry={};
         if(ImGui::GetCurrentContext()){
@@ -2253,6 +2487,7 @@ void HelpyStandaloneWindow::ThreadMain() {
         if(SUCCEEDED(com))CoUninitialize();
     };
     std::unique_ptr<void,decltype(cleanup)> resources(reinterpret_cast<void*>(1),cleanup);
+    coreLink.Start();
     RegisterClassExW(&wc);HelpyWindowPlacement::Load(HostServices::StateDirectory()/"window-placement.json");
     m_hwnd=CreateWindowExW(WS_EX_APPWINDOW,wc.lpszClassName,HelpyBranding::WindowTitle,WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,CW_USEDEFAULT,1280,900,nullptr,nullptr,m_module,this);
     if(!m_hwnd){SetError("CreateWindowExW failed");m_started=true;return;}
@@ -2284,23 +2519,35 @@ void HelpyStandaloneWindow::ThreadMain() {
     const auto lane=kind==HelpyEnvironment::Kind::Steam?"steam":kind==HelpyEnvironment::Kind::Epic?"epic":kind==HelpyEnvironment::Kind::GamePass?"gamepass":HelpyEnvironment::Server()?"server":"unknown";
     const auto diagnosticRoot=RuneSchemaData::PlatformDirectory(lane)/"diagnostics";
     const auto& diagnosticTheme=HelpyImGuiTheme::Current;
+    DiagnosticStore.Clear();DiagnosticFeed.Clear();
     DiagnosticHistory.Open(diagnosticRoot,{diagnosticTheme.diagnosticHistoryDays,diagnosticTheme.diagnosticHistorySessions,diagnosticTheme.diagnosticHistoryMB});
     DiagnosticMutes.Open(diagnosticRoot);
-    StructuredLogFeed::OnRecord=[](const StructuredDiagnostic::Record& record){
+    StructuredLogFeed::OnRecord=[&](const StructuredDiagnostic::Record& record){
+        if(!currentDiagnostic(record.Timestamp))return;
         if(record.Code==Diagnostics::Get(Diagnostics::Id::SlowWork).Code)HelpyRuntimeMonitor::SlowWork();
         const auto id=DiagnosticStore.AcceptStructured(record);if(!id)return;
         const auto* group=DiagnosticStore.FindGroup(id);if(!group||DiagnosticMutes.SuppressStructured(*group))return;
         auto toast=LiveLog::Parse(std::string("[RuneSchema] [")+(record.Severity=="Error"?"error":record.Severity=="Warning"?"warning":"info")+"] ["+record.Code+"] "+record.Title+": "+record.Message);
         toast.Scope=record.Source;DiagnosticFeed.Accept(toast,DiagnosticOptions());
     };
-    LiveLogPanel::OnBackfillEntry=[](const LiveLog::Entry& entry){DiagnosticStore.Accept(entry);};
-    LiveLogPanel::OnEntry=[](const LiveLog::Entry& entry){
+    LiveLogPanel::OnBackfillEntry=[&](const LiveLog::Entry& entry){
+        if(currentDiagnostic(entry.Text))DiagnosticStore.Accept(entry);
+    };
+    LiveLogPanel::OnEntry=[&](const LiveLog::Entry& entry){
+        if(!currentDiagnostic(entry.Text))return;
         if(entry.ReportedCode==Diagnostics::Get(Diagnostics::Id::SlowWork).Code)HelpyRuntimeMonitor::SlowWork();
         DiagnosticStore.Accept(entry);if(DiagnosticLegacyIntake::Eligible(entry)&&DiagnosticLegacyIntake::MirrorReference(entry).empty()&&!DiagnosticMutes.Suppress(entry))DiagnosticFeed.Accept(entry,DiagnosticOptions());
     };
     LiveLogPanel::OnUE4SSEntry=[](const LiveLog::Entry& entry,bool live){HelpyRuntimeMonitor::ObserveUE4SS(entry.Text,live,HealthSettings());};
-    HelpyRuntimeMonitor::OnEvent=[](const RuntimeHealth::Event& event){const auto& code=Diagnostics::Get(event.Code);
-        if(code.Severity=="info"){const auto entry=LiveLog::Parse("[RuneSchema] [info] ["+std::string(code.Code)+"] "+std::string(code.Title)+": "+event.Message);if(!DiagnosticMutes.Suppress(entry))DiagnosticFeed.Accept(entry,DiagnosticOptions());}};
+    HelpyRuntimeMonitor::OnEvent=[&](const RuntimeHealth::Event& event){
+        const auto& code=Diagnostics::Get(event.Code);
+        const bool offline=!diagnosticOwner();
+        if(offline||code.Severity=="info"){
+            const auto entry=LiveLog::Parse("[RuneSchema] ["+std::string(code.Severity)+"] ["+std::string(code.Code)+"] "+std::string(code.Title)+": "+event.Message);
+            if(offline)DiagnosticStore.Accept(entry);
+            if(!DiagnosticMutes.Suppress(entry))DiagnosticFeed.Accept(entry,DiagnosticOptions());
+        }
+    };
     m_ready=true;m_started=true;
     // Opt-in only, once after the renderer is ready. No recurring reopen or
     // game-thread polling; dedicated servers retain their existing entry page.
@@ -2314,6 +2561,9 @@ void HelpyStandaloneWindow::ThreadMain() {
     std::unique_ptr<void,decltype(closeTimer)> frameTimer(CreateWaitableTimerExW(nullptr,nullptr,CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,TIMER_MODIFY_STATE|SYNCHRONIZE),closeTimer);
     MSG msg{};bool done=false;HelpyFramePacing pacing;std::optional<bool> publishedVisibility,publishedCapture;
     uint64_t nextControllerShortcut=0,nextGuideReservation=0,nativeGuideUntil=0;uint32_t guidePid=~uint32_t{};bool previousGuide=false;
+    HelpyGuideReservation desktopGuide;
+    uint32_t desktopInputPid=0;uint64_t nextDesktopInput=0;
+    uint64_t visibilityEpoch=0,nextVisibility=0;
     const auto controllerAllowed=[&]{const auto focus=GetForegroundWindow();return HelpyPopupInput::CanToggle(GameWindow(focus),OwnsWindow(focus)||(m_nativeOverlay.Visible()&&focus==m_gameWindow));};
     const auto controllerToggle=[&]{HelpyControllerInput::ShortcutActivated=true;Toggle();};
     while(!done&&!m_stop.load()) {
@@ -2339,7 +2589,7 @@ void HelpyStandaloneWindow::ThreadMain() {
             if(msg.message==WM_QUIT){done=true;break;}
             if(msg.hwnd==nullptr&&msg.message==HelpyControllerShortcut::GuideMessage){
                 const auto now=GetTickCount64(),sent=uint64_t(msg.lParam);
-                if(uint32_t(msg.wParam)==PluginRuntimeServices::GameProcessId.load()&&sent<=now&&now-sent<=1000&&controllerAllowed()&&!HelpyBindingPicker::NativeGuide())nativeGuideUntil=now+120;
+                if((uint32_t(msg.wParam)==PluginRuntimeServices::GameProcessId.load()||(desktopGuide.Active()&&uint32_t(msg.wParam)==GetCurrentProcessId()))&&sent<=now&&now-sent<=1000&&controllerAllowed()&&!HelpyBindingPicker::NativeGuide())nativeGuideUntil=now+120;
                 continue;
             }
             if(msg.hwnd==nullptr&&msg.message==ToggleMessage) {
@@ -2384,12 +2634,35 @@ void HelpyStandaloneWindow::ThreadMain() {
         }
         HelpyBindingPicker::Tick(controllerAllowed());
         const auto shortcutPid=PluginRuntimeServices::GameProcessId.load();
+#if !defined(HELPY_PREVIEW)
+        const auto owner=diagnosticOwner();
+        if(!owner){diagnosticPid=0;nextDiagnosticAttach=0;}
+        else if(owner!=diagnosticPid&&shortcutNow>=nextDiagnosticAttach){
+            if(auto start=DiagnosticSession::ProcessStart(owner);!start.empty()){
+                diagnosticPid=owner;
+                if(start!=diagnosticStart){
+                    const bool haveHistory=!DiagnosticStore.Events().empty();
+                    if(haveHistory)DiagnosticHistory.Queue(DiagnosticStore,true);
+                    if(haveHistory||!diagnosticStart.empty())DiagnosticHistory.Open(diagnosticRoot,DiagnosticHistory.Limits());
+                    diagnosticStart=std::move(start);
+                    DiagnosticStore.Clear();DiagnosticFeed.Clear();DiagnosticMutes.ResetSession();
+                    LiveLogPanel::RestartRuneSchemaRead();StructuredLogFeed::Restart();
+                }
+            }else nextDiagnosticAttach=shortcutNow+1000;
+        }
+#endif
+        coreLink.Drain();
         const bool reserve=PluginRuntimeServices::ExternalDesktop&&!HelpyEnvironment::Server()&&shortcutPid&&(InputBindings::ParsePad(HelpyBindingActions::Controller())&InputBindings::Guide)&&shortcutTheme.reserveControllerGuide;
         if(guidePid!=shortcutPid||previousGuide!=reserve||(reserve&&shortcutNow>=nextGuideReservation)){
+            if(reserve)desktopGuide.Start(GetCurrentProcessId(),GetCurrentThreadId(),m_hwnd);else desktopGuide.Stop();
             guidePid=shortcutPid;previousGuide=reserve;nextGuideReservation=shortcutNow+2000;
             if(shortcutPid&&RuneSchemaSettingsPanel::Remote){
-                nlohmann::json reply;const bool ok=RuneSchemaSettingsPanel::Remote({{"Action","HelpyNativeOverlay"},{"Payload",{{"Action","GuideReservation"},{"Enabled",reserve},{"AppPid",GetCurrentProcessId()},{"Thread",GetCurrentThreadId()},{"Window",uint64_t(reinterpret_cast<uintptr_t>(m_hwnd))}}}},reply);
-                HelpyImGuiTheme::ControllerShortcutStatus=ok?reply.value("Status",std::string("Guide reservation is unavailable in this bridge")):"Guide reservation unavailable; SDL shortcut remains available";
+                const auto epoch=PluginRuntimeServices::ConnectionEpoch.load();
+                coreLink.Post("guide-reservation",{{"Action","HelpyNativeOverlay"},{"Payload",{{"Action","GuideReservation"},{"Enabled",reserve},{"AppPid",GetCurrentProcessId()},{"Thread",GetCurrentThreadId()},{"Window",uint64_t(reinterpret_cast<uintptr_t>(m_hwnd))}}}},
+                    RuneSchemaSettingsPanel::Remote,[epoch](bool ok,const nlohmann::json& reply){
+                        if(epoch!=PluginRuntimeServices::ConnectionEpoch.load())return;
+                        HelpyImGuiTheme::ControllerShortcutStatus=ok?reply.value("Status",std::string("Guide reservation is unavailable in this bridge")):"Guide reservation unavailable; SDL shortcut remains available";
+                    });
             }else HelpyImGuiTheme::ControllerShortcutStatus="Native Guide reservation needs a connected game; the SDL shortcut remains available";
         }
         if(HudExtensionsPanel::HideRequested){HudExtensionsPanel::HideRequested=false;ClosePopup();HudExtensionsPanel::AfterHide();}
@@ -2401,10 +2674,17 @@ void HelpyStandaloneWindow::ThreadMain() {
         const bool minimap=HelpyFeatureSettings::Hud.Minimap&&HelpyCoordinates::HasPosition;
         const bool notices=HelpyImGuiTheme::Current.diagnosticToastsEnabled&&!DiagnosticFeed.Empty();
         const bool starting=HelpyStartupProgress::Visible();
+        const bool gameFocused=GameWindow(foreground)&&!HelpyEnvironment::Server();
+        const bool award=HelpyImGuiTheme::Current.achievementPopups&&(AchievementOverlay.Busy()||!HelpyAchievements::Popups.empty());
+        const bool passiveHud=notices||coordinates||minimap||starting||award;
+        const bool panelVisible=m_visible.load();
+        const bool gameAward=award&&gameFocused&&!wasNative&&(!panelVisible||!m_gameOverlay.Active());
+        const bool showHud=gameFocused&&((!panelVisible&&passiveHud)||gameAward);
+        const bool nativeAward=PluginRuntimeServices::ExternalDesktop&&RuneSchemaSettingsPanel::Remote;
         auto hud=HelpyNativeOverlayClient::Hud::None;
-        if(!m_visible.load()&&(coordinates||minimap||starting||notices))hud=notices?HelpyNativeOverlayClient::Hud::Combined:starting?HelpyNativeOverlayClient::Hud::Startup:HelpyNativeOverlayClient::Hud::Coordinates;
-        m_nativeOverlay.Notifications(!m_visible.load()&&GameWindow(foreground)&&(notices||coordinates||minimap||starting));
-        m_nativeOverlay.Tick(RuneSchemaSettingsPanel::Remote,PluginRuntimeServices::GameProcessId.load(),HelpyStartupProgress::Presentation(PluginRuntimeServices::ExternalDesktop,HelpyEnvironment::Server(),HelpyImGuiTheme::Current.gameOverlay,HelpyImGuiTheme::Current.nativeOverlay,starting||minimap||coordinates||notices),m_device,HelpyImGuiTheme::Current.overlaySize,1.f,hud,[&](int width,int height){return HudSurfaceBounds(width,height,minimap,coordinates,starting,notices);});
+        if(showHud)hud=notices||award?HelpyNativeOverlayClient::Hud::Combined:starting?HelpyNativeOverlayClient::Hud::Startup:HelpyNativeOverlayClient::Hud::Coordinates;
+        m_nativeOverlay.Notifications(showHud);
+        m_nativeOverlay.Tick(RuneSchemaSettingsPanel::Remote,shortcutPid,HelpyStartupProgress::Presentation(PluginRuntimeServices::ExternalDesktop,HelpyEnvironment::Server(),HelpyImGuiTheme::Current.gameOverlay,HelpyImGuiTheme::Current.nativeOverlay,passiveHud),m_device,HelpyImGuiTheme::Current.overlaySize,1.f,hud,[&](int width,int height){return HudSurfaceBounds(width,height,minimap,coordinates,starting,notices,award);},foreground);
         if(const auto* page=m_nativeOverlay.Page();page&&page->ViewportWidth&&page->ViewportHeight){HelpyHudPanel::Viewport={float(page->ViewportWidth),float(page->ViewportHeight)};HelpyHudPanel::Detected=true;}
         else {RECT rect{};HelpyHudPanel::Detected=GameWindow(foreground)&&GetClientRect(foreground,&rect)&&rect.right>0&&rect.bottom>0;if(HelpyHudPanel::Detected)HelpyHudPanel::Viewport={float(rect.right),float(rect.bottom)};}
         LUID adapter{};if(m_nativeOverlay.AdapterChange(adapter))RebindNativeDevice(adapter);
@@ -2412,15 +2692,38 @@ void HelpyStandaloneWindow::ThreadMain() {
         if(wasNative&&!m_nativeOverlay.Wanted()){const bool failed=m_nativeOverlay.Failed();const auto status=m_nativeOverlay.Status;ClosePopup();if(failed){SetError(status);PushToast("Overlay is unavailable: "+status+". Overlay mode is retained. Retry the shortcut, or choose Open as a separate window from the tray.",10.0);}}
         const bool renderable=m_visible.load()&&(m_nativeOverlay.Visible()||(!m_nativeOverlay.Wanted()&&!IsIconic(m_hwnd)&&IsWindowVisible(m_hwnd)));
         if(HelpyImGuiTheme::Current.gameOverlay||m_gameOverlay.Active())SyncGameOverlay();
-        const bool captureInput=renderable&&(m_nativeOverlay.Visible()||m_gameOverlay.Active());
-        if(publishedVisibility&&*publishedVisibility&&!renderable)HelpyControllerInput::Suspend();
-        if(!publishedVisibility||*publishedVisibility!=renderable||!publishedCapture||*publishedCapture!=captureInput){
-            publishedVisibility=renderable;publishedCapture=captureInput;nlohmann::json ignored;
-            if(RuneSchemaSettingsPanel::Remote)RuneSchemaSettingsPanel::Remote({{"Action","HelpyVisibility"},{"Visible",renderable},{"CaptureInput",captureInput}},ignored);
+        const bool desktopOverlay=renderable&&m_gameOverlay.Active();
+        const bool captureInput=renderable&&(m_nativeOverlay.Visible()||desktopOverlay);
+        const auto desktopPid=desktopOverlay?shortcutPid:0;
+        if(desktopPid!=desktopInputPid||(desktopPid&&shortcutNow>=nextDesktopInput)){
+            if(shortcutPid&&RuneSchemaSettingsPanel::Remote){
+                const auto payload=nlohmann::json{{"Action","DesktopInput"},{"Enabled",desktopPid!=0},{"AppPid",GetCurrentProcessId()},{"Window",uint64_t(reinterpret_cast<uintptr_t>(m_hwnd))}};
+                const bool warn=desktopPid&&!desktopInputPid;
+                const auto epoch=PluginRuntimeServices::ConnectionEpoch.load();
+                coreLink.Post("desktop-input",{{"Action","HelpyNativeOverlay"},{"Payload",payload}},RuneSchemaSettingsPanel::Remote,[warn,epoch](bool ok,const nlohmann::json& reply){
+                    if(warn&&epoch==PluginRuntimeServices::ConnectionEpoch.load()&&!(ok&&reply.value("Accepted",false)))
+                        PushToast("Helpy could not reserve desktop overlay input. Check the installed RuneSchema HUD plugin.",6.0);
+                });
+            }
+            desktopInputPid=desktopPid;nextDesktopInput=shortcutNow+2000;
         }
-        const bool gameFocused=GameWindow(foreground)&&!HelpyEnvironment::Server();
+        if(publishedVisibility&&*publishedVisibility&&!renderable)HelpyControllerInput::Suspend();
+        const auto epoch=PluginRuntimeServices::ConnectionEpoch.load();
+        if(visibilityEpoch!=epoch){visibilityEpoch=epoch;publishedVisibility.reset();nextVisibility=0;}
+        if(shortcutNow>=nextVisibility&&(!publishedVisibility||*publishedVisibility!=renderable||!publishedCapture||*publishedCapture!=captureInput)){
+            nextVisibility=shortcutNow+250;
+            if(coreLink.Post("visibility",{{"Action","HelpyVisibility"},{"Visible",renderable},{"CaptureInput",captureInput}},RuneSchemaSettingsPanel::Remote,
+                [&,epoch,renderable,captureInput](bool ok,const nlohmann::json&){
+                    if(!ok&&epoch==visibilityEpoch&&publishedVisibility==renderable&&publishedCapture==captureInput){
+                        publishedVisibility.reset();nextVisibility=GetTickCount64()+250;
+                    }
+                })){
+                publishedVisibility=renderable;publishedCapture=captureInput;nextVisibility=0;
+            }
+        }
 #if !defined(HELPY_PREVIEW)
-        NotificationsPanel::Poll();
+        HelpyUpdates::Tick(HelpyImGuiTheme::Current.automaticUpdateChecks,HelpyEnvironment::UpdateChecksAvailable,HelpyEnvironment::RuneSchemaVersion);
+        if(NotificationsPanel::Poll())PushToast("RuneSchema and Helpy update available. See Notifications.",6.0);
         HelpyCachedCatalog::WarmStartup(HelpyIconPacks::ReferencesRevision);
 #endif
         const auto health=HealthSettings();static double nextHealthStatus=0;static bool observedGameplay=false;static uint32_t observedPid=0;
@@ -2433,7 +2736,8 @@ void HelpyStandaloneWindow::ThreadMain() {
         const bool gameToasts=gameFocused&&!renderable;
         const bool diagnosticBackground=!renderable||CurrentPage!=Page::LiveLog;
         if(renderable||(gameToasts&&HelpyImGuiTheme::Current.diagnosticToastsEnabled)){
-            LiveLogPanel::Poll(0,diagnosticBackground);StructuredLogFeed::Poll(diagnosticBackground);
+            LiveLogPanel::Poll(0,diagnosticBackground);
+            if(diagnosticPid&&diagnosticPid==diagnosticOwner())StructuredLogFeed::Poll(diagnosticBackground);
         }
         DiagnosticFeed.Tick(DiagnosticOptions());DiagnosticHistory.Queue(DiagnosticStore);
         const auto& performance=HelpyImGuiTheme::Current;
@@ -2444,10 +2748,18 @@ void HelpyStandaloneWindow::ThreadMain() {
         DiagnosticOverlay.Update(m_module,gameFocused?foreground:nullptr,gameToasts&&!m_nativeOverlay.NotificationsVisible()?DiagnosticFeed:noGameToasts,performance,gameFocused,gameFocused&&performance.showGameFps?HelpyPerformance::GameLabel():std::string{},ModsPanel::ServerComparison.Counts,HelpyDiagnosticOverlay::Mode::Notifications,HelpyFeatureSettings::Hud);
         CoordinatesOverlay.Update(m_module,gameFocused?foreground:nullptr,noGameToasts,performance,gameToasts&&coordinates&&!m_nativeOverlay.NotificationsVisible(),HelpyCoordinates::Label,{},HelpyDiagnosticOverlay::Mode::Coordinates,HelpyFeatureSettings::Hud);
         StartupOverlay.Update(m_module,gameFocused?foreground:nullptr,noGameToasts,performance,gameToasts&&starting&&!m_nativeOverlay.NotificationsVisible(),HelpyStartupProgress::Label(),{},HelpyDiagnosticOverlay::Mode::Startup,HelpyFeatureSettings::Hud);
+        // Mod achievements: read the core's gameplay feed, then raise unlocks from the bottom of the game window.
+        const bool achievementGame=gamePid&&!HelpyEnvironment::Server();
+        if(achievementGame&&ModsPanel::Snapshot.is_null()&&!ModsPanel::Worker.valid()&&ModsPanel::Status.empty()&&RuneSchemaSettingsPanel::Remote)ModsPanel::Start({{"Action","ModsRead"}});
+        ModsPanel::Poll();HelpyAchievements::Observe(ModsPanel::Rows,ModsPanel::SnapshotRevision);
+        HelpyAchievements::Poll(coreLink,RuneSchemaSettingsPanel::Remote,achievementGame);
+        AchievementOverlay.Update(m_module,foreground,performance,gameAward&&m_nativeOverlay.NotificationsVisible(),
+            gameAward&&(!nativeAward||m_nativeOverlay.NotificationsUnavailable()),ClientAreaAnimations,HelpyAchievements::Popups);
         if(DiagnosticOverlay.TakeModsRequest()){SplashEntered=true;CurrentPage=Page::Mods;ModsPanel::Tab=1;OpenPopup();}
         if(renderable&&std::chrono::steady_clock::now()>=NextPlayerRefresh)QueuePlayerRefresh(true);
         const bool presenting=renderable||m_nativeOverlay.NotificationsVisible();
-        if(pacing.Due(std::chrono::steady_clock::now(),presenting,m_nativeOverlay.Presenting()||OwnsWindow(GetForegroundWindow()),m_nativeOverlay.NotificationsVisible()?(starting?LoadingIndicator::StartupFps(ClientAreaAnimations):minimap||!DiagnosticFeed.Empty()?15:2):HelpyImGuiTheme::Current.helpyFpsLimit))RenderFrame();
+        const int hudFps=AchievementOverlay.Animating()?60:starting?LoadingIndicator::StartupFps(ClientAreaAnimations):minimap||award||notices?15:2;
+        if(pacing.Due(std::chrono::steady_clock::now(),presenting,m_nativeOverlay.Presenting()||OwnsWindow(GetForegroundWindow()),m_nativeOverlay.NotificationsVisible()?hudFps:performance.helpyFpsLimit))RenderFrame();
         const auto now=std::chrono::steady_clock::now();
         if(presenting&&pacing.Focused&&frameTimer&&pacing.Next>now){
             LARGE_INTEGER due{};due.QuadPart=-std::max<int64_t>(1,std::chrono::duration_cast<std::chrono::nanoseconds>(pacing.Next-now).count()/100);
@@ -2456,7 +2768,8 @@ void HelpyStandaloneWindow::ThreadMain() {
             }
         }
         const auto wait=pacing.WaitMs(now,presenting);
-        MsgWaitForMultipleObjectsEx(0,nullptr,starting&&gameToasts&&ClientAreaAnimations?std::min(wait,16u):wait,QS_ALLINPUT,MWMO_INPUTAVAILABLE);
+        const bool animating=(gameToasts&&starting&&ClientAreaAnimations)||(gameAward&&AchievementOverlay.Animating());
+        MsgWaitForMultipleObjectsEx(0,nullptr,animating?std::min(wait,16u):wait,QS_ALLINPUT,MWMO_INPUTAVAILABLE);
     }
 }
 
@@ -2500,13 +2813,19 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
     if(!m_hwnd||!CreateDevice())return 3;
     ImGui::CreateContext();auto& io=ImGui::GetIO();io.ConfigFlags|=ImGuiConfigFlags_NavEnableKeyboard;io.IniFilename=nullptr;
     LoadUiFontFamilies(io);ImGui_ImplWin32_Init(m_hwnd);ImGui_ImplDX11_Init(m_device,m_context);LoadBrandTextures(m_device);
+    {
+        Microsoft::WRL::ComPtr<ID3D11Texture2D> heldBuffer;
+        if(FAILED(m_swapChain->GetBuffer(0,IID_PPV_ARGS(&heldBuffer)))||
+           SUCCEEDED(ResizeRenderTarget(m_device,m_context,m_swapChain,m_target,width,height))||!m_target)
+            throw std::runtime_error("A rejected resize did not preserve the previous render target");
+    }
     const auto beforeMissingSurface=ImGui::GetFrameCount();auto* savedTarget=m_target;m_target=nullptr;
     RenderFrame();m_target=savedTarget;
     if(ImGui::GetFrameCount()!=beforeMissingSurface||Error().empty())throw std::runtime_error("Missing render target reached rendering or lost its diagnostic");
     SetError({});
     HelpyEnvironment::Configure({{"Storefront","Game Pass/WinGDK"},{"RuneSchemaVersion","0.8.0.0"},{"GameVersion","Preview build"}});
     HelpySourceCache::Current.Key="preview-fixture";HelpyImGuiTheme::Loaded=true;HelpyImGuiTheme::Current=HelpyImGuiTheme::Theme{};HelpyImGuiTheme::Current.autoReload=false;
-    HelpyImGuiTheme::Current.workspaces={true,true,true,true};
+    HelpyImGuiTheme::Current.workspaces={true,true,true,true,false,true,false,true,true};
     HelpyImGuiTheme::ForceReload=false; // Keep this isolated fixture's explicit options.
     HelpyImGuiTheme::NextPoll=std::chrono::steady_clock::now()+std::chrono::hours(24);
     // Exercise lazy font loading through the production path. Do not restore
@@ -2534,12 +2853,27 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
     std::map<uint64_t,nlohmann::json> detailReceipts;
     nlohmann::json mapPlacement,authoringRequest;
     size_t mapProbeCount=0;bool previewTravelWaiting=false;
+    const auto* atlasFixture=std::getenv("RUNESCHEMA_ATLAS_FIXTURE");
+    const bool atlasReview=capture&&atlasFixture&&*atlasFixture;
+    bool scornedPlayer=false;
+    std::optional<MapProjection::Point> atlasSample;
     const auto mapFixture=HostServices::CacheDirectory()/"map-fixture.rsicon";std::filesystem::create_directories(mapFixture.parent_path());
     {std::ofstream file(mapFixture,std::ios::binary);file.write("RSI3",4);const uint32_t width=8,height=8,bytes=256;file.write(reinterpret_cast<const char*>(&width),4);file.write(reinterpret_cast<const char*>(&height),4);file.write(reinterpret_cast<const char*>(&bytes),4);
         for(int i=0;i<64;++i){const unsigned char pixel[4]{static_cast<unsigned char>((i+i/8)%2?37:44),50,65,255};file.write(reinterpret_cast<const char*>(pixel),4);}}
     SpawnToolRequests::RemoteSubmit=[&](nlohmann::json request){
         const auto action=request.value("Action",std::string{});const auto id=request.value("_RequestId",uint64_t{});
         if(action=="MapSnapshot"){
+            if(atlasReview){
+                const auto p=atlasSample.value_or(scornedPlayer?MapProjection::Point{-715800,766000}:MapProjection::Point{96700,61000});
+                const auto projection=MapAtlas::Mainland.Project(-90000,90000);
+                detailReceipts[id]={{"MapSnapshot",{{"BridgeVersion",1},{"World","/Game/Maps/World/L_World.L_World"},{"ScornedTravel",true},{"CanBuildAndTeleport",true},
+                    {"Projection",projection.ToJson()},{"Image",{{"File",atlasFixture},{"Status","Ready"}}},
+                    {"Players",nlohmann::json::array({
+                        {{"Name","Preview player"},{"Path","preview-player"},{"IsLocal",true},{"Location",{p.X,p.Y,13144}}},
+                        {{"Name","Preview party member"},{"Path","preview-raid"},{"IsLocal",false},{"Location",{-797000,688000,15500}}}
+                    })}}}};
+                return true;
+            }
             MapProjection::Projection projection{{198000,91450},{0,1},{1,0},210000,210000,-90000,90000};
             detailReceipts[id]={{"MapSnapshot",{{"BridgeVersion",1},{"CanBuildAndTeleport",true},{"PartyTravelVersion",2},{"World","/Preview/World"},{"Projection",projection.ToJson()},{"Image",{{"File",mapFixture.string()},{"Status","Ready"}}},
                 {"Markers",nlohmann::json::array({{{"Name","Test lodestone"},{"Path","preview-lodestone"},{"Kind","Lodestone"},{"Managed",false},{"Location",{230000,125000,100}}},{{"Name","Placed iron node"},{"Path","preview-node"},{"Kind","Resource"},{"Managed",true},{"Location",{155000,125000,100}}}})},
@@ -2630,8 +2964,242 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
     SpawnToolsPanel::SyncCartWorld();SpawnToolsPanel::SelectedPlayer="preview-player";
     int result=0;
     try {
-        if(capture){
+        if(capture&&std::getenv("RUNESCHEMA_HELPY_WEB_PREVIEW")){
+            std::filesystem::create_directories(output);
+            SetWindowPos(m_hwnd,nullptr,-20000,-20000,0,0,SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);
+            ShowWindow(m_hwnd,SW_SHOWNOACTIVATE);
+            SplashEntered=true;CurrentPage=Page::Settings;SettingsCategory=0;RuneSchemaSettingsPanel::QuickSection=8;
+            const auto pump=[&]{
+                MSG msg{};while(PeekMessageW(&msg,nullptr,0,0,PM_REMOVE)){TranslateMessage(&msg);DispatchMessageW(&msg);}
+                RenderFrame();Sleep(16);
+            };
+            const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(30);
+            while(!HelpySupportPage::BrowserReady()&&std::chrono::steady_clock::now()<deadline)pump();
+            if(!HelpySupportPage::BrowserReady())throw std::runtime_error("Embedded support page did not load");
+            const auto report=output/"web-capture.txt";
+            if(!HelpySupportPage::ProbeBrowser(report))throw std::runtime_error("Embedded support capture did not start");
+            while(!std::filesystem::exists(report)&&std::chrono::steady_clock::now()<deadline)pump();
+            std::string result;std::ifstream(report)>>result;
+            if(result!="PASS")throw std::runtime_error("Embedded support capture did not finish");
+            CurrentPage=Page::Items;pump();
+            if(HelpySupportPage::BrowserReady())throw std::runtime_error("Embedded support pane remained visible on another page");
+            HelpySupportPage::Close();
+            std::ofstream(output/"render-result.txt")<<"Embedded WebView2 rendered the support page and hid when leaving Help.\n";
+        }else if(atlasReview){
+            std::filesystem::create_directories(output);
+            PreviewSelectSections=true;SplashEntered=true;CurrentPage=Page::Map;MapPanel::Data.ShowParty=true;
+            HelpyPreviewHooks::MouseEnabled=true;HelpyPreviewHooks::Mouse={-100,-100};
+            const auto frames=[&]{for(int i=0;i<8;++i)RenderFrame();};
+            const auto click=[&](ImVec4 rect){
+                if(rect.z<=rect.x||rect.w<=rect.y)throw std::runtime_error("Atlas control did not render");
+                HelpyPreviewHooks::Mouse={(rect.x+rect.z)*.5f,(rect.y+rect.w)*.5f};
+                HelpyPreviewHooks::MouseDown=false;RenderFrame();
+                HelpyPreviewHooks::MouseDown=true;RenderFrame();
+                HelpyPreviewHooks::MouseDown=false;frames();
+                HelpyPreviewHooks::Mouse={-100,-100};
+            };
+            const auto rightClick=[&](ImVec4 rect){
+                HelpyPreviewHooks::Mouse={(rect.x+rect.z)*.5f,(rect.y+rect.w)*.5f};
+                RenderFrame();HelpyPreviewHooks::RightDown=true;RenderFrame();
+                HelpyPreviewHooks::RightDown=false;frames();
+                HelpyPreviewHooks::Mouse={-100,-100};
+            };
+            const auto worldPoint=[&](MapProjection::Point world){
+                const auto canvas=HelpyPreviewHooks::Map;
+                const auto p=MapPanel::MapScreen({canvas.x,canvas.y},world);
+                return ImVec4{p.x-1,p.y-1,p.x+1,p.y+1};
+            };
+            frames();
+            if(!MapPanel::Data.AtlasVisible||MapPanel::Data.AtlasTabs.Active!=MapAtlas::OverviewTab||
+               !MapAtlas::MatchesMainland(MapPanel::Data.Projection)||!HelpyPreviewHooks::AtlasOutlinesDrawn||
+               !MapPanel::Data.Texture||MapPanel::Data.Texture->Status!=ImTextureStatus_OK)
+                throw std::runtime_error("Native mainland atlas did not render");
+            const auto atlasCanvas=HelpyPreviewHooks::Map;
+            const auto atlasParty=HelpyPreviewHooks::MapPartyWindow;
+            if(atlasParty.x>=atlasCanvas.z){
+                if(std::abs(atlasParty.y-atlasCanvas.y)>1||std::abs(atlasParty.w-atlasCanvas.w)>1)
+                    throw std::runtime_error("Party sidebar does not align with the atlas");
+            }else if(atlasParty.y<atlasCanvas.w)throw std::runtime_error("Party panel overlaps the atlas");
+            PreviewCapture=output/"atlas-overview.png";RenderFrame();PreviewCapture.clear();
+            if(HelpyPreviewHooks::AtlasPartyRegions["preview-player"]!="Fractured Plains")
+                throw std::runtime_error("Mainland party label did not match Fractured Plains");
+            click(HelpyPreviewHooks::AtlasTransportOutlines);
+            if(MapPanel::Data.ShowTransportOutlines||HelpyPreviewHooks::AtlasOutlinesDrawn)
+                throw std::runtime_error("Transport filter did not hide the map outlines");
+            const auto mainlandZone=MapAtlas::RegionAt(MapAtlas::MainlandPortal);
+            rightClick(worldPoint(MapAtlas::MainlandPortal));
+            if(!MapPanel::Data.Popup||MapPanel::Data.AtlasTabs.Active!=MapAtlas::OverviewTab)
+                throw std::runtime_error("Right-click with outlines hidden must open map actions without changing areas");
+            ImGui::ClosePopupToLevel(0,true);frames();
+            MapPanel::Data.HasPoint=false;
+            click(worldPoint(MapAtlas::MainlandPortal));
+            if(MapPanel::Data.AtlasTabs.Active!=mainlandZone||MapPanel::Data.HasPoint)
+                throw std::runtime_error("Left-click with outlines hidden must open the mainland zone without selecting a point");
+            PreviewCapture=output/"atlas-zone.png";RenderFrame();PreviewCapture.clear();
+            click(HelpyPreviewHooks::AtlasOverview);
+            if(MapPanel::Data.AtlasTabs.Active!=MapAtlas::OverviewTab)throw std::runtime_error("World map did not return from the zone");
+            click(HelpyPreviewHooks::AtlasScorned);
+            if(MapPanel::Data.AtlasTabs.Active!=MapAtlas::ScornedTab)throw std::runtime_error("Scorned tab did not select");
+            scornedPlayer=true;MapPanel::Data.Next={};frames();
+            if(MapPanel::Data.AtlasTabs.Active!=MapAtlas::ScornedTab||!MapPanel::AtlasPlayer()||
+               !MapAtlas::Scorned.Contains(*MapPanel::AtlasPlayer()))
+                throw std::runtime_error("Manual tab or Scorned player position was lost");
+            if(HelpyPreviewHooks::AtlasPartyRegions["preview-player"]!="Rasthin's Rest"||
+               HelpyPreviewHooks::AtlasPartyRegions["preview-raid"]!="Scorned Wilderness")
+                throw std::runtime_error("Party card region labels did not match measured native boundaries");
+            HelpyPreviewHooks::MapPlayerTints.clear();
+            MapPanel::Data.HasPoint=false;
+            RenderFrame();
+            if(!HelpyPreviewHooks::AtlasArtwork||MapPanel::Data.ShowTransportOutlines||
+               !HelpyPreviewHooks::MapPlayerTints.contains("preview-player"))
+                throw std::runtime_error("Scorned artwork and live pins must remain available with outlines hidden");
+            MapPanel::Data.Zoom=static_cast<float>(MapPanel::Data.View.FitZoom()*1.06);
+            MapPanel::Data.Center.Y=.515;
+            frames();
+            PreviewCapture=output/"atlas-scorned.png";RenderFrame();PreviewCapture.clear();
+            mapPlacement={};
+            click(HelpyPreviewHooks::AtlasScornedTravel);
+            if(!MapPanel::Data.Popup||!MapPanel::Data.ScornedEntrance||MapPanel::Data.Operation!=2||!mapPlacement.empty())
+                throw std::runtime_error("Scorned travel must open confirmation before submitting");
+            click(HelpyPreviewHooks::MapSpawn);
+            if(mapPlacement.value("Action",std::string{})!="MapTeleport"||!mapPlacement.value("ScornedEntrance",false)||
+               mapPlacement.value("Player",std::string{})!="preview-player"||
+               mapPlacement["TargetLocation"]!=nlohmann::json{{"X",ScornedTravel::Entrance.X},{"Y",ScornedTravel::Entrance.Y}})
+                throw std::runtime_error("Scorned travel did not submit the authored Rasthin's Rest entrance");
+            MapPanel::Data.HasPoint=false;
+            const auto originalView=MapPanel::Data.View;
+            if(originalView.Zoom<=originalView.FitZoom()||originalView.Center.Y==.5)
+                throw std::runtime_error("Atlas fixture did not leave the fit camera");
+            click(HelpyPreviewHooks::AtlasTransportOutlines);
+            if(!HelpyPreviewHooks::AtlasArtwork||!HelpyPreviewHooks::AtlasOutlinesDrawn||
+               !HelpyPreviewHooks::MapPlayerTints.contains("preview-player")||!HelpyPreviewHooks::MapPlayerTints.contains("preview-raid"))
+                throw std::runtime_error("Transport outlines must preserve the artwork and live pins");
+            const auto& overlayView=MapPanel::Data.View;
+            if(overlayView.Zoom!=originalView.Zoom||overlayView.Center.X!=originalView.Center.X||
+               overlayView.Center.Y!=originalView.Center.Y||overlayView.Width!=originalView.Width||overlayView.Height!=originalView.Height)
+                throw std::runtime_error("Toggling transport outlines changed the map camera");
+            const auto canvas=HelpyPreviewHooks::Map;
+            const auto target=MapPanel::Data.View.ToPixel(MapPanel::Data.Projection.ToUV({-797000,688000}));
+            const ImVec2 spot{canvas.x+float(target.X),canvas.y+float(target.Y)};
+            click({spot.x-1,spot.y-1,spot.x+1,spot.y+1});
+            if(!MapPanel::Data.HasPoint||std::abs(MapPanel::Data.Point.X+797000)>1||
+               std::abs(MapPanel::Data.Point.Y-688000)>1)
+                throw std::runtime_error("Scorned map did not select the world pin");
+            PreviewCapture=output/"atlas-scorned-coordinates.png";RenderFrame();PreviewCapture.clear();
+            click(HelpyPreviewHooks::AtlasTransportOutlines);
+            HelpyPreviewHooks::MapPlayerTints.clear();RenderFrame();
+            if(!HelpyPreviewHooks::AtlasArtwork||HelpyPreviewHooks::AtlasOutlinesDrawn||
+               !HelpyPreviewHooks::MapPlayerTints.contains("preview-player"))
+                throw std::runtime_error("Hiding transport outlines also hid the artwork or player pin");
+            click(HelpyPreviewHooks::AtlasOverview);
+            if(MapPanel::Data.AtlasTabs.Active!=MapAtlas::OverviewTab)throw std::runtime_error("Overview tab did not select");
+            click(HelpyPreviewHooks::AtlasFollow);
+            if(!MapPanel::Data.AtlasTabs.Following||MapPanel::Data.AtlasTabs.Active!=MapAtlas::ScornedTab)
+                throw std::runtime_error("Follow player did not select Scorned Wilderness");
+            click(HelpyPreviewHooks::AtlasOverview);
+            if(MapPanel::Data.AtlasTabs.Following||MapPanel::Data.AtlasTabs.Active!=MapAtlas::OverviewTab)
+                throw std::runtime_error("Manual overview selection did not pause follow");
+            if(MapPanel::Data.ShowTransportOutlines||HelpyPreviewHooks::AtlasOutlinesDrawn)
+                throw std::runtime_error("World map did not preserve the transport filter");
+            MapPanel::Data.HasPoint=false;
+            click(worldPoint({-1500,-21950}));
+            if(MapPanel::Data.HasPoint||MapPanel::Data.AtlasTabs.Active!=MapAtlas::ScornedTab)
+                throw std::runtime_error("Baked artwork must open Scorned without selecting a mainland coordinate");
+
+            for(size_t tab=0;tab<MapAtlas::TabCount;++tab){
+                const std::string title(MapAtlas::Title(tab));
+                MapPanel::Data.AtlasTabs.Requested=tab;frames();
+                if(MapPanel::Data.AtlasTabs.Active!=tab||MapPanel::Data.ShowTransportOutlines)
+                    throw std::runtime_error("Transport filter did not carry to "+title);
+                const auto frame=MapAtlas::Frame(tab);
+                const double worldWidth=frame.Max.X-frame.Min.X,worldHeight=frame.Max.Y-frame.Min.Y;
+                const auto local=tab==MapAtlas::OverviewTab?MapAtlas::MainlandPortal:
+                    tab==MapAtlas::ScornedTab?MapProjection::Point{-790000,700000}:
+                    MapProjection::Point{frame.Min.X+.46*worldWidth,frame.Min.Y+.48*worldHeight};
+                MapProjection::Point hit{local.X+.08*worldWidth,local.Y+.12*worldHeight};
+                if(MapAtlas::ScornedDisplayOnly(hit))hit={local.X-.08*worldWidth,local.Y-.12*worldHeight};
+                if(tab==MapAtlas::ScornedTab&&!MapAtlas::Contains(MapAtlas::ScornedRaid,hit))
+                    throw std::runtime_error("Scorned click fixture must be inside the measured raid area");
+                atlasSample=local;
+                MapPanel::Data.Next={};
+                const auto uv=[&](MapProjection::Point p){
+                    return MapProjection::Point{(p.X-frame.Min.X)/worldWidth,(p.Y-frame.Min.Y)/worldHeight};
+                };
+                const auto anchor=uv(local);
+                MapPanel::Data.Zoom=static_cast<float>(MapPanel::Data.View.FitZoom()*1.7);
+                MapPanel::Data.Center={anchor.X+.023,anchor.Y-.019};
+                frames();
+                const auto& view=MapPanel::Data.View;
+                const auto area=HelpyPreviewHooks::Map;
+                const auto expected=view.ToPixel(anchor);
+                const auto& pin=HelpyPreviewHooks::AtlasLocalPin;
+                if(!pin||std::abs(pin->x-area.x-expected.X)>.05||std::abs(pin->y-area.y-expected.Y)>.05)
+                    throw std::runtime_error("Rendered player pin does not match world coordinates in "+title);
+                const auto pixel=view.ToPixel(uv(hit));
+                if(pixel.X<12||pixel.X>view.Width-12||pixel.Y<12||pixel.Y>view.Height-12)
+                    throw std::runtime_error("Coordinate test click is outside the visible map in "+title);
+                const auto span=view.Span();
+                MapPanel::Data.HasPoint=false;
+                const ImVec4 target{area.x+float(pixel.X)-1,area.y+float(pixel.Y)-1,area.x+float(pixel.X)+1,area.y+float(pixel.Y)+1};
+                if(tab==MapAtlas::OverviewTab)rightClick(target);
+                else click(target);
+                if(!MapPanel::Data.HasPoint||
+                   std::abs(MapPanel::Data.Point.X-hit.X)>1.1*worldWidth*span.X/view.Width||
+                   std::abs(MapPanel::Data.Point.Y-hit.Y)>1.1*worldHeight*span.Y/view.Height)
+                    throw std::runtime_error("Rendered click did not resolve to the expected world coordinates in "+title);
+                if(tab==MapAtlas::OverviewTab){
+                    if(!MapPanel::Data.Popup)throw std::runtime_error("World map right-click did not open actions");
+                    ImGui::ClosePopupToLevel(0,true);frames();
+                }
+                if(tab==MapAtlas::FirstRegionTab){
+                    PreviewCapture=output/"atlas-region-coordinates.png";RenderFrame();PreviewCapture.clear();
+                }
+            }
+            MapPanel::Data.AtlasTabs.Requested=MapAtlas::ScornedTab;
+            frames();
+            MapPanel::Data.FitRequested=true;
+            frames();
+            rightClick(worldPoint(MapAtlas::ScornedPortal));
+            if(MapPanel::Data.Popup||!ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId|ImGuiPopupFlags_AnyPopupLevel))
+                throw std::runtime_error("The Scorned map portal must open a context menu before travel");
+            click(HelpyPreviewHooks::AtlasContextTravel);
+            if(!MapPanel::Data.Popup||!MapPanel::Data.ScornedEntrance)
+                throw std::runtime_error("The Scorned context menu must open the travel confirmation");
+            ImGui::ClosePopupToLevel(0,true);frames();
+            MapPanel::Data.AtlasTabs.Requested=MapAtlas::OverviewTab;frames();
+            atlasSample=MapProjection::Point{-715800,766000};MapPanel::Data.Next={};frames();
+            click(HelpyPreviewHooks::AtlasFindPlayer);
+            if(MapPanel::Data.AtlasTabs.Active!=MapAtlas::ScornedTab||MapPanel::Data.ShowTransportOutlines||
+               MapPanel::Data.View.Zoom<MapPanel::Data.View.FitZoom()*1.9||!HelpyPreviewHooks::AtlasLocalPin)
+                throw std::runtime_error("Find player must open the player's atlas area and reveal the local pin");
+            const auto capturePage=[&](Page page,const char* name){
+                CurrentPage=page;HelpyPreviewHooks::Mouse={-100,-100};frames();
+                PreviewCapture=output/name;RenderFrame();PreviewCapture.clear();
+            };
+            auto& options=HelpyImGuiTheme::Current.workspaces;
+            options.Clone=options.Recipes=false;
+            capturePage(Page::Items,"support-items.png");
+            if(HelpyPreviewHooks::WorkspaceTabs.contains("Clone")||HelpyPreviewHooks::WorkspaceTabs.contains("Recipes"))
+                throw std::runtime_error("Advanced item tabs rendered with their settings off");
+            options.Clone=true;frames();
+            if(!HelpyPreviewHooks::WorkspaceTabs.contains("Clone")||HelpyPreviewHooks::WorkspaceTabs.contains("Recipes"))
+                throw std::runtime_error("Clone visibility affected another Items tab");
+            options.Clone=false;options.Recipes=true;frames();
+            if(HelpyPreviewHooks::WorkspaceTabs.contains("Clone")||!HelpyPreviewHooks::WorkspaceTabs.contains("Recipes"))
+                throw std::runtime_error("Recipes visibility affected another Items tab");
+            options.Recipes=false;
+            SettingsCategory=0;RuneSchemaSettingsPanel::QuickSection=7;capturePage(Page::Settings,"support-topics.png");
+            RuneSchemaSettingsPanel::QuickSection=8;capturePage(Page::Settings,"support-help.png");
+            NotificationsPanel::Inbox.ObserveRelease("0.8.1.0","1.0.0",NotificationsPanel::Now());
+            NotificationsPanel::Loaded=true;capturePage(Page::Notifications,"support-notifications.png");
+            std::ofstream(output/"render-result.txt")<<"All "<<MapAtlas::TabCount
+                <<" atlas tabs passed rendered world-coordinate clicks and player pins after pan and zoom. Transport filter, world-to-zone navigation, native Scorned art, inset routing, context actions, follow/manual override and Rasthin's Rest confirmation passed.\n";
+        }else if(capture){
             if(!BrandTexture||!GameBrandTexture||!SteamTexture||!EpicTexture||!XboxTexture||!LoadingRingTexture||!SplashSprites[0].Texture||!SplashSprites[1].Texture||!SplashSprites[2].Texture)throw std::runtime_error("Packaged application, split logo, loading ring or platform logo failed to load");
+            HelpyDiagnosticOverlay startupFixture;
+            startupFixture.StartupLogos(ReadStartupPng("RuneSchema.png"),ReadStartupPng("dragonwilds.png",true),ReadStartupPng("loading-ring.png"));
+            if(!startupFixture.PreviewStartupAlpha(HelpyImGuiTheme::Current))
+                throw std::runtime_error("The startup compositor must preserve transparent PNG backgrounds and visible foreground");
             UINT wordmarkWidth=0,wordmarkHeight=0;std::vector<unsigned char> wordmarkPixels;
             if(!ReadBrandPixels("dragonwilds.png",wordmarkWidth,wordmarkHeight,wordmarkPixels)||wordmarkWidth!=HelpyBranding::GameWordmark::Width||wordmarkHeight!=HelpyBranding::GameWordmark::Height)throw std::runtime_error("Dragonwilds wordmark must use the full-resolution splash artwork, not a thumbnail");
             std::filesystem::create_directories(output);std::error_code ignored;
@@ -2666,10 +3234,12 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 }
                 PreviewCapture=output/"native-window-controls.png";RenderFrame();PreviewCapture.clear();
                 if(!HelpyPreviewHooks::SplashVisible||PreviewSidebarVisible||LazyCatalog::For(0).Rows.empty())throw std::runtime_error("Splash must hide navigation without blocking cache-first catalogue loading");
-                for(const auto& [time,name]:std::array{std::pair{.5,"splash-dragonwilds"},std::pair{6.0,"splash-blend"},std::pair{10.0,"splash-runeschema"},std::pair{14.0,"splash-blend-back"}}){
+                for(const auto& [time,name]:std::array{std::pair{.5,"splash-dragonwilds"},std::pair{6.0,"splash-blend"},std::pair{10.0,"splash-runeschema"},std::pair{14.0,"splash-blend-platform"},std::pair{18.0,"splash-game-pass"},std::pair{22.0,"splash-blend-back"}}){
                     HelpyPreviewHooks::SplashElapsed=time;
                     SplashStarted=ImGui::GetTime()-time;RenderFrame();PreviewCapture=output/(std::string(name)+".png");RenderFrame();PreviewCapture.clear();
-                    if(std::abs(HelpyPreviewHooks::SplashBlend-HelpySplash::Blend(time,HelpyPreviewHooks::SplashAnimated))>.12f)throw std::runtime_error("Splash rendered the wrong hold/blend phase");
+                    const auto expected=HelpySplash::Logos(time,HelpyPreviewHooks::SplashAnimated,true,true,8);
+                    if(std::abs(HelpyPreviewHooks::SplashBlend-expected[1])>.12f||std::abs(HelpyPreviewHooks::SplashPlatformAlpha-expected[2])>.12f)
+                        throw std::runtime_error("Splash rendered the wrong logo or crossfade phase");
                     const auto badge=HelpyPreviewHooks::RuntimeBadge;
                     if(badge.z>badge.x&&badge.w>badge.y){
                         if(std::abs((badge.x+badge.z)*.5f-HelpyPreviewHooks::SplashCenterX)>1.f||badge.w>height||
@@ -2890,12 +3460,14 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 LiveLogPanel::PreviewOptions=false;ImGui::ClosePopupsOverWindow(nullptr,false);
             }
             {
-                using namespace ModsPanel;const auto oldSnapshot=Snapshot,oldRows=Rows;const auto oldStatus=Status;const auto oldHealth=Health;const auto oldRevision=HealthRevision;const bool oldDirty=Dirty;
+                using namespace ModsPanel;
+                auto& modTheme=HelpyImGuiTheme::Current;const bool wasCompact=modTheme.modsCompact;modTheme.modsCompact=false;
+                const auto oldSnapshot=Snapshot,oldRows=Rows;const auto oldStatus=Status;const auto oldHealth=Health;const auto oldRevision=HealthRevision;const bool oldDirty=Dirty;
                 Rows=nlohmann::json::array();for(const auto* owner:{"Dye_Quests","Flintlocks","RSDWSpears"})Rows.push_back({{"Name",owner},{"Folder",(HostServices::ModDirectory()/"mods"/owner).string()},{"Enabled",true},{"Present",true},{"Metadata",{{"version","1.0"},{"description","Synthetic mod-manager layout fixture"}}},{"Loaders",nlohmann::json::array({"RuneSchema","Unreal PAK"})},{"HasCache",true}});
                 Snapshot={{"Ok",true},{"OrderEnabled",true},{"ExpectedExists",false},{"ExpectedContents",""},{"Rows",Rows}};Status.clear();PreviewChecked=true;
                 Health.clear();Health["Flintlocks"].Warnings=1;Health["RSDWSpears"].Errors=1;HealthRevision=LiveLogPanel::Streams[0].History.Revision+LiveLogPanel::Streams[2].History.Revision;
                 CurrentPage=Page::Mods;for(int i=0;i<400;++i){RenderFrame();Sleep(5);if(PreviewNativeBadges==3&&PreviewArtCards==3)break;}
-                if(PreviewPlacards!=3||PreviewNativeBadges!=3||PreviewArtCards!=3)throw std::runtime_error("Mod placards must show their three native health glyphs and mod artwork, not just fallback shapes");
+                if(PreviewPlacards!=3||PreviewNativeBadges!=3||PreviewArtCards!=3)throw std::runtime_error("Mod placards must show their three native health glyphs and mod artwork. Placards: "+std::to_string(PreviewPlacards)+"; glyphs: "+std::to_string(PreviewNativeBadges)+"; artwork: "+std::to_string(PreviewArtCards));
                 PreviewCapture=output/"mods-placards.png";RenderFrame();PreviewCapture.clear();
                 {namespace H=HelpyPreviewHooks;const auto title=H::ModTitles.at("Dye_Quests");H::MouseEnabled=true;H::Mouse={(title.x+title.z)*.5f,(title.y+title.w)*.5f};
                     RenderFrame();H::MouseDown=true;RenderFrame();H::MouseDown=false;RenderFrame();
@@ -2905,6 +3477,83 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                     const auto menu=H::ModDetailsMenu;H::Mouse={(menu.x+menu.z)*.5f,(menu.y+menu.w)*.5f};RenderFrame();H::MouseDown=true;RenderFrame();H::MouseDown=false;for(int i=0;i<5;++i)RenderFrame();
                     const auto details=H::ModDetailsWindow;if(details.z-details.x<300||details.x<0||details.z>width||details.y<0||details.w>height)throw std::runtime_error("Mod details submenu must retain a readable width and fit the viewport");
                     PreviewCapture=output/"mods-details.png";RenderFrame();PreviewCapture.clear();ImGui::ClosePopupsOverWindow(nullptr,false);H::MouseEnabled=false;H::Mouse={-100,-100};RenderFrame();}
+                {
+                    namespace A=AchievementsPanel;
+                    namespace H=HelpyPreviewHooks;
+                    const auto fixture=output/"mods-achievement-fixture"/"Dye_Quests";
+                    ConfigFiles::Write(fixture/"cache"/"achievements.json", R"({"format":1,"achievements":[
+                        {"id":"first","title":"First dye","description":"Dye a piece of gear.","points":10,"conditions":[{"event":"death"}]},
+                        {"id":"master","title":"Master dyer","description":"Dye ten pieces of gear.","points":30,"conditions":[{"event":"death","count":10}]},
+                        {"id":"secret","title":"Secret recipe","points":30,"hidden":true,"conditions":[{"event":"death","count":100}]}
+                    ]})");
+                    const auto original=Rows[0];
+                    Rows[0]["Folder"]=fixture.string();
+                    Rows[0]["Enabled"]=false;
+                    const auto oldProgress=HelpyAchievements::Progress;
+                    const bool oldLoaded=HelpyAchievements::ProgressLoaded;
+                    HelpyAchievements::Progress.Entries={
+                        {"mods/dye_quests|first",{{},1700000000,8,"First dye","mods/dye_quests","Dye Quests"}},
+                        {"mods/dye_quests|retired",{{},101,80,"Retired reward","mods/dye_quests","Dye Quests"}},
+                        {"mods/other|first",{{},102,100,"Other mod reward","mods/other","Other"}}
+                    };
+                    HelpyAchievements::ProgressLoaded=true;
+                    H::MouseEnabled=true;
+                    for(const bool compact:{false,true}){
+                        modTheme.modsCompact=compact;
+                        for(int frame=0;frame<3;++frame)RenderFrame();
+                        const auto title=H::ModTitles.at("Dye_Quests");
+                        H::Mouse={title.x+std::min(24.f,(title.z-title.x)*.5f),(title.y+title.w)*.5f};
+                        H::ModAchievementsAction={};A::PreviewModBounds={};
+                        A::PreviewUnlocked=A::PreviewLocked=A::PreviewHidden=0;
+                        RenderFrame();H::RightDown=true;RenderFrame();H::RightDown=false;
+                        // A popup can flip above the cursor when its measured height exceeds the viewport.
+                        for(int frame=0;frame<3;++frame)RenderFrame();
+                        const auto action=H::ModAchievementsAction;
+                        if(action.z<=action.x||action.w<=action.y)throw std::runtime_error("View achievements was missing from the mod context menu");
+                        H::Mouse={(action.x+action.z)*.5f,(action.y+action.w)*.5f};
+                        RenderFrame();H::MouseDown=true;RenderFrame();H::MouseDown=false;RenderFrame();
+                        for(int frame=0;frame<120&&A::PreviewLocked==0;++frame){Sleep(2);RenderFrame();}
+                        const auto rect=A::PreviewModBounds;
+                        if(A::PreviewBadgeValues!=std::vector<int>{188,8,80,30,-1})
+                            throw std::runtime_error("Achievement placards must show the player total, stored rewards, locked value, and hidden badge");
+                        if(A::PreviewUnlocked!=2||A::PreviewLocked!=2||A::PreviewHidden!=1||rect.x<0||rect.y<0||rect.z>width||rect.w>height){
+                            PreviewCapture=output/"mods-achievements-failure.png";RenderFrame();PreviewCapture.clear();
+                            throw std::runtime_error(std::format("Mod achievements preview (compact={}): earned={}, locked={}, hidden={}, bounds=({}, {}, {}, {}), viewport={}x{}",
+                                compact,A::PreviewUnlocked,A::PreviewLocked,A::PreviewHidden,rect.x,rect.y,rect.z,rect.w,width,height));
+                        }
+                        if(!compact){
+                            const auto hover=[&](const ImVec4& row,const std::string& expected){
+                                H::Mouse={row.x+std::min(12.f,(row.z-row.x)*.5f),(row.y+row.w)*.5f};
+                                for(int frame=0;frame<150&&A::PreviewTooltip!=expected;++frame){Sleep(3);RenderFrame();}
+                                if(A::PreviewTooltip!=expected)throw std::runtime_error("Achievement hover showed the wrong unlock details");
+                            };
+                            hover(A::PreviewEarnedRow,A::Date(1700000000,"%Y-%m-%d %H:%M"));
+                            hover(A::PreviewHiddenRow,"hidden");
+                            hover(A::PreviewLockedRow,"master");
+                            PreviewCapture=output/"mods-achievements.png";RenderFrame();PreviewCapture.clear();
+                        }
+                        ImGui::ClosePopupsOverWindow(nullptr,false);H::Mouse={-100,-100};RenderFrame();
+                    }
+                    const auto other=Rows[1];
+                    const auto otherFolder=fixture.parent_path()/"Flintlocks";
+                    ConfigFiles::Write(otherFolder/"cache"/"achievements.json",R"({"format":1,"achievements":[
+                        {"id":"practice","title":"Target practice","points":100,"conditions":[{"event":"kill"}]}
+                    ]})");
+                    Rows[1]["Folder"]=otherFolder.string();
+                    modTheme.modsCompact=false;RenderFrame();
+                    const auto all=H::ModAchievementsAll;
+                    H::Mouse={(all.x+all.z)*.5f,(all.y+all.w)*.5f};
+                    A::PreviewUnlocked=A::PreviewLocked=A::PreviewHidden=0;
+                    RenderFrame();H::MouseDown=true;RenderFrame();H::MouseDown=false;RenderFrame();
+                    for(int frame=0;frame<120&&A::PreviewLocked<3;++frame){Sleep(2);RenderFrame();}
+                    if(!A::ModOwner.empty()||A::PreviewUnlocked!=2||A::PreviewLocked!=3||A::PreviewHidden!=1)
+                        throw std::runtime_error("View All Achievements did not show exactly the installed enrolled mods");
+                    PreviewCapture=output/"mods-achievements-all.png";RenderFrame();PreviewCapture.clear();
+                    ImGui::ClosePopupsOverWindow(nullptr,false);
+                    H::MouseEnabled=false;H::Mouse={-100,-100};Rows[0]=original;Rows[1]=other;
+                    HelpyAchievements::Progress=oldProgress;HelpyAchievements::ProgressLoaded=oldLoaded;
+                    RenderFrame();
+                }
                 ModLicensePanel::Requested=false;ModLicensePanel::Data={{{"LICENSE.txt","SYNTHETIC LICENSE PREVIEW\n\nThis notice is an automated layout fixture. It does not grant permissions for any installed mod.\n\nThe license viewer preserves each bundled notice separately and provides a copy action."},{"conditions.license","Synthetic additional conditions"}}, {}};
                 Tab=3;for(int i=0;i<3;++i)RenderFrame();PreviewCapture=output/"mods-license.png";RenderFrame();PreviewCapture.clear();Tab=0;RenderFrame();
                 if(PreviewBadgeOrders!=std::vector<size_t>{1,2,3})throw std::runtime_error("Enabled mods must have consecutive load-order numbers");
@@ -2926,6 +3575,9 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                     throw std::runtime_error("Missing-entry removal must preserve installed rows and stage the order change");
                 Rows.push_back({{"Name","Missing one"},{"Present",false}});Rows.push_back({{"Name","Missing two"},{"Present",false}});
                 if(RemoveMissing()!=2||Rows.size()!=2)throw std::runtime_error("Missing-list cleanup must remove only absent folders");
+                modTheme.modsCompact=true;for(int i=0;i<3;++i)RenderFrame();
+                if(PreviewPlacards!=0||PreviewBadgeOrders.size()!=2)throw std::runtime_error("Compact view must render the RuneSchema rows as a table");
+                PreviewCapture=output/"mods-compact.png";RenderFrame();PreviewCapture.clear();modTheme.modsCompact=wasCompact;
                 Snapshot=oldSnapshot;Rows=oldRows;Status=oldStatus;Health=oldHealth;HealthRevision=oldRevision;Dirty=oldDirty;PreviewChecked=false;
             }
             {
@@ -2994,7 +3646,7 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                     submitted=nlohmann::json::object();delivered=false;P::Received=std::chrono::steady_clock::now();RenderFrame();
                     const auto before=calls;const std::string key=operation==std::string_view("AuthorizeAll")?"server-authorize-all":operation==std::string_view("AutoAuthorize")?"server-authorize-automatic":"server-authorize-"+guid;
                     click(H::AuthoringButtons.at(key));
-                    if(calls!=before+1||submitted.at("Operation")!=operation||submitted.at("WorldToken")!="10:20"||P::Pending)throw std::runtime_error("Server Helpy authorization control or receipt failed");
+                    if(calls!=before+1||submitted.at("Operation")!=operation||submitted.at("WorldToken")!="10:20"||P::Pending)throw std::runtime_error(std::string("Server Helpy authorization control or receipt failed: ")+operation);
                     if(operation==std::string_view("AutoAuthorize")&&submitted.at("Enabled")!=true)throw std::runtime_error("Automatic authorization toggle did not enable");
                 }
                 PreviewCapture=output/"server-player-authorization.png";RenderFrame();PreviewCapture.clear();
@@ -3347,7 +3999,7 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 for(auto page:HelpyNavigation::PlayerTabs){
                     if(!HelpyNavigation::Available(page,enabledWorkspaces,HelpyEnvironment::Server()))continue;
                     const auto label=HelpyNavigation::TabTitle(page);click(Hooks::WorkspaceTabs.at(label));
-                    if(CurrentPage!=page)throw std::runtime_error(std::string("Players tab did not open: ")+label);
+                    if(CurrentPage!=page)throw std::runtime_error(std::string("Items tab did not open: ")+label);
                 }
                 const auto lastPlayerTab=CurrentPage;
                 PreviewCapture=output/"players-grouped.png";RenderFrame();PreviewCapture.clear();
@@ -3359,8 +4011,8 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 }
                 const auto lastWorldTab=CurrentPage;
                 PreviewCapture=output/"world-grouped.png";RenderFrame();PreviewCapture.clear();
-                click(Hooks::Navigation.at("Players"));
-                if(CurrentPage!=lastPlayerTab)throw std::runtime_error("Players did not remember its previous workflow");
+                click(Hooks::Navigation.at("Items"));
+                if(CurrentPage!=lastPlayerTab)throw std::runtime_error("Items did not remember its previous workflow");
                 click(Hooks::Navigation.at("World"));
                 if(CurrentPage!=lastWorldTab)throw std::runtime_error("World did not remember its previous workflow");
                 if(ItemGridPicker::SharedCart.Payload()!=cartBeforeGrouping)throw std::runtime_error("Grouped navigation changed the delivery cart");
@@ -3453,6 +4105,14 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 HelpyImGuiTheme::Current.showGameFps=overlayBefore;
                 click(Hooks::AuthoringButtons.at("Close quick settings"));
                 if(ImGui::IsPopupOpen("Home quick settings",ImGuiPopupFlags_AnyPopupId))throw std::runtime_error("Quick settings panel did not close");
+                click(PreviewHomeQuick);
+                {const auto read=HelpyControllerInput::DeviceRead;const auto mode=HelpyImGuiTheme::Current.inputMode;
+                    HelpyImGuiTheme::Current.inputMode=2;HelpyControllerInput::DeviceRead=+[](bool){return HelpyControllerInput::PreviewReading;};
+                    Hooks::MouseEnabled=false;HelpyControllerInput::PreviewReading={true,{},HelpyControllerDevice::Xbox};RenderFrame();
+                    HelpyControllerInput::PreviewReading.Pad.wButtons=XINPUT_GAMEPAD_B;RenderFrame();
+                    HelpyControllerInput::PreviewReading={};HelpyControllerInput::DeviceRead=read;HelpyImGuiTheme::Current.inputMode=mode;RenderFrame();
+                    if(ImGui::IsPopupOpen("Home quick settings",ImGuiPopupFlags_AnyPopupId))throw std::runtime_error("Controller Back did not close Quick settings");
+                }
                 HelpyImGuiTheme::Current.showFps=true;HelpyPerformance::Next={};
                 PreviewCapture=output/"helpy-fps.png";RenderFrame();PreviewCapture.clear();
                 if(HelpyPerformance::GameFps!=60.0)throw std::runtime_error("FPS counter did not read the cached game sample");
@@ -3602,26 +4262,46 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 click(Hooks::BaySendToCart);for(int i=0;i<3;++i)RenderFrame();click(Hooks::RefreshSearch);
                 if(ItemGridPicker::SharedCart.Entries().size()!=1||ItemGridPicker::SharedCart.Entries()[0].Path!=path||!selection.SelectedPaths.empty()||refreshed.size()!=requests)throw std::runtime_error("Offline cached cart editing required a game or submitted a live search");
                 PreviewCapture=output/"item-bay-offline.png";RenderFrame();PreviewCapture.clear();
+                ItemGridPicker::SharedCart.Clear();
+                ItemGridPicker::ApplySelection(selection,path,ItemGridPicker::Bay.Selected,sizeof(ItemGridPicker::Bay.Selected),false,true,&row,false);
+                if(rows.size()>1){
+                    const auto& second=rows[1];
+                    ItemGridPicker::ApplySelection(selection,second.at("Path").get<std::string>(),ItemGridPicker::Bay.Selected,sizeof(ItemGridPicker::Bay.Selected),true,true,&second,false);
+                }
+                const auto selectedCount=selection.SelectedPaths.size();
+                RenderFrame();
+                const auto center=[](ImVec4 r){return ImVec2((r.x+r.z)*.5f,(r.y+r.w)*.5f);};
+                const auto card=center(Hooks::ItemRects.at(path));
+                Hooks::Mouse=card;Hooks::MouseDown=false;RenderFrame();
+                Hooks::MouseDown=true;RenderFrame();
+                Hooks::Mouse={card.x+12,card.y};RenderFrame();
+                Hooks::Mouse=center(Hooks::BaySendToCart);RenderFrame();RenderFrame();
+                if(ItemGridPicker::SharedCart.Entries().size())throw std::runtime_error("Cart changed before releasing an Item Bay drop");
+                Hooks::MouseDown=false;RenderFrame();RenderFrame();
+                if(ItemGridPicker::SharedCart.Entries().size()!=selectedCount||(selectedCount>1&&!selection.SelectedPaths.empty()))
+                    throw std::runtime_error("Item Bay drop target did not stage the selected cached items exactly once");
                 ItemGridPicker::SharedCart=cart;ItemGridPicker::Bay.Picker=picker;std::snprintf(ItemGridPicker::Bay.Selected,sizeof(ItemGridPicker::Bay.Selected),"%s",primary.c_str());
                 ItemGridPicker::Bay.Picker=originalPicker;std::snprintf(ItemGridPicker::Bay.Filter,sizeof(ItemGridPicker::Bay.Filter),"%s",originalFilter.c_str());cache.Query=originalQuery;cache.HasMore=originalMore;
                 SpawnToolRequests::RemoteAvailable=available;PluginRuntimeServices::ExternalDesktop=external;PluginRuntimeServices::GameProcessId=gamePid;LazyCatalog::RemoteSubmit=submit;LazyCatalog::LocalPoll=poll;Hooks::MouseEnabled=false;Hooks::Mouse={-100,-100};
             }
             {namespace Hooks=HelpyPreviewHooks;
-                const auto saved=ModsPanel::UeSnapshot;const bool compactBefore=HelpyImGuiTheme::Current.ue4ssCompact;HelpyImGuiTheme::Current.ue4ssCompact=true;const auto savedGeneration=ModsPanel::UeGeneration;const auto savedStatus=ModsPanel::UeStatus;const auto savedTab=ModsPanel::Tab;
+                const auto saved=ModsPanel::UeSnapshot;const bool compactBefore=HelpyImGuiTheme::Current.modsCompact;HelpyImGuiTheme::Current.modsCompact=true;const auto savedGeneration=ModsPanel::UeGeneration;const auto savedStatus=ModsPanel::UeStatus;const auto savedTab=ModsPanel::Tab;
                 ModsPanel::UeSnapshot={{"Ok",true},{"Rows",nlohmann::json::array({
-                    {{"Name","ModMenu"},{"Owner",""},{"Folder",(output/"inventory-fixture/ModMenu").string()},{"Managed",false},{"ConfiguredEnabled",true},{"NativeUnsupported",false},{"Kind","Lua"},{"Version","2.0.2"},{"Metadata",{{"name","Mod Menu"},{"source","modmenu.json"}}}},
+                    {{"Name","ModMenu"},{"Owner",""},{"Folder",(output/"inventory-fixture/ModMenu").string()},{"Managed",false},{"ConfiguredEnabled",true},{"NativeUnsupported",false},{"Kind","Lua"},{"Version","2.0.2"},{"J4SPakLoader",true},{"MaxxModMenu",true},{"Metadata",{{"name","Mod Menu"},{"source","modmenu.json"}}}},
                     {{"Name","External without version"},{"Owner",""},{"Folder",(output/"inventory-fixture/External").string()},{"Managed",false},{"ConfiguredEnabled",false},{"NativeUnsupported",false},{"Kind","Native"},{"Version",""},{"Metadata",nlohmann::json::object()}},
                     {{"Name","Owned Lua companion"},{"Owner","My RuneSchema mod"},{"Folder",(output/"inventory-fixture/Owner/ue4ss/Companion").string()},{"Managed",true},{"ConfiguredEnabled",true},{"NativeUnsupported",false},{"Kind","Lua"},{"Version","1.2"},{"Metadata",{{"source","RuneSchema parent metadata"}}}}
                 })}};
                 ModsPanel::UeGeneration=SpawnToolRequests::CurrentGeneration();ModsPanel::UeStatus.clear();++ModsPanel::UeRevision;ModsPanel::Tab=2;CurrentPage=Page::Mods;
-                for(int i=0;i<3;++i)RenderFrame();if(ModsPanel::UeRowsDrawn!=2)throw std::runtime_error("External UE4SS view must show versioned and unversioned mods");
+                for(int i=0;i<3;++i)RenderFrame();if(ModsPanel::UeRowsDrawn!=2 || ModsPanel::UeCapabilityBadgesDrawn!=2)
+                    throw std::runtime_error("Compact UE4SS view must show both declared capability badges");
                 for(const char* label:{"RuneSchema mods","Server comparison","UE4SS mods"}){const auto rect=Hooks::MenuTabs.at(std::string("mod-manager-sections/")+label);if(rect.z<=rect.x||rect.x<0||rect.z>width||rect.w>height)throw std::runtime_error("Mods category rail escaped the viewport");}
                 PreviewCapture=output/"mods-ue4ss-external.png";RenderFrame();PreviewCapture.clear();
-                HelpyImGuiTheme::Current.ue4ssCompact=false;for(int i=0;i<3;++i)RenderFrame();PreviewCapture=output/"mods-ue4ss-cards.png";RenderFrame();PreviewCapture.clear();HelpyImGuiTheme::Current.ue4ssCompact=true;RenderFrame();
+                HelpyImGuiTheme::Current.modsCompact=false;for(int i=0;i<3;++i)RenderFrame();if(ModsPanel::UeCapabilityBadgesDrawn!=2)throw std::runtime_error("UE4SS cards must show both declared capability badges");
+                PreviewCapture=output/"mods-ue4ss-cards.png";RenderFrame();PreviewCapture.clear();HelpyImGuiTheme::Current.modsCompact=true;RenderFrame();
                 {const auto rect=Hooks::MenuTabs.at("ue4ss-mod-groups/RuneSchema loaders");Hooks::MouseEnabled=true;Hooks::Mouse={(rect.x+rect.z)*.5f,(rect.y+rect.w)*.5f};Hooks::MouseDown=false;RenderFrame();Hooks::MouseDown=true;RenderFrame();Hooks::MouseDown=false;RenderFrame();}
                 if(ModsPanel::UeRowsDrawn!=1)throw std::runtime_error("RuneSchema UE4SS view must exclude external mods");
                 PreviewCapture=output/"mods-ue4ss-owned.png";RenderFrame();PreviewCapture.clear();Hooks::MouseEnabled=false;Hooks::Mouse={-100,-100};
-                HelpyImGuiTheme::Current.ue4ssCompact=compactBefore;ModsPanel::UeSnapshot=saved;ModsPanel::UeGeneration=savedGeneration;ModsPanel::UeStatus=savedStatus;++ModsPanel::UeRevision;ModsPanel::Tab=savedTab;
+                HelpyImGuiTheme::Current.modsCompact=compactBefore;ModsPanel::UeSnapshot=saved;ModsPanel::UeGeneration=savedGeneration;ModsPanel::UeStatus=savedStatus;++ModsPanel::UeRevision;ModsPanel::Tab=savedTab;
             }
             {
                 nlohmann::json mods=nlohmann::json::array();
@@ -3685,8 +4365,12 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 if(authoringFixture.Last["Operation"]!="AssetSearch"||authoringFixture.Last["Arguments"]["Query"]!="iron ore"||AuthoringClient::Result("AssetSearch")["AssetMatches"].size()!=1)throw std::runtime_error("Authoring search wire failed");
                 if(width>=1200&&height>=850){
                     click("Asset:/Preview/Items/IronOre.IronOre");if(AuthoringPanel::Entry.empty())throw std::runtime_error("Asset selection did not capture fields");
+                    // Theme and viewport changes can leave this control submitted but clipped.
+                    for(auto* window:ImGui::GetCurrentContext()->Windows)if(window->Active&&std::strstr(window->Name,"Authoring body")){
+                        const auto r=Hooks::AuthoringButtons.at("Build preview");ImGui::ScrollToRectEx(window,{{r.x,r.y},{r.z,r.w}},ImGuiScrollFlags_KeepVisibleEdgeY);RenderFrame();break;
+                    }
                     AuthoringPanel::Copy(AuthoringPanel::Fields,sizeof(AuthoringPanel::Fields),"{");click("Build preview");
-                    if(AuthoringClient::Error.empty()||!PageErrors[static_cast<size_t>(Page::Authoring)].empty())throw std::runtime_error("Malformed draft did not stay inside the authoring form");
+                    if(AuthoringClient::Error.empty()||!PageErrors[static_cast<size_t>(Page::Authoring)].empty())throw std::runtime_error("Malformed draft did not stay inside the authoring form. Local error: "+AuthoringClient::Error+"; page error: "+PageErrors[static_cast<size_t>(Page::Authoring)]);
                     AuthoringPanel::Copy(AuthoringPanel::Fields,sizeof(AuthoringPanel::Fields),"{\"PowerLevel\":9}");click("Build preview");
                     if(authoringFixture.Last["Operation"]!="StarterBuild"||authoringFixture.Last["Arguments"]["Fields"]["PowerLevel"]!=9||AuthoringClient::Result("StarterBuild").contains("Error"))throw std::runtime_error("Edited starter did not build through the bridge");
                 }
@@ -3879,7 +4563,7 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 float lastRouteBottom=0;for(auto page:HelpyNavigation::SidebarPages)if(page!=Page::Home&&page!=Page::Profile&&page!=Page::BugReport&&page!=Page::Notifications&&HelpyNavigation::Available(page,HelpyImGuiTheme::Current.workspaces,HelpyEnvironment::Server()))lastRouteBottom=std::max(lastRouteBottom,Hooks::Navigation.at(PageTitle(page)).w);
                 check(Hooks::Navigation.at("Home").y>lastRouteBottom,"Home must stay below the visible reorderable workspace routes");
                 const auto homeAtBottom=Hooks::Navigation.at("Home");check(homeAtBottom.y-lastRouteBottom<HelpyImGuiTheme::Current.Y(32),"Home must follow the draggable primary navigation divider without a bottom spacer");
-                const auto primaryRow=Hooks::Navigation.at("Players");
+                const auto primaryRow=Hooks::Navigation.at("Items");
                 check(std::abs(homeAtBottom.x-primaryRow.x)<2&&std::abs(homeAtBottom.z-primaryRow.z)<2&&std::abs((homeAtBottom.w-homeAtBottom.y)-(primaryRow.w-primaryRow.y))<2&&PageIcon(Page::Home)==HelpyImGuiTheme::Icon::Building,"Home must match the primary navigation row width, height and icon alignment");
                 const auto profileAtBottom=Hooks::Navigation.at("Profile");
                 check(std::abs(profileAtBottom.x-homeAtBottom.x)<2&&std::abs(profileAtBottom.z-homeAtBottom.z)<2&&profileAtBottom.y>=homeAtBottom.w&&profileAtBottom.w<=MainSurfacePosition.y+MainSurfaceSize.y,"Profile must be a matching full-width row below Home");
@@ -3943,6 +4627,18 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 check(Hooks::CartRects.contains(path),"Staged cart item has no return drag surface");
                 drag(center(Hooks::CartRects.at(path)),ImVec2(Hooks::Browser.x+30,Hooks::Browser.y+30),"Cart item","drag-cart-item.png");
                 check(ItemGridPicker::SharedCart.Entries().empty(),"Dragging a cart item back did not remove it");
+                auto& bay=ItemGridPicker::Bay;auto& picker=bay.Picker;
+                const auto other=std::find_if(items.begin(),items.end(),[&](const auto& row){
+                    const auto candidate=row.value("Path",std::string{});
+                    return candidate!=path&&Hooks::ItemRects.contains(candidate);
+                });
+                check(other!=items.end(),"Grouped drag needs a second Item Bay item");
+                check(ItemGridPicker::ApplySelection(picker,path,bay.Selected,sizeof(bay.Selected),false,true,&items[0])
+                    &&ItemGridPicker::ApplySelection(picker,other->at("Path").get<std::string>(),bay.Selected,sizeof(bay.Selected),true,true,&*other),
+                    "Could not select the two Item Bay fixtures");
+                drag(center(Hooks::ItemRects.at(path)),center(Hooks::Cart),"Items","drag-item-selection.png");
+                check(ItemGridPicker::SharedCart.Entries().size()==2&&picker.SelectedPaths.empty(),"Dragging a selection must add both rows and clear them from the selection");
+                ItemGridPicker::ClearSharedCart();
                 mouse(center(Hooks::ItemRects.at(path)),false);Hooks::RightDown=true;RenderFrame();Hooks::RightDown=false;RenderFrame();RenderFrame();
                 check(ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId),"Right-click did not open item actions");
                 mouse(center(Hooks::AddCart),true);mouse(center(Hooks::AddCart),false);
@@ -4404,7 +5100,7 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 click(H::NavigationCollapse);if(!H::NavigationCollapsed||H::NavigationRail.z-H::NavigationRail.x>=expanded)throw std::runtime_error("Mouse collapse did not reclaim sidebar space");PreviewCapture=output/"navigation-collapsed.png";RenderFrame();PreviewCapture.clear();
                 click(H::NavigationCollapse);if(H::NavigationCollapsed||std::abs(H::NavigationRail.z-H::NavigationRail.x-expanded)>1)throw std::runtime_error("Expanding navigation did not restore its width");
                 click(H::NavigationPin);theme.inputMode=2;H::MouseEnabled=false;for(unsigned i=0;i<3;++i)RenderFrame();if(!theme.navigationPinned||H::NavigationCollapsed)throw std::runtime_error("Pinned navigation folded in controller mode");
-                click(H::NavigationPin);if(!H::NavigationCollapsed)throw std::runtime_error("Unpinned controller navigation did not fold");click(H::NavigationCollapse);if(H::NavigationCollapsed)throw std::runtime_error("Controller navigation could not be expanded temporarily");click(H::Navigation.at("Players"));if(!H::NavigationCollapsed)throw std::runtime_error("Choosing a page did not fold unpinned controller navigation");
+                click(H::NavigationPin);if(!H::NavigationCollapsed)throw std::runtime_error("Unpinned controller navigation did not fold");click(H::NavigationCollapse);if(H::NavigationCollapsed)throw std::runtime_error("Controller navigation could not be expanded temporarily");click(H::Navigation.at("Items"));if(!H::NavigationCollapsed)throw std::runtime_error("Choosing a page did not fold unpinned controller navigation");
                 theme.inputMode=mode;theme.navigationCollapsed=savedCollapsed;theme.navigationPinned=savedPinned;Sidebar={};H::MouseEnabled=false;HelpyImGuiTheme::SaveCurrent();RenderFrame();
             }
             {
@@ -4470,13 +5166,23 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 {
                     const auto animations=ClientAreaAnimations;ClientAreaAnimations=FALSE;
                     const auto selectSections=PreviewSelectSections;PreviewSelectSections=false;
-                    const auto workspaces=HelpyImGuiTheme::Current.workspaces;HelpyImGuiTheme::Current.workspaces={true,true,true,true,true,true};
+                    const auto workspaces=HelpyImGuiTheme::Current.workspaces;HelpyImGuiTheme::Current.workspaces={true,true,true,true,true,true,false,true,true};
                     HelpyPreviewHooks::MouseEnabled=true;HelpyPreviewHooks::Mouse={-1000,-1000};HelpyPreviewHooks::MouseDown=false;
                     HelpyPreviewHooks::RightDown=false;HelpyPreviewHooks::ControlDown=false;HelpyTextInput::Clear();ImGui::ClearActiveID();ImGui::ClosePopupsOverWindow(nullptr,false);ImGui::GetIO().ClearInputKeys();ImGui::GetIO().ClearInputMouse();
                     HelpyControllerInput::PreviewReading={true,{},HelpyControllerDevice::PlayStation};
                     std::string routeTrace;
                     const auto frame=[&]{HelpyPreviewHooks::MenuTabs.clear();HelpyPreviewHooks::ItemFocus.clear();RenderFrame();if(HelpyControllerInput::PreviewReading.Pad.wButtons){const auto& nav=*ImGui::GetCurrentContext();routeTrace+="buttons="+std::to_string(HelpyControllerInput::PreviewReading.Pad.wButtons)+" down="+std::to_string(ImGui::IsKeyDown(ImGuiKey_GamepadDpadDown))+" pressed="+std::to_string(ImGui::IsKeyPressed(ImGuiKey_GamepadDpadDown,false))+" id="+std::to_string(nav.NavId)+" scored="+std::to_string(nav.NavScoringDebugCount)+" active="+std::to_string(nav.ActiveId)+" focusLost="+std::to_string(ImGui::GetIO().AppFocusLost)+"\n";}};
                     const auto press=[&](WORD button){HelpyControllerInput::PreviewReading.Pad.wButtons=button;frame();HelpyControllerInput::PreviewReading.Pad={};frame();const auto& nav=*ImGui::GetCurrentContext();const auto r=nav.NavWindow?nav.NavWindow->NavRectRel[0]:ImRect{};const auto p=nav.NavWindow?nav.NavWindow->Pos:ImVec2{};routeTrace+="focus="+std::to_string(nav.NavId)+" window="+(nav.NavWindow?nav.NavWindow->Name:"none")+" at="+std::to_string(r.Min.x+p.x)+","+std::to_string(r.Min.y+p.y)+" search="+std::to_string(HelpyPreviewHooks::BaySearchFocus.first)+"\n";};
+                    const auto sections=HelpyNavigationOrder::WorkspacePages(HelpyImGuiTheme::Current.workspaces,HelpyEnvironment::Server());
+                    const auto players=std::find(sections.begin(),sections.end(),Page::Items);
+                    if(players==sections.end())throw std::runtime_error("Players is missing from controller section navigation");
+                    const auto remembered=LastPlayersPage;
+                    CurrentPage=players==sections.begin()?sections.back():*(players-1);
+                    LastPlayersPage=Page::Recipes;frame();
+                    HelpyControllerInput::PreviewReading.Pad.bRightTrigger=255;frame();
+                    HelpyControllerInput::PreviewReading.Pad={};frame();
+                    if(CurrentPage!=Page::Recipes)throw std::runtime_error("Controller section navigation lost the remembered Players tab");
+                    LastPlayersPage=remembered;
                     const auto insideContent=[&]{
                         const auto& nav=*ImGui::GetCurrentContext();if(!nav.NavId||!nav.NavIdIsAlive||!nav.NavWindow||!std::strstr(nav.NavWindow->Name,"##helpy-scroll-"))return false;
                         const auto rect=nav.NavWindow->NavRectRel[ImGuiNavLayer_Main];const ImVec2 center{nav.NavWindow->Pos.x+(rect.Min.x+rect.Max.x)*.5f,nav.NavWindow->Pos.y+(rect.Min.y+rect.Max.y)*.5f};
@@ -4496,8 +5202,14 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                     };
                     for(const auto page:HelpyNavigation::Pages){
                         if(page==Page::Home||!HelpyNavigation::Available(page,HelpyImGuiTheme::Current.workspaces,HelpyEnvironment::Server()))continue;
-                        routeTrace.clear();CurrentPage=Page::Home;frame();ImGui::ClearActiveID();CurrentPage=page;frame();frame();frame();
-                        for(int step=0;step<24&&!insideContent();++step)press(categoryFocused()||sectionEntryFocused()?XINPUT_GAMEPAD_A:XINPUT_GAMEPAD_DPAD_DOWN);
+                        routeTrace.clear();CurrentPage=Page::Home;frame();ImGui::ClearActiveID();
+                        if(page==Page::Mods)ModsPanel::Tab=0;
+                        CurrentPage=page;frame();frame();frame();
+                        for(int step=0;step<24&&!insideContent();++step){
+                            const auto firstMod=HelpyPreviewHooks::MenuFocus.find("mod-manager-sections/RuneSchema mods");
+                            if(page==Page::Mods&&categoryFocused()&&firstMod!=HelpyPreviewHooks::MenuFocus.end()&&GImGui->NavId!=firstMod->second.first)press(XINPUT_GAMEPAD_DPAD_UP);
+                            else press(categoryFocused()||sectionEntryFocused()?XINPUT_GAMEPAD_A:XINPUT_GAMEPAD_DPAD_DOWN);
+                        }
                         if(!insideContent()){
                             CapturePreview(m_device,m_context,m_swapChain,output/"controller-pane-failure.png");
                             std::ofstream debug(output/"controller-pane-debug.txt");debug<<routeTrace;
@@ -4520,6 +5232,9 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                     if(!ItemGridPicker::IsSelected(ItemGridPicker::Bay.Picker,item.first))throw std::runtime_error("Controller confirm did not select the Item Bay card");
                     press(XINPUT_GAMEPAD_A);if(ItemGridPicker::IsSelected(ItemGridPicker::Bay.Picker,item.first))throw std::runtime_error("Controller confirm did not deselect the Item Bay card");
                     ItemGridPicker::Bay.Picker.MultiSelect=savedMulti;
+                    CurrentPage=Page::Tools;frame();frame();
+                    for(int attempt=0;attempt<5&&(!GImGui->NavWindow||!std::strstr(GImGui->NavWindow->Name,"/utilities_"));++attempt)press(XINPUT_GAMEPAD_LEFT_SHOULDER);
+                    if(!GImGui->NavWindow||!std::strstr(GImGui->NavWindow->Name,"/utilities_"))throw std::runtime_error("Controller could not reach the Tools categories with a bumper");
                     const auto oldSettingsCategory=SettingsCategory;
                     constexpr std::array settingsLabels{"Helpy","Server access","RuneSchema","Appearance","Diagnostics","Backgrounds","Updates & runtime","Workspaces"};
                     CurrentPage=Page::Settings;
@@ -4533,6 +5248,11 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                         if(!nav.NavId||!nav.NavIdIsAlive||!nav.NavWindow||!std::strstr(nav.NavWindow->Name,"##settings-details"))throw std::runtime_error("Controller is stuck entering Settings: "+std::string(settingsLabels[category])+" window="+(nav.NavWindow?nav.NavWindow->Name:"none"));
                     }
                     SettingsCategory=0;RuneSchemaSettingsPanel::QuickSection=3;ImGui::ClearActiveID();frame();frame();
+                    {const auto focus=HelpyPreviewHooks::MenuFocus.at("helpy-settings/Performance");auto* window=ImGui::FindWindowByID(focus.second);
+                        ImGui::FocusWindow(window);ImGui::SetFocusID(focus.first,window);frame();
+                        press(XINPUT_GAMEPAD_DPAD_LEFT);if(RuneSchemaSettingsPanel::QuickSection!=2)throw std::runtime_error("Settings D-pad Left did not select Cache");
+                        press(XINPUT_GAMEPAD_DPAD_RIGHT);if(RuneSchemaSettingsPanel::QuickSection!=3)throw std::runtime_error("Settings D-pad Right did not return to Performance");
+                    }
                     {const auto focus=HelpyPreviewHooks::MenuFocus.at("fps-limit");auto* window=ImGui::FindWindowByID(focus.second);const auto rect=HelpyPreviewHooks::AuthoringButtons.at("Helpy FPS limit");ImGui::FocusWindow(window);ImGui::SetFocusID(focus.first,window);window->NavRectRel[0]=ImRect({rect.x-window->Pos.x,rect.y-window->Pos.y},{rect.z-window->Pos.x,rect.w-window->Pos.y});press(XINPUT_GAMEPAD_A);
                         if(!ImGui::IsAnyItemActive())throw std::runtime_error("Controller did not enter the Settings slider");
                         m_visible=true;press(XINPUT_GAMEPAD_B);if(!m_visible.load())throw std::runtime_error("Cancelling a Settings slider hides Helpy instead of returning to navigation");m_visible=false;
@@ -4547,10 +5267,15 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                     press(XINPUT_GAMEPAD_A);if(!ItemGridPicker::Bay.Picker.SelectedPaths.empty())throw std::runtime_error("Controller confirm did not deselect the same item");press(XINPUT_GAMEPAD_A);
                     press(XINPUT_GAMEPAD_START);if(std::none_of(ItemGridPicker::SharedCart.Entries().begin(),ItemGridPicker::SharedCart.Entries().end(),[&](const auto& row){return row.Path==path;}))throw std::runtime_error("Controller Send to cart shortcut did not stage the selection");
                     if(!ItemGridPicker::Bay.Picker.SelectedPaths.empty())throw std::runtime_error("Controller Send to cart retained its old selection");
+                    if(auto* rows=GImGui->NavWindow;rows&&rows->ScrollMax.y>0){
+                        ImGui::SetScrollY(rows,0.f);frame();
+                        for(int step=0;step<10&&rows->Scroll.y==0;++step)press(XINPUT_GAMEPAD_DPAD_DOWN);
+                        if(rows->Scroll.y<=0||GImGui->NavWindow!=rows)throw std::runtime_error("Item Bay focus did not scroll the card grid");
+                    }
                     press(XINPUT_GAMEPAD_RIGHT_SHOULDER);if(!GImGui->NavWindow||!std::strstr(GImGui->NavWindow->Name,"##item-cart-dock"))throw std::runtime_error("Bumper did not move from Item Bay results to the cart");
                     PreviewCapture=output/"controller-pane-navigation.png";frame();PreviewCapture.clear();ItemGridPicker::ClearSharedCart();
                     CurrentPage=Page::Home;frame();CurrentPage=Page::Map;MapPanel::Data.Zoom=3;frame();frame();frame();
-                    for(int step=0;step<40&&ImGui::GetCurrentContext()->NavId!=HelpyPreviewHooks::MapCanvasID;++step)press(sectionEntryFocused()?XINPUT_GAMEPAD_A:XINPUT_GAMEPAD_DPAD_DOWN);
+                    press(XINPUT_GAMEPAD_DPAD_DOWN);
                     if(ImGui::GetCurrentContext()->NavId!=HelpyPreviewHooks::MapCanvasID)throw std::runtime_error("Controller cannot navigate from World tabs into the map canvas");
                     const auto center=MapPanel::Data.Center;HelpyControllerInput::PreviewReading.Pad.sThumbLX=20000;frame();HelpyControllerInput::PreviewReading.Pad={};frame();
                     if(MapPanel::Data.Center.X==center.X)throw std::runtime_error("Naturally focused map cannot pan with the controller");
@@ -4618,7 +5343,16 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 if(FAILED(m_device->QueryInterface(IID_PPV_ARGS(&oldDxgi)))||FAILED(oldDxgi->GetAdapter(&selected))||FAILED(selected->GetDesc(&gpu)))throw std::runtime_error("Native adapter fixture unavailable");
                 auto* retired=IM_NEW(ImTextureData)();retired->Create(ImTextureFormat_RGBA32,2,2);retired->RefCount=1;retired->SetStatus(ImTextureStatus_Destroyed);ImGui::RegisterUserTexture(retired);ImGui::GetPlatformIO().Textures.push_back(retired);ItemIconCache::detail::State().RetiredTextures.push_back(retired);
                 const auto cachedRows=LazyCatalog::For(0).Rows.size();const auto mapImage=MapPanel::Data.ImageFile;
-                RebindNativeDevice(gpu.AdapterLuid);if(m_device==oldDevice.Get()||m_nativeOverlay.Failed()||LazyCatalog::For(0).Rows.size()!=cachedRows||(!mapImage.empty()&&(!MapPanel::Data.Texture||MapPanel::Data.ImageFile!=mapImage)))throw std::runtime_error("Native UI device migration lost cached content");oldDevice.Reset();oldDxgi.Reset();selected.Reset();
+                m_nativeOverlay.Show();
+                LUID recovering{};
+                if(!m_nativeOverlay.PreviewDeviceRemoved(gpu.AdapterLuid)||!m_nativeOverlay.Wanted()||
+                   !m_nativeOverlay.AdapterChange(recovering)||m_nativeOverlay.PreviewDeviceRemoved(gpu.AdapterLuid))
+                    throw std::runtime_error("Native overlay device removal must preserve the open request and retry only once");
+                RebindNativeDevice(recovering);
+                if(!m_nativeOverlay.Wanted()||m_nativeOverlay.AdapterChange(recovering))
+                    throw std::runtime_error("Native overlay must remain requested after device recreation");
+                m_nativeOverlay.Hide();
+                if(m_device==oldDevice.Get()||m_nativeOverlay.Failed()||LazyCatalog::For(0).Rows.size()!=cachedRows||(!mapImage.empty()&&(!MapPanel::Data.Texture||MapPanel::Data.ImageFile!=mapImage)))throw std::runtime_error("Native UI device migration lost cached content");oldDevice.Reset();oldDxgi.Reset();selected.Reset();
                 m_nativeOverlay.PreviewSurface(m_device,width,height);RenderFrame();RenderFrame();if(!ImGui::GetIO().MouseDrawCursor)throw std::runtime_error("Native presentation did not enable its own cursor");
                 const auto published=HelpyOverlayFrames::Read(m_nativeOverlay.Page()->Published);if(published<0)throw std::runtime_error("Native UI did not publish its shared surface");
                 Microsoft::WRL::ComPtr<ID3D11Resource> picture;m_nativeOverlay.Target(published)->GetResource(&picture);Microsoft::WRL::ComPtr<ID3D11Texture2D> back;const auto read=m_swapChain->GetBuffer(0,IID_PPV_ARGS(&back));if(FAILED(read))throw std::runtime_error("Native UI capture target unavailable");
@@ -4641,6 +5375,39 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 if(ImGui::GetIO().MouseDrawCursor||m_nativeOverlay.Wanted()||HelpyOverlayFrames::CapturesInput(*m_nativeOverlay.Page(),GetTickCount64())||queries.size()!=queryCount)throw std::runtime_error("Passive diagnostics captured input or woke item queries");
                 const auto passiveSlot=HelpyOverlayFrames::Read(m_nativeOverlay.Page()->Published);if(passiveSlot<0)throw std::runtime_error("Passive diagnostic surface was not published");
                 m_nativeOverlay.Target(passiveSlot)->GetResource(picture.ReleaseAndGetAddressOf());m_context->OMSetRenderTargets(0,nullptr,nullptr);m_context->CopyResource(back.Get(),picture.Get());CapturePreview(m_device,m_context,m_swapChain,output/"native-diagnostic-notice.png");
+
+                namespace A = AchievementToastTimeline;
+                std::deque<ModAchievements::Unlock> awards{{"fixture|builder","fixture","Builder's Guild","Master Builder","Place 100 structures",150,1}};
+                const auto captureAward=[&](double elapsed,const char* file) {
+                    AchievementOverlay.PreviewAt(elapsed,awards);
+                    RenderFrame();
+                    const auto slot=HelpyOverlayFrames::Read(m_nativeOverlay.Page()->Published);
+                    if(slot<0)throw std::runtime_error("Gamer Points animation did not publish a HUD frame");
+                    m_nativeOverlay.Target(slot)->GetResource(picture.ReleaseAndGetAddressOf());
+                    m_context->OMSetRenderTargets(0,nullptr,nullptr);
+                    m_context->CopyResource(back.Get(),picture.Get());
+                    CapturePreview(m_device,m_context,m_swapChain,output/file);
+                };
+                captureAward(A::Rise+.05,"native-gamer-points-logo.png");
+                captureAward(A::BreakAt+A::Break*.55,"native-gamer-points-brackets.png");
+                captureAward(A::CloseAt+A::CloseBrackets*.55,"native-gamer-points-reassembly.png");
+                AchievementOverlay.PreviewAt(A::HoldAt+.10,awards);
+                RenderFrame();
+                const auto awardSlot=HelpyOverlayFrames::Read(m_nativeOverlay.Page()->Published);
+                if(!awards.empty()||awardSlot<0||HelpyOverlayFrames::CapturesInput(*m_nativeOverlay.Page(),GetTickCount64()))
+                    throw std::runtime_error("Gamer Points award did not use the passive HUD");
+                m_nativeOverlay.Target(awardSlot)->GetResource(picture.ReleaseAndGetAddressOf());
+                m_context->OMSetRenderTargets(0,nullptr,nullptr);
+                m_context->CopyResource(readback.Get(),picture.Get());
+                if(FAILED(m_context->Map(readback.Get(),0,D3D11_MAP_READ,0,&mapped)))throw std::runtime_error("Gamer Points alpha map unavailable");
+                const auto awardBox=AwardBounds(HelpyImGuiTheme::Current,float(width),float(height));
+                const auto alphaAt=[&](UINT x,UINT y){return static_cast<const unsigned char*>(mapped.pData)[size_t(y)*mapped.RowPitch+x*4+3];};
+                const bool awardDrawn=alphaAt(width/2,UINT(awardBox.Y+awardBox.H*.5f))>200&&alphaAt(0,height-1)==0;
+                m_context->Unmap(readback.Get(),0);
+                if(!awardDrawn)throw std::runtime_error("Gamer Points card was missing or filled the game viewport");
+                m_context->CopyResource(back.Get(),picture.Get());
+                CapturePreview(m_device,m_context,m_swapChain,output/"native-gamer-points.png");
+                AchievementOverlay.Reset();
                 m_context->CopyResource(readback.Get(),picture.Get());if(FAILED(m_context->Map(readback.Get(),0,D3D11_MAP_READ,0,&mapped)))throw std::runtime_error("Passive alpha map unavailable");
                 const auto* center=static_cast<const unsigned char*>(mapped.pData)+size_t(height/2)*mapped.RowPitch+size_t(width/2)*4;const bool transparent=center[3]==0;m_context->Unmap(readback.Get(),0);
                 if(!transparent)throw std::runtime_error("Passive notices drew the full Helpy background");
@@ -4674,6 +5441,12 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
 #endif
 
 void HelpyStandaloneWindow::RenderFrame() {
+#if defined(HELPY_PREVIEW)
+    const bool helpBrowser=std::getenv("RUNESCHEMA_HELPY_WEB_PREVIEW")!=nullptr;
+#else
+    const bool helpBrowser=PluginRuntimeServices::ExternalDesktop;
+#endif
+    HelpySupportPage::Frame support(m_hwnd,m_module,m_device,helpBrowser&&!m_gameOverlay.Active()&&!m_nativeOverlay.Presenting()&&!m_nativeOverlay.NotificationsVisible());
     HelpyFeatureSettings::Load();const bool modMenuLoaded=ModMenu2Panel::Loaded();HelpyImGuiTheme::Current.workspaces.ModMenu=HelpyFeatureSettings::Key&&modMenuLoaded;RuneSchemaSettingsPanel::ModMenuSettings=modMenuLoaded?ModMenu2Panel::Settings:std::function<void()>{};
     HudViewport={};HudOrigin={};
 #if defined(HELPY_PREVIEW)
@@ -4688,7 +5461,7 @@ void HelpyStandaloneWindow::RenderFrame() {
         HudViewport={page->ViewportWidth?float(page->ViewportWidth):float(page->Width),page->ViewportHeight?float(page->ViewportHeight):float(page->Height)};HudOrigin={float(page->Left),float(page->Top)};
         {HelpyImGuiTheme::Scope skin(HelpyImGuiTheme::Current);if(UiRegularFont)ImGui::PushFont(UiRegularFont);
             RenderDiagnosticToasts(HelpyImGuiTheme::Current,false);HelpyMiniMap::Draw(HelpyImGuiTheme::Current,HudViewport,HudOrigin);RenderCoordinates(HelpyImGuiTheme::Current);
-            RenderStartupProgress(HelpyImGuiTheme::Current,HudOrigin,HudViewport);
+            RenderStartupProgress(HelpyImGuiTheme::Current,HudOrigin,HudViewport);RenderGamerPoints(HelpyImGuiTheme::Current);
             if(UiRegularFont)ImGui::PopFont();}
         ImGui::Render();const int slot=m_nativeOverlay.Begin();if(slot>=0){auto* target=m_nativeOverlay.Target(slot);const float clear[4]{};
             m_context->OMSetRenderTargets(1,&target,nullptr);m_context->ClearRenderTargetView(target,clear);ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());m_nativeOverlay.Publish(slot);}return;
@@ -4753,8 +5526,6 @@ void HelpyStandaloneWindow::RenderFrame() {
     SourceBanners::Pump();
 #if !defined(HELPY_PREVIEW)
     HelpyIconPacks::PollPackaged();
-    if(HelpyUpdates::Tick(HelpyImGuiTheme::Current.automaticUpdateChecks,HelpyEnvironment::UpdateChecksAvailable,HelpyEnvironment::RuneSchemaVersion))
-        PushToast("RuneSchema update available. See Settings > Updates & runtime.",6.0);
 #endif
     ApplyCaptionTheme(m_hwnd,HelpyImGuiTheme::Current,false,m_gameOverlay.Active(),&m_composition);
     PlayerPortraitPicker::Pump();SpawnBrowserSettings::Pump();
@@ -4778,7 +5549,11 @@ void HelpyStandaloneWindow::RenderFrame() {
     HelpyImGuiTheme::OverlayRenderScale=(native||m_gameOverlay.Active())?HelpyImGuiTheme::Current.overlayUiScale:1.f;
     ImGui::GetIO().MouseDrawCursor=native&&!m_nativeOverlay.HardwareCursor();
     ImGui_ImplDX11_NewFrame();ImGui_ImplWin32_NewFrame();auto& frameIo=ImGui::GetIO();const auto& t=HelpyImGuiTheme::Current;SelectUiFontFamily(t.fontFamily);frameIo.FontDefault=UiRegularFont;frameIo.FontGlobalScale=std::clamp(t.Scale()*t.fontScale,0.50f,4.00f);
-    const bool controllerFocused=native?GetForegroundWindow()==m_nativeOverlay.GameWindow():OwnsWindow(GetForegroundWindow());
+    const auto foreground=GetForegroundWindow();
+    const bool controllerFocused=native?foreground==m_nativeOverlay.GameWindow():OwnsWindow(foreground)||(m_gameOverlay.Active()&&GameWindow(foreground));
+#if !defined(HELPY_PREVIEW)
+    if(native||m_gameOverlay.Active())frameIo.AddFocusEvent(controllerFocused);
+#endif
     const bool pointerInteractive=m_visible.load()&&t.inputMode!=1&&controllerFocused&&!HelpyBindingPicker::Recording();
     if(native){auto* page=m_nativeOverlay.Page();HelpyOverlayInput::Feed(*page,m_nativeOverlay.GameWindow());frameIo.DisplaySize={float(page->Width),float(page->Height)};frameIo.DisplayFramebufferScale={1,1};const auto pad=HelpyOverlayInput::FreshPad(*page);
 #if defined(HELPY_PREVIEW)
@@ -4810,7 +5585,7 @@ void HelpyStandaloneWindow::RenderFrame() {
 #endif
     const auto touchPointer=HelpyControllerInput::UpdatePointer(t.controllerTouchpad&&pointerInteractive,t.controllerCursor&&pointerInteractive);
 #if !defined(HELPY_PREVIEW)
-    if(touchPointer&&controllerFocused&&(native?GetForegroundWindow()==m_nativeOverlay.GameWindow():OwnsWindow(GetForegroundWindow()))){
+    if(touchPointer&&controllerFocused&&GetForegroundWindow()==foreground){
         POINT point{LONG(touchPointer->x),LONG(touchPointer->y)};
         if(bayVisible||cacheVisible||std::any_of(workspaceVisible.begin(),workspaceVisible.end(),[](bool visible){return visible;})){point.x+=LONG(bayCanvas.X);point.y+=LONG(bayCanvas.Y);}
         else{
@@ -4822,7 +5597,7 @@ void HelpyStandaloneWindow::RenderFrame() {
 #endif
     const bool popupAtFrameStart=ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId);
     const int popupDepthAtFrameStart=ImGui::GetCurrentContext()->OpenPopupStack.Size;HelpyMenu::PopupDepthAtFrameStart=popupDepthAtFrameStart;
-    const bool activeAtFrameStart=ImGui::IsAnyItemActive();
+    const bool activeAtFrameStart=ImGui::IsAnyItemActive();HelpyMenu::WidgetActiveAtFrameStart=activeAtFrameStart;
     ImGui::NewFrame();HelpyControllerInput::Observe(t.inputMode);HelpyWikiIcons::Poll();
     if(!RuneSchemaProfile::Initialized)RuneSchemaProfile::Load(HostServices::StateDirectory());
     if(!HelpyPersonalization::Initialized)HelpyPersonalization::Load(RuneSchemaProfile::Ready?RuneSchemaProfile::Data("labels.json"):HostServices::StateDirectory()/"personalization.json");
@@ -4840,7 +5615,9 @@ void HelpyStandaloneWindow::RenderFrame() {
     auto backing=t.window;if(transparentOverlay)backing.w=HelpyBackgrounds::Opaque()?0.f:std::clamp(t.overlayOpacity,.6f,1.f);
     ImGui::PushStyleColor(ImGuiCol_WindowBg,backing);ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,0.0f);ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize,0.0f);
     if(ImGui::Begin("##RuneSchemaHelpyStandalone",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoFocusOnAppearing|ImGuiWindowFlags_NoBringToFrontOnFocus)) {
-        HelpyBackgrounds::DrawWindow(transparentOverlay?std::clamp(t.overlayOpacity,.6f,1.f):1.f);
+        const float backgroundOpacity=transparentOverlay?std::clamp(t.overlayOpacity,.6f,1.f):1.f;
+        HelpyBackgrounds::DrawWindow(backgroundOpacity);
+        if(!SplashEntered&&t.splashBackgrounds)HelpyBackgrounds::DrawSplash(SplashElapsed(),ClientAreaAnimations!=FALSE,backgroundOpacity);
         if(NativeCaption.Height){
             const float icon=float(NativeCaption.Icon),inset=8.f*NativeCaption.Dpi/96.f;
             const ImVec2 at{framePosition.x+inset,framePosition.y+(NativeCaption.Height-icon)*.5f};
@@ -4858,13 +5635,21 @@ void HelpyStandaloneWindow::RenderFrame() {
         if(workspaceFont)ImGui::PushFont(workspaceFont);
         const bool controller=HelpyControllerInput::Selection.Controller;
         if(controller)ImGui::SetNavCursorVisible(!HelpyControllerInput::PointerMode);
-        if(controller){const float footer=HelpyControllerInput::HintsHeight(ImGui::GetContentRegionAvail().x,HelpyBindingActions::Controller());MainSurfaceSize.y=std::max(1.f,MainSurfaceSize.y-footer);ItemGridPicker::DetailsSurfaceSize=MainSurfaceSize;HelpyWindowChrome::Bounds(MainSurfacePosition,MainSurfaceSize);HelpyImGuiTheme::BeginPanel("##controller-content",{0,std::max(1.f,ImGui::GetContentRegionAvail().y-footer)},false);}
+        const bool itemBay=SplashEntered&&(CurrentPage==Page::Items||bayVisible)&&HelpyControllerInput::ItemBayFrame>=ImGui::GetFrameCount()-1;
+        const bool map=SplashEntered&&CurrentPage==Page::Map&&!DetachedWorkspaces[0];
+        const auto hints=controller?HelpyControllerInput::HintItems(HelpyBindingActions::Controller(),!SplashEntered,itemBay)
+            :HelpyControllerInput::DesktopHints(HelpyBindingActions::Keyboard(),!SplashEntered,itemBay,map,true);
+        const float footer=HelpyControllerInput::HintsHeight(ImGui::GetContentRegionAvail().x,hints);
+        MainSurfaceSize.y=std::max(1.f,MainSurfaceSize.y-footer);
+        ItemGridPicker::DetailsSurfaceSize=MainSurfaceSize;HelpyWindowChrome::Bounds(MainSurfacePosition,MainSurfaceSize);
+        HelpyImGuiTheme::BeginPanel("##workspace-with-hints",{0,std::max(1.f,ImGui::GetContentRegionAvail().y-footer)},false,ImGuiWindowFlags_NoBackground);
         const bool taskbar=HelpyTaskbar::Current.Count()!=0;
         if(taskbar)HelpyImGuiTheme::BeginPanel("##helpy-workspace-above-taskbar",{0,std::max(1.0f,ImGui::GetContentRegionAvail().y-ImGui::GetFrameHeightWithSpacing()*(HelpyTaskbar::Current.Count()>2?2:1)-t.Y(12))},false);
         RenderWorkspace(t);
         NotificationsPanel::Prompt();
         ModMetadataPanel::Render();
         ModSaveFilesPanel::Render();
+        AchievementsPanel::RenderModWindow();
         if(taskbar){
             PS::HelpyImGuiTheme::EndPanel();ImGui::Separator();
             const float logoSize=ImGui::GetFrameHeight();const auto logo=ImGui::GetCursorScreenPos();
@@ -4887,10 +5672,12 @@ void HelpyStandaloneWindow::RenderFrame() {
             restore("Restore Party",HelpyTaskbar::Window::Party,m_workspaces[3].Window);
             restore("Restore inventory",HelpyTaskbar::Window::Inventory,m_workspaces[4].Window);
         }
-        if(controller){PS::HelpyImGuiTheme::EndPanel();HelpyControllerInput::Hints(t.controllerGlyphs,HelpyBindingActions::Controller());
-            if(!popupAtFrameStart&&!activeAtFrameStart&&!ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId)&&!frameIo.WantTextInput){
+        PS::HelpyImGuiTheme::EndPanel();
+        HelpyControllerInput::Hints(t.controllerGlyphs,hints);
+        if(controller){
+            if(SplashEntered&&!popupAtFrameStart&&!activeAtFrameStart&&!ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId)&&!frameIo.WantTextInput&&!ImGui::GetDragDropPayload()){
                 const int direction=ImGui::IsAnyItemActive()?0:ImGui::IsKeyPressed(ImGuiKey_GamepadR2,false)?1:ImGui::IsKeyPressed(ImGuiKey_GamepadL2,false)?-1:0;
-                if(direction){const auto pages=HelpyNavigationOrder::WorkspacePages(t.workspaces,HelpyEnvironment::Server());if(!pages.empty()){auto found=std::find(pages.begin(),pages.end(),HelpyNavigation::Parent(CurrentPage));const auto at=found==pages.end()?(direction>0?-1:0):int(found-pages.begin());CurrentPage=pages[(at+direction+int(pages.size()))%int(pages.size())];HelpyControllerInput::EnterSection();}}
+                if(direction){const auto pages=HelpyNavigationOrder::WorkspacePages(t.workspaces,HelpyEnvironment::Server());if(!pages.empty()){auto found=std::find(pages.begin(),pages.end(),HelpyNavigation::Parent(CurrentPage));const auto at=found==pages.end()?(direction>0?-1:0):int(found-pages.begin());OpenSidebarPage(pages[(at+direction+int(pages.size()))%int(pages.size())],t);}}
             }
         }
         if(workspaceFont)ImGui::PopFont();
@@ -4970,25 +5757,25 @@ void HelpyStandaloneWindow::RenderFrame() {
         m_context->OMSetRenderTargets(1,&m_bayTarget,nullptr);m_context->ClearRenderTargetView(m_bayTarget,clear);
         auto bayDraw=*ImGui::GetDrawData();bayDraw.DisplayPos={bayCanvas.Bay.X,bayCanvas.Bay.Y};bayDraw.DisplaySize={bayCanvas.Bay.Width,bayCanvas.Bay.Height};
         HelpySurfaceDraw::Filter(bayDraw);
-        ImGui_ImplDX11_RenderDrawData(&bayDraw);m_baySwapChain->Present(0,0);
+        ImGui_ImplDX11_RenderDrawData(&bayDraw);PresentSurface(m_baySwapChain,L"Item Bay");
     }
     if(cacheVisible){
         m_context->OMSetRenderTargets(1,&m_cacheTarget,nullptr);m_context->ClearRenderTargetView(m_cacheTarget,clear);
         auto cacheDraw=*ImGui::GetDrawData();cacheDraw.DisplayPos={bayCanvas.Cache.X,bayCanvas.Cache.Y};cacheDraw.DisplaySize={bayCanvas.Cache.Width,bayCanvas.Cache.Height};
         HelpySurfaceDraw::Filter(cacheDraw);
-        ImGui_ImplDX11_RenderDrawData(&cacheDraw);m_cacheSwapChain->Present(0,0);
+        ImGui_ImplDX11_RenderDrawData(&cacheDraw);PresentSurface(m_cacheSwapChain,L"Icon Cache");
     }
     for(size_t i=0;i<m_workspaces.size();++i)if(workspaceVisible[i]){
         auto& panel=m_workspaces[i];const auto rect=WorkspaceRect(i,bayCanvas);
         m_context->OMSetRenderTargets(1,&panel.Target,nullptr);m_context->ClearRenderTargetView(panel.Target,clear);
         auto draw=*ImGui::GetDrawData();draw.DisplayPos={rect.X,rect.Y};draw.DisplaySize={rect.Width,rect.Height};
         HelpySurfaceDraw::Filter(draw);
-        ImGui_ImplDX11_RenderDrawData(&draw);panel.Swap->Present(0,0);
+        ImGui_ImplDX11_RenderDrawData(&draw);PresentSurface(panel.Swap,WorkspaceCaption(i));
     }
 #if defined(HELPY_PREVIEW)
     if(!PreviewCapture.empty())CapturePreview(m_device,m_context,m_swapChain,PreviewCapture);
 #endif
-    if(FAILED(m_swapChain->Present(0,0)))throw std::runtime_error("Helpy presentation failed; its renderer was closed without stopping the game.");
+    PresentSurface(m_swapChain,L"Helpy main window");
 }
 
 bool HelpyStandaloneWindow::SyncItemBay(){
@@ -5007,7 +5794,7 @@ bool HelpyStandaloneWindow::SyncItemBay(){
         description.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT;description.OutputWindow=m_bayWindow;description.SampleDesc.Count=1;description.Windowed=TRUE;description.SwapEffect=DXGI_SWAP_EFFECT_DISCARD;
         bool ready=m_bayWindow&&SUCCEEDED(m_device->QueryInterface(IID_PPV_ARGS(&device)))&&SUCCEEDED(device->GetAdapter(&adapter))
             &&SUCCEEDED(adapter->GetParent(IID_PPV_ARGS(&factory)))&&SUCCEEDED(factory->CreateSwapChain(m_device,&description,&m_baySwapChain));
-        if(ready){ComPtr<ID3D11Texture2D> buffer;ready=SUCCEEDED(m_baySwapChain->GetBuffer(0,IID_PPV_ARGS(&buffer)))&&SUCCEEDED(m_device->CreateRenderTargetView(buffer.Get(),nullptr,&m_bayTarget));}
+        if(ready)ready=SUCCEEDED(AcquireRenderTarget(m_device,m_baySwapChain,&m_bayTarget));
         if(!ready){DestroyItemBay();ItemGridPicker::DetachedBay=false;PushToast("Could not open the separate Item Bay; it remains docked.",4);return false;}
         SendMessageW(m_bayWindow,WM_SETICON,ICON_BIG,reinterpret_cast<LPARAM>(LoadImageW(m_module,MAKEINTRESOURCEW(IDI_RSMK),IMAGE_ICON,32,32,LR_SHARED)));
         SendMessageW(m_bayWindow,WM_SETICON,ICON_SMALL,reinterpret_cast<LPARAM>(LoadImageW(m_module,MAKEINTRESOURCEW(IDI_RSMK),IMAGE_ICON,16,16,LR_SHARED)));
@@ -5045,7 +5832,7 @@ bool HelpyStandaloneWindow::SyncIconCache(){
         description.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT;description.OutputWindow=m_cacheWindow;description.SampleDesc.Count=1;description.Windowed=TRUE;description.SwapEffect=DXGI_SWAP_EFFECT_DISCARD;
         bool ready=m_cacheWindow&&SUCCEEDED(m_device->QueryInterface(IID_PPV_ARGS(&device)))&&SUCCEEDED(device->GetAdapter(&adapter))
             &&SUCCEEDED(adapter->GetParent(IID_PPV_ARGS(&factory)))&&SUCCEEDED(factory->CreateSwapChain(m_device,&description,&m_cacheSwapChain));
-        if(ready){ComPtr<ID3D11Texture2D> buffer;ready=SUCCEEDED(m_cacheSwapChain->GetBuffer(0,IID_PPV_ARGS(&buffer)))&&SUCCEEDED(m_device->CreateRenderTargetView(buffer.Get(),nullptr,&m_cacheTarget));}
+        if(ready)ready=SUCCEEDED(AcquireRenderTarget(m_device,m_cacheSwapChain,&m_cacheTarget));
         if(!ready){DestroyIconCache();HelpyIconPacks::Detached=false;PushToast("Could not detach the cache window; it remains in Helpy.",4);return false;}
         SendMessageW(m_cacheWindow,WM_SETICON,ICON_BIG,reinterpret_cast<LPARAM>(LoadImageW(m_module,MAKEINTRESOURCEW(IDI_RSMK),IMAGE_ICON,32,32,LR_SHARED)));
         SendMessageW(m_cacheWindow,WM_SETICON,ICON_SMALL,reinterpret_cast<LPARAM>(LoadImageW(m_module,MAKEINTRESOURCEW(IDI_RSMK),IMAGE_ICON,16,16,LR_SHARED)));
@@ -5107,8 +5894,8 @@ void HelpyStandaloneWindow::RebindNativeDevice(const LUID& adapter){
     if(!mapFile.empty())try{MapPanel::LoadImage({{"File",mapFile},{"Status","Ready"}},false);}catch(const std::exception& error){SetError(std::string("Map image reload: ")+error.what());}
     if(!aligned)m_nativeOverlay.Fail("The game's graphics adapter is unavailable; desktop presentation remains available");
 }
-void HelpyStandaloneWindow::DestroyDevice(){DestroyTarget();m_composition.Reset();if(m_swapChain){m_swapChain->Release();m_swapChain=nullptr;}if(m_context){m_context->Release();m_context=nullptr;}if(m_device){m_device->Release();m_device=nullptr;}}
-void HelpyStandaloneWindow::CreateTarget(){if(!m_swapChain)return;ID3D11Texture2D* backBuffer{};if(SUCCEEDED(m_swapChain->GetBuffer(0,IID_PPV_ARGS(&backBuffer)))){m_device->CreateRenderTargetView(backBuffer,nullptr,&m_target);backBuffer->Release();}}
+void HelpyStandaloneWindow::DestroyDevice(){HelpySupportPage::ReleaseImages();DestroyTarget();m_composition.Reset();if(m_swapChain){m_swapChain->Release();m_swapChain=nullptr;}if(m_context){m_context->Release();m_context=nullptr;}if(m_device){m_device->Release();m_device=nullptr;}}
+void HelpyStandaloneWindow::CreateTarget(){if(m_swapChain)AcquireRenderTarget(m_device,m_swapChain,&m_target);}
 void HelpyStandaloneWindow::DestroyTarget(){if(m_target){m_target->Release();m_target=nullptr;}}
 
 LRESULT CALLBACK HelpyStandaloneWindow::WndProc(HWND hwnd,UINT msg,WPARAM wParam,LPARAM lParam) {
@@ -5178,25 +5965,22 @@ LRESULT CALLBACK HelpyStandaloneWindow::WndProc(HWND hwnd,UINT msg,WPARAM wParam
     }
     case WM_SIZE:
         if(self&&hwnd!=self->m_hwnd){
-            IDXGISwapChain* swap=nullptr;ID3D11RenderTargetView** targetPtr=nullptr;
-            if(hwnd==self->m_cacheWindow){swap=self->m_cacheSwapChain;targetPtr=&self->m_cacheTarget;}
-            else if(hwnd==self->m_bayWindow){swap=self->m_baySwapChain;targetPtr=&self->m_bayTarget;}
-            else for(auto& panel:self->m_workspaces)if(hwnd==panel.Window){swap=panel.Swap;targetPtr=&panel.Target;break;}
-            if(!targetPtr)return 0;auto*& target=*targetPtr;
-            if(swap&&self->m_device&&wParam!=SIZE_MINIMIZED){
-                self->m_context->OMSetRenderTargets(0,nullptr,nullptr);
-                if(target){target->Release();target=nullptr;}
-                if(SUCCEEDED(swap->ResizeBuffers(0,LOWORD(lParam),HIWORD(lParam),DXGI_FORMAT_UNKNOWN,0))){
-                    ID3D11Texture2D* buffer=nullptr;if(SUCCEEDED(swap->GetBuffer(0,IID_PPV_ARGS(&buffer)))){self->m_device->CreateRenderTargetView(buffer,nullptr,&target);buffer->Release();}
-                }
+            IDXGISwapChain* swap=nullptr;ID3D11RenderTargetView** target=nullptr;
+            const wchar_t* surface=nullptr;
+            if(hwnd==self->m_cacheWindow){swap=self->m_cacheSwapChain;target=&self->m_cacheTarget;surface=L"Icon Cache";}
+            else if(hwnd==self->m_bayWindow){swap=self->m_baySwapChain;target=&self->m_bayTarget;surface=L"Item Bay";}
+            else for(size_t i=0;i<self->m_workspaces.size();++i)if(hwnd==self->m_workspaces[i].Window){
+                auto& panel=self->m_workspaces[i];swap=panel.Swap;target=&panel.Target;surface=WorkspaceCaption(i);break;
+            }
+            if(swap&&self->m_device&&self->m_context&&wParam!=SIZE_MINIMIZED){
+                const auto result=ResizeRenderTarget(self->m_device,self->m_context,swap,*target,LOWORD(lParam),HIWORD(lParam));
+                if(FAILED(result))self->SetError(GraphicsFailure(surface,"resize",result));
             }return 0;
         }
         if(self&&(HelpyEnvironment::Server()||PluginRuntimeServices::ExternalDesktop))self->m_visible=wParam!=SIZE_MINIMIZED;
         if(self&&self->m_device&&self->m_context&&self->m_swapChain&&wParam!=SIZE_MINIMIZED){
-            self->m_context->OMSetRenderTargets(0,nullptr,nullptr);self->DestroyTarget();
-            const auto resized=self->m_swapChain->ResizeBuffers(0,LOWORD(lParam),HIWORD(lParam),DXGI_FORMAT_UNKNOWN,0);
-            self->CreateTarget();
-            if(FAILED(resized)||!self->m_target)self->SetError("Helpy could not resize its display buffer; rendering is paused until the surface is available.");
+            const auto result=ResizeRenderTarget(self->m_device,self->m_context,self->m_swapChain,self->m_target,LOWORD(lParam),HIWORD(lParam));
+            if(FAILED(result))self->SetError(GraphicsFailure(L"Helpy main window","resize",result));
         }return 0;
     case WM_DPICHANGED:
         if(main){HelpyImGuiTheme::SetRuntimeDpi(static_cast<float>(HIWORD(wParam))/96.f);NativeCaption.Update(hwnd,HIWORD(wParam));}

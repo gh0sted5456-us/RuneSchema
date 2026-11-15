@@ -7,6 +7,7 @@
 #include "SDK/WeakObjectHandle.h"
 #include "Core/RuneSchemaDataRoot.h"
 #include "Core/PakDiscovery.h"
+#include "Runtime/PakLoader.h"
 #include "Core/NativePersistencePolicy.h"
 #include "Core/ModIdentity.h"
 #include "Core/ModManager.h"
@@ -68,6 +69,7 @@
 #include "Runtime/WorldBuildingSavePreflight.h"
 #include "Runtime/WorldBuildingRegistryValidation.h"
 #include "Runtime/PluginCatalog.h"
+#include "Runtime/SisterContent.h"
 #include "Runtime/Storefront.h"
 #include "Runtime/NativeExecutableDiscovery.h"
 #include "Runtime/NativeHookPatterns.h"
@@ -101,6 +103,7 @@ using namespace RC::Unreal;
 namespace fs = std::filesystem;
 
 namespace {
+    std::vector<PS::SisterContent::Root> SisterContentRoots;
     PS::CleanupNotice::WorldReceipt WorldCleanupReceipt;
     PS::WeakObjectHandle WorldCleanupReceiptWorld;
     // Each world is handled independently. The complete live building registry
@@ -978,8 +981,16 @@ namespace DragonWilds {
 
     }
 
-    void DragonWildsMainLoader::PreInitialize()
+    void DragonWildsMainLoader::PreInitialize(bool sisterContentEnabled)
     {
+        SisterContentRoots.clear();
+        if (sisterContentEnabled) {
+            try { SisterContentRoots = PS::SisterContent::Discover(GetModsPath()); }
+            catch (const std::exception& error) {
+                PS::Log<LogLevel::Warning>(STR("[SISTER-CONTENT][SKIPPED] Discovery failed: {}.\n"),
+                    PS::ToWideSafe(error.what()));
+            }
+        }
         const auto& settings=PS::PSConfig::Get()->GetSettings();
         if (PS::NativePersistencePolicy::BypassRequested(PS::Storefront::IsDedicatedServer(),
                 settings.persistence.allowCorruptCharacterEntry,settings.quickLaunch.mode))
@@ -1128,6 +1139,10 @@ namespace DragonWilds {
     void DragonWildsMainLoader::IterateModsFolder(const std::function<void(const std::filesystem::path&, const RC::StringType&)>& callback)
     {
         const auto modsPath = GetModsPath();
+        const auto visit = [&](const auto& load) {
+            for (const auto& name : m_orderedMods) load(modsPath / name, name);
+            for (const auto& root : SisterContentRoots) load(root.Content, root.Name);
+        };
         if (!m_orderResolved) {
             std::vector<RC::StringType> discovered;
             if (fs::exists(modsPath))
@@ -1137,10 +1152,10 @@ namespace DragonWilds {
             m_orderedMods = ModLoadOrder::Resolve(modsPath, discovered);
             m_orderResolved = true;
             nlohmann::json enabledMods=nlohmann::json::array();
-            for(const auto& folder:m_orderedMods){
+            visit([&](const fs::path& path, const RC::StringType& folder) {
                 const auto id=RC::to_string(folder);std::string name=id,version,website,modId;
                 try{
-                    const auto metadata=PS::ModManager::Metadata(modsPath/folder);
+                    const auto metadata=PS::ModManager::Metadata(path);
                     if(metadata.contains("name")&&PS::ServerModList::Text(metadata["name"],256)&&metadata["name"]!="")name=metadata["name"].get<std::string>();
                     if(metadata.contains("version")&&PS::ServerModList::Text(metadata["version"],64))version=metadata["version"].get<std::string>();
                     if(metadata.contains("modId")&&PS::ServerModList::Text(metadata["modId"],128)&&metadata["modId"]!="")modId=metadata["modId"].get<std::string>();
@@ -1149,13 +1164,12 @@ namespace DragonWilds {
                 enabledMods.push_back({{"Id",id},{"Name",name},{"Version",version}});
                 if(!modId.empty())enabledMods.back()["ModId"]=modId;
                 if(!website.empty())enabledMods.back()["Website"]=website;
-            }
+                PS::StartupTrace::Mark("mod order: " + id);
+            });
             try{m_registryBridge.SetEnabledMods(enabledMods);}
             catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[RS-NET-005] Enabled-mod list unavailable: {}. Content loading continues.\n"),PS::ToWideSafe(error.what()));}
-            for (const auto& name : m_orderedMods)
-                PS::StartupTrace::Mark("mod order: " + RC::to_string(name));
         }
-        for (const auto& folderName : m_orderedMods) callback(modsPath / folderName, folderName);
+        visit(callback);
     }
 
     void DragonWildsMainLoader::SetupPostEngineInitLoaders()
@@ -1164,6 +1178,10 @@ namespace DragonWilds {
         InitializeMods(EEngineLifecyclePhase::PostEngineInit);
         LoadMods(EEngineLifecyclePhase::PostEngineInit);
         SetupLogicPakBridge();
+        if(m_spawnLoader&&PS::PSConfig::Get()->ItemDeliveryMode()!="off")
+            IterateModsFolder([&](const fs::path& path,const RC::StringType& owner){
+                m_spawnLoader->RegisterItemDeliverySource(path,owner);
+            });
         if(auto ready=std::move(m_modsReady))ready();
         PS::StartupTrace::Mark("PostEngineInit complete");
     }
@@ -1316,6 +1334,20 @@ namespace DragonWilds {
     void DragonWildsMainLoader::SetupGameInstanceInitLoaders()
     {
         PS::StartupTrace::Mark("GameInstanceInit loaders begin");
+        {
+            PS::AssetPreload::Plan<RC::StringType> plan;
+            const auto* config=PS::PSConfig::Get();
+            if(config->IsLoaderEnabled("recipes"))for(auto& loader:m_loaders)if(loader->GetModFolderType()=="recipes"){
+                auto& recipes=static_cast<DragonWildsRecipeModLoader&>(*loader);
+                recipes.ImportCookedDefinitions();
+                for(const auto& path:recipes.CookedReferencePaths())plan.Add(path);
+            }
+            if(config->IsLoaderEnabled("assets"))for(auto& loader:m_loaders)if(loader->GetModFolderType()=="assets")
+                for(const auto& path:static_cast<DragonWildsAssetModLoader*>(loader.get())->CookedReferencePaths())plan.Add(path);
+            PS::StartupTrace::Mark("cooked asset prefetch begin");
+            try {PrefetchCookedAssets(plan);}catch(const std::exception& error){PS::Log<LogLevel::Normal>(STR("[PERF][ASSETS] Native prefetch unavailable: {}. Required-asset loading continues normally.\n"),PS::ToWideSafe(error.what()));}
+            PS::StartupTrace::Mark("cooked asset prefetch complete");
+        }
         InitializeMods(EEngineLifecyclePhase::GameInstanceInit);
         LoadMods(EEngineLifecyclePhase::GameInstanceInit);
 
@@ -1484,6 +1516,7 @@ namespace DragonWilds {
         auto npcs=std::make_unique<DragonWildsNpcLoader>(recipeService);
         auto* npcService=npcs.get();
         npcService->PublishCleanupNotice=[this](RC::Unreal::UObject* controller,std::size_t removed,const std::string& mod){return m_registryBridge.PublishCleanupNotice(controller,removed,mod);};
+        npcService->PublishPlayerActivity=[this](RC::Unreal::UObject* controller,const std::string& payload){return m_registryBridge.PublishPlayerActivity(controller,payload);};
         npcService->NotifyWorldCleanup=[this](RC::Unreal::UObject* controller){
             auto* world=WorldCleanupReceiptWorld.Get();
             if(controller&&world&&WorldCleanupReceipt.Pending(controller,controller->GetWorld())&&controller->GetWorld()==world
@@ -1497,6 +1530,7 @@ namespace DragonWilds {
         m_registryBridge.ClientNotification=[this,npcService](RC::Unreal::UObject* player,const std::string& channel,
             const std::string& entity,const std::string& payload){
             if(channel=="helpy.marks"){if(m_spawnLoader)m_spawnLoader->HandleNetworkHelpyMarks(player,payload);return;}
+            if(channel=="helpy.activity"){(void)GameplayEventObserver::ReceiveRemote(payload);return;}
             npcService->HandleNetworkNotification(player,channel,entity,payload);
         };
         npcService->PublishWorldState=[this](const std::string& instance,const std::string& record){
@@ -1846,7 +1880,6 @@ namespace DragonWilds {
     {
         bool buildingOwnershipComplete=true;
         if(engineLifecyclePhase==EEngineLifecyclePhase::GameInstanceInit){
-            PS::AssetPreload::Plan<RC::StringType> plan;
             for(auto& loader:m_loaders){
                 const auto& kind=loader->GetModFolderType();
                 if(!PS::PSConfig::Get()->IsLoaderEnabled(kind)){
@@ -1860,18 +1893,9 @@ namespace DragonWilds {
                     }
                     continue;
                 }
-                if(kind=="recipes")static_cast<DragonWildsRecipeModLoader*>(loader.get())->ImportCookedDefinitions();
                 if(kind=="buildings")static_cast<DragonWildsBuildingModLoader*>(loader.get())->ImportCookedDefinitions();
                 if(kind=="journal"||kind=="lore")static_cast<DragonWildsJournalModLoader*>(loader.get())->ImportCookedDefinitions();
-                if(kind=="recipes")for(const auto& path:static_cast<DragonWildsRecipeModLoader*>(loader.get())->CookedReferencePaths())plan.Add(path);
             }
-            // Recipes are the next blocking consumer. Other assets use the
-            // remaining prefetch budget after those references are queued.
-            if(PS::PSConfig::Get()->IsLoaderEnabled("assets"))for(auto& loader:m_loaders)if(loader->GetModFolderType()=="assets")
-                for(const auto& path:static_cast<DragonWildsAssetModLoader*>(loader.get())->CookedReferencePaths())plan.Add(path);
-            PS::StartupTrace::Mark("cooked asset prefetch begin");
-            try {PrefetchCookedAssets(plan);}catch(const std::exception& error){PS::Log<LogLevel::Normal>(STR("[PERF][ASSETS] Native prefetch unavailable: {}. Required-asset loading continues normally.\n"),PS::ToWideSafe(error.what()));}
-            PS::StartupTrace::Mark("cooked asset prefetch complete");
         }
         if (engineLifecyclePhase == EEngineLifecyclePhase::GameInstanceInit
             && PS::PSConfig::Get()->IsLoaderEnabled("recipes")) {
@@ -2077,9 +2101,13 @@ namespace DragonWilds {
     void DragonWildsMainLoader::GetPakFolders(const TCHAR* CmdLine, TArray<FString>* OutPakFolders)
     {
         GetPakFolders_Hook.call(CmdLine, OutPakFolders);
+        if (!OutPakFolders || OutPakFolders->Num() < 0 || OutPakFolders->Num() > 4096) return;
         PS::PakDiscovery::ResetRoots();
-        if(OutPakFolders&&OutPakFolders->Num()>=0&&OutPakFolders->Num()<=4096)
-            for(const auto& folder:*OutPakFolders)PS::PakDiscovery::RememberRoot(fs::path(folder.GetCharArray().GetData()));
+        std::vector<fs::path> nativeRoots;
+        for (const auto& folder : *OutPakFolders) {
+            nativeRoots.emplace_back(folder.GetCharArray().GetData());
+            PS::PakDiscovery::RememberRoot(nativeRoots.back());
+        }
 
         try
         {
@@ -2149,6 +2177,29 @@ namespace DragonWilds {
                 PS::Log<LogLevel::Error>(STR(
                     "Mod pak order rejected; no mod PAK directories were added (fail-closed): {}\n"),
                     PS::ToWideSafe(error.what()));
+        }
+        for (const auto& root : SisterContentRoots) {
+            try {
+                const auto directories = PS::ModFolderLayout::PakReadDirectories(root.Content);
+                const auto owner = RC::to_string(root.Name);
+                for (const auto& directory : directories) {
+                    pakRoots.push_back(directory);
+                    pakOwners[directory] = owner;
+                }
+                if (!directories.empty()) {
+                    PS::MountedModRegistryOwners::Remember(owner);
+                    PS::Log<LogLevel::Normal>(STR("[SISTER-CONTENT][PAK] {}: {} startup container directories.\n"),
+                        root.Name, directories.size());
+                }
+            } catch (const std::exception& error) {
+                PS::Log<LogLevel::Warning>(STR("[SISTER-CONTENT][PAK][SKIPPED] {}: {}.\n"),
+                    root.Name, PS::ToWideSafe(error.what()));
+            }
+        }
+        for (const auto& paks : PS::PakLoader::Roots()) {
+            if (!PS::PakLoader::AlreadyRegistered(paks, nativeRoots)
+                && !PS::PakLoader::AlreadyRegistered(paks, pakRoots))
+                pakRoots.push_back(paks);
         }
         std::unordered_set<std::wstring> registered;
         size_t addedPakDirectories = 0;

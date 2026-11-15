@@ -2,6 +2,8 @@
 -- Adapted for RuneSchema's process bridge; see licenses/ModMenu-MIT.txt.
 -- No UMG widgets, input hooks or pause-menu hooks are installed by this adapter.
 if type(RuneSchemaModMenuExchange)~="function" then return end
+local offline=RuneSchemaModMenuOffline==true
+if not offline then
 local ok,other=pcall(function() return ModRef:GetSharedVariable("ModMenu.version") end)
 if ok and type(other)=="string" and other~="" then
     RuneSchemaModMenuExchange('{"Op":"stop","Reason":"Separate Mod Menu was already loaded. Restart after disabling it."}')
@@ -10,6 +12,7 @@ end
 if type(ExecuteInGameThreadWithDelay)~="function" then
     RuneSchemaModMenuExchange('{"Op":"stop","Reason":"UE4SS game-thread delayed actions are unavailable"}')
     return
+end
 end
 local function HMencode(value)
     local kind=type(value)
@@ -39,6 +42,8 @@ do
             if c == " " or c == "\t" or c == "\r" or c == "\n" then i = i + 1
             elseif c == "/" and s:sub(i + 1, i + 1) == "/" then   -- tolerate // comments
                 local e = s:find("\n", i, true); i = e and e + 1 or #s + 1
+            elseif c=="/" and s:sub(i+1,i+1)=="*" then
+                local e=s:find("*/",i+2,true);if not e then error("unterminated JSON block comment",0) end;i=e+2
             else return i end
         end
     end
@@ -152,10 +157,10 @@ local function readFile(path)
     local reply=exchange("read",{Path=path});baselines[path]=reply
     return reply.Exists and reply.Text or nil
 end
-local function writeFile(path,text)
+local function writeFile(path,text,jsonPatch)
     local previous=baselines[path];if not previous then return false end
-    local reply=exchange("write",{Path=path,Exists=previous.Exists,Expected=previous.Text,Text=text})
-    if reply.Saved then baselines[path]={Exists=true,Text=text};return true end
+    local reply=exchange("write",{Path=path,Exists=previous.Exists,Expected=previous.Text,Text=text,JsonPatch=jsonPatch})
+    if reply.Saved then return true end
     return false
 end
 
@@ -412,8 +417,10 @@ local function loadValues(m)
 end
 
 local function saveValues(m)
+    local before=baselines[m.cfgPath]
+    local text=before and before.Exists and before.Text or nil
     if m.format == "json" then
-        local text = readFile(m.cfgPath)
+        if offline then return writeFile(m.cfgPath,HMencode(m.values),true) end
         local obj = (text and json.decode(text)) or {}
         if type(obj) ~= "table" then obj = {} end
         local order, seenK = {}, {}
@@ -423,7 +430,7 @@ local function saveValues(m)
         for k in pairs(obj) do if not seenK[k] and type(obj[k]) ~= "table" then order[#order + 1] = k end end
         return writeFile(m.cfgPath, json.encodeFlat(obj, order))
     end
-    local text = readFile(m.cfgPath) or ""
+    text = text or ""
     local nl = text:find("\r\n", 1, true) and "\r\n" or "\n"
     if m.format == "lua" then
         if text == "" then return false end
@@ -485,6 +492,7 @@ end
 -- value of every mod again.
 local sent = {}
 local function share(name, v)
+    if offline then return end
     if v ~= nil and sent[name] == v then return end
     local ok, e = pcall(function() ModRef:SetSharedVariable(name, v) end)
     if ok then sent[name] = v
@@ -507,7 +515,7 @@ local function modsTxtFor(root)
     if t then return t end
     t = {}
     local text = readFile(root .. "\\mods.txt")
-    for line in ((text or "") .. "\n"):gmatch("([^\n]*)\n") do
+    for line in (((text or ""):gsub("^\239\187\191", "")) .. "\n"):gmatch("([^\n]*)\n") do
         local name, on = line:match("^%s*([^;:][^:]-)%s*:%s*(%d)")
         if name then t[name:lower()] = on end
     end
@@ -517,8 +525,7 @@ end
 
 local function switchedOff(folder, dir, runeSchema)
     if runeSchema then return nil end -- RuneSchema presents only packages of enabled parents.
-    local f = io.open(dir .. "\\enabled.txt", "r")
-    if f then f:close(); return nil end
+    if readFile(dir .. "\\enabled.txt") then return nil end
     local root = dir:match("^(.*)[/\\][^/\\]*$")
     if not root then return nil end
     if modsTxtFor(root)[folder:lower()] == "1" then return nil end
@@ -530,6 +537,7 @@ local function templateContext(m)
     local definition=m.helpy and m.helpy.templates
     local variable=definition and definition.contextVariable
     if not variable then return "" end
+    if offline then return nil end
     local ok,value=pcall(function()return ModRef:GetSharedVariable(variable)end)
     if ok and type(value)=="string" and #value>0 and #value<=256 then return value end
     return nil
@@ -656,7 +664,8 @@ end
 
 
 local openN,openId,openRow,lastStatus,lastOpen,lastSet=0,"","","","",""
-local running,hostAuthority=true,false
+local running,hostAuthority=true,offline
+local discoveryWarning=""
 local function publish()
     local pages=setmetatable({},{__json_array=true})
     for _,m in ipairs(mods) do
@@ -664,24 +673,32 @@ local function publish()
             Settings=m.settings,Values=m.values,Errors=m.errors,Off=m.off,RunsOn=m.runsOn,Revision=m.rev,Helpy=m.helpy,PreviewChannel=m.previewChannel,TemplateContext=m.templateContext}
         share("ModMenu.health."..m.id,m.off and "off" or "unknown")
     end
-    exchange("publish",{Snapshot={Pages=pages,OpenSequence=openN,OpenId=openId,OpenRow=openRow,Status=lastStatus}})
+    exchange("publish",{Snapshot={Pages=pages,OpenSequence=openN,OpenId=openId,OpenRow=openRow,Status=lastStatus,DiscoveryWarning=discoveryWarning}})
 end
 local function refresh()
-    local entries=exchange("catalog").Pages or {};local list,byId={},{}
-    for _,entry in ipairs(entries) do
-        local ok,m=pcall(loadSchema,entry.Folder,entry.Path)
-        if ok and m then
-            local previous=modsById[m.id];if previous then m.rev=previous.rev;m.actionN=previous.actionN end
-            if byId[m.id] then m.errors[#m.errors+1]="Duplicate Mod Menu id";m.id=m.id.."_"..m.folder end
-            byId[m.id]=m;list[#list+1]=m
-        else lastStatus=tostring(m) end
+    local catalog=exchange("catalog");local list,byId={},{}
+    discoveryWarning=catalog.Warning or ""
+    for _,entry in ipairs(catalog.Pages or {}) do
+        local ok,m
+        if not entry.Error then ok,m=pcall(loadSchema,entry.Folder,entry.Path) end
+        if not ok then
+            m={id=entry.Folder,name=entry.Folder,folder=entry.Folder,dir=entry.Path,settings=setmetatable({},{__json_array=true}),values={},errors={entry.Error or tostring(m)},rev=0,actionN=0,unavailable=true}
+        end
+        if byId[m.id] then
+            local base=m.id.."_"..m.folder;local index=1;m.id=base
+            while byId[m.id] do index=index+1;m.id=base.."_"..index end
+            m.errors[#m.errors+1]="Duplicate Mod Menu id; this page uses "..m.id
+        end
+        local previous=modsById[m.id];if previous and previous.dir==m.dir then m.rev=previous.rev;m.actionN=previous.actionN end
+        byId[m.id]=m;list[#list+1]=m
     end
     table.sort(list,function(a,b)return a.name:lower()<b.name:lower() end);mods,modsById=list,byId
-    for _,m in ipairs(mods) do publishAll(m) end
+    for _,m in ipairs(mods) do if not m.unavailable then publishAll(m) end end
 end
 local function change(id,key,value,expected,reset,action)
     local previous=assert(modsById[id],"Mod Menu page is unavailable")
-    local m=loadSchema(previous.folder,previous.dir);m.rev=previous.rev;m.actionN=previous.actionN;modsById[id]=m
+    assert(not previous.unavailable,"Refresh after repairing this mod's menu schema")
+    local m=loadSchema(previous.folder,previous.dir);m.id=id;m.rev=previous.rev;m.actionN=previous.actionN;modsById[id]=m
     for i,current in ipairs(mods) do if current.id==id then mods[i]=m;break end end
     if action then
         for _,s in ipairs(m.settings) do if s.type=="button" and s.action==action then
@@ -703,7 +720,8 @@ local function change(id,key,value,expected,reset,action)
 end
 local function applyTemplate(c)
     local previous=assert(modsById[c.Id],"Mod Menu page is unavailable")
-    local m=loadSchema(previous.folder,previous.dir);m.rev=previous.rev;m.actionN=previous.actionN
+    assert(not previous.unavailable,"Refresh after repairing this mod's menu schema")
+    local m=loadSchema(previous.folder,previous.dir);m.id=c.Id;m.rev=previous.rev;m.actionN=previous.actionN
     local definition=assert(m.helpy and m.helpy.templates,"This mod has not declared template support")
     assert(c.TemplateId==definition.id and c.TemplateVersion==definition.version,"Template contract changed; refresh the preview")
     assert(c.Revision==m.rev,"This page changed; review the template again")
@@ -738,6 +756,19 @@ local function command(c)
     elseif c.Op=="reset" then change(c.Id,nil,nil,nil,true)
     elseif c.Op=="button" then change(c.Id,nil,nil,nil,false,c.Action)
     elseif c.Op=="page" then share("ModMenu.page",c.Id or "");share("ModMenu.rect",c.Rect or "");share("ModMenu.quick","") end
+end
+if offline then
+    refresh()
+    publish()
+    return function(input)
+        local c,issue=json.decode(input)
+        if not c then error(issue or "Invalid Mod Menu command") end
+        assert(c.Op=="set" or c.Op=="reset" or c.Op=="refresh" or c.Op=="template_apply","This action requires a running game.")
+        local ok,problem=pcall(command,c)
+        if not ok then refresh() end
+        lastStatus=ok and (c.Op=="refresh" and "" or "Saved for the next game launch") or tostring(problem)
+        publish()
+    end
 end
 local function tick()
     local version=ModRef:GetSharedVariable("ModMenu.version")

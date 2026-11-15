@@ -65,6 +65,8 @@ public:
     bool RequestAuthority(const std::string& action,const std::string& payload);
     void PublishHelpyResult(RC::Unreal::UObject* player,int64_t revision,const nlohmann::json& result);
     bool PublishCleanupNotice(RC::Unreal::UObject* controller,std::size_t removed,const std::string& mod);
+    // Host -> owning client: a confirmed kill for that player's Helpy achievements (channel helpy.activity).
+    bool PublishPlayerActivity(RC::Unreal::UObject* controller,const std::string& payload);
     // Publishes an allow-listed presentation event through the replicated
     // GameState bridge. The payload contains semantic cue data only; asset
     // paths are rejected and client consumers remain mod-owned.
@@ -86,10 +88,12 @@ public:
 private:
     int64_t m_helpyAccessRevision=0;
     uint64_t m_helpyAccessGeneration=0;
-    bool m_helpyAccessStatusRequested=false;
     bool m_helpyPinNoticeSent=false;
-    std::chrono::steady_clock::time_point m_helpyAccessRefreshAt{};
     PS::WeakObjectHandle m_helpyAccessComponent;
+    PS::WeakObjectHandle m_helpyPolicyController;
+    uint64_t m_helpyPolicyGeneration=0,m_sentHelpyAuthorityVersion=0;
+    int64_t m_receivedHelpyPolicyRevision=0;
+    std::unordered_map<RC::Unreal::UObject*,PS::WeakObjectHandle> m_helpyPolicyPeers;
     int64_t m_helpyMutationRevision=0;
     uint64_t m_helpyMutationGeneration=0;
     PS::WeakObjectHandle m_helpyMutationComponent;
@@ -309,6 +313,9 @@ private:
     void ReceiveConsumedOwnerPresentation(RC::Unreal::UObject*,RC::Unreal::UFunction*,const std::string&,int64_t,const nlohmann::json&);
     void HandleGenericRequest(RC::Unreal::UObject* source,RC::Unreal::UFunction* function,void* parameters);
     void ObserveClientTransport(RC::Unreal::UObject* source,RC::Unreal::UFunction* function,void* parameters);
+    void ApplyHelpyAccessStatus(const nlohmann::json& access,bool success,const std::string& detail);
+    void PublishHelpyPolicy();
+    void ResetHelpyClientAccess();
     void ObservePresentationTransport(RC::Unreal::UObject* source,RC::Unreal::UFunction* function,void* parameters);
     void DeliverPresentation(RC::Unreal::UObject* context,const std::string& pluginId,const std::string& connection,
         const std::string& entityId,const std::string& payload,int64_t revision,RC::Unreal::UObject* ownerPawn=nullptr);
