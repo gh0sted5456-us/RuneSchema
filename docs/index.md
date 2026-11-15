@@ -24,8 +24,8 @@ hide:
   <a href="CURRENT-RELEASE/">Stable · 0.8.0.3 <span aria-hidden="true">→</span>
     <small>The stable download, released changes and installation guides.</small>
   </a>
-  <a href="experimental/PRE-RELEASE/">Pre-release · 0.8.1.0 <span aria-hidden="true">→</span>
-    <small>Test the candidate. Read the pending changelog, setup and known limits.</small>
+  <a href="experimental/PRE-RELEASE/">Pre-release · 0.9.0.0 <span aria-hidden="true">→</span>
+    <small>Preview Helpy achievements and the threading update. Read the changelog and setup guide.</small>
   </a>
 </div>
 
