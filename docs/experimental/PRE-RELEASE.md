@@ -3,10 +3,10 @@ channel: experimental
 promote_to: RELEASE-1.0.0.md
 ---
 
-# RuneSchema 1.0.0 Pre Release
+# RuneSchema 0.9.0.0 Pre Release
 
 <div class="rs-actions">
-  <a class="md-button md-button--primary" href="https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0-pre.20261114.3/RuneSchema-0.8.1.0-preview-20261114.3.zip">Download RuneSchema</a>
+  <a class="md-button md-button--primary" href="https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.9.0.0-pre.20261115.1/RuneSchema-0.9.0.0-preview-20261115.1.zip">Download RuneSchema</a>
   <a class="md-button" href="../INSTALLATION/">Installation</a>
 </div>
 
@@ -34,6 +34,7 @@ This prerelease packages RuneSchema and Helpy for Dragonwilds CL260223. Install 
 
 ### Item Bay, filters, and caches
 
+- Interactive live checks continue sooner between slices. Learned-item writes preserve the newest observation, skip redundant settled repeats, and coalesce cached-search index rebuilds across live search slices.
 - Item Bay can browse saved items and icons offline. The search bar groups source, category, family, and display-name filters. The display/internal-name switch preserves the current query, selection, and asset identity.
 - Cached searches reuse prepared indexes and unchanged rows. Live searches reuse the mounted item index, and discoveries with valid asset identities are saved for later searches. Live work and cancellation run off Helpy’s UI thread.
 - Downloaded records and icon packs remain available to the cache. Learned-item writes retry in order after a failure. Diagnostics report failed writes and discarded observations. Unchanged cache writes and repeated source-plan copies are reduced.
@@ -41,6 +42,17 @@ This prerelease packages RuneSchema and Helpy for Dragonwilds CL260223. Install 
 - Search and cache controls retain cached results during updates. Source grouping and name recovery preserve readable labels and distinguish different assets with the same display name. Cooked equipment types help categorize weapons, armor, and ammunition.
 - Select individual items or groups and move them to the cart. **Send to player…** opens a separate quantity and recipient picker for one item while preserving the staged cart.
 - **Cache enabled mods** runs a sequential queue with pause, resume, stop, and per-mod results. Installed mods and vanilla files can be read in the cache worker. Cache bundles preserve portable item taglines and tips.
+
+### Mod achievements and Gamer Points
+
+- Mods can declare achievements and award RuneSchema Gamer Points. In **Mods**, right-click an enrolled mod and choose **View Achievements**, or open **View All Achievements** to browse every enrolled mod.
+- Achievement placards show the award's points and dim locked entries. Hover to see unlock details when available. The player profile shows the total with a color-tiered points badge.
+- The native HUD plays a RuneSchema logo reveal for an unlock while the game keeps focus. The award can play an optional chime, and the notification respects Windows reduced-motion settings.
+
+### Helpy responsiveness
+
+- Input state updates and achievement requests use a background connection to RuneSchema Core. Closing Helpy coordinates with pending input work, and replies from a previous attachment cannot replace the active player's achievement view.
+- Catalog responses reuse a shared snapshot so Helpy's transport can read a consistent catalog without copying the full result while the catalog lock is held.
 
 ### World map, HUD, and presentation
 
@@ -60,6 +72,8 @@ This prerelease packages RuneSchema and Helpy for Dragonwilds CL260223. Install 
 
 ### Mods, authoring, and content registration
 
+- Named `$RuntimeWidget` and `$RuntimeUI` rules filter events before walking the owner hierarchy. Wildcard rules and UI teardown retain their normal handling.
+- Helpy's **Mods → UE4SS mods** list shows **J4S PAKLoader** and **Maxx's Mod Menu** badges on cards and in Compact view. Refresh the inventory after adding a descriptor.
 - RuneSchema and UE4SS share a compact mod-management view with metadata, license inspection, next-launch loader controls, and cache actions. The UE4SS inventory distinguishes external packages and RuneSchema-owned packages.
 - The bundled **RuneSchema.UE4SS.Bridge** lets an enabled standalone UE4SS mod declare and register RuneSchema content, including appearance and mod-data declarations.
 - **Mods → Mod Menu 2** adds a key-gated Helpy editor with legacy callbacks, offline editing for supported settings, optional character tabs, and template import and export. Supported controls include sliders, radial choices, and RGB/RGBA colors. A schema error stays on its own page so valid pages remain available. The existing external Mod Menu keeps precedence when enabled.
@@ -69,6 +83,8 @@ This prerelease packages RuneSchema and Helpy for Dragonwilds CL260223. Install 
 
 ### Saves, startup, and diagnostics
 
+- RuneSchema reads and parses mod JSON ahead on a bounded worker pool when the host has at least four hardware threads. Loader callbacks and diagnostics still run in file order on the calling thread.
+- Automatic reflection mapping capture now requires a fresh request from RuneSchema Core. Steam and Game Pass both reused their cached mappings on the next startup without writing a new dump.
 - Helpy’s Save Recovery view lists character snapshots with their reason and active mod metadata. World snapshot and restore controls are opt-in. Cleanup stays scoped to the selected save and uses verified backups on supported paths.
 - Character copy, import, and export follow redirected save roots. Core and Helpy share the resolved AppData root while guarding nested paths. Optional world archive errors are reported separately from verified cleanup backups.
 - Startup discovery reuses mounted-directory results, ownership checks, and ready recipe references. Registry merging reduces duplicate copies. Recipe prefetch stays bounded, malformed plugin order entries leave other plugins available, and temporary reflected map and array values release nested allocations.
@@ -78,9 +94,9 @@ This prerelease packages RuneSchema and Helpy for Dragonwilds CL260223. Install 
 
 ## Verification
 
-All 86 runtime files passed SHA-256 verification. Helpy started from a clean extraction, and nine Helpy tests and two core tests passed. The core starts an isolated Steam dedicated server on Dragonwilds CL260223. The packaged runtime matches the verified desktop Steam, desktop Game Pass, and dedicated Steam installations by hash.
+The release includes a SHA-256 verification manifest covering all 86 files in the runtime ZIP. See the GitHub pre-release for the build and test results.
 
-[Release files and checksums](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.8.1.0-pre.20261114.3)
+[Release files and checksums](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.9.0.0-pre.20261115.1)
 
 ## Feedback
 
