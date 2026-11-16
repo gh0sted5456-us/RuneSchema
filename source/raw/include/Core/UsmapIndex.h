@@ -3,12 +3,18 @@
 #include <cstdint>
 #include <filesystem>
 #include <mutex>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <vector>
 #include <nlohmann/json.hpp>
 
 namespace PS::Usmap {
+
+inline void ValidateFileSize(std::uintmax_t size) {
+    if (size < 12 || size > 128ull * 1024 * 1024)
+        throw std::runtime_error("USMAP file size is outside the 12-byte to 128-MiB limit");
+}
 
 class Index {
 public:

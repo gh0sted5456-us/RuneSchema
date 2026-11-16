@@ -114,6 +114,8 @@ int main(int argc,char** argv)try{namespace fs=std::filesystem;using namespace P
     {std::ofstream f(descriptor);f<<"{}";}
     auto nativeSources=Inspect(scoped,plan);assert(nativeSources.NativePlugins.contains("brynmoor")&&!nativeSources.NativePlugins.contains(""));
     Current={};assert(AcceptRemote(Document(nativeSources)));assert(Current.NativePlugins.contains("brynmoor"));
+    {auto offline=Document(nativeSources);offline["PresentationOnly"]=true;assert(AcceptRemote(offline));assert(Current.PresentationOnly&&Current.Provisional&&!Current.Authoritative);
+        assert(!AcceptRemote(offline));assert(AcceptRemote(Document(nativeSources)));assert(!Current.PresentationOnly&&!Current.Provisional&&Current.Authoritative);}
     const auto nativePak=base/"scoped"/"Content"/"Paks"/"scoped-Windows.pak";fs::create_directories(nativePak.parent_path());
     const nlohmann::json packedManifest={{"Contents",nlohmann::json::array({
         {{"File","../../../scoped/Plugins/GameFeatures/UmbralSands/UmbralSands.uplugin"},{"Descriptor",{{"CanContainContent",true}}}},

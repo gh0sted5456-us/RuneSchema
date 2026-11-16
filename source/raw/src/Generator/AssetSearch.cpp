@@ -517,6 +517,13 @@ std::string PresentationName(UObject* object){
 }
 namespace {
 LearnedItemCatalog::Store LearnedItems;
+LearnedItemCatalog::IndexRefresh LearnedIndexRefresh;
+const std::vector<std::string>& PriorityItemPaths(){
+    static uint64_t revision=0,generation=0;static std::vector<std::string> paths;
+    const auto current=SpawnToolRequests::Generation.load();
+    if(revision!=AssetProvenance::Revision()||generation!=current){paths=AssetProvenance::LivePaths();revision=AssetProvenance::Revision();generation=current;}
+    return paths;
+}
 const std::vector<F2Catalog::Candidate>& ContainerItemMetadata(){
     static std::string key;static std::vector<F2Catalog::Candidate> items;
     const auto& snapshot=HelpySourceCache::Current;
@@ -531,7 +538,7 @@ const std::vector<F2Catalog::Candidate>& ContainerItemMetadata(){
 }
 }
 json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,std::uint64_t startSeed,bool randomOrder,
-    const std::string& fieldSet,std::size_t scanBudget,std::uint64_t timeBudgetMicros,bool classIndex) {
+    const std::string& fieldSet,std::size_t scanBudget,std::uint64_t timeBudgetMicros,bool classIndex,bool refreshMounted) {
     if(limit<1||limit>128)throw std::runtime_error("Catalog window limit must be 1..128 rows.");
     if(query.size()>512)throw std::runtime_error("Catalog query and filter controls exceed 512 characters.");
     if(fieldSet!="BasicRow"&&fieldSet!="Detail")throw std::runtime_error("Unsupported item catalog field projection.");
@@ -545,18 +552,26 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
     const auto familyFilter=ItemFamily::TakeFilter(searchQuery);
     if(searchQuery.size()>256)throw std::runtime_error("Catalog search text exceeds 256 characters.");
     if(!searchQuery.empty()){std::istringstream words(searchQuery);std::string word;while(words>>word){word=AssetTemplate::Fold(std::move(word));if(!word.empty())queryTokens.push_back(std::move(word));}}
-    const auto matchesTokens=[&](const std::string& candidate){if(queryTokens.empty())return true;const auto folded=AssetTemplate::Fold(candidate);for(const auto& token:queryTokens)if(folded.find(token)==std::string::npos)return false;return true;};
+    const auto matchesFolded=[&](std::string_view text){
+        return std::all_of(queryTokens.begin(),queryTokens.end(),[&](const auto& token){return text.find(token)!=text.npos;});
+    };
+    const auto matchesTokens=[&](std::string candidate){return queryTokens.empty()||matchesFolded(AssetTemplate::Fold(std::move(candidate)));};
     auto* itemType=Class("assets");if(!itemType)throw std::runtime_error("ItemData class is not ready.");
     const auto objectCount=FUObjectArray::GetNumElements();
     if(objectCount<0||objectCount>4'000'000)throw std::runtime_error("Global object roster exceeds the safe catalog bound.");
     static std::string mountedScope;static bool mountedReady=false;static std::vector<CookedAssets::Record> mountedItems;
+    struct MountedHint {std::string Name,Search;};
+    static std::vector<std::optional<MountedHint>> mountedHints;
+    static std::chrono::steady_clock::time_point nextMetadataRefresh{};
+    const auto now=std::chrono::steady_clock::now();
     const auto generation=SpawnToolRequests::Generation.load();
     // A verified content census change may reflect a newly mounted package.
     // Re-query live ItemData metadata once for that scope, not on every poll or
     // thumbnail update. This observes mounts; it does not mount/re-register them.
     const auto metadataScope=json::array({generation,HelpySourceCache::PublishedCatalogKey(),HelpySourceCache::Current.Authoritative,HelpySourceCache::Current.Provisional}).dump();
-    if(!mountedReady||mountedScope!=metadataScope) {
-        if(mountedScope!=metadataScope){mountedReady=false;mountedItems.clear();}
+    if(mountedScope!=metadataScope||((refreshMounted||!mountedReady)&&now>=nextMetadataRefresh)) {
+        nextMetadataRefresh=now+(mountedReady?std::chrono::seconds(30):std::chrono::seconds(2));
+        if(mountedScope!=metadataScope){mountedScope=metadataScope;mountedReady=false;mountedItems.clear();}
         bool classMetadataReady=false;
         try {
             // Ask the native registry for ItemData (including subclasses),
@@ -581,15 +596,21 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
         std::unordered_set<std::string> known;for(const auto& record:mountedItems)known.insert(F2Catalog::Lower(record.path));
         for(const auto& candidate:ContainerItemMetadata())if(known.insert(F2Catalog::Lower(candidate.path)).second)
             mountedItems.push_back({candidate.path,candidate.name,{}});
+        mountedHints.clear();mountedHints.resize(mountedItems.size());
+        if(!mountedReady)nextMetadataRefresh=now+std::chrono::seconds(2);
     }
-    const auto priorityPaths=AssetProvenance::LivePaths();
+    const bool mountedFirst=!queryTokens.empty()||!familyFilter.empty()||!providerFilter.empty();
+    static const std::vector<std::string> noPriority;
+    const auto& priorityPaths=mountedFirst?noPriority:PriorityItemPaths();
     const std::unordered_set<std::string> prioritySet(priorityPaths.begin(),priorityPaths.end());
     static std::string indexedScope;static std::vector<WeakObjectHandle> indexedItems;
     static std::unordered_map<std::string,WeakObjectHandle> indexedPaths;
+    static std::chrono::steady_clock::time_point nextLoadedRefresh{};
     const bool useClassIndex=classIndex&&FUObjectHashTables::IsAvailable();
     if(useClassIndex){
-        const auto scope=json::array({generation,HelpySourceCache::PublishedFingerprint(),priorityPaths}).dump();
-        if(scope!=indexedScope){
+        const auto scope=json::array({generation,HelpySourceCache::Current.CatalogKey,AssetProvenance::Revision(),mountedFirst}).dump();
+        if(scope!=indexedScope||(mountedFirst&&offset==0&&now>=nextLoadedRefresh)){
+            nextLoadedRefresh=now+std::chrono::seconds(2);
             TArray<UObject*> items;UECustom::UObjectGlobals::GetObjectsOfClass(itemType,items,true);
             if(items.Num()<0||items.Num()>AlphabeticalItemCatalog::Cache::MaxRows)throw std::runtime_error("Native item class index exceeds its safe bound");
             indexedItems.clear();indexedItems.reserve(items.Num());indexedPaths.clear();
@@ -601,28 +622,41 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
     // the original time-bounded object-array walk, not a synchronous fallback.
     const ItemCatalogLayout layout{{priorityPaths.size(),useClassIndex?indexedItems.size():static_cast<std::size_t>(objectCount),mountedItems.size()}};
     const auto total=layout.Total();
-    if(!total)return {{"Rows",std::move(rows)},{"NextOffset",0},{"Start",0},{"HasMore",false},{"Scanned",0},{"MountedMetadataReady",mountedReady}};
+    if(!total){
+        if(mountedFirst)LearnedIndexRefresh.SearchSlice(std::chrono::steady_clock::now(),false);
+        return {{"Rows",std::move(rows)},{"NextOffset",0},{"Start",0},{"HasMore",false},{"Scanned",0},{"MountedMetadataReady",mountedReady}};
+    }
     const std::size_t start=randomOrder?static_cast<std::size_t>(startSeed%total):0;
     std::size_t visited=std::min(offset,total),scanned=0;const auto begin=std::chrono::steady_clock::now();
     while(visited<total&&rows.size()<limit&&scanned<scanBudget) {
         if(scanned>0&&std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-begin).count()>=static_cast<long long>(timeBudgetMicros))break;
         const std::size_t index=randomOrder?(start+visited)%total:visited;
-        const auto [segment,localIndex]=layout.At(index);
+        const auto [segment,localIndex]=layout.At(index,mountedFirst);
         UObject* object=nullptr;
         ++visited;++scanned;
         if(segment==2) {
             const auto& record=mountedItems[localIndex];
+            auto& cachedHint=mountedHints[localIndex];
+            if(mountedFirst){
+                if(!cachedHint){
+                    auto name=QuickDecorations::ReadableAssetName(record.path);
+                    auto searchable=AssetTemplate::Fold(record.path+" "+name);
+                    cachedHint=MountedHint{std::move(name),std::move(searchable)};
+                }
+                if(!matchesFolded(cachedHint->Search)||!ItemFamily::Matches(familyFilter,cachedHint->Name))continue;
+                if(!ItemSource::Matches(sourceFilter,ItemSource::Describe(record.path,sourcePlan,nativePlugins),providerFilter))continue;
+            }
             object=UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,RC::to_generic_string(record.path).c_str(),false);
             if(Usable(object)){
                 const auto captured=indexedPaths.find(record.path);
                 // Loading after the class snapshot must not make an item disappear from both slices.
-                if(prioritySet.contains(record.path)||!useClassIndex||(captured!=indexedPaths.end()&&captured->second.Get()==object))continue;
+                if(!mountedFirst&&(prioritySet.contains(record.path)||!useClassIndex||(captured!=indexedPaths.end()&&captured->second.Get()==object)))continue;
             }else{
-            const auto name=QuickDecorations::ReadableAssetName(record.path),category=HelpyBroadItemCategory(nullptr,record.path,name,{},record.type);
+            const auto name=cachedHint?cachedHint->Name:QuickDecorations::ReadableAssetName(record.path);
+            const auto category=HelpyBroadItemCategory(nullptr,record.path,name,{},record.type);
             if(!categoryFilter.empty()&&AssetTemplate::Fold(category)!=categoryFilter)continue;
             const auto source=ItemSource::Describe(record.path,sourcePlan,nativePlugins);
             if(!ItemSource::Matches(sourceFilter,source,providerFilter)||!ItemFamily::Matches(familyFilter,name))continue;
-            if(!matchesTokens(record.path+" "+name+" "+record.type+" "+category))continue;
             auto entry=json{{"StableId",HelpyStableId(record.path)},{"Path",record.path},{"Name",name},{"Class",record.type},{"Category",category},
                 {"Cooked",true},{"Mounted",true},{"Loaded",false},{"Available",true},{"Reason","Mounted ItemData candidate; native fields and inventory compatibility are checked when loaded"}};
             entry.update(ItemSource::Fields(source));rows.push_back(std::move(entry));
@@ -637,6 +671,7 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
         if(segment==1&&prioritySet.contains(path))continue;
         const auto internal=CheapText(object,"InternalName");const auto name=CachedItemName(object);const auto tags=ItemTags(object);const auto broadCategory=HelpyBroadItemCategory(object,path,name,internal,tags);
         if(!categoryFilter.empty()&&AssetTemplate::Fold(broadCategory)!=categoryFilter)continue;
+        if(!queryTokens.empty()&&!matchesTokens(path+" "+internal+" "+name+" "+tags+" "+broadCategory+" "+to_string(object->GetClassPrivate()->GetName())))continue;
         const auto provenance=AssetProvenance::Lookup(object);const auto declared=AssetMetadata::Lookup(object);
         const bool runtimeClone=provenance.is_object()&&provenance.value("Confirmed",false);
         auto source=ItemSource::Describe(path,sourcePlan,nativePlugins,
@@ -644,25 +679,73 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
             declared.modded.value_or(false)||runtimeClone,!runtimeClone&&AssetMetadata::IsManaged(object),AssetMetadata::Owner(object));
         if((source.Group==ItemSource::Kind::Vanilla||source.Group==ItemSource::Kind::Expansion)&&!object->HasAnyFlags(RF_WasLoaded))source.Group=ItemSource::Kind::Unknown;
         if(!ItemSource::Matches(sourceFilter,source,providerFilter)||!ItemFamily::Matches(familyFilter,name))continue;
-        if(!queryTokens.empty()&&!matchesTokens(path+" "+internal+" "+name+" "+tags+" "+broadCategory+" "+to_string(object->GetClassPrivate()->GetName())))continue;
         // Reuse this slice's source decision: copying the full mount/owner
         // census again for every schema clone made large mod lists expensive.
         auto entry=fieldSet=="Detail"||segment==0?DescribeItemWithSource(object,&source):DescribeItemBasic(object,path,name,internal,tags,broadCategory);
         if(entry.is_object()){entry["StableId"]=HelpyStableId(path);entry["Category"]=broadCategory;entry.update(ItemSource::Fields(source));rows.push_back(std::move(entry));}
     }
-    if(!queryTokens.empty()&&!rows.empty())LearnedItems.Observe(HelpySourceCache::Directory(false),HelpySourceCache::Current,CacheBundleStore::Locale(),rows);
+    if(mountedFirst){
+        LearnedIndexRefresh.SearchSlice(std::chrono::steady_clock::now(),visited<total);
+        if(!rows.empty())LearnedItems.Observe(HelpySourceCache::Directory(false),HelpySourceCache::Current,CacheBundleStore::Locale(),rows);
+    }
     return {{"Rows",std::move(rows)},{"NextOffset",visited},{"Start",start},{"HasMore",visited<total},
         {"Scanned",scanned},{"BudgetExhausted",visited<total&&scanned>=scanBudget},{"FieldSet",fieldSet},{"MountedMetadataReady",mountedReady}};
 }
 
-namespace {PersistentItemCatalog::Store ItemManifest;PagedItemCatalog::Store ItemPages,ItemPreviewPages;CacheBundleItems::Store BundleItems;std::atomic<bool> ImportedCacheChanged=false;bool ItemRefreshPending=false,ItemRefreshPumping=false;HelpyBrowsePolicy::Policy BrowsePolicy;}
+json RefreshItemMetadata(const std::string& path){
+    if(!F2Catalog::ValidObjectPath(path))throw std::runtime_error("Invalid item path");
+    auto* object=ActorHelper::ResolveObject(RC::to_generic_string(path));
+    auto* type=Class("assets");
+    if(!Usable(object)||!type||!object->IsA(type)||to_string(object->GetPathName())!=path)
+        throw std::runtime_error("The selected ItemData did not resolve in this game");
+    auto row=ItemMetadata(path);
+    if(!row.value("Available",true))throw std::runtime_error("The selected ItemData is unavailable");
+    return row;
+}
+
+namespace {
+PersistentItemCatalog::Store ItemManifest;PagedItemCatalog::Store ItemPages,ItemPreviewPages;CacheBundleItems::Store BundleItems;
+std::atomic<bool> ImportedCacheChanged=false;bool ItemRefreshPending=false,ItemRefreshPumping=false;HelpyBrowsePolicy::Policy BrowsePolicy;
+void ReportLearnedItemWrites(bool shutdown=false){
+    static std::string lastError;
+    static size_t reportedDrops=0;
+    static std::chrono::steady_clock::time_point nextReport{};
+    if(LearnedItems.Error.empty())lastError.clear();
+    const bool failed=!LearnedItems.Error.empty()&&LearnedItems.Error!=lastError;
+    const bool dropped=LearnedItems.Dropped>reportedDrops;
+    const auto now=std::chrono::steady_clock::now();
+    if((!failed&&!dropped)||(!shutdown&&now<nextReport))return;
+    if(failed){
+        CodedLog<LogLevel::Warning>(Diagnostics::Id::CachePublish,STR("Learned item cache write failed: {}\n"),ToWideSafe(LearnedItems.Error));
+        lastError=LearnedItems.Error;
+    }
+    if(dropped){
+        CodedLog<LogLevel::Warning>(Diagnostics::Id::CachePartial,STR("Learned item cache did not save {} queued observations. Search again to rediscover them.\n"),LearnedItems.Dropped-reportedDrops);
+        reportedDrops=LearnedItems.Dropped;
+    }
+    nextReport=now+std::chrono::minutes(1);
+}
+}
+void RememberRefreshedItem(const json& row){
+    LearnedItems.Observe(HelpySourceCache::Directory(false),HelpySourceCache::Current,CacheBundleStore::Locale(),json::array({row}));
+}
 HelpyBrowsePolicy::Policy ItemBrowsePolicy() noexcept {return BrowsePolicy;}
 void NotifyImportedCache() noexcept {ImportedCacheChanged.store(true);}
-void ShutdownItemCatalog() noexcept {ItemRefreshPending=false;LearnedItems.Shutdown();BundleItems.Shutdown();ItemPreviewPages.Shutdown();ItemPages.Shutdown();ItemManifest.Shutdown();}
-void PumpItemCatalog(){
-    LearnedItems.Flush();
-    if(!ItemRefreshPending||!BrowsePolicy.PassiveRefresh)return;
-    static auto next=std::chrono::steady_clock::time_point{};const auto now=std::chrono::steady_clock::now();
+void ShutdownItemCatalog() noexcept {
+    ItemRefreshPending=false;
+    LearnedItems.Shutdown();
+    LearnedIndexRefresh={};
+    try{ReportLearnedItemWrites(true);}catch(...){}
+    BundleItems.Shutdown();ItemPreviewPages.Shutdown();ItemPages.Shutdown();ItemManifest.Shutdown();
+}
+bool HasPendingLearnedItems(){return LearnedItems.HasWork()||LearnedIndexRefresh.Ready(std::chrono::steady_clock::now(),false);}
+void PumpItemCatalog(bool passiveRefresh){
+    const auto now=std::chrono::steady_clock::now();
+    if(LearnedItems.Flush())LearnedIndexRefresh.Committed(now);
+    if(LearnedIndexRefresh.Take(now,LearnedItems.HasWork()))BundleItems.Invalidate();
+    ReportLearnedItemWrites();
+    if(!passiveRefresh||!ItemRefreshPending||!BrowsePolicy.PassiveRefresh)return;
+    static auto next=std::chrono::steady_clock::time_point{};
     if(now<next)return;next=now+std::chrono::milliseconds(50);
     ItemRefreshPumping=true;
     struct ResetPump{~ResetPump(){ItemRefreshPumping=false;}} reset;
@@ -670,6 +753,16 @@ void PumpItemCatalog(){
 }
 json AlphabeticalItemWindow(const std::string& query,const std::string& cursor,std::size_t limit,const std::string& fieldSet,HelpyBrowsePolicy::Policy policy){
     if(fieldSet!="BasicRow"&&fieldSet!="Detail")throw std::runtime_error("Unsupported item catalog field projection.");
+    const auto focused=[&](size_t offset){
+        auto page=ItemWindow(query,offset,limit,0,false,fieldSet,4096,1800,true,offset==0);
+        page["NextCursor"]="F:"+std::to_string(page.value("NextOffset",size_t{}));page["AlphabeticalReady"]=true;
+        page["PopulationStage"]="searching-live-items";page["PopulationDone"]=page.value("NextOffset",size_t{});page["CacheHit"]=false;
+        page["Coverage"]="Bounded mounted-item check; discoveries are queued for the persistent cache.";return page;
+    };
+    if(!query.empty()&&cursor.starts_with("F:")){
+        size_t offset=0;const auto text=std::string_view(cursor).substr(2);const auto [end,error]=std::from_chars(text.data(),text.data()+text.size(),offset);
+        if(text.empty()||error!=std::errc{}||end!=text.data()+text.size())throw std::runtime_error("Invalid focused item search cursor");return focused(offset);
+    }
     if(!ItemRefreshPumping&&fieldSet=="BasicRow"){
         static bool reported=false;
         if(!reported||BrowsePolicy!=policy){CodedLog<LogLevel::Normal>(Diagnostics::Id::CacheLoadPolicy,STR("Helpy item browsing: {} first; passive refresh {}.\n"),policy.CacheFirst?STR("cache"):STR("game"),policy.PassiveRefresh?STR("enabled"):STR("disabled"));reported=true;}
@@ -683,19 +776,24 @@ json AlphabeticalItemWindow(const std::string& query,const std::string& cursor,s
     // exact live path list invalidates this index without chasing transient
     // UObject counts (which change constantly while a menu is open).
     const ItemCatalogFilter::Query filter(query);
-    auto paths=AssetProvenance::LivePaths();
-    for(const auto& candidate:ContainerItemMetadata())paths.push_back(candidate.path);
-    std::sort(paths.begin(),paths.end());paths.erase(std::unique(paths.begin(),paths.end()),paths.end());
+    static std::string pathScope,pathDigest;static std::vector<std::string> paths;
+    const auto rosterScope=json::array({SpawnToolRequests::Generation.load(),AssetProvenance::Revision(),HelpySourceCache::Current.CatalogKey,HelpySourceCache::Current.Provisional}).dump();
+    if(pathScope!=rosterScope){paths=PriorityItemPaths();for(const auto& candidate:ContainerItemMetadata())paths.push_back(candidate.path);
+        std::sort(paths.begin(),paths.end());paths.erase(std::unique(paths.begin(),paths.end()),paths.end());pathDigest=CacheBundleIO::Hash(json(paths).dump());pathScope=rosterScope;}
     const auto published=HelpySourceCache::ForClient();
     const auto pageProviders=HelpySourceCache::NativePluginRoots();
     const auto fingerprint=fieldSet=="BasicRow"?published.value("CatalogKey",std::string{}):HelpySourceCache::PublishedFingerprint();
-    const auto scope=json::array({SpawnToolRequests::Generation.load(),fingerprint,paths,fieldSet,policy.CacheFirst}).dump();
+    const auto scope=json::array({SpawnToolRequests::Generation.load(),fingerprint,pathDigest,fieldSet,policy.CacheFirst}).dump();
     static FocusedItemQuery::Misses cacheMisses;
     wchar_t localeName[LOCALE_NAME_MAX_LENGTH]{};GetUserDefaultLocaleName(localeName,LOCALE_NAME_MAX_LENGTH);
     const auto language=to_string(RC::StringType(localeName));
     const auto manifest=HelpySourceCache::Directory(false).parent_path()/"item-catalogues"/"native-items.json";
     std::optional<json> bundled;
     if(fieldSet=="BasicRow"&&!ItemRefreshPumping)bundled=BundleItems.Lookup(HelpySourceCache::Directory(false),HostServices::ModDirectory(),HelpySourceCache::Current,language,query,cursor,limit);
+    static FocusedItemQuery::Misses bundleMisses;
+    if(bundled&&bundleMisses.NeedsLive(scope,query,*bundled)){
+        auto live=focused(0);live["Reset"]=true;return live;
+    }
     const auto awaitingBundle=[&](){return json{{"Rows",json::array()},{"HasMore",true},{"NextCursor",cursor},{"AlphabeticalReady",false},{"PopulationStage","filtering-cache"},{"Coverage","Searching imported references on a file worker; existing results remain visible"}};};
     const auto decorateSaved=[](json page){
         const auto plan=HelpySourceCache::ItemPlan();const auto nativePlugins=HelpySourceCache::NativePluginRoots();
@@ -721,24 +819,13 @@ json AlphabeticalItemWindow(const std::string& query,const std::string& cursor,s
         if(auto page=ItemPreviewPages.Preview(manifest,language,query,cursor,limit,pageProviders))return decorateSaved(std::move(*page));
         return {{"Rows",json::array()},{"HasMore",true},{"NextCursor",cursor},{"AlphabeticalReady",false},{"PopulationStage","checking-cache"},{"Coverage","No compatible saved presentation cache; waiting for mounted content verification"}};
     }
-    const auto focused=[&](size_t offset){
-        auto page=ItemWindow(query,offset,limit,0,false,fieldSet,4096,1800,true);
-        page["NextCursor"]="F:"+std::to_string(page.value("NextOffset",size_t{}));
-        page["AlphabeticalReady"]=true;page["PopulationStage"]="searching-live-items";
-        page["PopulationDone"]=page.value("NextOffset",size_t{});page["CacheHit"]=false;
-        page["Coverage"]="Focused live-item lookup after a verified catalogue miss; no full catalogue rebuild or icon scan.";return page;
-    };
-    if(!query.empty()&&cursor.starts_with("F:")){
-        size_t offset=0;const auto text=std::string_view(cursor).substr(2);const auto [end,error]=std::from_chars(text.data(),text.data()+text.size(),offset);
-        if(text.empty()||error!=std::errc{}||end!=text.data()+text.size())throw std::runtime_error("Invalid focused item search cursor");return focused(offset);
-    }
     std::string diskScope;static uint64_t waiting=0;
     if(fieldSet=="BasicRow"){
         if(basicScope!=scope){basicScope=scope;basicCache=std::make_unique<AlphabeticalItemCatalog::Cache>();basicCache->Scope(scope);ItemManifest.ResetScope();}
         // Strict reusable pages require the authoritative source census;
         // presentation previews above remain explicitly provisional.
         if(!published.value("Ready",false)||!published.value("Authoritative",false))return {{"Rows",json::array()},{"HasMore",true},{"NextCursor","W:"+std::to_string(++waiting)},{"AlphabeticalReady",false},{"PopulationStage","checking-cache"},{"Coverage","Waiting for mounted content verification"}};
-        diskScope=PersistentItemCatalog::DiskScope(published,paths,language);
+        diskScope=PersistentItemCatalog::DiskScope(published,pathDigest,language);
         const auto legacyScope=json::array({"item-browse-v1",published.value("Key",std::string{}),paths,language}).dump();
         if(policy.CacheFirst)if(auto page=ItemPages.Lookup(manifest,diskScope,query,cursor,limit,false,{},pageProviders)){
             ItemRefreshPending=!page->value("AlphabeticalReady",false)&&policy.PassiveRefresh;

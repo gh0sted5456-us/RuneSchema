@@ -1,1 +1,164 @@
-[{"Overview":"experimental/index.md"}]
+[
+  {
+    "Overview": "experimental/index.md"
+  },
+  {
+    "Pre-release & pending changelog": "experimental/PRE-RELEASE.md"
+  },
+  {
+    "Runtime folder layout": "experimental/RUNTIME-LAYOUT.md"
+  },
+  {
+    "Install & compatibility": [
+      {
+        "Install or update": "experimental/INSTALLATION.md"
+      },
+      {
+        "Vortex": "experimental/VORTEX-INSTALLATION.md"
+      },
+      {
+        "Platforms, Wine & Proton": "experimental/COMPATIBILITY.md"
+      }
+    ]
+  },
+  {
+    "Helpy support": "experimental/HELPY-SUPPORT.md"
+  },
+  {
+    "Helpy & controllers": [
+      {
+        "Desktop, overlay & settings": "experimental/HELPY-STANDALONE.md"
+      },
+      {
+        "Native overlay": "experimental/NATIVE-OVERLAY.md"
+      },
+      {
+        "Controller navigation": "experimental/CONTROLLER-NAVIGATION.md"
+      },
+      {
+        "Bindings & mod HUDs (in development)": "experimental/CONTROLLER-HUD-BINDINGS.md"
+      },
+      {
+        "Mod Menu 2 & HUD layout": "experimental/MOD-MENU-2-AND-HUD.md"
+      },
+      {
+        "Save recovery": "experimental/SAVE-RECOVERY.md"
+      },
+      {
+        "Item Delivery": "experimental/ITEM-DELIVERY.md"
+      },
+      {
+        "Multiplayer plugin": "experimental/MULTIPLAYER-PLUGIN.md"
+      },
+      {
+        "Network bridge capacity": "experimental/NETWORK-CAPACITY.md"
+      },
+      {
+        "Mod-owned save files": "experimental/MOD-SAVE-FILES.md"
+      },
+      {
+        "Resource & UE4SS diagnostics": "experimental/PERFORMANCE-DIAGNOSTICS.md"
+      },
+      {
+        "Notifications & hotfixes": "experimental/NOTIFICATIONS-AND-HOTFIXES.md"
+      },
+      {
+        "Report a bug": "experimental/HELPY-BUG-REPORTS.md"
+      },
+      {
+        "Advanced Tooling (in development)": "experimental/DEVELOPER-TOOLS.md"
+      }
+    ]
+  },
+  {
+    "Mods, caches & tools": [
+      {
+        "Metadata & loader controls": "experimental/MOD-METADATA-AND-CONTROLS.md"
+      },
+      {
+        "Authoring & repair": "experimental/AUTHORING-AND-REPAIR.md"
+      },
+      {
+        "UE4SS sister content": "experimental/UE4SS-SISTER-CONTENT.md"
+      },
+      {
+        "UE4SS Pak Loader": "experimental/UE4SS-PAK-LOADER.md"
+      },
+      {
+        "Cache bundles": "experimental/CACHE-BUNDLES.md"
+      },
+      {
+        "Offline cache authoring": "experimental/modders/offline-helpy-cache.md"
+      }
+    ]
+  },
+  {
+    "Servers & worlds": [
+      {
+        "Compare server mods": "experimental/SERVER-MOD-LIST.md"
+      },
+      {
+        "Connect with a PIN": "experimental/SERVER-ACCESS.md"
+      },
+      {
+        "Server control & admin": "experimental/SERVER-CONTROL.md"
+      },
+      {
+        "World policies": "experimental/BUILDING-WORLD-POLICIES.md"
+      }
+    ]
+  },
+  {
+    "Mod author APIs": [
+      {
+        "Shared HUD": "experimental/SHARED-HUD.md"
+      },
+      {
+        "Local mod profiles": "experimental/LOCAL-MOD-PROFILES.md"
+      },
+      {
+        "Multiplayer appearance": "experimental/CHARACTER-APPEARANCE.md"
+      },
+      {
+        "Consumed-item interfaces": "experimental/CONSUMED-OWNER-PRESENTATION.md"
+      },
+      {
+        "Lua scheduling": "experimental/LUA-SCHEDULING.md"
+      },
+      {
+        "Cooked declarations": "experimental/COOKED-PAK-REGISTRY-MANIFEST.md"
+      },
+      {
+        "Native data families": "experimental/COOKED-NATIVE-DATA-FAMILIES.md"
+      },
+      {
+        "Cooked table extensions": "experimental/COOKED-TABLE-EXTENSIONS.md"
+      },
+      {
+        "Raw table reference": "experimental/reference/loaders/raw.md"
+      },
+      {
+        "Cooked host console (in development)": "experimental/MOD-CONSOLE.md"
+      },
+      {
+        "Mod-local services (in development)": "experimental/MOD-LOCAL-SERVICES.md"
+      }
+    ]
+  },
+  {
+    "Investigations & history": [
+      {
+        "Companion saves": "experimental/COMPANION-SAVES.md"
+      },
+      {
+        "Skills": "experimental/SKILL-REGISTRY.md"
+      },
+      {
+        "0.8.1.0 development history": "experimental/CHANGELOG-0.8.1.0.md"
+      }
+    ]
+  },
+  {
+    "Cooked world components": "experimental/WORLD-COMPONENTS.md"
+  }
+]

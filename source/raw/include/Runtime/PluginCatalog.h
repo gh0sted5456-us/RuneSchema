@@ -1,3 +1,5 @@
+#include "RuntimePaths.h"
+#include "Core/CacheBundleIO.h"
 #pragma once
 #include <algorithm>
 #include <cctype>
@@ -15,9 +17,10 @@
 namespace PS::PluginCatalog {
 namespace fs = std::filesystem;
 struct Plugin {
-    std::string Id,Name,Version,BuiltForRuneSchema,ConsoleMessage;
+    std::string Id,Name,Version,BuiltForRuneSchema,ConsoleMessage,Host="game",ModOwner;
     int ApiVersion=0;
-    bool Enabled=true,Required=false,MountPaks=true;
+    bool Enabled=true,Required=false,MountPaks=true,ServerCompatible=false;
+    bool PreferSharedRegistry=false;
     fs::path Root,DllRoot,PaksRoot,ScriptsRoot,EntryPoint;
     std::vector<std::string> Capabilities,Connections;
     std::vector<std::pair<std::string,std::string>> Dependencies;
@@ -30,6 +33,7 @@ inline std::vector<fs::path> PakDirectories(const Plugin& plugin) {
         throw std::runtime_error("Plugin paks path is not a safe directory: "+plugin.Id);
     for(const auto& package:fs::directory_iterator(plugin.PaksRoot,fs::directory_options::skip_permission_denied,error)) {
         if(error)throw std::runtime_error("Unable to enumerate plugin paks: "+plugin.Id);
+        if(plugin.PreferSharedRegistry){auto name=package.path().filename().wstring();std::transform(name.begin(),name.end(),name.begin(),::towlower);if(name==L"registrybridge")continue;}
         if(package.is_symlink(error))throw std::runtime_error("Symlinks are not allowed under plugin paks: "+plugin.Id);
         if(!package.is_directory(error)) {
             if(!package.is_regular_file(error))continue;
@@ -39,16 +43,26 @@ inline std::vector<fs::path> PakDirectories(const Plugin& plugin) {
                 throw std::runtime_error("Container files must be inside paks/<PackageName>/: "+plugin.Id);
             continue; // Mod-manager markers and unrelated files are not plugin content.
         }
-        std::map<fs::path,uint8_t> triplets;
+        struct Parts {fs::path Stem;uint8_t Mask=0;};std::map<std::wstring,Parts> triplets;
+        std::string observed;std::size_t observedCount=0;
         for(const auto& file:fs::directory_iterator(package.path(),fs::directory_options::skip_permission_denied,error)) {
             if(error)throw std::runtime_error("Unable to enumerate plugin package: "+plugin.Id);
             if(file.is_symlink(error)||!file.is_regular_file(error))throw std::runtime_error("Package directories may contain only regular container files: "+plugin.Id);
             auto extension=file.path().extension().wstring();std::transform(extension.begin(),extension.end(),extension.begin(),::towlower);
             uint8_t bit=0;if(extension==L".pak")bit=1;else if(extension==L".ucas")bit=2;else if(extension==L".utoc")bit=4;else continue;
-            auto base=file.path();base.replace_extension();triplets[base]|=bit;
+            auto stem=file.path().stem();auto key=stem.wstring();std::transform(key.begin(),key.end(),key.begin(),::towlower);
+            auto& parts=triplets[key];parts.Stem=stem;
+            if(parts.Mask&bit)throw std::runtime_error("Duplicate container part ignoring filename case in "+package.path().string()+": "+file.path().filename().string());
+            parts.Mask|=bit;
+            if(observedCount++<12){if(!observed.empty())observed+=", ";observed+=file.path().filename().string();}
         }
-        if(triplets.empty()||std::any_of(triplets.begin(),triplets.end(),[](const auto& value){return value.second!=7;}))
-            throw std::runtime_error("Incomplete pak/ucas/utoc triplet in "+package.path().string());
+        if(triplets.empty())continue; // Ignore directories containing only mod-manager metadata.
+        for(const auto& [key,parts]:triplets)if(parts.Mask!=7){
+            std::string missing;
+            for(const auto& [bit,extension]:std::vector<std::pair<uint8_t,const char*>>{{1,".pak"},{2,".ucas"},{4,".utoc"}})
+                if(!(parts.Mask&bit)){if(!missing.empty())missing+=", ";missing+=parts.Stem.string()+extension;}
+            throw std::runtime_error("Incomplete pak/ucas/utoc triplet in "+package.path().string()+"; missing "+missing+"; found "+observed);
+        }
         result.push_back(package.path());
     }
     std::sort(result.begin(),result.end());return result;
@@ -58,19 +72,22 @@ inline bool Token(const std::string& value) {
         return std::isalnum(c)||c=='.'||c=='_'||c=='-';
     });
 }
-inline std::vector<OrderEntry> ReadOrder(const fs::path& root) {
+inline std::vector<OrderEntry> ReadOrder(const fs::path& root,std::vector<std::string>* diagnostics) {
     const auto path=root/"plugins.txt";std::vector<OrderEntry> result;if(!fs::is_regular_file(path))return result;
-    if(fs::file_size(path)>256*1024)throw std::runtime_error("plugins.txt exceeds 256 KiB");
-    std::ifstream stream(path);std::string line;size_t position=0;std::unordered_set<std::string> seen;
+    std::ifstream stream(path);
+    if(!stream){if(diagnostics)diagnostics->push_back("Cannot open plugins.txt: "+path.string());return result;}
+    std::string line;size_t position=0,lineNumber=0;std::unordered_set<std::string> seen;
+    const auto invalid=[&]{if(diagnostics)diagnostics->push_back("Ignoring invalid plugins.txt entry on line "+std::to_string(lineNumber)+": "+path.string());};
     while(std::getline(stream,line)) {
+        if(++lineNumber==1&&line.starts_with("\xEF\xBB\xBF"))line.erase(0,3);
         const auto first=line.find_first_not_of(" \t\r\n");if(first==std::string::npos||line[first]=='#'||line[first]==';')continue;
-        const auto colon=line.find(':',first);if(colon==std::string::npos)throw std::runtime_error("Invalid plugins.txt entry: "+line);
+        const auto colon=line.find(':',first);if(colon==std::string::npos){invalid();continue;}
         auto id=line.substr(first,colon-first),value=line.substr(colon+1);
         const auto idLast=id.find_last_not_of(" \t\r\n");id.resize(idLast==std::string::npos?0:idLast+1);
         const auto valueFirst=value.find_first_not_of(" \t\r\n"),valueLast=value.find_last_not_of(" \t\r\n");
         value=valueFirst==std::string::npos?std::string{}:value.substr(valueFirst,valueLast-valueFirst+1);
         if(id=="RuneSchema.Networking")id="RSNetworking";
-        if(!Token(id)||(value!="0"&&value!="1"))throw std::runtime_error("Invalid plugins.txt entry: "+id);
+        if(!Token(id)||(value!="0"&&value!="1")){invalid();continue;}
         if(!seen.emplace(id).second) {
             for(auto& existing:result)if(existing.Id==id){existing.Enabled=value=="1";break;}
             continue;
@@ -79,45 +96,48 @@ inline std::vector<OrderEntry> ReadOrder(const fs::path& root) {
     }
     return result;
 }
-inline std::vector<Plugin> Discover(const fs::path& root,std::vector<std::string>* diagnostics=nullptr) {
+inline std::vector<Plugin> Discover(const fs::path& root,std::vector<std::string>* diagnostics=nullptr,bool runtime=false) {
     std::vector<Plugin> result;if(!fs::is_directory(root))return result;
+    std::vector<fs::path> folders;
+    const auto append=[&](const fs::path& base){if(!fs::is_directory(base)||fs::is_symlink(fs::symlink_status(base)))return;for(const auto& folder:fs::directory_iterator(base))if(folder.is_directory()&&!folder.is_symlink())folders.push_back(folder.path());};
+    if(runtime){append(root/"dlls/plugins");if(fs::is_directory(root/"Helpy")&&!fs::is_symlink(fs::symlink_status(root/"Helpy")))folders.push_back(root/"Helpy");append(root/"Helpy/plugins");append(root/"plugins");}else append(root);
     std::unordered_set<std::string> ids;
-    for(const auto& folder:fs::directory_iterator(root)) {
-        if(!folder.is_directory()||folder.is_symlink())continue;
-        const auto manifest=folder.path()/"plugin.json";if(!fs::is_regular_file(manifest))continue;
+    for(const auto& folder:folders) {
+        const auto manifest=folder/"plugin.json";if(!fs::is_regular_file(manifest)||fs::is_symlink(fs::symlink_status(manifest)))continue;
         try {
-        if(fs::file_size(manifest)>256*1024)throw std::runtime_error("Plugin manifest exceeds 256 KiB: "+manifest.string());
         std::ifstream stream(manifest);nlohmann::json data;stream>>data;
-        for(const auto* field:{"SchemaVersion","Id","Version"})
+        for(const auto* field:{"Id","Version"})
             if(!data.contains(field))throw std::runtime_error(std::string("Plugin manifest missing ")+field+": "+manifest.string());
-        if(data.at("SchemaVersion")!=1)throw std::runtime_error("Unsupported plugin manifest schema: "+manifest.string());
         Plugin plugin;plugin.Id=data.at("Id").get<std::string>();plugin.Name=data.value("Name",plugin.Id);
         plugin.Version=data.at("Version").get<std::string>();plugin.ApiVersion=data.value("ApiVersion",1);
         plugin.BuiltForRuneSchema=data.value("BuiltForRuneSchema",std::string{});
         plugin.ConsoleMessage=data.value("ConsoleMessage",std::string{});
+        plugin.Host=data.value("Host",std::string("game"));if(plugin.Host!="game"&&plugin.Host!="helpy")throw std::runtime_error("Plugin host must be game or helpy: "+plugin.Id);
         plugin.Enabled=data.value("Enabled",true);plugin.Required=data.value("Required",false);
-        plugin.MountPaks=data.value("MountPaks",true);plugin.Root=folder.path();
+        plugin.ServerCompatible=data.value("ServerCompatible",false);
+        plugin.MountPaks=data.value("MountPaks",true);plugin.Root=folder;
+        if(runtime&&ids.contains(plugin.Id)){if(diagnostics)diagnostics->push_back(plugin.Id+": duplicate location ignored; canonical plugin already selected");continue;}
         if(!Token(plugin.Id)||!Token(plugin.Version)||(!plugin.BuiltForRuneSchema.empty()&&!Token(plugin.BuiltForRuneSchema))
-            ||plugin.Name.empty()||plugin.Name.size()>128||plugin.ConsoleMessage.size()>512
+            ||plugin.Name.empty()
             ||plugin.ConsoleMessage.find_first_of("\r\n")!=std::string::npos||!ids.emplace(plugin.Id).second)
             throw std::runtime_error("Invalid or duplicate plugin identity/wording: "+plugin.Id);
         if(data.contains("Capabilities")) {
-            if(!data.at("Capabilities").is_array()||data.at("Capabilities").size()>64)throw std::runtime_error("Invalid plugin capabilities: "+plugin.Id);
+            if(!data.at("Capabilities").is_array())throw std::runtime_error("Invalid plugin capabilities: "+plugin.Id);
             for(const auto& capability:data.at("Capabilities")){auto value=capability.get<std::string>();if(!Token(value))throw std::runtime_error("Invalid plugin capability: "+plugin.Id);plugin.Capabilities.push_back(std::move(value));}
         }
         if(data.contains("Connections")) {
-            if(!data.at("Connections").is_array()||data.at("Connections").size()>32)throw std::runtime_error("Invalid plugin connections: "+plugin.Id);
+            if(!data.at("Connections").is_array())throw std::runtime_error("Invalid plugin connections: "+plugin.Id);
             for(const auto& connection:data.at("Connections")){auto value=connection.get<std::string>();if(!Token(value))throw std::runtime_error("Invalid plugin connection: "+plugin.Id);plugin.Connections.push_back(std::move(value));}
         }
         if(data.contains("Dependencies")) {
-            if(!data.at("Dependencies").is_object()||data.at("Dependencies").size()>32)throw std::runtime_error("Invalid plugin dependencies: "+plugin.Id);
+            if(!data.at("Dependencies").is_object())throw std::runtime_error("Invalid plugin dependencies: "+plugin.Id);
             for(const auto& [id,version]:data.at("Dependencies").items()) {
-                if(!Token(id)||!version.is_string()||version.get_ref<const std::string&>().size()>32)throw std::runtime_error("Invalid plugin dependency: "+plugin.Id);
+                if(!Token(id)||!version.is_string())throw std::runtime_error("Invalid plugin dependency: "+plugin.Id);
                 plugin.Dependencies.emplace_back(id,version.get<std::string>());
             }
         }
         if(data.contains("PackagedRoot"))throw std::runtime_error("PackagedRoot is obsolete; use the fixed paks/<PackageName> layout: "+plugin.Id);
-        plugin.DllRoot=plugin.Root/"dll";plugin.PaksRoot=plugin.Root/"paks";plugin.ScriptsRoot=plugin.Root/"scripts";
+        plugin.DllRoot=runtime&&plugin.Root==root/"Helpy"?plugin.Root:plugin.Root/"dll";plugin.PaksRoot=plugin.Root/"paks";plugin.ScriptsRoot=plugin.Root/"scripts";
         if(data.contains("EntryPoint")) {
             const auto entry=fs::path(data.at("EntryPoint").get<std::string>());
             if(entry.is_absolute()||entry.empty()||entry.has_parent_path()||entry.extension()!=L".dll")throw std::runtime_error("Plugin EntryPoint must be a DLL filename under dll/: "+plugin.Id);
@@ -126,9 +146,9 @@ inline std::vector<Plugin> Discover(const fs::path& root,std::vector<std::string
         }
         result.push_back(std::move(plugin));
         } catch(const std::exception& error) {
-            if(diagnostics)diagnostics->push_back(folder.path().filename().string()+": rejected: "+error.what());
+            if(diagnostics)diagnostics->push_back(folder.filename().string()+": rejected: "+error.what());
         } catch(...) {
-            if(diagnostics)diagnostics->push_back(folder.path().filename().string()+": rejected by an unknown manifest error");
+            if(diagnostics)diagnostics->push_back(folder.filename().string()+": rejected by an unknown manifest error");
         }
     }
     // 0.7.9 renamed RuneSchema.Networking to RSNetworking. If an old
@@ -136,13 +156,17 @@ inline std::vector<Plugin> Discover(const fs::path& root,std::vector<std::string
     // ignore the retired copy instead of registering duplicate capabilities.
     const bool hasRsNetworking=std::any_of(result.begin(),result.end(),[](const auto& plugin){return plugin.Id=="RSNetworking";});
     if(hasRsNetworking)std::erase_if(result,[](const auto& plugin){return plugin.Id=="RuneSchema.Networking";});
-    const auto requested=ReadOrder(root);std::unordered_map<std::string,OrderEntry> requestedById;
+    const auto requested=ReadOrder(runtime?RuntimePaths::PluginOrder(root):root,diagnostics);std::unordered_map<std::string,OrderEntry> requestedById;
     for(const auto& entry:requested)requestedById.emplace(entry.Id,entry);
     for(auto& plugin:result)if(const auto found=requestedById.find(plugin.Id);found!=requestedById.end()) {
         if(plugin.Required&&!found->second.Enabled&&diagnostics)
             diagnostics->push_back(plugin.Id+": legacy Required flag ignored; explicit plugins.txt disable wins and RuneSchema core remains independent");
         plugin.Enabled=plugin.Enabled&&found->second.Enabled;
     }
+    const auto shared=std::find_if(result.begin(),result.end(),[](const auto& plugin){return plugin.Id=="RuneSchema.RegistryBridge"&&plugin.Enabled&&plugin.MountPaks;});
+    if(shared!=result.end())try{
+        if(!PakDirectories(*shared).empty())for(auto& plugin:result)if(plugin.Id=="RSNetworking")plugin.PreferSharedRegistry=true;
+    }catch(const std::exception&){} // An invalid canonical provider must not suppress the legacy fallback.
     std::sort(result.begin(),result.end(),[&](const auto& a,const auto& b){
         const auto left=requestedById.find(a.Id),right=requestedById.find(b.Id);
         if(left!=requestedById.end()&&right!=requestedById.end())return left->second.Position<right->second.Position;
@@ -164,4 +188,21 @@ inline std::vector<Plugin> Discover(const fs::path& root,std::vector<std::string
     }
     return ordered;
 }
+// Only the loader's resolved enabled roots may enter this lane; never scan /ue4ss.
+inline std::vector<Plugin> DiscoverOwned(const fs::path& runtime,const std::vector<fs::path>& enabled,std::vector<std::string>* diagnostics=nullptr){
+    std::vector<Plugin> result;const auto mods=fs::absolute(runtime/"mods").lexically_normal();
+    for(const auto& root:enabled)try{
+        const auto exact=fs::absolute(root).lexically_normal();const auto owner=exact.filename().string();
+        if(exact.parent_path()!=mods||!Token(owner)||owner=="."||owner=="..")throw std::runtime_error("Owner is not an enabled direct mod folder");
+        CacheBundleIO::Safe(exact);CacheBundleIO::Safe(exact/"plugins");
+        if(!fs::exists(exact/"plugins"))continue;
+        for(auto plugin:Discover(exact/"plugins",diagnostics)){
+            if(plugin.Host!="game"||plugin.EntryPoint.empty()||!plugin.Id.starts_with(owner+"."))throw std::runtime_error("Mod-owned plugins require Host game, a DLL EntryPoint and Owner-prefixed Id");
+            CacheBundleIO::Safe(plugin.EntryPoint);
+            plugin.ModOwner=owner;plugin.MountPaks=false;result.push_back(std::move(plugin));
+        }
+    }catch(const std::exception& error){if(diagnostics)diagnostics->push_back(root.filename().string()+": mod plugin rejected: "+error.what());}
+    return result;
+}
+inline std::vector<Plugin> DiscoverRuntime(const fs::path& root,std::vector<std::string>* diagnostics=nullptr){return Discover(root,diagnostics,true);}
 }

@@ -82,9 +82,14 @@ return function(runeRoot)
         if not ok then log("[MAP][FAILED] " .. tostring(failure)) end
     end)
 
-    ExecuteInGameThread(function()
-        local ok, failure = xpcall(function() startWorld(UEHelpers.GetWorld()) end, debug.traceback)
-        if not ok then log("[INITIAL][FAILED] " .. tostring(failure)) end
-    end)
-    log("[READY] " .. #ordered .. " RuneSchema ModActor package(s) queued; BPModLoaderMod untouched.")
+    if type(ExecuteInGameThreadWithDelay) == "function" then
+        local queued, failure = pcall(ExecuteInGameThreadWithDelay, 0, function()
+            local ok, problem = xpcall(function() startWorld(UEHelpers.GetWorld()) end, debug.traceback)
+            if not ok then log("[INITIAL][FAILED] " .. tostring(problem)) end
+        end)
+        if not queued then log("[INITIAL][DEFERRED] " .. tostring(failure) .. "; load-map hook retained.") end
+    else
+        log("[INITIAL][DEFERRED] Game-thread delayed actions unavailable; load-map hook retained.")
+    end
+    log("[READY] " .. #ordered .. " RuneSchema ModActor package(s) monitored; BPModLoaderMod untouched.")
 end

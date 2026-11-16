@@ -20,6 +20,31 @@ namespace PS::SettingsStore {
     inline Loaded Parse(const fs::path& file,bool ini) {
         return ParseContents(file,ini,ConfigFiles::Read(file,MaximumBytes));
     }
+    inline HelpyAuthoritySettings ReadHelpyAuthority(const fs::path& file) {
+        return Parse(file,file.extension()==".ini").Settings.helpyAuthority;
+    }
+    // Update only native player authorizations in the latest disk document.
+    // The caller serializes this with the local Helpy settings editor.
+    inline HelpyAuthoritySettings SaveHelpyPlayerAccess(const fs::path& file,
+        const HelpyAuthoritySettings& before,const HelpyAuthoritySettings& proposed) {
+        const auto contents=ConfigFiles::Read(file,MaximumBytes);
+        const bool ini=file.extension()==".ini";
+        auto latest=ParseContents(file,ini,contents);
+        auto& access=latest.Settings.helpyAuthority;
+        if(access.autoAuthorizeConnectingPlayers!=before.autoAuthorizeConnectingPlayers||
+            access.authorizedPlayers!=before.authorizedPlayers)
+            throw std::runtime_error("Player access changed on disk. Refresh and retry.");
+        access.autoAuthorizeConnectingPlayers=proposed.autoAuthorizeConnectingPlayers;
+        access.authorizedPlayers=proposed.authorizedPlayers;
+        const auto document=SettingsDocument(latest.Settings,latest.Document);
+        (void)DecodeSettings(document.dump());
+        const auto text=ini?EncodeIniDocument(document):document.dump(2)+"\n";
+        if(text.size()>MaximumBytes)throw std::runtime_error("Updated settings exceed the size limit.");
+        if(ConfigFiles::Read(file,MaximumBytes)!=contents)
+            throw std::runtime_error("Settings changed while saving player access. Refresh and retry.");
+        ConfigFiles::Write(file,text);
+        return std::move(access);
+    }
     inline fs::path Preserve(const fs::path& file,std::string_view reason) {
         static std::atomic<unsigned> sequence{0};
         auto backup=file;backup+='.'+std::string(reason)+'-'+std::to_string(std::chrono::system_clock::now().time_since_epoch().count())+'-'+std::to_string(sequence++)+".bak";

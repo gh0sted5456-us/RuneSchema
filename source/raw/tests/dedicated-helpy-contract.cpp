@@ -14,7 +14,7 @@ int main(int argc,char** argv){
     Check(lookup.contains("if(!FUObjectHashTables::IsAvailable() && !PS::Storefront::IsDedicatedServer()"),"Public class-hash iteration must precede client AOB fallback; no client iterator ABI guesses on servers");
     Check(tools.find("if(action==\"CatalogWindow\")")<tools.find("auto* controllerClass="),"Catalogue queries must not require a connected or local player");
     Check(tools.contains("HelpyQueryService::PumpOne(false,runCatalogWindow)"),"Accepted catalogue reads must dispatch without a ready spawn world");
-    Check(tools.contains("if(work.MayStart()&&!PS::SpawnToolRequests::Waiting.load())")&&tools.contains("else {work.Started();PS::SlowWork::Measure(\"helpy.catalog.passive\""),"Background catalogue refresh must yield to item mutations, dispatched reads and the shared frame budget");
+    Check(tools.contains("if(work.MayStart()&&!PS::SpawnToolRequests::Waiting.load())")&&tools.contains("else if(PS::HelpyActivity::BackgroundAllowed())")&&tools.contains("PS::SlowWork::Measure(\"helpy.catalog.passive\""),"Background catalogue refresh must require visible Helpy and yield to mutations, dispatched reads and the shared frame budget");
     Check(items.contains("ItemPages,ItemPreviewPages")&&items.contains("ItemRefreshPending&&!ItemRefreshPumping"),"A stale-scope presentation cache must survive bounded background refresh without evicting strict-scope read state");
     Check(!tools.contains("if(m_readyWorld&&IsWorldStillLoaded(m_readyWorld))if(auto queryRequest="),"World-gated metadata query starvation returned");
     Check(tools.contains("UWorld* catalogWorld=m_readyWorld&&IsWorldStillLoaded(m_readyWorld)?m_readyWorld:nullptr"),"Empty dedicated worlds must still have a live catalogue context");

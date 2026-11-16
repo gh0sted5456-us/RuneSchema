@@ -19,8 +19,8 @@ public:
     bool Lock(){if(!gate)return false;const auto result=WaitForSingleObject(gate,0);if(result==WAIT_ABANDONED){ReleaseMutex(gate);return false;}return result==WAIT_OBJECT_0;}
     void Unlock(){ReleaseMutex(gate);}
     Data* Get(){return data;}
-    void Open(const std::string& value,bool create){
-        Close();const auto prefix="Local\\RuneSchema.CharacterPreview."+std::to_string(GetCurrentProcessId())+".";
+    void Open(const std::string& value,bool create,uint32_t owner=GetCurrentProcessId()){
+        Close();const auto prefix="Local\\RuneSchema.CharacterPreview."+std::to_string(owner)+".";
         if(!value.starts_with(prefix)||value.size()>128||value.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.\\")!=value.npos)throw std::runtime_error("Invalid local preview channel");
         name=value;const std::wstring wide(value.begin(),value.end());gate=CreateMutexW(nullptr,FALSE,(wide+L".gate").c_str());
         mapping=create?CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,0,sizeof(Data),wide.c_str()):OpenFileMappingW(FILE_MAP_ALL_ACCESS,FALSE,wide.c_str());

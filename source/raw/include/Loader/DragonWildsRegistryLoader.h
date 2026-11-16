@@ -28,6 +28,7 @@ private:
     void LoadDocument(const nlohmann::json& document,const std::string& owner,const std::string& source);
     nlohmann::json NormalizeEntry(const nlohmann::json& entry,const std::string& owner);
     void LoadCookedRegistries();
+    void LoadStandaloneNetworks();
     void WriteMerged();
 };
 }

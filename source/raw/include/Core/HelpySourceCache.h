@@ -29,7 +29,7 @@ struct Snapshot {
     std::string Key,CatalogKey;std::set<std::string> Files,NativePlugins;
     std::string FileKey;uint64_t IconBase=0;
     std::map<std::string,uint64_t> OwnerHashes;
-    bool Authoritative=false,Provisional=false,Complete=true;uint64_t PlanRevision=0,ContentRevision=0;
+    bool Authoritative=false,Provisional=false,PresentationOnly=false,Complete=true;uint64_t PlanRevision=0,ContentRevision=0;
     std::map<std::string,std::string> SourceKeys;
     std::map<std::string,std::set<std::string>> Owners;
     std::map<std::string,std::set<std::string>> DeclaredOwners;
@@ -236,7 +236,7 @@ inline nlohmann::json Document(const Snapshot& value){return {{"Version",4},{"Re
 inline bool AcceptRemote(const nlohmann::json& value){
     if(!value.is_object()||!value.value("Ready",false))return false;
     if(value.value("Version",0)!=4||!value.value("Authoritative",false))throw std::runtime_error("Icon source manifest requires a matching RuneSchema core");
-    Snapshot next;next.Key=value.at("Key").get<std::string>();next.Authoritative=true;next.PlanRevision=value.at("PlanRevision").get<uint64_t>();next.ContentRevision=value.value("ContentRevision",uint64_t{});
+    Snapshot next;next.PresentationOnly=value.value("PresentationOnly",false);next.Provisional=next.PresentationOnly;next.Key=value.at("Key").get<std::string>();next.Authoritative=!next.PresentationOnly;next.PlanRevision=value.at("PlanRevision").get<uint64_t>();next.ContentRevision=value.value("ContentRevision",uint64_t{});
     if(!HexKey(next.Key)||!value.at("Sources").is_object()||value.at("Sources").size()>512)throw std::runtime_error("Icon source manifest is invalid");
     if(value.contains("CatalogKey")){if(!value["CatalogKey"].is_string())throw std::runtime_error("Invalid catalogue source key");
         next.CatalogKey=value["CatalogKey"].get<std::string>();if(!next.CatalogKey.empty()&&!HexKey(next.CatalogKey))throw std::runtime_error("Invalid catalogue source key");}
@@ -291,7 +291,7 @@ inline bool AcceptRemote(const nlohmann::json& value){
         }
         next.Containers=containers;
     }
-    if(next.Key==Current.Key&&next.NativePlugins==Current.NativePlugins&&next.DeclaredOwners==Current.DeclaredOwners&&next.DisplayNames==Current.DisplayNames&&next.Versions==Current.Versions){
+    if(next.Key==Current.Key&&next.PresentationOnly==Current.PresentationOnly&&next.Authoritative==Current.Authoritative&&next.Owners==Current.Owners&&next.NativePlugins==Current.NativePlugins&&next.DeclaredOwners==Current.DeclaredOwners&&next.DisplayNames==Current.DisplayNames&&next.Versions==Current.Versions){
         Current.PlanRevision=next.PlanRevision;Current.ContentRevision=next.ContentRevision;Current.Containers=std::move(next.Containers);return false;
     }
     bool removed=false;for(const auto& [group,key]:Current.SourceKeys)if(!next.SourceKeys.contains(group)){removed=true;break;}
@@ -314,12 +314,12 @@ inline void Persist(const Snapshot& value) noexcept {
 }
 // Called only by the owning UI/game thread. The worker only reads files and
 // returns a value; it never accesses Unreal, ImGui, or mutable cache state.
-inline bool Poll(const std::filesystem::path& root){
-    bool changed=false;const auto now=std::chrono::steady_clock::now();
+inline bool PollSaved(){
+    bool changed=false;
     // Both the native host and desktop can display saved references before the
     // live census completes. Provisional sources never publish a live contract.
     if(!CachedSourcesAttempted){CachedSourcesAttempted=true;if(Current.Key.empty()){const auto file=Directory(false)/"sources.json";
-            CachedSourcesWorker=std::async(std::launch::async,[file]{try{if(std::filesystem::file_size(file)>2*1024*1024)return nlohmann::json{};std::ifstream input(file);return nlohmann::json::parse(input);}catch(...){return nlohmann::json{};}});}
+            CachedSourcesWorker=std::async(std::launch::async,[file]{try{std::ifstream input(file);return nlohmann::json::parse(input);}catch(...){return nlohmann::json{};}});}
     }
     if(CachedSourcesWorker.valid()&&CachedSourcesWorker.wait_for(std::chrono::seconds(0))==std::future_status::ready){
         try{auto value=CachedSourcesWorker.get();if(Current.Key.empty()&&AcceptRemote(value)){
@@ -327,14 +327,21 @@ inline bool Poll(const std::filesystem::path& root){
             if(!RemoteSnapshot){std::lock_guard lock(PublishedMutex);Published=Document(Current);}
         }}catch(...){}
     }
+    return changed;
+}
+inline bool Poll(const std::filesystem::path& root){
+    bool changed=PollSaved();const auto now=std::chrono::steady_clock::now();
     if(RemoteSnapshot){
         if(now<Next)return changed;Next=now+std::chrono::seconds(2);try{nlohmann::json value;
         if(!RemoteSnapshot(value)||!value.value("Ready",false))return changed;
-        const bool provisional=Current.Provisional;const bool accepted=AcceptRemote(value);Current.Provisional=false;
-        if(provisional&&!accepted)++Revision;changed=changed||accepted||provisional;Error.clear();return changed;
+        const bool provisional=Current.Provisional;const bool accepted=AcceptRemote(value);Current.Provisional=Current.PresentationOnly;
+        const bool promoted=provisional&&!Current.Provisional;if(promoted&&!accepted)++Revision;changed=changed||accepted||promoted;Error.clear();return changed;
     }catch(const std::exception& error){Error=error.what();return false;}}
+    // Skip the full plan copy unless a worker finished or a new inspection is due.
+    const bool finished=Worker.valid()&&Worker.wait_for(std::chrono::seconds(0))==std::future_status::ready;
+    if(!finished&&(Worker.valid()||(now<Next&&InspectingRevision==HelpyCacheSources::CurrentRevision())))return changed;
     const auto plan=HelpyCacheSources::Snapshot();
-    if(Worker.valid()&&Worker.wait_for(std::chrono::seconds(0))==std::future_status::ready){try{
+    if(finished){try{
         auto result=Worker.get();if(result.Versions!=plan.Versions){Next={};return false;}if(result.PlanRevision!=plan.Revision){
             if(result.ContentRevision!=plan.ContentRevision||result.FileKey.empty()){Next={};return false;}
             result=Replan(std::move(result),plan);

@@ -6,6 +6,7 @@
 #include <string>
 #include <string_view>
 #include <stdexcept>
+#include <nlohmann/json.hpp>
 namespace PS::ItemFamily {
 // Browsing identity only: strip equipment-slot words, retain set, material,
 // quality and dye/trim words. No asset loading, grants or item mutation.
@@ -20,8 +21,11 @@ inline std::string Key(std::string_view name){
         words+=std::isalnum(c)?static_cast<char>(std::tolower(c)):' ';
     }
     static const std::set<std::string> slots{"helm","helmet","hood","coif","cowl","hat","mask","cap","chestplate","chestpiece","platebody","cuirass","hauberk","body","chest","tunic","coat","robe","robes","legs","legplates","platelegs","greaves","leggings","chaps","tassets","skirt","boots","shoes","gloves","gauntlets","bracers","vambraces","pauldrons","shoulders"};
+    const bool identifier=words.starts_with("item ")||words.starts_with("armour ")||words.starts_with("armor ");
     std::istringstream input(words);std::string word,key;bool slot=false,robe=false;
     while(input>>word){
+        if(identifier&&word=="head"){slot=true;continue;}
+        if(identifier&&word.size()>1&&word[0]=='t'&&std::all_of(word.begin()+1,word.end(),[](unsigned char c){return std::isdigit(c);}))continue;
         const bool robePart=robe&&(word=="top"||word=="bottom");robe=word=="robe"||word=="robes";
         if(robePart)continue;
         if(slots.contains(word)){
@@ -35,9 +39,18 @@ inline std::string Key(std::string_view name){
         }
         if(word=="item"||word=="armor"||word=="armour")continue;if(!key.empty())key+='_';key+=word;
     }
-    return slot&&key.size()>=3?key:std::string{};
+    if(slot)return key.size()>=3?key:std::string{};
+    std::istringstream contractWords(words);std::string family;bool contract=false;
+    static const std::set<std::string> tiers{"bronze","iron","steel","black","mithril","adamant","adamantite","rune","dragon"};
+    while(contractWords>>word){if(word=="contract"){contract=true;continue;}if(word=="item"||tiers.contains(word))continue;if(!family.empty())family+='_';family+=word;}
+    return contract&&family.size()>=3?family+"_contract":std::string{};
 }
 inline bool Matches(const std::string& filter,std::string_view name){return filter.empty()||Key(name)==filter;}
+inline std::string RowKey(const nlohmann::json& row){
+    const auto manual=row.find("HelpyFamily");if(manual!=row.end()&&manual->is_string()){const auto& key=manual->get_ref<const std::string&>();if(!key.empty()&&key.size()<=192&&key.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789_")==key.npos)return key;}
+    const auto name=row.find("Name");return name!=row.end()&&name->is_string()?Key(name->get_ref<const std::string&>()):std::string{};
+}
+inline bool MatchesRow(const std::string& filter,const nlohmann::json& row){return filter.empty()||RowKey(row)==filter;}
 inline std::string TakeFilter(std::string& query){
     constexpr std::string_view prefix="__helpyfamily:";if(!query.starts_with(prefix))return {};
     const auto end=query.find(' ');auto key=query.substr(prefix.size(),end==query.npos?std::string::npos:end-prefix.size());

@@ -1,6 +1,8 @@
 #pragma once
 #include "Core/ProcessExitFuture.h"
 #include "Core/HelpyPersonalization.h"
+#include "Core/ModAchievements.h"
+#include <functional>
 #include <objbase.h>
 #include <chrono>
 #include <array>
@@ -109,7 +111,31 @@ inline void ReceivePublic(const std::string& character,const Json& value){
     Shared[character]={profile,now+std::chrono::minutes(15)};
 }
 inline Json PublicFor(const std::string& character,bool local=false){std::lock_guard lock(Gate);if(local)return PublicLocked();const auto found=Shared.find(HelpyPersonalization::Guid(character));return found!=Shared.end()&&found->second.Expires>std::chrono::steady_clock::now()?found->second.Public:Json{};}
-inline void ClearShared(){std::lock_guard lock(Gate);Shared.clear();}
+// Mod achievement summaries shared with other players (Core/ModAchievements.h). Kept beside the public
+// profile but separate from it, so older Helpy builds that validate exactly four profile fields still work.
+struct SharedAchievement{Json Summary;std::chrono::steady_clock::time_point Expires;};
+inline std::map<std::string,SharedAchievement> SharedAchievements;
+inline std::function<Json()> LocalAchievements; // Set by the in-process achievements runtime.
+// The local summary: from the in-process runtime, or from the profile's achievements.json when Helpy runs
+// as a separate desktop process. Re-read only when the file changes.
+inline Json LocalAchievementSummary(){
+    if(LocalAchievements)return LocalAchievements();
+    static std::filesystem::file_time_type seen{};static Json cached=nullptr;static std::mutex cache;
+    try{const auto file=Data("achievements.json");std::error_code error;const auto time=fs::last_write_time(file,error);if(error)return nullptr;
+        std::lock_guard lock(cache);if(time!=seen){cached=ModAchievements::Summary(ModAchievements::Progress::Parse(Json::parse(ConfigFiles::Read(file,4*1024*1024))));seen=time;}return cached;
+    }catch(...){return nullptr;}
+}
+inline void ReceivePublicAchievements(const std::string& character,const Json& value){
+    if(character.empty()||HelpyPersonalization::Guid(character)!=character)return;const auto summary=ModAchievements::ValidateSummary(value);
+    std::lock_guard lock(Gate);const auto now=std::chrono::steady_clock::now();std::erase_if(SharedAchievements,[&](const auto& entry){return entry.second.Expires<=now;});
+    if(summary.is_null()){SharedAchievements.erase(character);return;}if(!SharedAchievements.contains(character)&&SharedAchievements.size()>=256)return;
+    SharedAchievements[character]={summary,now+std::chrono::minutes(15)};
+}
+inline Json AchievementsFor(const std::string& character,bool local=false){
+    if(local)return LocalAchievementSummary();std::lock_guard lock(Gate);const auto found=SharedAchievements.find(HelpyPersonalization::Guid(character));
+    return found!=SharedAchievements.end()&&found->second.Expires>std::chrono::steady_clock::now()?found->second.Summary:Json(nullptr);
+}
+inline void ClearShared(){std::lock_guard lock(Gate);Shared.clear();SharedAchievements.clear();}
 inline std::string Name(const Json& row){const auto character=row.value("Name",std::string{});std::lock_guard lock(Gate);std::string profile;if(Ready&&row.value("IsLocal",false))profile=Document.value("ProfileName",std::string{});else {const auto found=Shared.find(HelpyPersonalization::Guid(row.value("Guid",std::string{})));if(found!=Shared.end()&&found->second.Expires>std::chrono::steady_clock::now())profile=found->second.Public.value("ProfileName",std::string{});}return profile.empty()?character:profile+" ("+character+")";}
 inline void Shutdown(){if(Migration.valid())Migration.wait();}
 }

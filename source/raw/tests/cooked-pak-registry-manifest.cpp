@@ -32,6 +32,53 @@ int main()
     assert(published.MeleeAttackClasses.size() == 2);
     assert(published.RangedAttackClasses.size() == 1);
     assert(published.Fingerprint != 0);
+    const std::string component="/Game/Mods/ExampleMod/BP_World.BP_World_C";
+    const nlohmann::json worldOnly={{"NativeRegistries",{{"WorldComponents",{component}}}}};
+    const auto world=Parse(worldOnly,"ExampleMod","registry/world.jsonc");
+    assert(world&&world->WorldComponents==std::vector<std::string>{component}&&world->AssetLanes.empty());
+    auto withWorld=document;withWorld["NativeRegistries"]["WorldComponents"]={component};
+    assert(Parse(withWorld,"ExampleMod","registry/world.jsonc")->Fingerprint!=published.Fingerprint);
+    auto emptyWorld=document;emptyWorld["NativeRegistries"]["WorldComponents"]=nlohmann::json::array();
+    assert(Parse(emptyWorld,"ExampleMod","registry/world.jsonc")->Fingerprint==published.Fingerprint);
+    for(const auto* path:{"/Game/Mods/Other/BP.BP_C","/Game/Mods/ExampleMod/BP.BP","/Script/Engine.ActorComponent","/Game/Mods/ExampleMod/BP.BP_C:Sub"}){
+        auto invalidWorld=worldOnly;invalidWorld["NativeRegistries"]["WorldComponents"]={path};bool bad=false;
+        try{Parse(invalidWorld,"ExampleMod","registry/world.jsonc");}catch(const std::runtime_error&){bad=true;}assert(bad);
+    }
+    auto duplicateWorld=worldOnly;duplicateWorld["NativeRegistries"]["WorldComponents"].push_back(component);bool badWorld=false;
+    try{Parse(duplicateWorld,"ExampleMod","registry/world.jsonc");}catch(const std::runtime_error&){badWorld=true;}assert(badWorld);
+
+    const nlohmann::json commands={{"NativeRegistries",{{"ConsoleCommands",nlohmann::json::array({{{"Version",1},{"Id","Weather"},{"Class",component}}})}}}};
+    const auto command=Parse(commands,"ExampleMod","registry/commands.jsonc");
+    assert(command&&command->ConsoleCommands.size()==1&&command->ConsoleCommands[0].Owner=="ExampleMod");
+    auto withCommand=document;withCommand["NativeRegistries"]["ConsoleCommands"]=commands["NativeRegistries"]["ConsoleCommands"];
+    assert(Parse(withCommand,"ExampleMod","registry/commands.jsonc")->Fingerprint!=published.Fingerprint);
+    auto noCommands=document;noCommands["NativeRegistries"]["ConsoleCommands"]=nlohmann::json::array();
+    assert(Parse(noCommands,"ExampleMod","registry/commands.jsonc")->Fingerprint==published.Fingerprint);
+    for(const auto& invalid:nlohmann::json::array({
+        {{"Version",2},{"Id","Weather"},{"Class",component}},{{"Version",1},{"Id","bad:id"},{"Class",component}},
+        {{"Version",1},{"Id","Weather"},{"Class","/Game/Mods/Other/BP.BP_C"}},
+        {{"Version",1},{"Id","Weather"},{"Class",component},{"Owner","Other"}},
+        {{"Version",1},{"Id","Weather"},{"Class","/Game/Mods/ExampleMod/BP.BP"}}})){
+        auto bad=commands;bad["NativeRegistries"]["ConsoleCommands"][0]=invalid;bool rejected=false;
+        try{Parse(bad,"ExampleMod","registry/commands.jsonc");}catch(const std::runtime_error&){rejected=true;}assert(rejected);
+    }
+    auto duplicateCommand=commands;duplicateCommand["NativeRegistries"]["ConsoleCommands"].push_back({{"Version",1},{"Id","weather"},{"Class",component}});
+    bool rejectedCommand=false;try{Parse(duplicateCommand,"ExampleMod","registry/commands.jsonc");}catch(const std::runtime_error&){rejectedCommand=true;}assert(rejectedCommand);
+
+    const nlohmann::json local={{"NativeRegistries",{{"LocalServices",nlohmann::json::array({{{"Version",1},{"Id","templates"},{"Class","/Game/ExampleMod/Core/BPC_Template.BPC_Template_C"},{"Templates",true}}})}}}};
+    const auto localService=Parse(local,"ExampleMod","registry/local.jsonc");assert(localService&&localService->LocalServices.size()==1&&localService->LocalServices[0].Templates);
+    assert(!Detail::OwnedObjectPath("/Game/ExampleMod/Core/BPC_Template.BPC_Template_C","ExampleMod"));
+    auto computeService=local;computeService["NativeRegistries"]["LocalServices"][0].erase("Templates");computeService["NativeRegistries"]["LocalServices"][0]["ComputeProviders"]={"ExampleMod.Math/Check180"};assert(Parse(computeService,"ExampleMod","registry/local.jsonc"));
+    for(const auto& row:nlohmann::json::array({
+        {{"Version",1},{"Id","t"},{"Class","/Game/Other/BPC.BPC_C"},{"Templates",true}},
+        {{"Version",1},{"Id","t"},{"Class",component},{"Templates","true"}},
+        {{"Version",1},{"Id","t"},{"Class",component}},
+        {{"Version",1},{"Id","t"},{"Class",component},{"ComputeProviders",{"Other.Math/Probe"}}},
+        {{"Version",1},{"Id","t"},{"Class",component},{"Templates",true},{"Root","C:/other"}}})){
+        auto invalid=local;invalid["NativeRegistries"]["LocalServices"][0]=row;bool rejected=false;try{Parse(invalid,"ExampleMod","registry/local.jsonc");}catch(const std::runtime_error&){rejected=true;}assert(rejected);
+    }
+    auto duplicateLocal=local;duplicateLocal["NativeRegistries"]["LocalServices"].push_back(duplicateLocal["NativeRegistries"]["LocalServices"][0]);bool rejectedLocal=false;try{Parse(duplicateLocal,"ExampleMod","registry/local.jsonc");}catch(const std::runtime_error&){rejectedLocal=true;}assert(rejectedLocal);
+
     auto artwork=document;artwork["NativeRegistries"]["CacheAssets"]={"/Example/Icons/T_Original.T_Original"};
     const auto loose=Parse(artwork,"ExampleMod","registry/example.jsonc");
     const auto cooked=Parse(artwork,"ExampleMod","pak:/Example.RSREG_Test");
@@ -128,6 +175,7 @@ int main()
     rejectDocument({{"LoaderDefinitions",{{"Journals",{{"/Example/Journal/Empty.",nlohmann::json::object()}}}}}});
     rejectDocument({{"LoaderDefinitions",{{"Journals",{{journal,1}}}}}});
     rejectDocument({{"NativeRegistries",nlohmann::json::object()}});
+    auto nullNative=metadata;nullNative["NativeRegistries"]=nullptr;rejectDocument(nullNative);
     auto oversized=metadata;
     for(int i=0;i<4097;++i)oversized["LoaderDefinitions"]["Lore"]["/Example/Note"+std::to_string(i)+".Note"] = nlohmann::json::object();
     rejectDocument(oversized);
@@ -238,4 +286,45 @@ int main()
         {"LoaderDefinitions",{{"Recipes",{{lower,nlohmann::json::object()}}}}}},"Example","schema-alias.jsonc");}
     catch(const std::exception&){schemaAlias=true;}assert(schemaAlias);
     Reset();
+    const std::string tableSource="/Example/Tables/DT_Extra.DT_Extra",tableTarget="/Game/Tables/DT_Native.DT_Native";
+    const auto tableDocument=[&](const nlohmann::json& body){return nlohmann::json{{"LoaderDefinitions",{{"DataTables",{{tableSource,body}}}}}};};
+    assert(Publish(tableDocument({{"Target",tableTarget}}),"Example","pak:/Example/DA_Registry.DA_Registry"));
+    assert(Definitions("DataTables").size()==1&&Definitions("DataTables")[0].Body==nlohmann::json({{"Target",tableTarget}}));
+    for(const auto& bad:nlohmann::json::array({nlohmann::json::object(),{{"Target",7}},{{"Target","DT_Native"}},
+        {{"Target","/Game/Tables/DT_Native"}},{{"Target","/Game/Tables/A.A:Subobject"}},{{"Target","/Other/Tables/A.A"}},
+        {{"Target",tableTarget},{"Replace",true}},{{"Target",tableTarget},{"Unlock",true}}})){
+        bool rejected=false;try{Parse(tableDocument(bad),"Example","bad.jsonc");}catch(const std::exception&){rejected=true;}assert(rejected);
+    }
+    bool foreign=false;try{Parse(tableDocument({{"Target",tableTarget}}),"OtherOwner","bad.jsonc");}catch(const std::exception&){foreign=true;}assert(foreign);
+    Reset();
+    Manifest large;large.Owner="Large";large.Source="large.jsonc";
+    constexpr int count=23000;
+    for(int i=0;i<count;++i){const auto name="R_"+std::to_string(i);const auto path="/Large/Recipes/"+name+"."+name;
+        large.LoaderDefinitions["Recipes"][path]={{"Unlock",false},{"Discovery",{{"AllItems",{"/Large/I.I","/Large/J.J"}}}}};}
+    PublishBatch({large});
+    const auto* retained=&Detail::Manifests[0]->LoaderDefinitions.get_ref<const nlohmann::json::object_t&>();
+    Manifest unrelated;unrelated.Owner="Other";unrelated.Source="items.jsonc";unrelated.AssetLanes.push_back({"Items",{"/Other/I.I"}});
+    PublishBatch({unrelated});
+    assert(retained==&Detail::Manifests[0]->LoaderDefinitions.get_ref<const nlohmann::json::object_t&>());
+    auto owned=Definitions("Recipes");assert(owned.size()==count);
+    Manifest lateManifestConflict;lateManifestConflict.Owner="Large";lateManifestConflict.Source="conflict.jsonc";
+    lateManifestConflict.LoaderDefinitions["Recipes"][owned.front().Path]={{"Unlock",true}};
+    Manifest earlier;earlier.Owner="Early";earlier.Source="early.jsonc";earlier.AssetLanes.push_back({"Items",{"/Early/I.I"}});
+    bool atomic=false;try{PublishBatch({earlier,lateManifestConflict});}catch(const std::runtime_error&){atomic=true;}
+    assert(atomic&&Detail::Manifests.size()==2&&retained==&Detail::Manifests[0]->LoaderDefinitions.get_ref<const nlohmann::json::object_t&>());
+    auto replacement=large;replacement.LoaderDefinitions["Recipes"][owned.front().Path]["Unlock"]=true;
+    PublishBatch({replacement,large}); // Last update to the same owner/source wins.
+    assert(Detail::Manifests.size()==2&&Definitions("Recipes").front().Body.at("Unlock")==false);
+    PublishBatch({replacement});
+    assert(Definitions("Recipes").front().Body.at("Unlock")==true&&owned.front().Body.at("Unlock")==false);
+    Reset();assert(owned.size()==count&&owned.front().Body.at("Unlock")==false);
+    Manifest defaults;defaults.Owner="A";defaults.Source="a";defaults.LoaderDefinitions["Recipes"]["/Shared/R.R"]=nlohmann::json::object();
+    auto explicitDefault=defaults;explicitDefault.Source="b";explicitDefault.LoaderDefinitions["Recipes"]["/Shared/R.R"]["Unlock"]=false;
+    PublishBatch({defaults,explicitDefault});assert(Definitions("Recipes").size()==1);
+    Reset();
+    assert(WorldComponentClasses().empty());
+    assert(Publish(worldOnly,"ExampleMod","registry/world.jsonc"));
+    const auto worldClasses=WorldComponentClasses();
+    assert(worldClasses.size()==1&&worldClasses.front().first=="ExampleMod"&&worldClasses.front().second==component);
+    Reset();assert(WorldComponentClasses().empty());
 }

@@ -12,6 +12,8 @@ int main(int argc,char** argv)try{
     ConfigFiles::Write(file,EncodeIniDocument(document));
     auto initial=RuneSchemaSettingsEditor::Read(root);Need(initial.at("Ok").get<bool>());
     Need(initial["Editable"]["/archiveLogs"]==false&&initial["Document"]["archiveLogs"]==false);
+    Need(initial["Editable"]["/logsInUE4SS"]==false&&initial["Document"]["logsInUE4SS"]==false);
+    Need(initial["Editable"]["/itemDeliveryMode"]=="once"&&initial["Document"]["itemDeliveryMode"]=="once");
     Need(!initial["Editable"].contains("/futureSection/keep"));
     Need(!initial["Editable"].contains("/persistence/recovery")&&!initial["Editable"].contains("/worldSaveCleanup/backupBeforePrune"));
     Need(initial["Editable"]["/persistence/blanketCleanup"]==false
@@ -37,13 +39,14 @@ int main(int argc,char** argv)try{
     Need(!save(json{{"/advancedLogging",true}},"stale").at("Ok").get<bool>());
     Need(!save(json{{"/helpyHotkey","not-a-key"}},original).at("Ok").get<bool>());Need(ConfigFiles::Read(file)==original);
     Need(initial["Document"]["helpyHotkey"]=="F2"&&initial["Editable"].contains("/helpyHotkey"));
-    const auto saved=save(json{{"/advancedLogging",true},{"/archiveLogs",true},{"/persistence/allowCorruptCharacterEntry",true},{"/persistence/blanketCleanup",false}},original);
+    const auto saved=save(json{{"/advancedLogging",true},{"/archiveLogs",true},{"/logsInUE4SS",true},{"/persistence/allowCorruptCharacterEntry",true},{"/persistence/blanketCleanup",false}},original);
     Need(saved.at("Ok").get<bool>()&&saved.at("RestartRequired").get<bool>());
     Need(ConfigFiles::Read(saved.at("Backup").get<std::string>())==original);
     Need(saved["Document"]["futureSection"]["keep"]=="unchanged");
     Need(saved["Document"]["advancedLogging"]==true&&saved["Document"]["persistence"]["allowCorruptCharacterEntry"]==true);
     Need(saved["Document"]["defaultRecovery"]["enabled"]==false&&saved["Document"]["defaultRecovery"]["progress"]==false);
     Need(saved["Document"]["archiveLogs"]==true);
+    Need(saved["Document"]["logsInUE4SS"]==true&&DecodeSettings(DecodeIniDocument(ConfigFiles::Read(file)).dump()).logsInUE4SS);
     Need(saved["Document"]["persistence"]["recovery"]==false);
     Need(saved["Document"]["persistence"]["blanketCleanup"]==false
         &&!DecodeSettings(DecodeIniDocument(ConfigFiles::Read(file)).dump()).persistence.blanketCleanup);
@@ -51,6 +54,8 @@ int main(int argc,char** argv)try{
     const auto shortcut=save(json{{"/helpyHotkey","F5"}},current);Need(shortcut.at("Ok").get<bool>());
     Need(shortcut["Document"]["helpyHotkey"]=="F5"&&DecodeSettings(DecodeIniDocument(ConfigFiles::Read(file)).dump()).helpyHotkey=="F5");
     Need(ConfigFiles::Read(shortcut.at("Backup").get<std::string>())==current);
+    const auto chord=save(json{{"/helpyHotkey","Ctrl+F7"}},ConfigFiles::Read(file));Need(chord.at("Ok").get<bool>());
+    Need(chord["Document"]["helpyHotkey"]=="Ctrl+F7"&&DecodeSettings(DecodeIniDocument(ConfigFiles::Read(file)).dump()).helpyHotkey=="Ctrl+F7");
     const auto entrySave=save(json{{"/persistence/cleanupOnWorldEntry",true}},ConfigFiles::Read(file));
     Need(entrySave.at("Ok")==true&&entrySave.at("RestartRequired")==false);
     const auto launchSave=save(json{{"/persistence/cleanupOnWorldEntry",false}},ConfigFiles::Read(file));
@@ -66,6 +71,23 @@ int main(int argc,char** argv)try{
     Need(seeded.at("helpyHotkey")=="F2"&&seeded.at("archiveLogs")==false
         &&seeded.at("persistence").at("allowCorruptCharacterEntry")==false);
     Need(seeded.at("advancedLogging")==true&&seeded.at("autoUpdateMappings")==true);
+    const auto hostSaved=save(json{{"/helpyAuthority/allowPinAccess",true},{"/helpyAuthority/accessPin","Private-test-48219"},
+        {"/helpyAuthority/allowClientItemGrants",true},{"/helpyAuthority/allowClientTeleport",true},
+        {"/helpyAuthority/permittedPlayerGuids",json::array({"0123456789abcdef0123456789abcdef"})}},ConfigFiles::Read(file));
+    Need(hostSaved.at("Ok")==true&&hostSaved.at("HostPolicyChanged")==true&&hostSaved.at("RestartRequired")==false);
+    const auto mixed=save(json{{"/helpyAuthority/maximumItemCount",250},{"/advancedLogging",false}},ConfigFiles::Read(file));
+    Need(mixed.at("Ok")==true&&mixed.at("HostPolicyChanged")==true&&mixed.at("RestartRequired")==true);
+    const auto live=save(json{{"/helpyAuthority/maximumItemCount",0}},ConfigFiles::Read(file));
+    Need(live.at("Ok")==true&&live.at("HostPolicyChanged")==true&&live.at("RestartRequired")==false);
+    const auto hostRestart=DecodeSettings(DecodeIniDocument(ConfigFiles::Read(file)).dump()).helpyAuthority;
+    Need(hostRestart.maximumItemCount==0&&hostRestart.allowPinAccess&&hostRestart.accessPin=="Private-test-48219"&&hostRestart.allowClientItemGrants&&hostRestart.allowClientTeleport
+        &&hostRestart.permittedPlayerGuids==std::vector<std::string>{"0123456789abcdef0123456789abcdef"});
+    for(const auto* mode:{"off","always","once"}){
+        const auto change=save(json{{"/itemDeliveryMode",mode}},ConfigFiles::Read(file));
+        Need(change.at("Ok")==true&&change.at("RestartRequired")==true);
+        Need(DecodeItemDeliveryMode(DecodeIniDocument(ConfigFiles::Read(file)))==mode);
+    }
+    Need(save(json{{"/itemDeliveryMode","typo"}},ConfigFiles::Read(file)).at("Ok")==false);
     auto explicitBlanket=seeded;explicitBlanket["persistence"]["blanketCleanup"]=true;
     ConfigFiles::Write(file,EncodeIniDocument(explicitBlanket));
     const auto seededText=ConfigFiles::Read(file);Need(RuneSchemaSettingsEditor::PrepareModMenuFields(root).at("Ok")==true&&ConfigFiles::Read(file)==seededText);

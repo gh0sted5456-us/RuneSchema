@@ -10,6 +10,7 @@
 #include "Loader/DragonWildsModLoaderBase.h"
 #include "SDK/WeakObjectHandle.h"
 #include "Runtime/WorldBuildingRegistryValidation.h"
+#include "Core/BuildingNetworkGuard.h"
 #include "nlohmann/json.hpp"
 
 namespace RC::Unreal {
@@ -24,8 +25,12 @@ namespace DragonWilds {
         DragonWildsBuildingModLoader();
         ~DragonWildsBuildingModLoader() override;
         void ActivateWorldRegistration();
+        PS::BuildingNetworkGuard::Registry NetworkIdentity(RC::Unreal::UObject* context);
+        nlohmann::json NetworkIdentityManifest();
+        std::vector<std::string> PlanNetworkOrder(const std::vector<std::size_t>& order);
+        void SetNetworkOrder(std::vector<std::string> order) noexcept;
         void ImportCookedDefinitions();
-        std::vector<PS::WorldBuildingRegistryValidation::Expected> CleanupExpectations();
+        std::vector<PS::WorldBuildingRegistryValidation::Expected> CleanupExpectations(const std::unordered_set<std::string>* present=nullptr);
         void RejectCleanup(const std::string& reason);
         std::function<void(const nlohmann::json&,const RC::StringType&)> ImportPlacements;
         nlohmann::json PlanToolImport(const nlohmann::json& data);
@@ -119,7 +124,8 @@ namespace DragonWilds {
         bool RestoreNativeRegistry();
         void ClearWorldRegistryState();
         bool ApplyUnlocks(RC::Unreal::UObject* progressComponent);
-        size_t ApplyUnlocksToWorld(
+        struct WorldUnlockResult { size_t ProgressComponents = 0, Applied = 0; };
+        WorldUnlockResult ApplyUnlocksToWorld(
             RC::Unreal::UObject* worldContext = nullptr,
             bool reportDeferred = true);
         void NotifyBuildingUnlocks(RC::Unreal::UObject* progressComponent,
@@ -147,6 +153,11 @@ namespace DragonWilds {
         std::unordered_set<std::string> m_ownedProfileRows;
         std::vector<RC::Unreal::UObject*> m_createdBuildings;
         NativeRegistrySnapshot m_nativeRegistrySnapshot;
+        PS::WeakObjectHandle m_networkWorld;
+        PS::BuildingNetworkGuard::Registry m_networkIdentity;
+        std::size_t m_networkNativeCount=0;
+        std::vector<std::string> m_networkOrder;
+        PS::WeakObjectHandle m_networkPreviousContext;
         bool m_hooksRegistered = false;
         bool m_cookedImported = false;
         RC::Unreal::Hook::GlobalCallbackId m_initGameStateCallbackId = RC::Unreal::Hook::ERROR_ID;

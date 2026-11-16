@@ -10,8 +10,10 @@
 #include "nlohmann/json.hpp"
 
 namespace PS::NetworkIdentitySync {
-    inline constexpr std::size_t MaxDocument = 2 * 1024 * 1024;
-    inline constexpr std::size_t MaxWelcome = 48 * 1024;
+    inline constexpr std::size_t MaxDocument = 8 * 1024 * 1024;
+    inline constexpr std::size_t MaxWelcome = 60 * 1024;
+    inline constexpr std::size_t MaxSources = 1024;
+    inline constexpr std::size_t MaxJsonEvents = 1024 * 1024;
     inline constexpr std::string_view WelcomePrefix = "runeschema-ids-v1:";
     using Permutations = std::map<std::string, std::vector<std::size_t>>;
     struct Incompatible : std::runtime_error { using std::runtime_error::runtime_error; };
@@ -38,15 +40,16 @@ namespace PS::NetworkIdentitySync {
         Require(document.contains("fixedLanes") && document.at("fixedLanes").is_object()
             && document.at("fixedLanes").size() <= 256, "Invalid fixed registry lanes");
         Require(document.contains("registryOwners") && document.at("registryOwners").is_object()
-            && document.at("registryOwners").size() <= 256, "Invalid registry owner table");
+            && document.at("registryOwners").size() <= MaxSources, "Invalid registry owner table");
         for (const auto* field : {"fixedLanes", "registryOwners"})
             for (const auto& [key, value] : document.at(field).items()) {
                 Token(key, 512); Require(value.is_string(), "Invalid registry fingerprint"); Token(value.get<std::string>(), 96);
             }
         if(document.contains("sourceVersions")) {
-            Require(document.at("sourceVersions").is_object()&&document.at("sourceVersions").size()<=512,"Invalid source version telemetry");
+            Require(document.at("sourceVersions").is_object()&&document.at("sourceVersions").size()<=MaxSources,"Invalid source version telemetry");
             for(const auto& [key,value]:document.at("sourceVersions").items()){Token(key,128);Require(value.is_string(),"Invalid source version");Token(value.get<std::string>(),128);}
         }
+        if(document.contains("telemetryOmitted"))Require(document.at("telemetryOmitted").is_boolean(),"Invalid registry telemetry marker");
         for (const auto& [key, lane] : document.at("lanes").items()) {
             Token(key, 512);
             Require(lane.is_object() && lane.contains("prefixCount") && lane.at("prefixCount").is_number_unsigned()
@@ -70,11 +73,15 @@ namespace PS::NetworkIdentitySync {
             }
         }
     }
-    inline nlohmann::json Parse(const std::string& bytes) {
+    inline nlohmann::json ParseJson(const std::string& bytes) {
         Require(!bytes.empty() && bytes.size() <= MaxDocument, "Registry ID document exceeds its limit");
-        auto value = nlohmann::json::parse(bytes, [](int depth, auto, auto&) {
-            Require(depth <= 16, "Registry ID document nesting exceeds its limit"); return true;
-        }); Validate(value); return value;
+        std::size_t events=0;
+        return nlohmann::json::parse(bytes, [&](int depth, auto, auto&) {
+            Require(depth <= 16 && ++events<=MaxJsonEvents, "Registry ID document exceeds its nesting or element budget"); return true;
+        });
+    }
+    inline nlohmann::json Parse(const std::string& bytes) {
+        auto value=ParseJson(bytes);Validate(value);return value;
     }
     // All lanes are planned before the caller touches either native lookup table.
     inline Permutations Plan(const nlohmann::json& local, const nlohmann::json& authority) {

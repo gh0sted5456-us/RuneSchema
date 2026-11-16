@@ -1,4 +1,6 @@
+#include "Core/RuntimeWidgetEvents.h"
 #include <fstream>
+#include <set>
 #include <iostream>
 #include <iterator>
 #include <stdexcept>
@@ -80,7 +82,7 @@ int main(int argc, char** argv) {
     Require(source, "RemoveFromParent");
     Require(source, "m_runtimeUiActiveRules.emplace(key)");
     Require(source, "RemoveRuntimeUiInstancesForOwner");
-    Require(source, "eventName = function->GetFName()");
+    Require(source, "function ? function->GetFName() : NAME_None");
     Require(source, "destruct(TEXT(\"Destruct\"),FNAME_Add)");
     Require(source, "deactivated(TEXT(\"OnDeactivated\"),FNAME_Add)");
     Require(source, "eventName == destruct");
@@ -120,5 +122,22 @@ int main(int argc, char** argv) {
     if (restoreAppearance.find("/Game/UI/MainMenu/WBP_MainMenu_CharacterSelect") != std::string::npos)
         throw std::runtime_error("Restore Appearance must target the two observed live Gamepass owner classes");
 
-    std::cout << "Runtime-widget safety and native appearance wiring passed.\n";
+    using Json = nlohmann::json;
+    using namespace PS::RuntimeWidgetEvents;
+    std::set<std::string> names;
+    const auto add = [&](const std::string& name) {names.insert(name);};
+    const auto check = [](bool ok) {if(!ok)throw std::runtime_error("Runtime widget event filter changed");};
+    const auto named = Json::parse(R"({"$When":{"Function":["Construct","OnActivated"]}})");
+    check(!Collect(named,add) && names==std::set<std::string>{"Construct","OnActivated"});
+    check(!Match(named,[](const auto& name){return name=="Tick";}));
+    check(Match(named,[](const auto& name){return name=="OnActivated";}));
+    check(Collect(Json::object(),add));
+    check(Collect(Json::parse(R"({"$When":"ReSoLvEd"})"),add));
+    check(Collect(Json::parse(R"({"$When":{"Function":["Construct",17]}})"),add));
+    check(Match(Json::parse(R"({"$When":{"Function":["Construct",17]}})"),[](const auto& name){return name=="Construct";}));
+    const auto close=source.find("if (ownerClosing)");
+    const auto gate=source.find("!m_runtimeWidgetEvents.contains(eventName)");
+    const auto owners=source.find("ownersToRefresh;");
+    check(close!=source.npos && close<gate && gate<owners);
+    std::cout << "Runtime-widget named dispatch, wildcard rules, owner teardown, and native appearance wiring passed.\n";
 }

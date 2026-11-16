@@ -16,7 +16,8 @@ if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
 $RepositoryRoot = [IO.Path]::GetFullPath($RepositoryRoot)
 $required = @('LICENSE', 'AUTHORS.md', 'LICENSING.md', 'CONTRIBUTING.md', 'THIRD_PARTY_NOTICES.md',
     'licenses/PalSchema-MIT.txt', 'licenses/UE4SS-MIT.txt',
-    'licenses/nlohmann-json-MIT.txt')
+    'licenses/nlohmann-json-MIT.txt', 'licenses/SDL3-zlib.txt', 'licenses/ModMenu-MIT.txt',
+    'licenses/WebView2-Loader.txt', 'licenses/WebView2-NOTICE.txt', 'licenses/MD4C-MIT.txt')
 foreach ($relative in $required) {
     $path = Join-Path $RepositoryRoot $relative
     if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or
@@ -88,9 +89,12 @@ function Install-LicenseBundle([string]$Payload) {
     }
     # Preserve every bundled plugin's exact notices before consolidating them.
     # Removing Helpy's licenses first used to lose plugin-only notices.
-    $pluginDirectory = Join-Path $Payload 'plugins'
+    $pluginFolders=@()
+    foreach($relative in @('plugins','dlls/plugins','Helpy/plugins')){$directory=Join-Path $Payload $relative;if(Test-Path -LiteralPath $directory -PathType Container){$pluginFolders+=@(Get-ChildItem -LiteralPath $directory -Directory)}}
+    if(Test-Path -LiteralPath (Join-Path $Payload 'Helpy/plugin.json')){$pluginFolders+=Get-Item -LiteralPath (Join-Path $Payload 'Helpy')}
+    $pluginDirectory = $Payload
     if (Test-Path -LiteralPath $pluginDirectory -PathType Container) {
-        foreach ($plugin in Get-ChildItem -LiteralPath $pluginDirectory -Directory) {
+        foreach ($plugin in $pluginFolders) {
             $pluginNotices = @(Get-ChildItem -LiteralPath $plugin.FullName -File | Where-Object {
                 $_.Name -in @('LICENSE', 'AUTHORS.md', 'LICENSING.md', 'CONTRIBUTING.md', 'THIRD_PARTY_NOTICES.md')
             })
@@ -204,7 +208,12 @@ function Write-ConsolidatedLicenseFile {
         @{ Name = 'RuneSchema — Third-Party Inventory'; File = 'THIRD_PARTY_NOTICES.md'; Upstream = 'https://github.com/gh0sted5456-us/RuneSchema' },
         @{ Name = 'PalSchema — MIT License'; File = 'PalSchema-MIT.txt'; Upstream = 'https://github.com/Okaetsu/PalSchema' },
         @{ Name = 'UE4SS / RE-UE4SS — MIT License'; File = 'UE4SS-MIT.txt'; Upstream = 'https://github.com/UE4SS-RE/RE-UE4SS' },
-        @{ Name = 'JSON for Modern C++ — MIT License'; File = 'nlohmann-json-MIT.txt'; Upstream = 'https://github.com/nlohmann/json' }
+        @{ Name = 'JSON for Modern C++ — MIT License'; File = 'nlohmann-json-MIT.txt'; Upstream = 'https://github.com/nlohmann/json' },
+        @{ Name = 'SDL 3.4.16 — zlib License'; File = 'SDL3-zlib.txt'; Upstream = 'https://github.com/libsdl-org/SDL/tree/release-3.4.16' },
+        @{ Name = 'Maxxfilth Mod Menu — MIT License'; File = 'ModMenu-MIT.txt'; Upstream = 'https://www.curseforge.com/runescape-dragonwilds/ue4ss-mods/mod-menu' },
+        @{ Name = 'Microsoft WebView2 Loader — License'; File = 'WebView2-Loader.txt'; Upstream = 'https://www.nuget.org/packages/Microsoft.Web.WebView2/1.0.3405.78' },
+        @{ Name = 'Microsoft WebView2 Loader — Notices'; File = 'WebView2-NOTICE.txt'; Upstream = 'https://www.nuget.org/packages/Microsoft.Web.WebView2/1.0.3405.78' },
+        @{ Name = 'MD4C — MIT License'; File = 'MD4C-MIT.txt'; Upstream = 'https://github.com/mity/md4c/tree/release-0.5.2' }
     )
     foreach ($section in $sections) {
         $lines.Add('')
@@ -257,6 +266,7 @@ function Collect-DependencyNotices {
     }
     $roots = @(
         @{ Name = 'dependency-cache'; Path = (Join-Path $RepositoryRoot '.cache/dependencies') },
+        @{ Name = 'helpy-vendor'; Path = (Join-Path $RepositoryRoot 'source/helpy/vendor') },
         @{ Name = 'build-cache'; Path = $buildCache }
     )
     $records = @()
@@ -302,7 +312,7 @@ try {
     if ($FinalizeBuild) {
         $buildScript = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'build/build.ps1') -Raw
         $versionMatch = [regex]::Match($buildScript, '(?m)^\$Version\s*=\s*''([^'']+)''')
-        if (-not $versionMatch.Success -or $versionMatch.Groups[1].Value -notmatch '^\d+\.\d+\.\d+(?:\.\d+(?:[bem]|-alpha(?:\.\d+)?)?)?$') {
+        if (-not $versionMatch.Success -or $versionMatch.Groups[1].Value -cnotmatch '^(?:\d+\.\d+\.\d+(?:\.\d+(?:[bem]|-alpha(?:\.\d+)?)?)?|1\.0\.0\.J0[0-9A-Z]{4})$') {
             throw 'Could not determine the current package version from build/build.ps1.'
         }
         $version = $versionMatch.Groups[1].Value
@@ -321,7 +331,7 @@ try {
         $dist = Join-Path $RepositoryRoot 'dist'
         $packages = @(
             @{ Name = "RuneSchema-$version"; Payload = 'RuneSchema' },
-            @{ Name = "RuneSchema.Helpy-$version"; Payload = 'RuneSchema.Helpy' }
+            @{ Name = "RuneSchema.Helpy-$version"; Payload = 'RuneSchema' }
         )
         Collect-DependencyNotices
         $count = 0
@@ -329,9 +339,11 @@ try {
             $archive = Join-Path $dist ($package.Name + '.zip')
             if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) { continue }
             $payload = Join-Path (Join-Path $dist $package.Name) $package.Payload
+            $legacyHelpy=$false
+            if(-not(Test-Path -LiteralPath $payload) -and $package.Name.StartsWith('RuneSchema.Helpy-')){$payload=Join-Path (Join-Path $dist $package.Name) 'RuneSchema.Helpy';$legacyHelpy=$true}
             # Full releases extract directly to RuneSchema, matching the
             # installation guide and verified public package layout.
-            Write-LicensedArchive $payload $archive ($package.Payload -ne 'RuneSchema')
+            Write-LicensedArchive $payload $archive $legacyHelpy
             $count++
         }
         if ($count -eq 0) { throw 'No current RuneSchema or Helpy build archive was found to finalize.' }

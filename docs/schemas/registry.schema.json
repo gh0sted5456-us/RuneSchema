@@ -183,7 +183,7 @@
               },
               "MaxBytes": {
                 "default": 65536,
-                "maximum": 1048576,
+                "maximum": 65536,
                 "minimum": 1,
                 "type": "integer"
               },
@@ -295,6 +295,25 @@
             "pattern": "^/[^\\r\\n\\t]+\\.[^/]+$",
             "type": "string"
           },
+          "type": "object"
+        },
+        "DataTables": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "properties": {
+              "Target": {
+                "maxLength": 1024,
+                "pattern": "^/Game/.+\\.[^./]+$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "Target"
+            ],
+            "type": "object"
+          },
+          "description": "Append missing rows from each mod-owned cooked source DataTable key into its exact plain vanilla Target before loose JSON edits. Runtime verifies identical RowStruct, row limits and copies; existing target rows are preserved.",
+          "maxProperties": 4096,
           "type": "object"
         },
         "Journals": {
@@ -799,16 +818,111 @@
           "maxItems": 4096,
           "type": "array",
           "uniqueItems": true
+        },
+        "LocalServices": {
+          "description": "Explicit local template and native compute services. Runtime binds owner, class, local PlayerController, exact typed pins and allowed owner-prefixed native providers.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "Class": {
+                "maxLength": 1024,
+                "pattern": "^/[^\\r\\n\\t]+\\.[^/]+_C$",
+                "type": "string"
+              },
+              "ComputeProviders": {
+                "items": {
+                  "maxLength": 193,
+                  "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+                  "type": "string"
+                },
+                "maxItems": 32,
+                "type": "array",
+                "uniqueItems": true
+              },
+              "Id": {
+                "maxLength": 96,
+                "minLength": 1,
+                "not": {
+                  "enum": [
+                    ".",
+                    ".."
+                  ]
+                },
+                "pattern": "^[A-Za-z0-9_.-]+$",
+                "type": "string"
+              },
+              "Templates": {
+                "type": "boolean"
+              },
+              "Version": {
+                "const": 1
+              }
+            },
+            "required": [
+              "Version",
+              "Id",
+              "Class"
+            ],
+            "type": "object"
+          },
+          "maxItems": 256,
+          "type": "array"
+        },
+        "ConsoleCommands": {
+          "description": "Mod-owned host-only local console handlers on existing GameState components. Runtime validates unique IDs, class ownership and the four-pin local Blueprint signature.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "Class": {
+                "maxLength": 1024,
+                "pattern": "^/[^\\r\\n\\t]+\\.[^/]+_C$",
+                "type": "string"
+              },
+              "Id": {
+                "maxLength": 96,
+                "minLength": 1,
+                "not": {
+                  "enum": [
+                    ".",
+                    ".."
+                  ]
+                },
+                "pattern": "^[A-Za-z0-9_.-]+$",
+                "type": "string"
+              },
+              "Version": {
+                "const": 1
+              }
+            },
+            "required": [
+              "Version",
+              "Id",
+              "Class"
+            ],
+            "type": "object"
+          },
+          "maxItems": 256,
+          "type": "array"
+        },
+        "WorldComponents": {
+          "type": "array",
+          "maxItems": 4096,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "maxLength": 1024,
+            "pattern": "^/[^\\r\\n\\t]+\\.[^/]+_C$"
+          },
+          "description": "Mod-owned, nonreplicated cooked ActorComponent classes enrolled once per local gameplay GameState."
         }
       },
       "type": "object"
     },
     "SchemaVersion": {
-      "const": 1
+      "description": "Informational authoring version; supported fields are validated independently."
     }
   },
   "required": [
-    "SchemaVersion",
     "Entries"
   ],
   "title": "RuneSchema registry manifest",

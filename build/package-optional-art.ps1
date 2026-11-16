@@ -6,7 +6,7 @@ param(
 $ErrorActionPreference='Stop'
 $payload=[IO.Path]::GetFullPath($PayloadRoot).TrimEnd([char[]]'\/')
 $stage=[IO.Path]::GetFullPath($StagingRoot).TrimEnd([char[]]'\/')
-if([IO.Path]::GetFileName($payload) -ne 'RuneSchema.Helpy' -or -not $payload.StartsWith($stage+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)){throw 'Artwork filtering requires a Helpy payload inside the explicit packaging staging root'}
+if([IO.Path]::GetFileName($payload) -notin @('RuneSchema.Helpy','Helpy') -or -not $payload.StartsWith($stage+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)){throw 'Artwork filtering requires a Helpy payload inside the explicit packaging staging root'}
 $manifest=Get-Content -LiteralPath (Join-Path $RepositoryRoot 'resources/helpy-ui/v1/manifest.json') -Raw|ConvertFrom-Json
 $paths=@($manifest.Files|ForEach-Object {
     if([IO.Path]::GetFileName($_.Name) -ne $_.Name -or $_.Name -notmatch '\.png$'){throw 'Unexpected managed artwork filename'}

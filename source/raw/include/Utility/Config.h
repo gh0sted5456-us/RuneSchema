@@ -1,13 +1,18 @@
 #pragma once
 
+#include <atomic>
+#include <cstdint>
+#include <memory>
 #include <filesystem>
 #include <string>
 #include <string_view>
 #include <unordered_set>
 #include <vector>
 #include "nlohmann/json.hpp"
+#include "../../../shared/HelpyPlayerAuthorization.h"
 
 namespace PS {
+    class FileWatchWrapper;
     struct LoadOrderSettings {
         bool enabled = true;
         bool autoCreate = true;
@@ -119,8 +124,7 @@ namespace PS {
     };
 
     struct WorldSaveCleanupSettings {
-        // Preserve the original world before removing unresolved building IDs.
-        // Legacy compatibility field; backups are now mandatory before pruning.
+        // Legacy compatibility field; Helpy's optional world-recovery setting owns backups.
         bool backupBeforePrune = true;
     };
 
@@ -160,14 +164,20 @@ namespace PS {
         // Client Helpy requests are always server-executed and independently
         // validated. Permanent authoring/export operations are never accepted.
         bool allowClientItemGrants = false;
+        bool allowClientTeleport = false;
+        bool allowPinAccess = false;
+        std::string accessPin{}; // Private server setting; never replicate or log.
         bool allowClientTemporarySpawns = false;
-        int maximumItemCount = 100;
+        bool autoAuthorizeConnectingPlayers = false;
+        std::vector<HelpyAuthorizedPlayer> authorizedPlayers{};
+        int maximumItemCount = 0; // No host quantity limit when zero.
         int maximumSpawnCount = 100;
         int maximumNpcDurationSeconds = 300;
-        // Empty lists deny remote Helpy mutations. GUIDs are preferred;
+        // Without PIN access, empty lists deny remote mutations. GUIDs are preferred;
         // exact names are an explicit compatibility fallback.
         std::vector<std::string> permittedPlayerGuids{};
         std::vector<std::string> permittedPlayerNames{};
+        bool operator==(const HelpyAuthoritySettings&) const = default;
     };
 
     struct PSConfigSettings {
@@ -180,6 +190,7 @@ namespace PS {
         bool advancedLogging = false;
         // Keep previous RuneSchema sessions in logs/ using UTC date-time names.
         bool archiveLogs = false;
+        bool logsInUE4SS = false;
         bool authoringTools = true;
         // Retained JSON name for compatibility. This now means heavyweight
         // diagnostics/full catalog work, never ordinary mod authoring.
@@ -223,19 +234,36 @@ namespace PS {
         PSConfigSettings& GetMutableSettings();
 
         const PSConfigSettings& GetSettings() const;
+        std::string_view ItemDeliveryMode() const;
+
+        // Live authority is read and applied only on the game thread.
+        const HelpyAuthoritySettings& LiveHelpyAuthority() const { return m_liveHelpyAuthority; }
+        uint64_t RefreshHelpyAuthority();
+        void StartHelpyAuthorityWatch();
+        void StopHelpyAuthorityWatch();
+        void InvalidateHelpyAuthority() noexcept { m_helpyAuthorityRefresh = true; }
+        bool SaveHelpyPlayerAccess(const HelpyAuthoritySettings& before, const HelpyAuthoritySettings& proposed);
 
         bool Save();
         const std::string& GetStatus() const { return m_status; }
 
         void Load();
     private:
+        PSConfig();
+        ~PSConfig();
         static std::filesystem::path GetSettingsPath();
+        void ApplyHelpyAuthority(HelpyAuthoritySettings latest);
 
     private:
         PSConfigSettings m_settings;
+        HelpyAuthoritySettings m_liveHelpyAuthority;
+        uint64_t m_helpyAuthorityVersion = 0;
+        std::atomic_bool m_helpyAuthorityRefresh{true};
+        bool m_helpyAuthorityReadFailed = false;
         std::string m_status;
         bool m_preserveOriginal = false;
         std::filesystem::path m_configFile;
         nlohmann::json m_configDocument = nlohmann::json::object();
+        std::unique_ptr<FileWatchWrapper> m_helpyAuthorityWatch;
     };
 }

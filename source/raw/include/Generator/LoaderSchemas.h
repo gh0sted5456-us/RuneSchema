@@ -835,15 +835,28 @@ inline nlohmann::json LoaderSchemas() {
             {"Function",{{"type","string"},{"pattern","^[A-Za-z0-9_.-]+$"},{"default","Trigger"}}},
             {"DataAsset",{{"type","string"},{"maxLength",1024},{"pattern","^/[A-Za-z0-9_.-]+/[^\\r\\n\\t]+$"}}},
             {"Bindings",{{"type","object"},{"maxProperties",32},{"additionalProperties",{{"type","string"},{"pattern","^/(?:Game|DowdunReach|FutureMajorVersion)/"}}}}}}}};
-    registryEntry["anyOf"]={json{{"required",{"Presentation"}}},json{{"required",{"Authority"}}},json{{"required",{"Relay"}}}};
+    registryAuthority["properties"]["OwnerPresentation"]={{"type","object"},{"additionalProperties",false},{"required",{"Connection","Key"}},
+        {"properties",{{"Connection",{{"type","string"},{"minLength",1},{"maxLength",96},{"pattern","^[A-Za-z0-9_.-]+$"}}},
+            {"Key",{{"type","string"},{"minLength",1},{"maxLength",96},{"pattern","^[A-Za-z0-9_.-]+$"}}}}}};
+    registryAuthority["allOf"]={{{"if",{{"required",{"OwnerPresentation"}}}},
+        {"then",{{"required",{"DataAsset","Function"}},{"properties",{{"Action",{{"const","ConsumedItemAuthority"}}},{"Function",{{"const","OnConsumeSuccess"}}}}}}}}};
+    registryEntry["anyOf"]={json{{"required",{"Presentation"}}},json{{"required",{"Authority"}}},json{{"required",{"Relay"}}},json{{"required",{"Consumer"}}},json{{"required",{"Profile"}}},json{{"required",{"Appearance"}}}};
     registryEntry["properties"]={
         {"Id",{{"type","string"},{"pattern","^[A-Za-z0-9_.-]+$"},{"maxLength",96}}},
-        {"Kind",{{"enum",{"SpellPresentation","PersistentEffect","WeatherPresentation","AudioPresentation","CosmeticWrapper","DataRelay","GameplayAuthority"}}}},
+        {"Kind",{{"enum",{"SpellPresentation","PersistentEffect","WeatherPresentation","AudioPresentation","CosmeticWrapper","DataRelay","GameplayAuthority","LocalProfile","CharacterAppearance"}}}},
         {"Spell",{{"type","string"},{"pattern","^/(?:Game|DowdunReach|FutureMajorVersion)/"}}},
         {"Presentation",{{"type","array"},{"minItems",1},{"maxItems",64},{"items",registryPresentation}}},
         {"Authority",registryAuthority},
+        {"Consumer",{{"type","object"},{"additionalProperties",false},{"required",{"Connection","Class","AllowedKeys"}},
+            {"properties",{{"Connection",{{"type","string"},{"minLength",1},{"maxLength",96},{"pattern","^[A-Za-z0-9_.-]+$"}}},
+                {"Class",{{"type","string"},{"pattern","^/[A-Za-z0-9_.-]+/.+_C$"}}},
+                {"Function",{{"type","string"},{"pattern","^[A-Za-z0-9_.-]+$"},{"default","OnRuneSchemaPresentation"}}},
+                {"AllowedKeys",{{"type","array"},{"minItems",1},{"maxItems",256},{"uniqueItems",true},{"items",{{"type","string"},{"minLength",1},{"maxLength",96},{"pattern","^[A-Za-z0-9_.-]+$"}}}}},
+                {"Audience",{{"enum",{"World","Owner"}},{"default","World"}}}}}}},
         {"Metadata",{{"type","object"},{"maxProperties",32}}}
     };
+    registryEntry["properties"]["Consumer"]["allOf"]={{{"if",{{"required",{"Audience"}},{"properties",{{"Audience",{{"const","Owner"}}}}}}},
+        {"then",{{"required",{"Function"}}}}}};
     registryEntry["properties"]["Relay"]={{"type","object"},{"additionalProperties",false},{"required",{"Channel"}},
         {"properties",{{"Channel",{{"type","string"},{"minLength",1},{"maxLength",96},{"pattern","^[A-Za-z0-9_.-]+$"}}},
             {"Version",{{"type","integer"},{"minimum",1},{"maximum",65535},{"default",1}}},
@@ -851,8 +864,19 @@ inline nlohmann::json LoaderSchemas() {
             {"ClientPublish",{{"type","boolean"},{"default",false}}},{"Broadcast",{{"type","boolean"},{"default",false}}},{"Snapshot",{{"type","boolean"},{"default",false}}}}}};
     registryEntry["allOf"]={{{"if",{{"properties",{{"Kind",{{"const","DataRelay"}}}}}}},
         {"then",{{"required",{"Relay"}},{"maxProperties",3}}},{"else",{{"not",{{"required",{"Relay"}}}}}}}};
-    result["registry"]={{"type","object"},{"additionalProperties",false},{"required",{"SchemaVersion","Entries"}},
-        {"properties",{{"SchemaVersion",{{"const",1}}},
+    registryEntry["properties"]["Profile"]={{"type","object"},{"additionalProperties",false},{"required",{"Class"}},
+        {"properties",{{"Class",{{"type","string"},{"maxLength",1024},{"pattern","^/(?!Script/|Engine/)[A-Za-z0-9_.-]+/[^\\r\\n\\t\\\\]+_C$"},{"not",{{"pattern","\\.\\."}}}}}}}};
+    registryEntry["allOf"].push_back({{"if",{{"properties",{{"Kind",{{"const","LocalProfile"}}}}}}},
+        {"then",{{"required",{"Profile"}},{"maxProperties",3}}},{"else",{{"not",{{"required",{"Profile"}}}}}}});
+    registryEntry["properties"]["Appearance"]={{"type","object"},{"additionalProperties",false},
+        {"properties",{{"MaxBytes",{{"type","integer"},{"minimum",2},{"maximum",4096},{"default",4096}}},
+            {"Class",registryEntry["properties"]["Profile"]["properties"]["Class"]},
+            {"Function",{{"type","string"},{"pattern","^[A-Za-z0-9_.-]+$"},{"maxLength",96},{"default","OnRuneSchemaCharacterAppearance"}}}}},
+        {"dependentRequired",{{"Function",{"Class"}}}}};
+    registryEntry["allOf"].push_back({{"if",{{"properties",{{"Kind",{{"const","CharacterAppearance"}}}}}}},
+        {"then",{{"required",{"Appearance"}},{"maxProperties",3}}},{"else",{{"not",{{"required",{"Appearance"}}}}}}});
+    result["registry"]={{"type","object"},{"additionalProperties",false},{"required",{"Entries"}},
+        {"properties",{{"SchemaVersion",{{"description","Informational authoring version; supported fields are validated independently."}}},
             {"Entries",{{"type","array"},{"maxItems",256},{"items",registryEntry}}}}},
         {"description","Enabled loose schema mods and cooked declarations share native-registry enrollment and client/server declarations. Every asset still requires a correct live type and verified native identity; a declaration does not construct an asset or authorize cleanup."}};
     json nativeRegistries={{"type","object"},{"additionalProperties",false},{"properties",json::object()}};
@@ -862,9 +886,20 @@ inline nlohmann::json LoaderSchemas() {
             {"description","Exact existing cooked objects only. Startup identity enrollment does not synthesize assets, activate hooks or certify gameplay/save lifecycle."}};
     nativeRegistries["properties"]["CacheAssets"]={{"type","array"},{"maxItems",4096},{"uniqueItems",true},{"items",nativePath},{"description","Original artwork references; not gameplay registry identities."}};
     const json schemaPath={{"type","object"},{"additionalProperties",false},{"required",{"Path","Source"}},{"properties",{{"Path",nativePath},{"Source",{{"const","Schema"}}}}}};
-    for(const auto* lane:{"Items","Recipes","Quests","CombatSpells","UtilitySpells","EquipmentEffects","Journals","Lore","WearableMeshData","MeleeAttackClasses","RangedAttackClasses"})
+    for(const auto* lane:{"Items","Recipes","Quests","CombatSpells","UtilitySpells","EquipmentEffects","Journals","Lore","WearableMeshData","MeleeAttackClasses","RangedAttackClasses","WorldComponents"})
         nativeRegistries["properties"][lane]={{"type","array"},{"maxItems",4096},{"uniqueItems",true},{"items",{{"anyOf",{nativePath,schemaPath}}}}};
-    for(const auto* lane:{"MeleeAttackClasses","RangedAttackClasses"})nativeRegistries["properties"][lane]["items"]=nativePath;
+    for(const auto* lane:{"MeleeAttackClasses","RangedAttackClasses","WorldComponents"})nativeRegistries["properties"][lane]["items"]=nativePath;
+    nativeRegistries["properties"]["WorldComponents"]={{"type","array"},{"maxItems",4096},{"uniqueItems",true},{"items",{{"type","string"},{"maxLength",1024},{"pattern","^/[^\\r\\n\\t]+\\.[^/]+_C$"}}},{"description","Mod-owned, nonreplicated cooked ActorComponent classes enrolled once per local gameplay GameState."}};
+    nativeRegistries["properties"]["ConsoleCommands"]={{"type","array"},{"maxItems",256},{"items",{
+        {"type","object"},{"additionalProperties",false},{"required",{"Version","Id","Class"}},{"properties",{
+            {"Version",{{"const",1}}},{"Id",{{"type","string"},{"minLength",1},{"maxLength",96},{"pattern","^[A-Za-z0-9_.-]+$"},{"not",{{"enum",{".",".."}}}}}},
+            {"Class",{{"type","string"},{"maxLength",1024},{"pattern","^/[^\\r\\n\\t]+\\.[^/]+_C$"}}}}}}},
+        {"description","Mod-owned host-only local console handlers on existing GameState components. Runtime validates unique IDs, class ownership and the four-pin local Blueprint signature."}};
+    nativeRegistries["properties"]["LocalServices"]=nativeRegistries["properties"]["ConsoleCommands"];
+    auto& localServices=nativeRegistries["properties"]["LocalServices"];
+    localServices["items"]["properties"]["Templates"]={{"type","boolean"}};
+    localServices["items"]["properties"]["ComputeProviders"]={{"type","array"},{"maxItems",32},{"uniqueItems",true},{"items",{{"type","string"},{"maxLength",193},{"pattern","^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"}}}};
+    localServices["description"]="Explicit local template and native compute services. Runtime binds owner, class, local PlayerController, exact typed pins and allowed owner-prefixed native providers.";
     result["registry"]["definitions"]["modOwnedCookedPaths"]={{"type","array"},{"maxItems",4096},{"uniqueItems",true},
         {"items",{{"type","string"},{"maxLength",1024},{"pattern","^/(?!Script/|Engine/)[A-Za-z0-9_.-]+/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"},{"not",{{"pattern","\\.\\."}}}}},
         {"description","Runtime requires the owning /Owner/ or /Game/Mods/Owner/ namespace and rejects case-insensitive duplicates. Strings only; no Source:Schema or arbitrary property writes."}};
@@ -873,6 +908,10 @@ inline nlohmann::json LoaderSchemas() {
     nativeRegistries["properties"]["Enums"]={{"$ref","#/definitions/modOwnedCookedPaths"},{"description","Read-only verification of exact mod-owned cooked UserDefinedEnum symbol tables; never extends a native enum."}};
     result["registry"]["properties"]["NativeRegistries"]=nativeRegistries;
     result["registry"]["properties"]["LoaderDefinitions"]={{"type","object"},{"additionalProperties",false},{"properties",json::object()}};
+    result["registry"]["properties"]["LoaderDefinitions"]["properties"]["DataTables"]={{"type","object"},{"maxProperties",4096},
+        {"additionalProperties",{{"type","object"},{"required",json::array({"Target"})},{"additionalProperties",false},
+            {"properties",{{"Target",{{"type","string"},{"pattern","^/Game/.+\\.[^./]+$"},{"maxLength",1024}}}}}}},
+        {"description","Append missing rows from each mod-owned cooked source DataTable key into its exact plain vanilla Target before loose JSON edits. Runtime verifies identical RowStruct, row limits and copies; existing target rows are preserved."}};
     for(const auto* lane:{"Recipes","Journals","Lore"})result["registry"]["properties"]["LoaderDefinitions"]["properties"][lane]=
         {{"type","object"},{"maxProperties",4096},{"additionalProperties",{{"type","object"}}}};
     nativeRegistries["properties"]["Buildings"]={{"type","array"},{"maxItems",4096},{"uniqueItems",true},{"items",nativePath},

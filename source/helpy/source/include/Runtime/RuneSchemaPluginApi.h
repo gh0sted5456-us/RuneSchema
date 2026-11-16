@@ -37,6 +37,7 @@ struct RuneSchemaPluginDescriptor {
     const char* Name;
     const char* Version;
 };
+struct RuneSchemaModApiV1;
 struct RuneSchemaHostApi {
     uint32_t StructSize;
     uint32_t ApiVersion;
@@ -57,6 +58,8 @@ struct RuneSchemaHostApi {
     // Append-only API 1 extension: share one serial allocator across native plugins.
     int32_t (RS_PLUGIN_CALL *ObjectIdentity)(void* object,int32_t* index,int32_t* serial);
     void* (RS_PLUGIN_CALL *ResolveObjectIdentity)(int32_t index,int32_t serial);
+    // Optional append-only API 1 extension; check StructSize and the pointer.
+    const RuneSchemaModApiV1* (RS_PLUGIN_CALL *GetModApi)(const char* pluginId);
 };
 // Required exports: Query, Initialize, and Shutdown.
 using RuneSchemaPluginQueryFn = const RuneSchemaPluginDescriptor* (RS_PLUGIN_CALL *)();

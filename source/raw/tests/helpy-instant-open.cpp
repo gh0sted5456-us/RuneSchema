@@ -21,7 +21,7 @@ int main(int argc,char** argv){
     Check(Has(plugin,"HelpyStandaloneWindow")&&Has(plugin,"QuerySubmit"),"standalone Helpy uses a bounded query service");
     Check(Has(plugin,"state->ToolsCatalog=nlohmann::json::object()"),"initialization does not copy an eager full catalogue");
     Check(Has(plugin,"for(auto it=payload.begin();it!=payload.end();++it)state->ToolsCatalog[it.key()]=it.value()"),"core catalogue updates are merged");
-    const auto begin=window.find("bool HelpyStandaloneWindow::OpenPopup()");
+    const auto begin=window.find("bool HelpyStandaloneWindow::OpenPopup(bool desktop)");
     const auto end=window.find("void HelpyStandaloneWindow::ClosePopup()",begin);
     Check(begin!=std::string::npos&&end!=std::string::npos,"desktop open implementation bounded");
     const auto open=window.substr(begin,end-begin);

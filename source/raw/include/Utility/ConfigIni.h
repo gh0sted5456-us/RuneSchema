@@ -12,9 +12,17 @@ namespace PS {
     inline bool IniName(std::string_view value) {
         return !value.empty()&&value.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")==value.npos;
     }
+    inline std::string_view DecodeItemDeliveryMode(const nlohmann::json& document) {
+        const auto setting=document.find("itemDeliveryMode");
+        if(setting==document.end())return "once";
+        if(*setting=="once")return "once";
+        if(*setting=="always")return "always";
+        return "off";
+    }
     inline nlohmann::json SettingsDocument(const PSConfigSettings& settings,nlohmann::json original=nlohmann::json::object()) {
         if(!original.is_object())throw std::runtime_error("Settings must be an object");
         original.merge_patch(nlohmann::json::parse(StripJsonComments(EncodeSettings(settings))));
+        original["itemDeliveryMode"]=DecodeItemDeliveryMode(original);
         return original;
     }
     inline nlohmann::json DecodeIniDocument(std::string text) {
@@ -77,7 +85,7 @@ namespace PS {
         (void)DecodeSettings(document.dump());
         std::string text="; RuneSchema settings. Edit with the game closed, then restart.\n"
             "; Booleans: true/false. Lists: JSON arrays. Quote strings containing ; or #.\n"
-            "; Plugin-owned settings remain below plugins/<PluginId>/settings/.\n\n";
+            "; Plugin-owned settings remain below dlls/plugins/<PluginId>/settings/ or Helpy/settings/.\n\n";
         const auto emit=[&](auto&& self,const nlohmann::json& object,const std::string& section)->void {
             text+='['+section+"]\n";
             for(const auto& [key,value]:object.items()){

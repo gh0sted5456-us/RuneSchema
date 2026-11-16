@@ -1,9 +1,11 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include "Generator/HelpyNodes.h"
 #include <functional>
 #include "Loader/QuestService.h"
+#include "Loader/GameplayEventObserver.h"
 #include "Loader/EventRuntime.h"
 #include "Loader/QuestKillCredit.h"
 #include "Loader/QuestAcquisition.h"
@@ -56,6 +58,10 @@ namespace DragonWilds {
         void LoadDialogues(const nlohmann::json& data,const RC::StringType& modName);
         void LoadQuests(const nlohmann::json& data,const RC::StringType& mod,const std::string& source="<internal quest>"){m_quests.Load(RC::to_string(mod),data,source);}
         Events::Runtime& EventService(){return m_events;}
+        std::function<bool(RC::Unreal::UObject*,std::size_t,const std::string&)> PublishCleanupNotice;
+        std::function<void(RC::Unreal::UObject*)> NotifyWorldCleanup;
+        // Host -> client relay for achievement kills: (credited controller, payload). Set by the main loader.
+        std::function<bool(RC::Unreal::UObject*,const std::string&)> PublishPlayerActivity;
         void PublishEventIdentity(RC::Unreal::AActor* actor,const std::string& payload);
         std::function<void(const std::string&,const std::string&)> PublishWorldState;
         std::function<bool(RC::Unreal::AActor*,const std::string&)> PresentEventIdentity;
@@ -195,6 +201,7 @@ namespace DragonWilds {
         Quests::Service m_quests;
         Quests::KillCredits m_killCredits;
         std::unique_ptr<Quests::Summons::NativeKillCredit> m_summonNativeCredit;
+        GameplayEventObserver m_gameplayEvents;
         std::map<std::string,Quests::AcquisitionBaseline> m_acquisitionBaselines;
         // Client-only late-join recovery: one native current-objective
         // presentation per already-active quest and world.
@@ -437,6 +444,8 @@ namespace DragonWilds {
         void QueueLegacyPersistentNpc(RC::Unreal::AActor* actor);
         void ScanLegacyPersistentNpcs(RC::Unreal::UWorld* world);
         RC::Unreal::UWorld* m_legacyNpcSweepWorld = nullptr; // compared only; cleared on travel
+        float m_legacyNpcSweepElapsed = 0.5f;
+        std::chrono::steady_clock::time_point m_nextNpcTimeCheck{};
         void QueueClientReplica(RC::Unreal::AActor* actor);
         bool PrepareClientReplica(RC::Unreal::AActor* actor);
         VendorDefinition* FindClientDefinition(RC::Unreal::AActor* actor);

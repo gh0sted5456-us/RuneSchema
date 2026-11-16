@@ -1,0 +1,13 @@
+{
+  "Format": 1,
+  "Items": {
+    "/Game/Example/ITEM_ExampleBody.ITEM_ExampleBody": {
+      "Category": "Armor",
+      "Family": "my_example_set"
+    },
+    "/Game/Example/ITEM_ExampleLegs.ITEM_ExampleLegs": {
+      "Category": "Armor",
+      "Family": "my_example_set"
+    }
+  }
+}

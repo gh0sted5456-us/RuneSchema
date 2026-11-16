@@ -1,14 +1,22 @@
 #include <windows.h>
 #include "Core/RsmkResources.h"
 IDI_RSMK ICON "RSMK.ico"
+#ifdef RSMK_EXECUTABLE
+IDR_CACHE_BUILDER RCDATA "../../../../resources/tools/build-helpy-cache.ps1"
+IDR_NEXUS_ICON RCDATA "../../../../resources/helpy-ui/v1/nexus.png"
+IDR_RUNESCHEMA_REPAIR RCDATA "../../../../resources/tools/repair-runeschema.ps1"
+IDR_MOD_MENU_LICENSE RCDATA "../../../../licenses/ModMenu-MIT.txt"
+IDR_LOADING_WHEEL RCDATA "../../../../resources/helpy-ui/v1/loading-ring.png"
+IDR_SCORNED_ART RCDATA "../../../../resources/map-atlas/Scorned-Art.png"
+#endif
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 0,8,0,3
- PRODUCTVERSION 0,8,0,3
+ FILEVERSION 0,9,0,0
+ PRODUCTVERSION 0,9,0,0
  FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
  FILEFLAGS 0
  FILEOS VOS_NT_WINDOWS32
-#ifdef RSMK_PREVIEW_EXECUTABLE
+#ifdef RSMK_EXECUTABLE
  FILETYPE VFT_APP
 #else
  FILETYPE VFT_DLL
@@ -20,10 +28,10 @@ BEGIN
   BLOCK "040904b0"
   BEGIN
    VALUE "CompanyName", "RuneSchema Community Team"
-   VALUE "FileDescription", "RSMK (RuneSchema Modding Kit)"
-   VALUE "FileVersion", "0.8.0.3"
-   VALUE "ProductName", "RuneSchema Modding Kit"
-   VALUE "ProductVersion", "0.8.0.3"
+   VALUE "FileDescription", "RuneSchema Helpy"
+   VALUE "FileVersion", "0.9.0.0"
+   VALUE "ProductName", "RuneSchema Helpy"
+   VALUE "ProductVersion", "0.9.0.0"
    VALUE "LegalCopyright", "Copyright (c) 2026 RSDW Modding Community"
   END
  END

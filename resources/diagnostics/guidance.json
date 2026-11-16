@@ -215,6 +215,18 @@
     "Individual cart entries failed native validation or delivery while other entries may have succeeded.",
     "Read each placard's result and resolve only failed entries. Verify the intended recipient and availability. Never resend the entire cart to compensate for a partial failure."
   ],
+  "RS-ITEM-002": [
+    "The configured asset is missing, its provider is disabled, or the path names a different object type.",
+    "Check the full object path in item-delivery.json and the active mod list. Other paths still run."
+  ],
+  "RS-ITEM-003": [
+    "An inventory mutation, receipt write, or native save outcome could not be verified.",
+    "Keep the held receipt and inspect the character and logs. Removing a held row can cause a duplicate if the save actually succeeded."
+  ],
+  "RS-ITEM-004": [
+    "The definition file is invalid or the current game build changed a reflected save or inventory contract.",
+    "Verify the mod JSON and RuneSchema game compatibility. Correct the source and restart."
+  ],
   "RS-SRC-001": [
     "The source mod is absent, disabled, unmounted or has not completed registration.",
     "Enable/install the matching content and let registration finish, or leave its references unavailable. Downloading its pictures/cache alone cannot create its gameplay definitions."
@@ -282,5 +294,113 @@
   "RS-NET-002": [
     "The authority and client differ in content definitions, source membership, a protected registry baseline, or the availability of a verified mapping. Client-only content and version drift do not themselves cause a RuneSchema entry refusal.",
     "Read the original source/lane detail. Keep extra client mods installed if desired. Shared IDs are aligned only when their identities and native types are verified; update required content for unavailable server features. A warning does not certify that the game itself can deserialize a missing cooked class."
+  ],
+  "RS-NET-003": [
+    "A native placement index was unavailable, unverified or different between the owning client and authority.",
+    "Confirm required building definitions match, including versioned Totems or other building providers. Enable RuneSchema networking on both sides and retry after the handshake. Native-prefix agreement permits native pieces despite unrelated extra mods; no building IDs are silently rewritten."
+  ],
+  "RS-WLD-001": [
+    "A world-effect provider or its native adapter could not validate or execute the listed contract.",
+    "Read the original callback/hook reason. Verify the cooked Blueprint signature and framework/game version. Keep private native fixtures out of user games and report unsupported executable details rather than forcing hooks."
+  ],
+  "RS-PLUG-009": [
+    "A plugin package had incomplete, duplicate or unsupported container entries. The original reason identifies the package and missing/observed parts.",
+    "Finish deployment before launch and verify the exact names in the game directory. RuneSchema accepts mixed filename case and ordinary hardlinks, skips this plugin on failure, and continues independent sources. Symlinks and genuinely incomplete packages are still checked."
+  ],
+  "RS-RAW-004": [
+    "A declared source/target table failed path, class, row layout, staging or copy verification.",
+    "Read the original COOKED-TABLE reason and exact paths. Correct that declaration; use a plain editable parent for composite tables and test native consumers before release. Independent table and JSON operations continue."
+  ],
+  "RS-UI-001": [
+    "Helpy initialization, resize, presentation or its window thread could not complete.",
+    "Keep the exact message and any matching crash dump. Missing render targets are skipped; record display/DPI changes and graphics-driver status. A window failure is not proof of a RuneSchema-caused game crash."
+  ],
+  "RS-UI-002": [
+    "The optional standalone desktop could not start or attach. Use matching DLLs and Helpy.exe in the assigned installation.",
+    "Read the full startup reason and confirm the current Windows user. Select DLL window and restart to use the fallback."
+  ],
+  "RS-UI-003": [
+    "The overlay could not apply or release its local controller movement/look guard. Read the complete reflected-contract error; this is separate from save validation.",
+    "Close the overlay and verify matching core, bridge and Helpy builds. The guard releases only its own stacked input blocks and clears on bridge disconnect. If controls do not recover, close Helpy and return to the menu."
+  ],
+  "RS-CACHE-015": [
+    "A creation/conversion input includes a native UE4SS DLL mod. Its byte content and native ue4ss/Mods placement are preserved; this is not a DLL compatibility failure.",
+    "Review the job warnings and packaged native companion. Do not assume its relative file lookups or native bridge can reach inside RuneSchema. Verify that integration with the DLL author. Helpy does not execute or rewrite the DLL."
+  ],
+  "RS-OVL-001": [
+    "The game submitted a frame from Helpy through its native graphics adapter.",
+    "No action is needed. Use the Helpy shortcut to show or hide the panel."
+  ],
+  "RS-OVL-002": [
+    "The native presentation bridge rejected attachment, a graphics surface or an input contract.",
+    "Keep the bridge error and renderer/GPU details from RuneSchema.log. Use matching RuneSchema and Helpy builds; a desktop window requires borderless or windowed mode."
+  ],
+  "RS-OVL-003": [
+    "The native presentation bridge is prepared or attached to the game renderer.",
+    "Open Helpy with its configured shortcut. RS-OVL-001 confirms an actual visible presentation."
+  ],
+  "RS-SAVE-003": [
+    "The selected character or world was copied and verified at its entry boundary.",
+    "Review its identity, entry time and recorded mods in Helpy > Save Recovery."
+  ],
+  "RS-SAVE-004": [
+    "A queued restore was claimed once and loaded through the exact selected native save contract.",
+    "Reinstall required mods before entry and let the game save normally. Keep the backup until the restored progress is verified."
+  ],
+  "RS-SAVE-005": [
+    "A backup preference, verification, restore request or native application step failed.",
+    "Read the original error, check free space and the selected runtime, then review or cancel the request in Save Recovery. Do not delete the prior-save backup."
+  ],
+  "RS-NET-004": [
+    "The owning-player bridge finished assembling an authority snapshot after connection.",
+    "No repair is required. The list describes enabled mods for this host process; it is not proof that every loader succeeded or that client registries match."
+  ],
+  "RS-NET-005": [
+    "The roster exceeds 1,024 mods, its bounded identity fields or its 1 MiB envelope, or contains duplicate or malformed identifiers.",
+    "Correct the named metadata issue or reduce the enabled set, then restart normally. Do not alter persistence IDs or player saves to repair this informational listing."
+  ],
+  "RS-PERF-002": [
+    "CPU is normalized to total logical-processor capacity; this is not per-mod attribution.",
+    "Compare the named process, current workload and resource panel; adjust the threshold if expected."
+  ],
+  "RS-PERF-003": [
+    "Helpy and Dragonwilds working sets are shown when Windows permits access; other processes may account for remaining use.",
+    "Check process memory and available system RAM. A high working set alone does not prove a leak."
+  ],
+  "RS-PERF-004": [
+    "High GPU use can be normal. Missing or warming Windows counters are unavailable, not zero usage.",
+    "Compare frame rate, resolution and workload. The metric uses the busiest measured engine and does not blame a mod."
+  ],
+  "RS-PERF-005": [
+    "Asset loading and retained caches can explain growth; one increase does not establish a memory leak.",
+    "Compare repeated samples during steady gameplay, after changing pages and after delivery; include the timestamps when reporting."
+  ],
+  "RS-LUA-001": [
+    "This identifies reported failure evidence, not proof that every function in the companion stopped. External native UE4SS mods remain managed by stock UE4SS.",
+    "Review the original UE4SS message and companion installation. Check its parent mod and supported Lua loader layout."
+  ],
+  "RS-LUA-002": [
+    "This measures log output. Stock UE4SS does not expose reliable per-mod callback timing, CPU time or polling frequency through this feature.",
+    "Review the original messages and compare frame rate. Raise the budget for expected logging; do not assume the mod caused a delay."
+  ],
+  "RS-LUA-003": [
+    "The configured overlap window establishes timing correlation only; it does not establish contention or which mod caused it.",
+    "Compare both original messages and timestamps. Adjust the overlap window or log-message budget for expected workloads."
+  ],
+  "RS-PLAY-001": [
+    "Informational only. It never pauses the game, blocks input, changes saves or disconnects a player. Menus and disconnected intervals are not counted.",
+    "Consider a 10 minute break. Disable Play-time reminders in Quick Settings > Performance at any time."
+  ],
+  "RS-NET-006": [
+    "No access is granted by this notice. Client requests remain scoped to the owning character and authoritative world.",
+    "Open Helpy, enter the world PIN and submit it. The server must enable item delivery or teleportation."
+  ],
+  "RS-NET-007": [
+    "Delivery and teleport requests execute on the server with existing identity, item registry, quantity and ground checks. This does not grant arbitrary administrator rights.",
+    "Use the allowed self-service actions. Reconnect after changing character/world or if the server revokes access."
+  ],
+  "RS-SAVE-006": [
+    "A verified cleanup removed character records or world building instances. Notifications wait for the native player-ready check and use only removal counts plus a reliably attributed absent mod owner.",
+    "No action is required. Technical details remain in RuneSchema.log. This message does not assert that a transformed load payload has already been saved to disk."
   ]
 }

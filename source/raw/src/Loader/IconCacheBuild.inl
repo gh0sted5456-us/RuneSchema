@@ -21,11 +21,15 @@ struct BulkIconCacheJob {
     using Clock=std::chrono::steady_clock;
     struct Icon {std::string Path;std::set<std::string> Origins;};
     bool Active=false,Capturing=false,Discovered=false,Prepared=false,ItemsDiscovered=false;
-    std::string Source,Stage="Idle",Error;size_t ObjectAt=0,ObjectTotal=0,MetadataAt=0,At=0,Hits=0,Captured=0,Failed=0;
+    std::string Source,Item,ItemIcon,Stage="Idle",Error;
+    bool Refresh=false;
+    size_t ObjectAt=0,ObjectTotal=0,MetadataAt=0,At=0,Hits=0,Captured=0,Failed=0;
     std::vector<PS::CookedAssets::Record> Metadata;
     size_t MetadataTotal=0,MetadataWindowAt=0;uint64_t MetadataRevision=0;
     std::map<std::string,std::set<std::string>> Found;std::vector<Icon> Icons;
     std::map<std::string,std::string> FrozenKeys;
+    std::vector<std::string> RefreshedIcons;
+    std::map<std::string,std::string> ItemIcons;
     size_t DiscoveryFailed=0;
     size_t ItemOffset=0,ItemRows=0,Verified=0,VerifyAt=0;
     size_t Retries=0;unsigned Attempt=0;Clock::time_point RetryAt{};
@@ -36,7 +40,7 @@ struct BulkIconCacheJob {
     void Publish(bool force=false) {
         const auto now=Clock::now();if(!force&&now<NextPublish)return;NextPublish=now+std::chrono::milliseconds(200);
         const auto choices=PS::ContentSource::Choices(PS::HelpySourceCache::ItemPlan());
-        PS::IconCacheBuild::Publish({{"Available",true},{"Active",Active},{"Stage",Stage},{"Source",Source},
+        PS::IconCacheBuild::Publish({{"Available",true},{"Active",Active},{"Stage",Stage},{"Source",Source},{"Item",Item},{"Icon",ItemIcon},{"Refresh",Refresh},
             {"ScanDone",ObjectAt+MetadataAt},{"ScanTotal",ObjectTotal+MetadataTotal},{"Total",Icons.size()},
             {"Done",At},{"CacheHits",Hits},{"Captured",Captured},{"Failed",Failed},{"Error",Error},{"Sources",choices},
             {"DiscoveryFailed",DiscoveryFailed},{"Verified",Verified},{"VerifyDone",VerifyAt},{"Retries",Retries},{"ItemRows",ItemRows},{"RequiredMB",(uint64_t(Icons.size())*16400+1048575)/1048576},{"Issues",Issues.size()>64?nlohmann::json(Issues.begin(),Issues.begin()+64):Issues},
@@ -46,8 +50,14 @@ struct BulkIconCacheJob {
         Error=reason.substr(0,1024);if(Issues.size()<32768)Issues.push_back({{"Path",path},{"Phase",phase},{"Reason",Error}});
     }
     void Report(){
-        nlohmann::json expected=nlohmann::json::array();for(const auto& icon:Icons)expected.push_back(icon.Path);
-        PS::IconCacheBuild::SetManifest({{"Expected",std::move(expected)},{"SourceKeys",FrozenKeys}});
+        if(Refresh){
+            const std::unordered_set<std::string> captured(RefreshedIcons.begin(),RefreshedIcons.end());
+            std::erase_if(ItemIcons,[&](const auto& entry){return !captured.contains(entry.second);});
+            PS::IconCacheBuild::SetManifest({{"RefreshedIcons",std::move(RefreshedIcons)},{"ItemIcons",std::move(ItemIcons)}});
+        }else{
+            nlohmann::json expected=nlohmann::json::array();for(const auto& icon:Icons)expected.push_back(icon.Path);
+            PS::IconCacheBuild::SetManifest({{"Expected",std::move(expected)},{"SourceKeys",FrozenKeys}});
+        }
         Publish(true);
         try{auto report=PS::IconCacheBuild::Read(true);report["Issues"]=Issues;
             const auto path=PS::HelpySourceCache::Directory(false).parent_path()/"icon-build-report.json";
@@ -75,21 +85,21 @@ struct BulkIconCacheJob {
     }
     void Tick(UWorld* world,bool rendererFree) {
         if(const auto start=PS::IconCacheBuild::Take()) {
-            Source=*start;Active=true;Capturing=Discovered=Prepared=ItemsDiscovered=false;Stage="Waiting for registered sources";Error.clear();
+            Source=start->Source;Item=start->Item;Refresh=start->Refresh;ItemIcon.clear();Active=true;Capturing=Discovered=Prepared=ItemsDiscovered=false;Stage="Waiting for registered sources";Error.clear();
             ObjectAt=ObjectTotal=MetadataAt=At=Hits=Captured=Failed=0;Metadata.clear();Found.clear();Icons.clear();FrozenKeys.clear();Began=WaitingSince=Clock::now();NextPublish={};
             MetadataTotal=MetadataWindowAt=MetadataRevision=0;
             DiscoveryFailed=0;Issues=nlohmann::json::array();
             ItemOffset=ItemRows=Verified=VerifyAt=0;
             Retries=Attempt=0;RetryAt={};
             ItemPage=nlohmann::json::array();ItemPageAt=0;ItemPageLast=false;
-            ItemCensusKey.clear();
+            ItemCensusKey.clear();RefreshedIcons.clear();ItemIcons.clear();
             PS::HelpySourceCache::Requested=true;
         }
         if(!Active)return;
         try {
             if(PS::IconCacheBuild::Cancelled()){Stop("Cancelled; completed thumbnails remain cached.");return;}
             const auto limitMB=PS::ItemIconThumbnail::CacheLimitMB();
-            if(limitMB<=0)throw std::runtime_error("Enable Keep icons between launches before building a cache.");
+            if(limitMB<=0&&Item.empty())throw std::runtime_error("Enable Keep icons between launches before building a cache.");
             auto plan=PS::HelpySourceCache::ItemPlan();
             if(!PS::HelpySourceCache::Ready()||PS::HelpySourceCache::Current.Provisional||!plan.Authoritative||plan.Registered.empty()) {
                 if(Clock::now()-WaitingSince>std::chrono::seconds(60))throw std::runtime_error("Registered source identities are not ready; retry after startup completes.");
@@ -98,14 +108,29 @@ struct BulkIconCacheJob {
             if(!Prepared) {
                 const auto choices=PS::ContentSource::Choices(plan);
                 if(!Source.empty()&&!choices.contains(Source))throw std::runtime_error("The selected source is not currently registered.");
-                if(!PS::CookedAssets::TryEnsure()) {
+                if(!Item.empty()){
+                    const auto row=PS::AssetSearch::RefreshItemMetadata(Item);
+                    PS::AssetSearch::RememberRefreshedItem(row);
+                    ItemIcon=row.value("Icon",std::string{});
+                    if(ItemIcon.empty())throw std::runtime_error("The selected item has no live icon");
+                    const auto owner=row.value("SourceKind",std::string{})=="modded"?row.value("SourceName",std::string{}):std::string{};
+                    auto origins=PS::ContentSource::Origins(Item,plan,owner);
+                    if(origins.empty())throw std::runtime_error("The selected item source could not be resolved");
+                    Icons.push_back({ItemIcon,std::move(origins)});ItemIcons.emplace(Item,ItemIcon);
+                    Prepared=ItemsDiscovered=Discovered=true;
+                    WaitingSince=Clock::now();Publish();return;
+                }
+                if(!Refresh&&!PS::CookedAssets::TryEnsure()) {
                     if(Clock::now()-WaitingSince>std::chrono::seconds(60))throw std::runtime_error("Mounted asset registry did not become ready; no empty cache was declared complete.");
                     Stage="Waiting for mounted asset registry";Publish();return;
                 }
-                const auto metadata=PS::CookedAssets::MetadataWindow(0,0);
-                MetadataTotal=metadata.Total;MetadataRevision=metadata.Revision;MetadataWindowAt=0;Metadata.clear();
-                const auto count=FUObjectArray::GetNumElements();if(count<0||count>4'000'000)throw std::runtime_error("Loaded-object discovery exceeds its bound.");
-                ObjectTotal=static_cast<size_t>(count);Prepared=true;Stage="Discovering registered icons";
+                if(!Refresh){
+                    const auto metadata=PS::CookedAssets::MetadataWindow(0,0);
+                    MetadataTotal=metadata.Total;MetadataRevision=metadata.Revision;MetadataWindowAt=0;Metadata.clear();
+                    const auto count=FUObjectArray::GetNumElements();if(count<0||count>4'000'000)throw std::runtime_error("Loaded-object discovery exceeds its bound.");
+                    ObjectTotal=static_cast<size_t>(count);
+                }
+                Prepared=true;Stage="Discovering registered icons";
             }
             const auto deadline=Clock::now()+std::chrono::milliseconds(2);
             // Seed from the same complete native catalogue used by Item Bay.
@@ -131,7 +156,17 @@ struct BulkIconCacheJob {
                     const auto owner=row.value("SourceKind",std::string{})=="modded"?row.value("SourceName",std::string{}):std::string{};
                     const auto origins=PS::ContentSource::Origins(asset,plan,owner);
                     if(!Source.empty()&&!origins.contains(Source))continue;
-                    if(!icon.empty()){PS::HelpyCacheSources::Registered(asset);PS::HelpyCacheSources::Reference(asset,icon);Add(icon,origins);}
+                    if(Refresh){
+                        try{
+                            const auto live=icon.empty()&&row.value("Mounted",false)?PS::AssetSearch::RefreshItemMetadata(asset):row;
+                            const auto primary=live.value("Icon",std::string{});
+                            if(!primary.empty()){
+                                Add(primary,origins);
+                                PS::AssetSearch::RememberRefreshedItem(live);
+                                ItemIcons.emplace(asset,primary);
+                            }
+                        }catch(const std::exception& e){++DiscoveryFailed;Issue(asset,"Item discovery",e.what());}
+                    }else if(!icon.empty()){PS::HelpyCacheSources::Registered(asset);PS::HelpyCacheSources::Reference(asset,icon);Add(icon,origins);}
                     else if(row.value("Mounted",false))try{
                         auto* object=ActorHelper::ResolveObject(RC::to_generic_string(asset));
                         auto* itemType=ActorHelper::ResolveClass(TEXT("/Script/Dominion.ItemData"));
@@ -142,6 +177,10 @@ struct BulkIconCacheJob {
                 }
                 if(ItemPageLast&&ItemPageAt>=ItemPage.size()){
                     ItemsDiscovered=true;Stage="Discovering registered icons";
+                    if(Refresh){
+                        for(const auto& [path,origins]:Found)Icons.push_back({path,origins});
+                        Found.clear();Discovered=true;WaitingSince=Clock::now();
+                    }
                 }
                 Publish();return;
             }
@@ -185,7 +224,7 @@ struct BulkIconCacheJob {
                 }
             }
             if(!Discovered){Publish();return;}
-            if(uint64_t(Icons.size())*(16+64*64*4)>uint64_t(limitMB)*1024*1024){
+            if(Item.empty()&&uint64_t(Icons.size())*(16+64*64*4)>uint64_t(limitMB)*1024*1024){
                 Stage="More cache space needed";Publish();return;
             }
             plan=PS::HelpySourceCache::ItemPlan();
@@ -198,7 +237,7 @@ struct BulkIconCacheJob {
             // Disk hits are checked in bounded batches, before any renderer
             // gate. Re-scans do not redraw/rewrite every existing thumbnail.
             const auto cacheDeadline=Clock::now()+std::chrono::milliseconds(2);
-            while(!Capturing&&At<Icons.size()&&Clock::now()<cacheDeadline){
+            while(!Refresh&&!Capturing&&At<Icons.size()&&Clock::now()<cacheDeadline){
                 const auto cached=PS::ItemIconThumbnail::Cached(Icons[At].Path);if(!cached)break;
                 Index(*cached,Icons[At]);++Hits;++At;Attempt=0;RetryAt={};
             }
@@ -226,11 +265,12 @@ struct BulkIconCacheJob {
             const auto& icon=Icons[At];
             try {
                 if(PS::HelpySourceCache::Fingerprint(icon.Path).empty())throw std::runtime_error("Icon source is not registered");
-                const auto result=PS::ItemIconThumbnail::Render(world,icon.Path);Capturing=result.value("Status",std::string{})=="Pending";
+                const auto result=PS::ItemIconThumbnail::Render(world,icon.Path,Refresh);Capturing=result.value("Status",std::string{})=="Pending";
                 if(Capturing){Publish();return;}
                 if(result.value("Status",std::string{})!="Ready")throw std::runtime_error("Icon capture did not return pixels");
                 Index(result,icon);
-                if(result.value("CacheHit",false))++Hits;else ++Captured;
+                if(result.value("CacheHit",false))++Hits;
+                else{++Captured;if(Refresh)RefreshedIcons.push_back(icon.Path);}
             }catch(const std::exception& error){
                 PS::ItemIconThumbnail::Reset();Capturing=false;
                 if(!Attempt&&PS::IconCapture::Retryable(error.what())){++Attempt;++Retries;RetryAt=Clock::now()+std::chrono::milliseconds(80);Issue(icon.Path,"Retry",error.what());Publish();return;}

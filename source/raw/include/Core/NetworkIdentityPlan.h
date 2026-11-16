@@ -1,12 +1,14 @@
 #pragma once
 
 #include <algorithm>
+#include <charconv>
 #include <cstdint>
 #include <limits>
 #include <span>
 #include <stdexcept>
 #include <string>
-#include <unordered_set>
+#include <string_view>
+#include <tuple>
 #include <vector>
 
 namespace PS::NetworkIdentityPlan {
@@ -30,19 +32,20 @@ namespace PS::NetworkIdentityPlan {
 
         std::vector<Candidate> ordered(candidates.begin(), candidates.end());
         std::ranges::sort(ordered, {}, [](const Candidate& value) {
-            return std::pair{value.Identity, value.AssetPath};
+            return std::tie(value.Identity, value.AssetPath);
         });
-        std::unordered_set<std::string> identities;
+        std::string_view previousIdentity;
         std::size_t additions = 0;
         std::size_t reused = 0;
         for (const auto& candidate : ordered)
         {
             if (candidate.Identity.empty() || candidate.AssetPath.empty())
                 throw std::runtime_error("Network identity candidate is incomplete");
-            if (!identities.emplace(candidate.Identity).second)
+            if (candidate.Identity == previousIdentity)
                 throw std::runtime_error(
                     "Duplicate persistence identity in network registration plan: "
                     + candidate.Identity);
+            previousIdentity = candidate.Identity;
             if (candidate.NetworkRegistered) ++reused;
             else ++additions;
         }
@@ -63,14 +66,21 @@ namespace PS::NetworkIdentityPlan {
     inline std::string Fingerprint(std::span<const std::string> orderedPaths)
     {
         std::uint64_t hash = 14695981039346656037ULL;
-        for (std::size_t index = 0; index < orderedPaths.size(); ++index)
-        {
-            const auto row = std::to_string(index) + "=" + orderedPaths[index] + "\n";
-            for (const unsigned char byte : row)
+        const auto append = [&](std::string_view bytes) {
+            for (const unsigned char byte : bytes)
             {
                 hash ^= byte;
                 hash *= 1099511628211ULL;
             }
+        };
+        for (std::size_t index = 0; index < orderedPaths.size(); ++index)
+        {
+            char indexText[std::numeric_limits<std::size_t>::digits10 + 1];
+            const auto end = std::to_chars(indexText, indexText + sizeof(indexText), index).ptr;
+            append(std::string_view(indexText, end));
+            append("=");
+            append(orderedPaths[index]);
+            append("\n");
         }
         constexpr char Hex[] = "0123456789abcdef";
         std::string result(16, '0');

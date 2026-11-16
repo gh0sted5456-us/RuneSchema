@@ -10,17 +10,20 @@
 
 namespace PS::RecipeBatchWork {
 // A startup-scope snapshot, not a persistent raw-object cache. Missing/stale
-// objects still go through the native loader, which also handles dependencies
-// loaded since the snapshot. Callers retain normal type/lifetime checks.
+// objects first use live lookup for dependencies loaded since the snapshot,
+// then the native loader. Callers retain normal type/lifetime checks.
 template<class Key,class Handle> class References {
     std::unordered_map<Key,Handle> m_objects;
 public:
-    std::size_t Hits=0,Loads=0;
+    std::size_t Hits=0,LiveHits=0,Loads=0;
     void Remember(const Key& key,Handle handle){m_objects.insert_or_assign(key,handle);}
-    template<class Load,class Validate,class Capture>
-    auto Resolve(const Key& key,Load&& load,Validate&& validate,Capture&& capture) {
+    template<class Find,class Load,class Validate,class Capture>
+    auto Resolve(const Key& key,Find&& find,Load&& load,Validate&& validate,Capture&& capture) {
         if(const auto found=m_objects.find(key);found!=m_objects.end())
             if(auto* object=found->second.Get();object&&validate(object)){++Hits;return object;}
+        if(auto* object=find();object&&validate(object)){
+            Remember(key,capture(object));++LiveHits;return object;
+        }
         ++Loads;
         auto* object=load();
         if(!object||!validate(object))return decltype(object){};

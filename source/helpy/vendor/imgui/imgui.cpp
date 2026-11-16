@@ -654,7 +654,13 @@ IMPLEMENTING SUPPORT for ImGuiBackendFlags_RendererHasTextures:
                          it has been frequently requested by people to use our own. We had an opt-in define which was
                          previously fulfilled in imgui_internal.h. It is now fulfilled in imgui.h. (#6164)
                            - OK:     #define IMGUI_DEFINE_MATH_OPERATORS / #include "imgui.h" / #include "imgui_internal.h"
+#ifdef RUNESCHEMA_HELPY_FOCUS
+#include "Generator/HelpyFocusHighlight.h"
+#endif
                            - Error:  #include "imgui.h" / #define IMGUI_DEFINE_MATH_OPERATORS / #include "imgui_internal.h"
+#ifdef RUNESCHEMA_HELPY_FOCUS
+#include "Generator/HelpyFocusHighlight.h"
+#endif
  - 2023/02/07 (1.89.3) - backends: renamed "imgui_impl_sdl.cpp" to "imgui_impl_sdl2.cpp" and "imgui_impl_sdl.h" to "imgui_impl_sdl2.h". (#6146) This is in prevision for the future release of SDL3.
  - 2022/10/26 (1.89)   - commented out redirecting OpenPopupContextItem() which was briefly the name of OpenPopupOnItemClick() from 1.77 to 1.79.
  - 2022/10/12 (1.89)   - removed runtime patching of invalid "%f"/"%0.f" format strings for DragInt()/SliderInt(). This was obsoleted in 1.61 (May 2018). See 1.61 changelog for details.
@@ -1137,6 +1143,9 @@ IMPLEMENTING SUPPORT for ImGuiBackendFlags_RendererHasTextures:
 #include "imgui.h"
 #ifndef IMGUI_DISABLE
 #include "imgui_internal.h"
+#ifdef RUNESCHEMA_HELPY_FOCUS
+#include "Generator/HelpyFocusHighlight.h"
+#endif
 
 // System includes
 #include <stdio.h>      // vsnprintf, sscanf, printf
@@ -3871,6 +3880,9 @@ void ImGui::RenderNavCursor(const ImRect& bb, ImGuiID id, ImGuiNavRenderCursorFl
     float rounding = (flags & ImGuiNavRenderCursorFlags_NoRounding) ? 0.0f : g.Style.FrameRounding;
     ImRect display_rect = bb;
     display_rect.ClipWith(window->ClipRect);
+#ifdef RUNESCHEMA_HELPY_FOCUS
+    PS::HelpyFocusHighlight::Draw(window->DrawList, display_rect.Min, display_rect.Max, GetColorU32(ImGuiCol_NavCursor), rounding);
+#else
     const float thickness = 2.0f;
     if (flags & ImGuiNavRenderCursorFlags_Compact)
     {
@@ -3887,6 +3899,7 @@ void ImGui::RenderNavCursor(const ImRect& bb, ImGuiID id, ImGuiNavRenderCursorFl
         if (!fully_visible)
             window->DrawList->PopClipRect();
     }
+#endif
 }
 
 void ImGui::RenderMouseCursor(ImVec2 base_pos, float base_scale, ImGuiMouseCursor mouse_cursor, ImU32 col_fill, ImU32 col_border, ImU32 col_shadow)
@@ -6374,7 +6387,11 @@ void ImGui::EndChild()
 
             // When browsing a window that has no activable items (scroll only) we keep a highlight on the child (pass g.NavId to trick into always displaying)
             if (child_window->DC.NavLayersActiveMask == 0 && child_window == g.NavWindow)
+#ifdef RUNESCHEMA_HELPY_FOCUS
+                RenderNavCursor(bb, g.NavId, ImGuiNavRenderCursorFlags_Compact);
+#else
                 RenderNavCursor(ImRect(bb.Min - ImVec2(2, 2), bb.Max + ImVec2(2, 2)), g.NavId, ImGuiNavRenderCursorFlags_Compact);
+#endif
         }
         else
         {

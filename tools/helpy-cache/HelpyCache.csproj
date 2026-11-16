@@ -11,5 +11,6 @@
     <PackageReference Include="AssetRipper.TextureDecoder" Version="2.6.2" />
     <PackageReference Include="SkiaSharp" Version="2.88.9" />
     <PackageReference Include="Microsoft.Bcl.Memory" Version="10.0.10" />
+    <PackageReference Include="SharpCompress" Version="1.0.0" />
   </ItemGroup>
 </Project>

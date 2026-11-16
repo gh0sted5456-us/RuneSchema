@@ -4,7 +4,7 @@
 #include <string_view>
 namespace PS::StructuredDiagnosticRegistry {
 struct Entry { std::string_view Code, TypicalSeverity, Description, ProducerSite; bool LegacyCollision; };
-inline constexpr std::array<Entry,222> All{{
+inline constexpr std::array<Entry,227> All{{
     {"RS-ASSET-001","Error","Asset target remained unresolved","src/Loader/DragonWildsAssetModLoader.cpp",false},
     {"RS-ASSET-002","Warning","Asset definition has invalid root","src/Loader/DragonWildsAssetModLoader.cpp",false},
     {"RS-ASSET-003","Warning","Asset property modification rejected","src/Loader/DragonWildsAssetModLoader.cpp",false},
@@ -42,6 +42,7 @@ inline constexpr std::array<Entry,222> All{{
     {"RS-BP-009","Error","Blueprint modification failed","src/Loader/DragonWildsBlueprintModLoader.cpp",false},
     {"RS-BP-010","Warning","Blueprint component template unavailable","src/Loader/DragonWildsBlueprintModLoader.cpp",false},
     {"RS-BP-011","Warning","Blueprint component definition invalid","src/Loader/DragonWildsBlueprintModLoader.cpp",false},
+    {"RS-CMD-001","Warning","Mod console command unavailable","include/Runtime/ModConsoleCommands.h",false},
     {"RS-CORE-001","Error","RuneSchema startup aborted","src/Loader/DragonWildsMainLoader.cpp",false},
     {"RS-CORE-002","Error","GameInstance vtable unavailable","src/Loader/DragonWildsMainLoader.cpp",false},
     {"RS-CORE-003","Error","GameInstance initialization hook unavailable","src/Loader/DragonWildsMainLoader.cpp",false},
@@ -134,6 +135,8 @@ inline constexpr std::array<Entry,222> All{{
     {"RS-IMP-010","Error","Atomic import plan blocked","src/Loader/DragonWildsAssetModLoader.cpp",false},
     {"RS-IMP-011","Warning","Dry-run import plan blocked","src/Loader/DragonWildsAssetModLoader.cpp",false},
     {"RS-IMP-012","Warning","Import batch partially applied","src/Loader/DragonWildsAssetModLoader.cpp",false},
+    {"RS-IMP-013","Info","Dry-run import plan ready","src/Loader/DragonWildsAssetModLoader.cpp",false},
+    {"RS-IMP-014","Error","Import application failed","src/Loader/DragonWildsAssetModLoader.cpp",false},
     {"RS-JRN-001","Error","Journal runtime classes unavailable","src/Loader/DragonWildsJournalModLoader.cpp",true},
     {"RS-JRN-002","Error","Invalid journal document root","src/Loader/DragonWildsJournalModLoader.cpp",true},
     {"RS-JRN-003","Error","Invalid journal entry","src/Loader/DragonWildsJournalModLoader.cpp",false},
@@ -157,6 +160,7 @@ inline constexpr std::array<Entry,222> All{{
     {"RS-LOAD-002","Warning","Loader capability unavailable","src/Loader/DragonWildsModLoaderBase.cpp",false},
     {"RS-LOAD-003","Warning","Loader section raised an exception","src/Loader/DragonWildsModLoaderBase.cpp",false},
     {"RS-LOAD-004","Warning","Loader section raised an unknown exception","src/Loader/DragonWildsModLoaderBase.cpp",false},
+    {"RS-MOD-001","Warning","Mod-local service unavailable","src/Runtime/ModLocalServices.cpp",false},
     {"RS-NIA-001","Error","Invalid Niagara document root","src/Loader/DragonWildsNiagaraLoader.cpp",false},
     {"RS-NIA-002","Error","Duplicate Niagara ID","src/Loader/DragonWildsNiagaraLoader.cpp",false},
     {"RS-NIA-003","Error","Niagara definition rejected","src/Loader/DragonWildsNiagaraLoader.cpp",false},
@@ -227,6 +231,7 @@ inline constexpr std::array<Entry,222> All{{
     {"RS-STR-002","Warning","String replacements unmatched","src/Loader/DragonWildsStringModLoader.cpp",false},
     {"RS-STR-003","Error","String definition rejected","src/Loader/DragonWildsStringModLoader.cpp",false},
     {"RS-VND-001","Warning","Vendor reload requires restart","src/Loader/DragonWildsVendorLoader.cpp",false},
+    {"RS-WORLD-006","Warning","World component unavailable","src/Runtime/WorldComponentEnrollment.cpp",false},
 }};
 inline constexpr const Entry* Find(std::string_view code) noexcept {
     std::size_t first=0,count=All.size();

@@ -54,7 +54,8 @@ inline void Sha1(std::string_view bytes,std::string_view expected){
         ||BCryptHashData(hash,reinterpret_cast<PUCHAR>(const_cast<char*>(bytes.data())),static_cast<ULONG>(bytes.size()),0)<0||BCryptFinishHash(hash,digest.data(),digest.size(),0)<0
         ||!std::equal(digest.begin(),digest.end(),reinterpret_cast<const unsigned char*>(expected.data())))throw std::runtime_error("Container index SHA-1 mismatch");
 }
-inline Result LegacyPak(File& file,const std::string& game){
+inline bool Selected(std::string_view name,const std::set<std::string>* filenames){return !filenames||filenames->contains(HelpyCacheSources::Lower(std::string(name.substr(name.find_last_of('/')==name.npos?0:name.find_last_of('/')+1))));}
+inline Result LegacyPak(File& file,const std::string& game,const std::set<std::string>* filenames=nullptr){
     constexpr size_t footerSize=44;const auto footer=file.Read(file.Size-footerSize,footerSize);Reader info{footer};
     if(info.Number()!=0x5a6f12e1||info.Number()!=3)throw std::runtime_error("Unsupported legacy PAK footer");
     const auto offset=info.Number(8),size=info.Number(8);const auto expected=info.Take(20);
@@ -67,14 +68,14 @@ inline Result LegacyPak(File& file,const std::string& game){
         if(compression)for(size_t blocks=index.Count();blocks;--blocks){const auto start=index.Number(8),end=index.Number(8);
             if(start>end||end>offset)throw std::runtime_error("Invalid legacy PAK compression range");}
         if(index.Number(1)>1)throw std::runtime_error("Invalid legacy PAK encryption flag");index.Number();
-        const auto package=Package(mount+name,game);if(!package.empty())result.Packages.insert(package);
+        if(Selected(name,filenames)){const auto package=Package(mount+name,game);if(!package.empty())result.Packages.insert(package);}
     }
     if(index.At!=primary.size())throw std::runtime_error("Unexpected legacy PAK index data");
     result.IndexKey=CacheBundleIO::Hash(primary);result.Complete=true;return result;
 }
-inline Result Pak(File& file,const std::string& game){
+inline Result Pak(File& file,const std::string& game,const std::set<std::string>* filenames=nullptr){
     if(file.Size>=44){const auto tail=file.Read(file.Size-44,8);Reader legacy{tail};
-        if(legacy.Number()==0x5a6f12e1&&legacy.Number()==3)return LegacyPak(file,game);}
+        if(legacy.Number()==0x5a6f12e1&&legacy.Number()==3)return LegacyPak(file,game,filenames);}
     // shortcut: v3 and v10/v11 full indexes only; reject other layouts rather than guess ownership.
     constexpr size_t footerSize=221;if(file.Size<footerSize)throw std::runtime_error("Missing PAK footer");
     const auto footer=file.Read(file.Size-footerSize,footerSize);Reader info{footer};info.Take(16);if(info.Number(1))throw std::runtime_error("Encrypted PAK index unavailable");
@@ -88,11 +89,11 @@ inline Result Pak(File& file,const std::string& game){
     for(size_t n=rows.Count();n;--n){const auto folder=rows.Text();if(folder.find("..")!=folder.npos)throw std::runtime_error("Invalid PAK directory path");
         for(size_t m=rows.Count();m;--m){if(++seen>total||seen>MaxEntries)throw std::runtime_error("PAK directory count mismatch");const auto name=rows.Text();const auto location=static_cast<int32_t>(rows.Number());
             if(name.empty()||name.find('/')!=name.npos)throw std::runtime_error("Invalid PAK filename");if(location==INT32_MIN||location==INT32_MAX)continue; // Native invalid/delete record.
-            const auto package=Package(mount+(folder=="/"?"":folder)+name,game);if(!package.empty())result.Packages.insert(package);}}
+            if(Selected(name,filenames)){const auto package=Package(mount+(folder=="/"?"":folder)+name,game);if(!package.empty())result.Packages.insert(package);}}}
     if(rows.At!=directory.size()||seen!=total)throw std::runtime_error("Unexpected PAK directory data");
     result.IndexKey=CacheBundleIO::Hash(primary+directory);result.Complete=true;return result;
 }
-inline Result IoStore(File& file,const std::string& game){
+inline Result IoStore(File& file,const std::string& game,const std::set<std::string>* filenames=nullptr){
     const auto header=file.Read(0,144);Reader h{header};if(h.Take(16)!="-==--==--==--==-")throw std::runtime_error("Unsupported IoStore magic");
     const auto version=h.Number(1);if(version<3||version>8)throw std::runtime_error("Unsupported IoStore version");h.Take(3);if(h.Number()!=144)throw std::runtime_error("Unsupported IoStore header");
     const auto chunks=h.Count(),blocks=h.Number(),blockSize=h.Number(),methods=h.Number(),width=h.Number();h.Take(4);const auto directorySize=h.Number();
@@ -121,13 +122,13 @@ inline Result IoStore(File& file,const std::string& game){
         if(depth>128||id>=dirs.size()||!visitedDirs.insert(id).second)throw std::runtime_error("Invalid IoStore directory cycle");const auto& dir=dirs[id];
         if(dir[0]!=none)prefix+=name(dir[0])+"/";if(prefix.size()>4096)throw std::runtime_error("IoStore path limit exceeded");
         auto entry=dir[3];while(entry!=none){if(entry>=files.size()||!visitedFiles.insert(entry).second)throw std::runtime_error("Invalid IoStore file cycle");const auto& row=files[entry];if(row[2]>=chunks)throw std::runtime_error("Invalid IoStore chunk index");
-            const auto package=Package(mount+prefix+name(row[0]),game);if(!package.empty())result.Packages.insert(package);entry=row[1];}
+            const auto leaf=name(row[0]);if(Selected(leaf,filenames)){const auto package=Package(mount+prefix+leaf,game);if(!package.empty())result.Packages.insert(package);}entry=row[1];}
         auto child=dir[1];while(child!=none){walk(child,prefix,depth+1);child=dirs[child][2];}};
     walk(0,{},0);if(visitedDirs.size()!=dirs.size()||visitedFiles.size()!=files.size())throw std::runtime_error("Unreachable IoStore directory entries");
     result.IndexKey=CacheBundleIO::Hash(header+directory);result.Complete=true;return result;
 }
-inline Result Read(const std::filesystem::path& path,const std::string& game){
-    try{File file(path);const auto extension=HelpyCacheSources::Lower(path.extension().string());auto result=extension==".pak"?Pak(file,game):extension==".utoc"?IoStore(file,game):Result{};file.Stable();return result;}
+inline Result Read(const std::filesystem::path& path,const std::string& game,const std::set<std::string>* filenames=nullptr){
+    try{File file(path);const auto extension=HelpyCacheSources::Lower(path.extension().string());auto result=extension==".pak"?Pak(file,game,filenames):extension==".utoc"?IoStore(file,game,filenames):Result{};file.Stable();return result;}
     catch(const std::exception& error){Result result;result.Error=error.what();return result;}
 }
 struct Root {std::filesystem::path Path;std::string Owner;};
@@ -136,4 +137,32 @@ inline std::vector<Root> Roots;
 inline void ResetRoots() noexcept {try{std::lock_guard lock(RootsMutex);Roots.clear();}catch(...){}}
 inline void RememberRoot(const std::filesystem::path& path,const std::string& owner={}) noexcept {try{std::lock_guard lock(RootsMutex);if(Roots.size()<4096)Roots.push_back({path,HelpyCacheSources::Lower(owner)});}catch(...){}}
 inline std::vector<Root> ReadRoots(){std::lock_guard lock(RootsMutex);return Roots;}
+// Absence is usable only after every discovered container index was readable.
+// An incomplete census must retain native loading as the fallback.
+// A filename selection narrows returned packages, never index validation or completeness.
+inline Result ReadMountedPackages(const std::vector<Root>& roots,const std::string& game,const std::set<std::string>* filenames=nullptr){
+    Result result;std::set<std::filesystem::path> files;size_t entries=0;
+    try{
+        if(roots.empty())throw std::runtime_error("Mounted PAK roots are unavailable");
+        for(const auto& root:roots){
+            if(!std::filesystem::exists(root.Path))continue;
+            if(!std::filesystem::is_directory(root.Path))throw std::runtime_error("Mounted PAK root is unavailable");
+            for(const auto& entry:std::filesystem::recursive_directory_iterator(root.Path)){
+                if(++entries>16384||entry.is_symlink())throw std::runtime_error("Mounted PAK census is incomplete");
+                if(!entry.is_regular_file())continue;
+                const auto extension=HelpyCacheSources::Lower(entry.path().extension().string());
+                if(extension==".uasset"||extension==".umap")throw std::runtime_error("Loose cooked assets require native probing");
+                if(extension!=".pak"&&extension!=".utoc")continue;
+                if(!files.insert(std::filesystem::weakly_canonical(entry.path())).second)continue;
+                if(files.size()>512)throw std::runtime_error("Mounted PAK census exceeds its container bound");
+                auto index=Read(entry.path(),game,filenames);
+                if(!index.Complete)throw std::runtime_error(index.Error.empty()?"Container index is unavailable":index.Error);
+                result.Packages.insert(index.Packages.begin(),index.Packages.end());
+                if(result.Packages.size()>MaxEntries)throw std::runtime_error("Mounted package census exceeds its bound");
+            }
+        }
+        result.Complete=!files.empty();
+    }catch(const std::exception& error){result.Error=error.what();}
+    return result;
+}
 }

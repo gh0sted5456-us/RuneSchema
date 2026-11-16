@@ -17,4 +17,9 @@ inline Crop Cover(float imageWidth,float imageHeight,float viewWidth,float viewH
     else{const auto span=image/view;result.Top=(1-span)*.5f;result.Bottom=1-result.Top;}return result;
 }
 inline float Strength(float value){return std::clamp(value,0.f,.3f);}
+struct Layers {float Base,Image;};
+inline Layers TintLayers(float opacity,float strength){
+    opacity=std::clamp(opacity,0.f,1.f);const float image=opacity*Strength(strength);
+    return {(opacity-image)/(1.f-image),image};
+}
 }

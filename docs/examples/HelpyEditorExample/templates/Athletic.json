@@ -1,0 +1,18 @@
+{
+  "format": "RuneSchema.ModMenu2.Template",
+  "version": 1,
+  "name": "Athletic example",
+  "mod": "HelpyEditorExample",
+  "modVersion": "1.0.0",
+  "template": "appearance",
+  "templateVersion": 1,
+  "values": {
+    "Enabled": true,
+    "Height": 1.05,
+    "Build": 0.75,
+    "Hip": 0.45,
+    "Style": "Athletic",
+    "SkinColor": "#B98D72",
+    "AccentColor": "#6677BBFF"
+  }
+}

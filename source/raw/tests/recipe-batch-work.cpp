@@ -1,27 +1,48 @@
 #include "Core/RecipeBatchWork.h"
+#include "Core/NativeAssetLoadTiming.h"
 #include <cassert>
 #include <chrono>
 #include <iostream>
 #include <string>
 #include <vector>
-struct Object {bool Live=true,CorrectType=true;};
+struct Object {bool Live=true,CorrectType=true,SamePath=true;};
 struct Handle {Object* Value=nullptr;Object* Get()const{return Value&&Value->Live?Value:nullptr;}};
 int main(){
+    {
+        using namespace PS::NativeAssetLoadTiming;
+        assert(!Active);
+        {Call disabled;disabled.BeginNative();disabled.EndNative();}
+        Batch outer;
+        {Call first;first.BeginNative();{Call recursive;recursive.BeginNative();recursive.EndNative();}first.EndNative();}
+        assert(outer.Cost.Calls==1&&outer.Cost.TotalNs>=outer.Cost.NativeNs&&Active==&outer.Cost);
+        {Batch inner;{Call nested;nested.BeginNative();}assert(inner.Cost.Calls==1);}
+        assert(Active==&outer.Cost);
+        try{Call failed;failed.BeginNative();throw 1;}catch(int){}
+        assert(outer.Cost.Calls==2&&outer.Cost.TotalNs>=outer.Cost.NativeNs&&Active==&outer.Cost);
+    }
+    assert(!PS::NativeAssetLoadTiming::Active);
     using namespace PS::RecipeBatchWork;
     References<std::string,Handle> references;Object original,replacement,wrong;wrong.CorrectType=false;
-    const auto validate=[](Object* value){return value->Live&&value->CorrectType;};
+    const auto validate=[](Object* value){return value->Live&&value->CorrectType&&value->SamePath;};
     const auto capture=[](Object* value){return Handle{value};};
+    const auto absent=[]{return static_cast<Object*>(nullptr);};
     references.Remember("/A.A",Handle{&original});int loads=0;
-    assert(references.Resolve("/A.A",[&]{++loads;return &replacement;},validate,capture)==&original&&loads==0);
+    assert(references.Resolve("/A.A",absent,[&]{++loads;return &replacement;},validate,capture)==&original&&loads==0);
     original.Live=false;
-    assert(references.Resolve("/A.A",[&]{++loads;return &replacement;},validate,capture)==&replacement&&loads==1);
-    assert(references.Resolve("/A.A",[&]{++loads;return &replacement;},validate,capture)==&replacement&&loads==1);
-    assert(!references.Resolve("/B.B",[&]{++loads;return &wrong;},validate,capture));
-    assert(!references.Resolve("/C.C",[]{return static_cast<Object*>(nullptr);},validate,capture));
-    // A dependency appearing after the snapshot is resolved by the loader,
-    // rather than incorrectly treated as absent or constructed a second time.
-    assert(references.Resolve("/Late.Late",[&]{++loads;return &replacement;},validate,capture)==&replacement);
-    assert(references.Hits==2&&references.Loads==4);
+    assert(references.Resolve("/A.A",absent,[&]{++loads;return &replacement;},validate,capture)==&replacement&&loads==1);
+    assert(references.Resolve("/A.A",absent,[&]{++loads;return &replacement;},validate,capture)==&replacement&&loads==1);
+    assert(!references.Resolve("/B.B",absent,[&]{++loads;return &wrong;},validate,capture));
+    assert(!references.Resolve("/C.C",absent,absent,validate,capture));
+    // A dependency appearing after the snapshot avoids a blocking load, but
+    // wrong-class or half-ready live results must still use the native loader.
+    assert(references.Resolve("/Late.Late",[&]{return &replacement;},[&]{++loads;return &wrong;},validate,capture)==&replacement);
+    assert(references.Resolve("/Late.Late",absent,[&]{++loads;return &wrong;},validate,capture)==&replacement);
+    assert(references.Resolve("/Wrong.Wrong",[&]{return &wrong;},[&]{++loads;return &replacement;},validate,capture)==&replacement);
+    assert(references.Hits==3&&references.LiveHits==1&&references.Loads==4&&loads==3);
+    Object renamed;renamed.SamePath=false;
+    References<std::string,Handle> names;names.Remember("/Old.Old",Handle{&renamed});
+    assert(names.Resolve("/Old.Old",[&]{return &renamed;},[&]{return &replacement;},validate,capture)==&replacement);
+    assert(names.Hits==0&&names.LiveHits==0&&names.Loads==1);
 
     const auto started=std::chrono::steady_clock::now();
     AppendIndex<std::string,std::size_t> index;std::vector<std::size_t> items{9,9,10};

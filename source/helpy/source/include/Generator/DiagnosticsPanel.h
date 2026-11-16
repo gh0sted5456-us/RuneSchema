@@ -1,4 +1,6 @@
 #pragma once
+#include "Generator/HelpyTextInput.h"
+#include "Generator/HelpyMenu.h"
 #include "Core/ProcessExitFuture.h"
 
 #include "Core/DiagnosticCenterModel.h"
@@ -153,9 +155,9 @@ inline void DrawExportPopup(const HelpyImGuiTheme::Theme& theme){
             PendingReportText.size()>6144?" (truncated)":"");
         const std::string excerpt=PendingReportText.substr(0,6144);
         const float previewHeight=std::max(theme.Y(36.0f),ImGui::GetContentRegionAvail().y-theme.Y(65.0f));
-        if(ImGui::BeginChild("##diagnostics-export-preview",ImVec2(0,previewHeight),true))
+        if(HelpyImGuiTheme::BeginPanel("##diagnostics-export-preview",ImVec2(0,previewHeight),true))
             ImGui::TextWrapped("%s",excerpt.c_str());
-        ImGui::EndChild();
+        PS::HelpyImGuiTheme::EndPanel();
         const float actionAvail=ImGui::GetContentRegionAvail().x;
         const bool stackActions=actionAvail<theme.X(320.0f);
         const float actionWidth=stackActions?actionAvail:std::min(theme.X(150.0f),
@@ -309,9 +311,9 @@ inline void TextFittedAt(const ImVec2& at,std::string_view text,float maxWidth,I
 }
 inline bool BeginPaddedChild(const char* id,const HelpyImGuiTheme::Theme& theme,const ImVec2& size=ImVec2(0,0),bool border=true,ImGuiWindowFlags flags=0){
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(theme.X(theme.contentPaddingX),theme.Y(theme.contentPaddingY)));
-    return ImGui::BeginChild(id,size,border,flags|ImGuiWindowFlags_AlwaysUseWindowPadding);
+    return HelpyImGuiTheme::BeginPanel(id,size,border,flags|ImGuiWindowFlags_AlwaysUseWindowPadding);
 }
-inline void EndPaddedChild(){ImGui::EndChild();ImGui::PopStyleVar();}
+inline void EndPaddedChild(){PS::HelpyImGuiTheme::EndPanel();ImGui::PopStyleVar();}
 inline bool ActionButton(const char* id,HelpyImGuiTheme::Icon icon,const char* label,const HelpyImGuiTheme::Theme& theme,float logicalWidth=0.0f){
     ImGui::PushID(id);
     std::string caption="   ";caption+=label;
@@ -332,7 +334,7 @@ inline void MetaRow(const char* label,const std::string& value,const HelpyImGuiT
 inline bool DrawMetricCard(std::size_t count,std::string_view label,LiveLog::Level level,const ImVec4& accent,const HelpyImGuiTheme::Theme& theme){
     const float cardHeight=theme.Y(112.0f);
     ImGui::PushStyleColor(ImGuiCol_ChildBg,theme.panelAlt);
-    if(ImGui::BeginChild("##metric",ImVec2(0,cardHeight),true,ImGuiWindowFlags_NoScrollbar)){
+    if(HelpyImGuiTheme::BeginPanel("##metric",ImVec2(0,cardHeight),true,ImGuiWindowFlags_NoScrollbar)){
         const auto min=ImGui::GetWindowPos();
         const auto max=ImVec2(min.x+ImGui::GetWindowSize().x,min.y+ImGui::GetWindowSize().y);
         auto* dl=ImGui::GetWindowDrawList();
@@ -369,7 +371,7 @@ inline bool DrawMetricCard(std::size_t count,std::string_view label,LiveLog::Lev
     const bool clicked=hovered&&ImGui::IsMouseClicked(ImGuiMouseButton_Left);
     const auto cardMin=ImGui::GetWindowPos(),cardSize=ImGui::GetWindowSize();
     if(hovered){ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);HelpyImGuiTheme::TooltipAt(cardMin,{cardMin.x+cardSize.x,cardMin.y+cardSize.y},("Browse "+std::string(label)).c_str());}
-    ImGui::EndChild();
+    PS::HelpyImGuiTheme::EndPanel();
     ImGui::PopStyleColor();
     return clicked;
 }
@@ -400,6 +402,9 @@ inline float IssueRowHeight(const HelpyImGuiTheme::Theme& theme){
 inline void DrawIssueRow(DiagnosticCenterModel::Store& store,const DiagnosticCenterModel::Group& group,
                          const HelpyImGuiTheme::Theme& theme,bool selected,
                          std::size_t related=0,bool* expanded=nullptr,bool nested=false){
+#if defined(HELPY_PREVIEW)
+    ++HelpyPreviewHooks::DiagnosticRowsDrawn;
+#endif
     ImGui::PushID(static_cast<int>(group.Id));
     const float height=IssueRowHeight(theme);
     const float width=std::max(1.0f,ImGui::GetContentRegionAvail().x);
@@ -595,7 +600,7 @@ inline void DrawInspectorWindowHeader(DiagnosticCenterModel::Store& store,
     const float headerHeight=std::max(theme.Y(42.0f),buttonSide+theme.Y(10.0f));
     ImGui::PushStyleColor(ImGuiCol_ChildBg,theme.panel);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(0,0));
-    if(ImGui::BeginChild("##issue-inspector-window-header",ImVec2(0,headerHeight),true,
+    if(HelpyImGuiTheme::BeginPanel("##issue-inspector-window-header",ImVec2(0,headerHeight),true,
                          ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse)){
         const ImVec2 a=ImGui::GetWindowPos(),windowSize=ImGui::GetWindowSize();
         const float iconSize=theme.X(15.0f);
@@ -684,7 +689,7 @@ inline void DrawInspectorWindowHeader(DiagnosticCenterModel::Store& store,
         }
         ImGui::PopID();
     }
-    ImGui::EndChild();
+    PS::HelpyImGuiTheme::EndPanel();
     ImGui::PopStyleVar();
     ImGui::PopStyleColor();
     ImGui::Dummy(ImVec2(0.0f,theme.Y(4.0f)));
@@ -695,7 +700,7 @@ inline void DrawInspector(DiagnosticCenterModel::Store& store,const HelpyImGuiTh
     if(LastInspected!=SelectedGroup){LastInspected=SelectedGroup;OpenOccurrences=false;OpenTechnical=false;OpenRelated=false;SelectedOccurrenceEvent=0;}
     DrawInspectorWindowHeader(store,*group,theme);
     const float detailHeight=std::max(1.0f,ImGui::GetContentRegionAvail().y);
-    if(ImGui::BeginChild("##issue-inspector-scrollable-details",ImVec2(0,detailHeight),false)){
+    if(HelpyImGuiTheme::BeginPanel("##issue-inspector-scrollable-details",ImVec2(0,detailHeight),false)){
 
     ImGui::TextColored(SeverityColor(group->Severity,theme),"%s",IssueTitle(*group).c_str());
     ImGui::TextDisabled("%s  ·  %llu occurrence%s",LiveLog::Label(group->Severity),
@@ -859,7 +864,7 @@ inline void DrawInspector(DiagnosticCenterModel::Store& store,const HelpyImGuiTh
         ImGui::TextDisabled("Evidence older than the bounded history is unavailable from this viewer.");
     }
     }
-    ImGui::EndChild();
+    PS::HelpyImGuiTheme::EndPanel();
 }
 inline void DrawIssues(DiagnosticCenterModel::Store& store,const HelpyImGuiTheme::Theme& theme){
     const float availableBefore=ImGui::GetContentRegionAvail().x;
@@ -867,7 +872,7 @@ inline void DrawIssues(DiagnosticCenterModel::Store& store,const HelpyImGuiTheme
     const float clearWidth=ImGui::CalcTextSize("Clear").x+theme.X(35.0f);
     const float queryWidth=std::max(theme.X(85.0f),availableBefore-clearWidth);
     ImGui::SetNextItemWidth(queryWidth);
-    ImGui::InputTextWithHint("##diagnostics-search","Search code, mod, file, target, property, message...",Query,sizeof(Query));
+    HelpyTextInput::InputTextWithHint("##diagnostics-search","Search code, mod, file, target, property, message...",Query,sizeof(Query));
     ImGui::SameLine();
     if(ImGui::SmallButton("Clear##diagnostics-search"))Query[0]='\0';
     const char* scopes[]={"Errors + warnings","Errors only","Warnings only",
@@ -895,9 +900,9 @@ inline void DrawIssues(DiagnosticCenterModel::Store& store,const HelpyImGuiTheme
     ImGui::Checkbox("Group same-operation",&GroupByOperation);
     if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Only reports sharing explicit OperationId AND ModId. Legacy safety warnings remain separate.");
 
-    std::vector<const DiagnosticCenterModel::Group*> filtered;
-    for(const auto& group:store.Groups())if(Matches(group,Query))filtered.push_back(&group);
-    DiagnosticIssueFilters::Sort(filtered,SortMode);
+    // Memoized per store revision and filter state; per-frame cost is a key comparison.
+    static DiagnosticIssueFilters::View issues;
+    const auto& filtered=issues.Update(store,Query,ShowAll,OnlyNew,SeverityScope,SortMode);
     if(RevealSelectedInList&&GroupByOperation&&DiagnosticIssueNavigation::Contains(filtered,SelectedGroup)){
         const auto parent=DiagnosticIssueNavigation::ParentFor(store,filtered,SelectedGroup);
         if(parent&&parent!=SelectedGroup)ExpandedOperations.insert(parent);
@@ -927,6 +932,11 @@ inline void DrawIssues(DiagnosticCenterModel::Store& store,const HelpyImGuiTheme
     if(filtered.empty())ImGui::TextDisabled("No issues match these filters. Use Reset filters to show all reported errors and warnings.");
     const auto selectedIndex=DiagnosticIssueNavigation::SelectedRowIndex(display,SelectedGroup);
     const float rowHeight=IssueRowHeight(theme)+theme.Y(6.0f)+ImGui::GetStyle().ItemSpacing.y*2;
+    const auto drawVisible=[&]{
+        ImGuiListClipper clipper;clipper.Begin(static_cast<int>(display.size()),rowHeight);
+        while(clipper.Step())for(int index=clipper.DisplayStart;index<clipper.DisplayEnd;++index)
+            drawRow(display[static_cast<std::size_t>(index)]);
+    };
     if(narrow){
         if(DetailOnly&&store.FindGroup(SelectedGroup)){
             if(ImGui::SmallButton("Back to issues"))DetailOnly=false;
@@ -942,7 +952,7 @@ inline void DrawIssues(DiagnosticCenterModel::Store& store,const HelpyImGuiTheme
                     ImGui::SetScrollY(static_cast<float>(selectedIndex)*rowHeight);
                     RevealSelectedInList=false;
                 }
-                for(const auto& row:display)drawRow(row);
+                drawVisible();
             }EndPaddedChild();ImGui::PopStyleColor();
         }
         return;
@@ -968,9 +978,7 @@ inline void DrawIssues(DiagnosticCenterModel::Store& store,const HelpyImGuiTheme
             ImGui::SetScrollY(static_cast<float>(selectedIndex)*rowHeight);
             RevealSelectedInList=false;
         }
-        ImGuiListClipper clipper;clipper.Begin(static_cast<int>(display.size()),rowHeight);
-        while(clipper.Step())for(int index=clipper.DisplayStart;index<clipper.DisplayEnd;++index)
-            drawRow(display[static_cast<std::size_t>(index)]);
+        drawVisible();
     }EndPaddedChild();ImGui::PopStyleColor();
     ImGui::SameLine(0,0);
     ImGui::InvisibleButton("##diagnostic-divider",ImVec2(splitter,paneHeight));
@@ -993,7 +1001,7 @@ inline void DrawLiveStructuredReports(DiagnosticCenterModel::Store& store,const 
     if(ImGui::CollapsingHeader("Confirmed structured diagnostic codes##live",ImGuiTreeNodeFlags_DefaultOpen)){
         ImGui::TextDisabled("%zu code-bearing reports in retained history. Legacy log entries without emitted codes remain unclassified.",confirmed);
         const float height=std::clamp(theme.Y(132.0f),theme.Y(70.0f),std::max(theme.Y(70.0f),ImGui::GetContentRegionAvail().y*.33f));
-        if(ImGui::BeginChild("##structured-live-codes",ImVec2(0,height),true)){
+        if(HelpyImGuiTheme::BeginPanel("##structured-live-codes",ImVec2(0,height),true)){
             std::size_t shown=0;
             for(auto it=events.rbegin();it!=events.rend()&&shown<200;++it){
                 if(it->StructuredId.empty())continue;
@@ -1011,7 +1019,7 @@ inline void DrawLiveStructuredReports(DiagnosticCenterModel::Store& store,const 
                 ImGui::TextUnformatted(Fitted(line,ImGui::GetContentRegionAvail().x).c_str());
                 ImGui::PopID();
             }
-        }ImGui::EndChild();
+        }PS::HelpyImGuiTheme::EndPanel();
     }
 }
 inline void Render(DiagnosticCenterModel::Store& current,
@@ -1094,13 +1102,11 @@ inline void Render(DiagnosticCenterModel::Store& current,
     }
     Historical=!ArchivedSessionId.empty();
     auto& store=*selected;
-    if(ImGui::BeginTabBar("Diagnostics views")){
-        const auto tab=[&](const char* label,View id,const auto& draw){
-            const auto flags=RequestedTab==static_cast<int>(id)?ImGuiTabItemFlags_SetSelected:ImGuiTabItemFlags_None;
-            if(ImGui::BeginTabItem(label,nullptr,flags)){
-                Current=id;draw();ImGui::EndTabItem();
-            }
-        };
+    if(RequestedTab>=0)Current=static_cast<View>(RequestedTab);
+    int section=static_cast<int>(Current);constexpr std::array labels{"Overview","Issues","Live Log"};
+    HelpyMenu::Tabs("diagnostic-views",labels,section);Current=static_cast<View>(section);
+    if(HelpyMenu::BeginBody("Diagnostic view body",section)){
+        const auto visible=Current;const auto tab=[&](const char*,View id,const auto& draw){if(visible==id)draw();};
         tab("Overview",View::Overview,[&]{DrawOverview(store,theme);});
         tab("Issues",View::Issues,[&]{DrawIssues(store,theme);});
         tab("Live Log",View::LiveLog,[&]{
@@ -1112,7 +1118,7 @@ inline void Render(DiagnosticCenterModel::Store& current,
                 ImGui::TextDisabled("Saved session snapshot: retained events only. No current RuneSchema.log source-row links.");
                 const auto& events=store.Events();
                 const float evidenceHeight=std::max(theme.Y(90),ImGui::GetContentRegionAvail().y*0.70f);
-                if(ImGui::BeginChild("##diagnostic-historical-log",ImVec2(0,evidenceHeight),true)){
+                if(HelpyImGuiTheme::BeginPanel("##diagnostic-historical-log",ImVec2(0,evidenceHeight),true)){
                     if(RevealHistoricalEvent){
                         if(const auto index=DiagnosticHistoryNavigation::EventIndex(events,SelectedHistoricalEvent)){
                             ImGui::SetScrollY(static_cast<float>(*index)*ImGui::GetTextLineHeightWithSpacing());
@@ -1132,7 +1138,7 @@ inline void Render(DiagnosticCenterModel::Store& current,
                         ImGui::PopID();
                     }
                 }
-                ImGui::EndChild();
+                PS::HelpyImGuiTheme::EndPanel();
                 if(const auto* event=store.FindEvent(SelectedHistoricalEvent)){
                     ImGui::TextDisabled("Retained historical evidence: %s",TimeLabel(event->Timestamp).c_str());
                     ImGui::TextWrapped("%s",event->Text.c_str());
@@ -1146,9 +1152,8 @@ inline void Render(DiagnosticCenterModel::Store& current,
                 }
             }
         });
-        ImGui::EndTabBar();
         RequestedTab=-1;
-    }
+    }HelpyMenu::EndBody();
     DrawExportPopup(theme);
 }
 }

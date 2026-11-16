@@ -47,6 +47,7 @@ int main(int argc,char**argv){
         for(const auto* invalid:{"NexusFileID=-1","NexusModID=abc","Banner=../escape.png","Banner=C:/outside.png","Banner=cache/payload.dll"}){bool rejected=false;try{(void)PS::ModIdentity::Parse(invalid,"Folder");}catch(...){rejected=true;}assert(rejected);}
         PS::ConfigFiles::Write(root/"mods/Alpha/ID.txt","ModID=stable-alpha\nName=Alpha display\nBuild=test\nNexusModID=123\nNexusFileID=456\nDescription=From ID.txt\n");const auto info=Metadata(root/"mods/Alpha");assert(info["modId"]=="stable-alpha"&&info["name"]=="Alpha display"&&info["build"]=="test"&&info["nexusModId"]=="123"&&info["nexusFileId"]=="456"&&info["description"]=="example");
     }
+    PS::ConfigFiles::Write(root/"mods/Alpha/ID.txt","ModID=stable-alpha\nVersion=3.4\n");assert(Metadata(root/"mods/Alpha")["version"]=="3.4");
     auto state=Read(root,true);assert(state["Rows"].size()==2&&state["Rows"][0]["Name"]=="Alpha"&&state["Rows"][0]["Enabled"]==false);
     fs::create_directories(root/"mods/Beta/cache");PS::ConfigFiles::Write(root/"mods/Beta/cache/mod.png","fixture-pixels");
     const auto banner=Read(root,true);assert(banner["Rows"][1]["BannerRelative"]=="cache/mod.png");
@@ -56,6 +57,19 @@ int main(int argc,char**argv){
     bool stale=false;try{Save(root,true,request);}catch(...){stale=true;}assert(stale);
     bool disabled=false;try{Save(root,false,saved);}catch(...){disabled=true;}assert(disabled);
     auto removed=saved;removed["Rows"].erase(removed["Rows"].begin());bool missing=false;try{Save(root,true,removed);}catch(...){missing=true;}assert(missing);
+    PS::ConfigFiles::Write(root/"mods/runeschema.txt",PS::ConfigFiles::Read(root/"mods/runeschema.txt")+"Gone : 0\nRetired : 1\n");
+    auto orphaned=Read(root,true);assert(orphaned["Rows"].size()==4);
+    std::erase_if(orphaned["Rows"].get_ref<Json::array_t&>(),[](const auto& row){return row.at("Name")=="Gone";});
+    auto one=Save(root,true,orphaned);assert(one["Rows"].size()==3);
+    assert(std::any_of(one["Rows"].begin(),one["Rows"].end(),[](const auto& row){return row.at("Name")=="Retired"&&!row.at("Present").template get<bool>();}));
+    std::erase_if(one["Rows"].get_ref<Json::array_t&>(),[](const auto& row){return !row.at("Present").template get<bool>();});
+    const auto cleaned=Save(root,true,one);assert(cleaned["Rows"].size()==2&&PS::ConfigFiles::Read(root/"mods/runeschema.txt").find("preserve this comment")!=std::string::npos);
+    auto foreign=cleaned;foreign["Rows"].push_back({{"Name","Unlisted"},{"Enabled",true},{"Present",false}});
+    bool unknown=false;try{Save(root,true,foreign);}catch(...){unknown=true;}assert(unknown);
+    PS::ConfigFiles::Write(root/"mods/runeschema.txt",PS::ConfigFiles::Read(root/"mods/runeschema.txt")+"Returning : 0\n");
+    auto returning=Read(root,true);std::erase_if(returning["Rows"].get_ref<Json::array_t&>(),[](const auto& row){return row.at("Name")=="Returning";});
+    fs::create_directories(root/"mods/Returning/equipment");bool reappeared=false;try{Save(root,true,returning);}catch(...){reappeared=true;}assert(reappeared);
+    assert(fs::is_directory(root/"mods/Beta/paks")&&fs::is_directory(root/"mods/Returning/equipment"));
     assert(fs::is_directory(root/"mods/Alpha/equipment"));
     std::cout<<"Mod manager: metadata, order preservation, CAS, disabled policy, complete-list guard passed.\n";
     fs::remove_all(root);

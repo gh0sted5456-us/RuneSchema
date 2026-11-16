@@ -5,6 +5,7 @@
 #include "Unreal/AActor.hpp"
 #include "Unreal/CoreUObject/UObject/Class.hpp"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
+#include "Unreal/CoreUObject/UObject/FStrProperty.hpp"
 #include "Unreal/Property/FEnumProperty.hpp"
 #include "Unreal/Transform.hpp"
 #include "Unreal/UFunctionStructs.hpp"
@@ -358,7 +359,14 @@ namespace DragonWilds::ActorHelper {
 
     FunctionCall& FunctionCall::StringArg(const CharType* Name, const std::string& Value)
     {
-        return JsonArg(Name, nlohmann::json(Value));
+        auto* property=CastField<FStrProperty>(m_function->FindProperty(FName(Name,FNAME_Find)));
+        if(!ReflectedContract::Input(property,m_function)||property->GetArrayDim()!=1||property->GetElementSize()!=sizeof(FString))
+            throw std::runtime_error("String argument did not match its native FString parameter");
+        // Early save callbacks can run before the generic property-class cache is initialized.
+        property->InitializeValue_InContainer(m_params.data());m_initialized.push_back(property);
+        const FString text(RC::to_generic_string(Value).c_str());
+        property->SetPropertyValue(property->ContainerPtrToValuePtr<void>(m_params.data()),text);
+        return *this;
     }
 
     FunctionCall& FunctionCall::SoftObjectArg(const CharType* Name, UObject* Value)
@@ -446,6 +454,37 @@ namespace DragonWilds::ActorHelper {
             ||!property->HasAnyPropertyFlags(CPF_OutParm)||Size!=static_cast<size_t>(property->GetSize()))
             throw std::runtime_error("Output parameter did not match the live function layout");
         std::memcpy(Out,property->ContainerPtrToValuePtr<void>(m_params.data()),Size);
+    }
+
+    FunctionCall& FunctionCall::InitializeOutput(const CharType* Name)
+    {
+        auto* property=m_function->FindProperty(FName(Name,FNAME_Find));
+        if(!ReflectedContract::Fits(property,m_function->GetParmsSize())||!property->HasAllPropertyFlags(CPF_Parm|CPF_OutParm)
+            ||property->HasAnyPropertyFlags(CPF_ReturnParm|CPF_ReferenceParm|CPF_ConstParm)
+            ||std::find(m_initialized.begin(),m_initialized.end(),property)!=m_initialized.end())
+            throw std::runtime_error("Output parameter is unavailable or already initialized");
+        m_initialized.push_back(property);property->InitializeValue_InContainer(m_params.data());return *this;
+    }
+    bool FunctionCall::BooleanOutput(const CharType* Name)
+    {
+        auto* property=CastField<FBoolProperty>(m_function->FindProperty(FName(Name,FNAME_Find)));
+        if(!property||std::find(m_initialized.begin(),m_initialized.end(),property)==m_initialized.end())
+            throw std::runtime_error("Boolean output was not initialized");
+        return property->GetPropertyValueInContainer(m_params.data());
+    }
+    std::string FunctionCall::StringOutput(const CharType* Name,size_t MaximumBytes)
+    {
+        auto* property=CastField<FStrProperty>(m_function->FindProperty(FName(Name,FNAME_Find)));
+        if(!property||property->GetElementSize()!=sizeof(FString)||std::find(m_initialized.begin(),m_initialized.end(),property)==m_initialized.end())
+            throw std::runtime_error("String output was not initialized");
+        // Copy characters while the reflected frame owns the FString allocation.
+        const auto& chars=property->ContainerPtrToValuePtr<FString>(m_params.data())->GetCharArray();
+        if(chars.Num()==0)return {};
+        if(chars.Num()<0||static_cast<size_t>(chars.Num())>MaximumBytes+1||!chars.GetData()||chars[chars.Num()-1]!=0)
+            throw std::runtime_error("String output exceeds its limit or is invalid");
+        const auto value=RC::to_string(StringType(chars.GetData(),chars.Num()-1));
+        if(value.size()>MaximumBytes||value.find('\0')!=value.npos)throw std::runtime_error("String output exceeds its UTF-8 limit or contains NUL");
+        return value;
     }
 
     FunctionCall& FunctionCall::FirstNumericArg(double Value)

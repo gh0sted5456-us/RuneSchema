@@ -39,6 +39,19 @@ int main(){
     for(const auto* bad:{L"rs unknown",L"rs vision on",L"rs status | quit",L"rs status;quit",L"rs status\nquit",L"rs exec",L"rs delete",L"rs \u03b1"})
         assert(Parse(bad)==Command::Invalid);
     assert(Parse(L"rs "+std::wstring(513,L'x'))==Command::Invalid);
+    const auto mod=ParseMod(L"runeschema MOD J4SWeather:Weather snow 120");
+    assert(mod&&mod->Owner==L"J4SWeather"&&mod->Id==L"Weather"&&mod->Count==2&&mod->Arguments[0]==L"snow");
+    assert(Parse(L"rs mod Example:Run")==Command::Mod);
+    assert(Parse(L"rs mod Example:Run "+std::wstring(64,L'x'))==Command::Mod);
+    assert(Parse(L"rs mod Example:Run "+std::wstring(65,L'x'))==Command::Invalid);
+    assert(Parse(L"rs mod Example:Run "+std::wstring(32,L'\u00e9'))==Command::Mod);
+    assert(Parse(L"rs mod Example:Run "+std::wstring(33,L'\u00e9'))==Command::Invalid);
+    assert(Parse(L"rs mod Example:Run a b c d e f g h")==Command::Mod);
+    for(const auto* bad:{L"rs mod",L"rs mod Example",L"rs mod :Run",L"rs mod Example:",L"rs mod ../:Run",L"rs mod Example:Run:Other",
+        L"rs mod Example:Run a b c d e f g h i",L"rs mod Example:Run \"quoted\"",L"rs mod Example:Run a\\b",L"rs mod Example:Run a\nquit"})
+        assert(Parse(bad)==Command::Invalid&&!ParseMod(bad));
+    assert(Parse(std::wstring(L"rs mod Example:Run ")+wchar_t(0xd800))==Command::Invalid);
+    assert(Parse(std::wstring(L"rs mod Example:Run a\0b",22))==Command::Invalid);
     const std::wstring nul(L"rs status\0quit",14);
     assert(Parse(nul)==Command::Invalid);
 }

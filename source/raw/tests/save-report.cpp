@@ -43,6 +43,17 @@ int main(){
         assert(necklaceAmbiguous["NPC"]["Equipment"].empty() && !necklaceAmbiguous["Warnings"].empty());
         auto missing=source;missing["GameProgress"]["Inventory"].erase("3");
         assert(PS::NpcSaveExport::Preview(missing)["Warnings"].size()==1);
+        auto complete=source;
+        complete["GameProgress"]["Loadout"]["0"]={{"ItemData","helmet"},{"GUID","equipped-instance"},{"PlayerInventoryItemIndex",3}};
+        assert(PS::NpcSaveExport::Preview(complete)["Rows"][0]["PersistenceID"]=="helmet");
+        complete["GameProgress"]["Loadout"]["1"]={{"GUID","unresolved-equipped"},{"PlayerInventoryItemIndex",3}};
+        auto unknown=PS::NpcSaveExport::Preview(complete);
+        assert(unknown["Rows"].size()==2&&unknown["Warnings"].size()==1);
+        for(const auto& invalid:{json("3"),json(uint64_t(4294967299ULL)),json(-1)}){
+            complete["GameProgress"]["Loadout"]["5"]["PlayerInventoryItemIndex"]=invalid;
+            const auto malformed=PS::NpcSaveExport::Preview(complete);
+            assert(malformed["Rows"].size()==1&&malformed["Rows"][0]["PersistenceID"]=="helmet"&&malformed["Warnings"].size()==2);
+        }
     }
     using namespace PS::SaveReport;
     assert(Guid("{12345678-12345678-12345678-ABCDEF12}")=="123456781234567812345678ABCDEF12");

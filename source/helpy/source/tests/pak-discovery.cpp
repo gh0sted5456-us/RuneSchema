@@ -45,6 +45,12 @@ std::string Toc(const std::string& mount="../../../RSDragonwilds/Content/",uint3
 }
 int main(int argc,char** argv)try{
     namespace fs=std::filesystem;namespace P=PS::PakDiscovery;namespace C=PS::HelpyCacheSources;namespace S=PS::HelpySourceCache;
+    if(argc==4&&std::string_view(argv[1])=="--compare-selected"){
+        const std::set<std::string> wanted{C::Lower(argv[3])};const auto timed=[&](bool selected){const auto start=std::chrono::steady_clock::now();auto value=P::Read(argv[2],"RSDragonwilds",selected?&wanted:nullptr);const auto elapsed=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-start).count();return std::pair{std::move(value),elapsed};};
+        for(int pass=0;pass<3;++pass){auto first=timed(pass%2!=0),second=timed(pass%2==0);const auto& full=pass%2?second:first;const auto& selected=pass%2?first:second;
+            assert(full.first.Complete==selected.first.Complete);for(const auto& package:selected.first.Packages)assert(full.first.Packages.contains(package));
+            std::cout<<nlohmann::json{{"FullPackages",full.first.Packages.size()},{"SelectedPackages",selected.first.Packages.size()},{"FullMicroseconds",full.second},{"SelectedMicroseconds",selected.second},{"Complete",full.first.Complete},{"Error",full.first.Error}}.dump()<<'\n';}return 0;
+    }
     if(argc==4&&std::string_view(argv[1])=="--inspect"){
         const fs::path root=argv[2];std::ifstream input(argv[3]);const auto document=nlohmann::json::parse(input);S::AcceptRemote(document);
         auto plan=PS::CacheBundleStore::Plan(S::Current);plan.DisplayNames=S::Current.DisplayNames;
@@ -60,8 +66,25 @@ int main(int argc,char** argv)try{
     const auto root=fixture/"RSDragonwilds"/"Binaries"/"Win64"/"ue4ss"/"Mods"/"RuneSchema";
     const auto file=root/"mods"/"Example"/"paks"/"Example.utoc";Write(file,Toc());Write(file.parent_path()/"Example.ucas","payload");
     const auto toc=P::Read(file,"RSDragonwilds");assert(toc.Complete&&toc.Packages==std::set<std::string>{"/game/stone"});
+    const std::set<std::string> stones{"stone.uasset"},absent{"missing.uasset"};
+    assert(P::Read(file,"RSDragonwilds",&stones).Packages==toc.Packages);
+    const auto selectedAbsent=P::Read(file,"RSDragonwilds",&absent);assert(selectedAbsent.Complete&&selectedAbsent.Packages.empty());
     const auto pak=file.parent_path()/"Example.pak";Write(pak,Pak());const auto indexed=P::Read(pak,"RSDragonwilds");
     assert(indexed.Complete&&indexed.Packages==std::set<std::string>{"/game/items/stone"});
+    const std::vector<P::Root> roots{{file.parent_path(),"Example"},{file.parent_path(),"Example"}};
+    const auto mounted=P::ReadMountedPackages(roots,"RSDragonwilds");
+    assert(mounted.Complete&&mounted.Packages.contains("/game/stone")&&mounted.Packages.contains("/game/items/stone"));
+    assert(!mounted.Packages.contains("/game/mods/example/registry/da_registry_example"));
+    assert(!P::ReadMountedPackages({},"RSDragonwilds").Complete);
+    assert(!P::ReadMountedPackages({{fixture/"missing","Example"}},"RSDragonwilds").Complete);
+    assert(P::ReadMountedPackages({roots.front(),{fixture/"missing","Example"}},"RSDragonwilds").Complete);
+    Write(file.parent_path()/"Unknown.utoc","broken");
+    assert(!P::ReadMountedPackages(roots,"RSDragonwilds").Complete);
+    assert(!P::ReadMountedPackages(roots,"RSDragonwilds",&absent).Complete);
+    fs::remove(file.parent_path()/"Unknown.utoc");
+    Write(file.parent_path()/"Loose.uasset","unindexed");
+    assert(!P::ReadMountedPackages(roots,"RSDragonwilds").Complete);
+    fs::remove(file.parent_path()/"Loose.uasset");
     const auto alias=fixture/"XboxGames alias";
     if(CreateSymbolicLinkW(alias.c_str(),file.parent_path().c_str(),SYMBOLIC_LINK_FLAG_DIRECTORY|SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE)){
         const auto redirected=P::Read(alias/pak.filename(),"RSDragonwilds");assert(redirected.Complete&&redirected.IndexKey==indexed.IndexKey);
@@ -69,11 +92,12 @@ int main(int argc,char** argv)try{
         fs::remove(alias);
     }
     for(bool compressed:{false,true}){Write(pak,LegacyPak("Items/Stone.uasset",compressed));const auto legacy=P::Read(pak,"RSDragonwilds");
-        assert(legacy.Complete&&legacy.Packages==std::set<std::string>{"/game/items/stone"});}
+        assert(legacy.Complete&&legacy.Packages==std::set<std::string>{"/game/items/stone"});assert(P::Read(pak,"RSDragonwilds",&stones).Packages==legacy.Packages);assert(P::Read(pak,"RSDragonwilds",&absent).Complete&&P::Read(pak,"RSDragonwilds",&absent).Packages.empty());}
     Write(pak,LegacyPak("../Private/Stone.uasset"));assert(!P::Read(pak,"RSDragonwilds").Complete);
-    {auto bad=LegacyPak();bad[130]^=1;Write(pak,bad);assert(!P::Read(pak,"RSDragonwilds").Complete);}
+    {auto bad=LegacyPak();bad[130]^=1;Write(pak,bad);assert(!P::Read(pak,"RSDragonwilds").Complete);assert(!P::Read(pak,"RSDragonwilds",&absent).Complete);}
     for(size_t cut=0;cut<LegacyPak().size();++cut){Write(pak,LegacyPak().substr(0,cut));assert(!P::Read(pak,"RSDragonwilds").Complete);}
     Write(pak,Pak());
+    const auto modern=P::Read(pak,"RSDragonwilds");assert(P::Read(pak,"RSDragonwilds",&stones).Packages==modern.Packages);assert(P::Read(pak,"RSDragonwilds",&absent).Complete&&P::Read(pak,"RSDragonwilds",&absent).Packages.empty());
     assert(P::Package("../../../RSDragonwilds/Plugins/GameFeatures/Colors/Content/Icons/T.uasset","RSDragonwilds")=="/colors/icons/t");
     assert(P::Package("../../../Engine/Content/Icons/T.uasset","RSDragonwilds")=="/engine/icons/t");
     assert(P::Package("../../../RSDragonwilds/Content/../Private/T.uasset","RSDragonwilds").empty());

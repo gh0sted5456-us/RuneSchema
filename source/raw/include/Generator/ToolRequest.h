@@ -4,6 +4,9 @@
 #include <atomic>
 #include <cstdint>
 #include <map>
+#include <memory>
+#include <string_view>
+#include <vector>
 #include <deque>
 #include <string>
 #include <functional>
@@ -59,20 +62,46 @@ template<> struct ToolRequest<SpawnToolTag> {
     inline static std::mutex Mutex;
     inline static std::optional<nlohmann::json> Pending;
     inline static std::optional<nlohmann::json> PendingMapGround;
-    inline static bool PendingPlayerRoles=false;
+    inline static std::atomic_bool PendingPlayerRoles=false;
     inline static std::chrono::steady_clock::time_point NextPlayerRoles{};
     static void RequestPlayerRoles(){
         std::lock_guard lock(Mutex);const auto now=std::chrono::steady_clock::now();
         if(Available&&now>=NextPlayerRoles){PendingPlayerRoles=true;NextPlayerRoles=now+std::chrono::seconds(5);}
     }
-    static bool TakePlayerRoles(){std::lock_guard lock(Mutex);const auto pending=PendingPlayerRoles;PendingPlayerRoles=false;return pending;}
+    static bool TakePlayerRoles(){
+        if(!PendingPlayerRoles.load(std::memory_order_relaxed))return false;
+        std::lock_guard lock(Mutex);
+        return PendingPlayerRoles.exchange(false,std::memory_order_relaxed);
+    }
     static std::atomic<bool> Waiting,Available,CancelRequested;
     static std::atomic<uint64_t> Generation;
-    inline static nlohmann::json Result={{"Status","Load a world before using runtime tools."}};
-    inline static nlohmann::json QuickCatalogData=nlohmann::json::object();
+    // Live catalog pieces (Definitions, Items, ...). Each value is immutable and shared: the game thread
+    // builds a new one outside the lock, and readers copy pointers under it and build JSON after release.
+    // Helpy's reads therefore never hold the mutex the game thread needs while catalogs are deep-copied.
+    using SharedJson=std::shared_ptr<const nlohmann::json>;
+    using CatalogMap=std::map<std::string,SharedJson,std::less<>>;
+    static CatalogMap Share(nlohmann::json value) {
+        CatalogMap fields;
+        for(auto it=value.begin();it!=value.end();++it)
+            fields.emplace(it.key(),std::make_shared<const nlohmann::json>(std::move(it.value())));
+        return fields;
+    }
+    static nlohmann::json Expand(const CatalogMap& fields) {
+        auto value=nlohmann::json::object();
+        for(const auto& [key,field]:fields)value[key]=*field;
+        return value;
+    }
+    inline static CatalogMap Result=Share({{"Status","Load a world before using runtime tools."}});
+    inline static CatalogMap QuickCatalogData;
+    static CatalogMap CatalogShared(){std::lock_guard lock(Mutex);return QuickCatalogData;}
     inline static uint64_t Revision=1,ActiveRequest=0;
     inline static std::map<uint64_t,nlohmann::json> Completed;
     inline static bool InFlight=false;
+    inline static uint64_t NetworkCompletionId=0;
+    inline static std::function<void(const nlohmann::json&)> NetworkCompletion;
+    static void SetNetworkCompletion(uint64_t id,std::function<void(const nlohmann::json&)> callback){
+        std::lock_guard lock(Mutex);NetworkCompletionId=id;NetworkCompletion=std::move(callback);
+    }
     inline static std::optional<std::string> SearchHint;
     static void PrioritizeSearch(std::string query) {
         if(RemoteSearch){RemoteSearch(std::move(query));return;}
@@ -84,19 +113,18 @@ template<> struct ToolRequest<SpawnToolTag> {
     }
     static bool TrySubmit(nlohmann::json request) {
         if(RemoteSubmit)return RemoteSubmit(std::move(request));
+        CatalogMap retired;
+        const auto status=std::make_shared<const nlohmann::json>("Queued for the game thread.");
         std::lock_guard lock(Mutex);
         if(!Available||Pending||InFlight)return false;
         Pending=std::move(request);Waiting=true;
-        Result.erase("GrantResults");Result.erase("SpawnResult");
-        Result.erase("CloneResult");Result.erase("CloneSource");Result.erase("CloneAppearance");Result.erase("ItemDetails");
-        Result.erase("RecipeExportResult");Result.erase("ItemOverrideExportResult");Result.erase("KitMetadata");Result.erase("NativeContracts");
-        Result.erase("CartValidation");
-        Result.erase("RecipeWorkspaceCatalog");Result.erase("RecipeWorkspaceSource");
-        Result.erase("JournalCatalog");
-        Result.erase("InventorySnapshot");
-        Result.erase("InventoryAction");Result.erase("EquipmentAction");Result.erase("StorageResult");
-        Result.erase("SpawnDefinition");Result.erase("MapSnapshot");Result.erase("MapBuildings");Result.erase("MapPoint");Result.erase("MapTravel");
-        Result["Status"]="Queued for the game thread.";return true;
+        for(const auto* key:{"GrantResults","SpawnResult","CloneResult","CloneSource","CloneAppearance","ItemDetails",
+                "RecipeExportResult","ItemOverrideExportResult","KitMetadata","NativeContracts","DeveloperContracts",
+                "CartValidation","ServerControl","RecipeWorkspaceCatalog","RecipeWorkspaceSource","JournalCatalog",
+                "InventorySnapshot","InventoryAction","EquipmentAction","StorageResult","SpawnDefinition",
+                "MapSnapshot","MapBuildings","MapPoint","MapTravel"})
+            if(auto field=Result.extract(key);!field.empty())retired.insert(std::move(field));
+        Result["Status"]=status;return true;
     }
     // Read-only, latest-point-wins mailbox; never owns the mutation slot.
     static bool SubmitMapGround(nlohmann::json request) {
@@ -113,9 +141,10 @@ template<> struct ToolRequest<SpawnToolTag> {
     static std::optional<nlohmann::json> TakeMapGround(){std::lock_guard lock(Mutex);auto request=std::move(PendingMapGround);PendingMapGround.reset();return request;}
     static void Submit(nlohmann::json request) {
         if(TrySubmit(std::move(request)))return;
+        auto replacement=Share({{"Status","Runtime tool is not ready. Enable its loader and load a world."}});
         std::lock_guard lock(Mutex);
         if(!Available&&!Pending&&!InFlight) {
-            Result={{"Status","Runtime tool is not ready. Enable its loader and load a world."}};
+            Result.swap(replacement);
             ++Revision;
         }
     }
@@ -127,41 +156,33 @@ template<> struct ToolRequest<SpawnToolTag> {
         ActiveRequest=value->value("_RequestId",uint64_t{});return value;
     }
     static void Publish(nlohmann::json result) {
-        nlohmann::json pushed;uint64_t revision=0;
+        auto fields=Share(std::move(result));
+        const auto status=fields.find("Status");
+        nlohmann::json receipt={{"Status",status==fields.end()?nlohmann::json("Completed."):*status->second}};
+        for(const auto* key:{"GrantResults","KitMetadata","NativeContracts","ServerControl","SpawnResult","CloneResult",
+                "CloneSource","CloneAppearance","ItemDetails","MapSnapshot","MapBuildings","MapPoint","RecipeExportResult",
+                "RecipeWorkspaceCatalog","JournalCatalog","InventorySnapshot","EquipmentAction","InventoryAction",
+                "StorageResult","RecipeWorkspaceSource","SpawnDefinition","ItemOverrideExportResult"})
+            if(const auto it=fields.find(key);it!=fields.end())receipt[key]=*it->second;
+        CatalogMap pushedFields;uint64_t revision=0;
+        std::map<uint64_t,nlohmann::json>::node_type oldReceipt;
+        std::function<void(const nlohmann::json&)> completion;
         {
-        std::lock_guard lock(Mutex);
-        result["_RequestId"]=ActiveRequest;result["_InProgress"]=false;
-        if(ActiveRequest) {
-            // Compact one-shot receipts survive a second settings request.
-            // Do not retain copies of full asset catalogs for every command.
-            nlohmann::json receipt={{"Status",result.value("Status",std::string("Completed."))}};
-            if(result.contains("GrantResults"))receipt["GrantResults"]=result["GrantResults"];
-            if(result.contains("KitMetadata"))receipt["KitMetadata"]=result["KitMetadata"];
-            if(result.contains("NativeContracts"))receipt["NativeContracts"]=result["NativeContracts"];
-            if(result.contains("SpawnResult"))receipt["SpawnResult"]=result["SpawnResult"];
-            if(result.contains("CloneResult"))receipt["CloneResult"]=result["CloneResult"];
-            if(result.contains("CloneSource"))receipt["CloneSource"]=result["CloneSource"];
-            if(result.contains("CloneAppearance"))receipt["CloneAppearance"]=result["CloneAppearance"];
-            if(result.contains("ItemDetails"))receipt["ItemDetails"]=result["ItemDetails"];
-            if(result.contains("MapSnapshot"))receipt["MapSnapshot"]=result["MapSnapshot"];
-            if(result.contains("MapBuildings"))receipt["MapBuildings"]=result["MapBuildings"];
-            if(result.contains("MapPoint"))receipt["MapPoint"]=result["MapPoint"];
-            if(result.contains("RecipeExportResult"))receipt["RecipeExportResult"]=result["RecipeExportResult"];
-            if(result.contains("RecipeWorkspaceCatalog"))receipt["RecipeWorkspaceCatalog"]=result["RecipeWorkspaceCatalog"];
-            if(result.contains("JournalCatalog"))receipt["JournalCatalog"]=result["JournalCatalog"];
-            if(result.contains("InventorySnapshot"))receipt["InventorySnapshot"]=result["InventorySnapshot"];
-            if(result.contains("EquipmentAction"))receipt["EquipmentAction"]=result["EquipmentAction"];
-            if(result.contains("InventoryAction"))receipt["InventoryAction"]=result["InventoryAction"];
-            if(result.contains("StorageResult"))receipt["StorageResult"]=result["StorageResult"];
-            if(result.contains("RecipeWorkspaceSource"))receipt["RecipeWorkspaceSource"]=result["RecipeWorkspaceSource"];
-            if(result.contains("SpawnDefinition"))receipt["SpawnDefinition"]=result["SpawnDefinition"];
-            if(result.contains("ItemOverrideExportResult"))receipt["ItemOverrideExportResult"]=result["ItemOverrideExportResult"];
-            Completed[ActiveRequest]=std::move(receipt);
-            while(Completed.size()>16)Completed.erase(Completed.begin());
+            std::lock_guard lock(Mutex);
+            fields["_RequestId"]=std::make_shared<const nlohmann::json>(ActiveRequest);
+            fields["_InProgress"]=std::make_shared<const nlohmann::json>(false);
+            if(ActiveRequest&&ActiveRequest==NetworkCompletionId){completion=std::move(NetworkCompletion);NetworkCompletionId=0;}
+            if(ActiveRequest){
+                Completed[ActiveRequest]=std::move(receipt);
+                if(Completed.size()>16)oldReceipt=Completed.extract(Completed.begin());
+            }
+            Result.swap(fields);InFlight=false;Waiting=false;ActiveRequest=0;revision=++Revision;
+            if(completion||PushUpdate)pushedFields=Result;
         }
-        Result=std::move(result);InFlight=false;Waiting=false;ActiveRequest=0;revision=++Revision;pushed=Result;
-        if(pushed.contains("PlayersDelta"))pushed.erase("Players");
-        }
+        if(!completion&&!PushUpdate)return;
+        if(pushedFields.contains("PlayersDelta"))pushedFields.erase("Players");
+        const auto pushed=Expand(pushedFields);
+        if(completion)try{completion(pushed);}catch(...){/* Native result remains recorded; never repeat a mutation after a transport error. */}
         if(PushUpdate)PushUpdate("result",pushed,revision);
     }
     static bool TakeCompleted(uint64_t request,nlohmann::json& out) {
@@ -171,64 +192,89 @@ template<> struct ToolRequest<SpawnToolTag> {
         out=std::move(it->second);Completed.erase(it);return true;
     }
     static void Progress(const std::string& status,const nlohmann::json& details=nlohmann::json::object()) {
-        nlohmann::json pushed;uint64_t revision=0;{
-        std::lock_guard lock(Mutex);Result["Status"]=status;Result["_RequestId"]=ActiveRequest;
-        Result["_InProgress"]=true;
+        CatalogMap incoming;
         if(details.is_object())for(auto it=details.begin();it!=details.end();++it)
-            if(!it.key().starts_with("_")&&it.key()!="Status")Result[it.key()]=it.value();
-        revision=++Revision;
-        pushed={{"Status",status},{"_RequestId",ActiveRequest},{"_InProgress",true}};
-        if(details.is_object())for(auto it=details.begin();it!=details.end();++it)
-            if(!it.key().starts_with("_")&&it.key()!="Status")pushed[it.key()]=it.value();}
-        if(PushUpdate)PushUpdate("result",pushed,revision);
+            if(!it.key().starts_with("_")&&it.key()!="Status")incoming.emplace(it.key(),std::make_shared<const nlohmann::json>(it.value()));
+        incoming["Status"]=std::make_shared<const nlohmann::json>(status);
+        incoming["_InProgress"]=std::make_shared<const nlohmann::json>(true);
+        CatalogMap retired;uint64_t revision=0;{
+            std::lock_guard lock(Mutex);
+            incoming["_RequestId"]=std::make_shared<const nlohmann::json>(ActiveRequest);
+            for(const auto& [key,value]:incoming){
+                if(auto field=Result.extract(key);!field.empty())retired.insert(std::move(field));
+                Result.emplace(key,value);
+            }
+            revision=++Revision;
+        }
+        if(PushUpdate)PushUpdate("result",Expand(incoming),revision);
     }
     // Index snapshots never take/release the mutation slot or replace its receipt.
     static void CatalogProgress(const nlohmann::json& snapshot) {
-        uint64_t revision=0;{
-        std::lock_guard lock(Mutex);
-        for(const auto* key:{"Definitions","Items","Players","PlayerRoles","CatalogReady","_CatalogIndexing","CatalogStatus",
+        // Copy the (possibly large) catalog pieces before taking the lock.
+        std::vector<std::pair<const char*,SharedJson>> incoming;
+        for(const auto* key:{"Definitions","Items","Players","PlayerRoles","ServerMods","RemoteAccess","CatalogReady","_CatalogIndexing","CatalogStatus",
                 "RegistryRecords","UnresolvedAssets","MetadataUnavailable","UnclassifiedRecords",
                 "CatalogAI","CatalogResources","CatalogCoverage","CookedVisuals","CatalogIssues",
                 "IndexStage","IndexDone","IndexTotal","IndexHasTotal","IndexFinished","IndexDetail"})
-            if(snapshot.contains(key))QuickCatalogData[key]=snapshot[key];
+            if(snapshot.contains(key))incoming.emplace_back(key,std::make_shared<const nlohmann::json>(snapshot[key]));
+        uint64_t revision=0;{
+        std::lock_guard lock(Mutex);
+        for(auto& [key,value]:incoming)QuickCatalogData[key].swap(value);
         revision=++Revision;}
         if(PushUpdate)PushUpdate("catalog",snapshot,revision);
     }
-    static nlohmann::json Read(){std::lock_guard lock(Mutex);return Result;}
+    static nlohmann::json Read(){
+        CatalogMap fields;{std::lock_guard lock(Mutex);fields=Result;}
+        return Expand(fields);
+    }
     static bool ReadIfChanged(uint64_t& revision,nlohmann::json& out) {
-        std::lock_guard lock(Mutex);if(revision==Revision)return false;
-        out=Result;revision=Revision;return true;
+        CatalogMap fields;uint64_t current;
+        {std::lock_guard lock(Mutex);if(revision==Revision)return false;fields=Result;current=Revision;}
+        out=Expand(fields);revision=current;return true;
     }
     // Only F2 opts into live index snapshots. The settings panel's Read() and
     // explicit saved Catalog result remain a point-in-time snapshot.
     static bool ReadQuickIfChanged(uint64_t& revision,int category,nlohmann::json& out) {
         if(RemoteReadQuick)return RemoteReadQuick(revision,category,out);
-        std::lock_guard lock(Mutex);if(revision==Revision)return false;
-        out=Result;
-        const auto copy=[&](const char* key){if(QuickCatalogData.contains(key))out[key]=QuickCatalogData[key];};
+        CatalogMap catalog,fields;uint64_t current=0;
+        {std::lock_guard lock(Mutex);if(revision==Revision)return false;current=Revision;catalog=QuickCatalogData;if(category!=-2)fields=Result;}
+        out=CatalogSnapshot(Expand(fields),catalog,category);
+        revision=current;return true;
+    }
+    static bool ReadQuickIfChanged(uint64_t& revision,nlohmann::json& out) {return ReadQuickIfChanged(revision,-1,out);}
+    // Builds a category view from shared catalog pieces. Call without holding Mutex.
+    //  -2: server mods and remote access only. -1: everything. 0: items. 1: AI/NPC definitions. 2: resources.
+    static nlohmann::json CatalogSnapshot(nlohmann::json out,const CatalogMap& catalog,int category){
+        const auto find=[&](std::string_view key)->const nlohmann::json*{const auto it=catalog.find(key);return it==catalog.end()||!it->second?nullptr:it->second.get();};
+        const auto copy=[&](const char* key){if(const auto* value=find(key))out[key]=*value;};
+        if(category==-2){copy("ServerMods");copy("RemoteAccess");return out;}
         if(category==0){copy("Items");copy("CookedVisuals");copy("CatalogIssues");}
         else if(category==1||category==2) {
-            if(QuickCatalogData.contains("Definitions")&&QuickCatalogData["Definitions"].is_array()) {
+            if(const auto* definitions=find("Definitions");definitions&&definitions->is_array()) {
                 out["Definitions"]=nlohmann::json::array();
-                for(const auto& row:QuickCatalogData["Definitions"]) {
+                for(const auto& row:*definitions) {
                     const auto type=row.value("Type",std::string{});
                     if((category==1&&(type=="AI"||type=="NPC"))||(category==2&&type=="Resource"))out["Definitions"].push_back(row);
                 }
             }
-        } else for(auto it=QuickCatalogData.begin();it!=QuickCatalogData.end();++it)out[it.key()]=it.value();
-        copy("Players");copy("PlayerRoles");
+        } else for(const auto& [key,value]:catalog)if(value)out[key]=*value;
+        copy("Players");copy("PlayerRoles");copy("ServerMods");copy("RemoteAccess");
         for(const auto* key:{"CatalogReady","_CatalogIndexing","CatalogStatus","RegistryRecords","UnresolvedAssets",
                 "MetadataUnavailable","UnclassifiedRecords","CatalogAI","CatalogResources","CatalogCoverage",
                 "IndexStage","IndexDone","IndexTotal","IndexHasTotal","IndexFinished","IndexDetail"})copy(key);
         out["_Category"]=category;
-        revision=Revision;return true;
+        return out;
     }
-    static bool ReadQuickIfChanged(uint64_t& revision,nlohmann::json& out) {return ReadQuickIfChanged(revision,-1,out);}
     static void Clear() {
-        nlohmann::json pushed;uint64_t revision=0;{
+        const nlohmann::json pushed={{"Status","World changed; refresh tools."}};
+        auto replacement=Share(pushed);
+        CatalogMap catalog;
+        decltype(Completed) receipts;
+        uint64_t revision=0;{
         std::lock_guard lock(Mutex);Pending.reset();PendingMapGround.reset();SearchHint.reset();Waiting=false;InFlight=false;ActiveRequest=0;
-        CancelRequested=true;Completed.clear();QuickCatalogData=nlohmann::json::object();PendingPlayerRoles=false;NextPlayerRoles={};++Generation;
-        Result={{"Status","World changed; refresh tools."}};revision=++Revision;pushed=Result;}
+        NetworkCompletion={};NetworkCompletionId=0;
+        CancelRequested=true;Completed.swap(receipts);QuickCatalogData.swap(catalog);PendingPlayerRoles=false;NextPlayerRoles={};++Generation;
+        Result.swap(replacement);revision=++Revision;}
         if(PushUpdate)PushUpdate("clear",pushed,revision);
     }
     static bool IsAvailable(){return RemoteAvailable?RemoteAvailable():Available.load();}

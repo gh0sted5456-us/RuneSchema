@@ -9,9 +9,13 @@ inline bool Mutating(const std::string& action){return action=="Mark"||action=="
 inline Json Run(const std::filesystem::path& directory,const Json& request){
     const auto action=request.at("Action").get<std::string>();
     if(action=="Capabilities")return {{"GameFavorites",HelpySettings::ExtendFavoritesToGame()},{"MarksRevision",HelpyPersonalization::Revision.load()}};
-    if(action=="PublicProfile")return {{"Profile",RuneSchemaProfile::Public()}};
-    if(action=="ReadPublicProfile")return {{"Profile",RuneSchemaProfile::PublicFor(request.at("CharacterGuid").get<std::string>(),request.value("Local",false))}};
-    if(action=="ReceivePublicProfile"){RuneSchemaProfile::ReceivePublic(request.at("CharacterGuid").get<std::string>(),request.at("Profile"));return {{"Accepted",true}};}
+    // "Achievements" is optional on every profile message: older cores and Helpy builds simply omit or ignore it.
+    if(action=="PublicProfile")return {{"Profile",RuneSchemaProfile::Public()},{"Achievements",RuneSchemaProfile::LocalAchievementSummary()}};
+    if(action=="ReadPublicProfile"){const auto guid=request.at("CharacterGuid").get<std::string>();const bool local=request.value("Local",false);
+        return {{"Profile",RuneSchemaProfile::PublicFor(guid,local)},{"Achievements",RuneSchemaProfile::AchievementsFor(guid,local)}};}
+    if(action=="ReceivePublicProfile"){const auto guid=request.at("CharacterGuid").get<std::string>();
+        RuneSchemaProfile::ReceivePublicAchievements(guid,request.contains("Achievements")?request["Achievements"]:Json(nullptr));
+        RuneSchemaProfile::ReceivePublic(guid,request.at("Profile"));return {{"Accepted",true}};}
     if(action=="ClearPublicProfiles"){RuneSchemaProfile::ClearShared();return {{"Accepted",true}};}
     if(action=="ExportMarks")return HelpyMarkSync::Export(request);
     if(action=="ReceiveMarks")return HelpyMarkSync::Receive(request.at("Batch"));

@@ -1,4 +1,4 @@
-name: License packaging checks
+name: Packaging checks
 
 on:
   pull_request:
@@ -15,10 +15,14 @@ on:
       - 'licenses/**'
       - 'build/package-licenses.ps1'
       - 'build/test-package-licenses.ps1'
+      - 'build/package-wine-compat.ps1'
+      - 'build/check-ue4ss-abi.py'
+      - 'build/tests/ue4ss-abi.py'
+      - 'build/tests/wine-compat.ps1'
       - 'build/build.bat'
       - '.github/workflows/license-checks.yml'
   push:
-    branches: [main, experimental]
+    branches: [main, experimental, pre-release]
     paths:
       - 'LICENSE'
       - 'AUTHORS.md'
@@ -32,6 +36,10 @@ on:
       - 'licenses/**'
       - 'build/package-licenses.ps1'
       - 'build/test-package-licenses.ps1'
+      - 'build/package-wine-compat.ps1'
+      - 'build/check-ue4ss-abi.py'
+      - 'build/tests/ue4ss-abi.py'
+      - 'build/tests/wine-compat.ps1'
       - 'build/build.bat'
       - '.github/workflows/license-checks.yml'
   workflow_dispatch:
@@ -44,10 +52,15 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Check portable UE4SS API inspection
+        run: python -B build/tests/ue4ss-abi.py
       - name: Parse and test on Windows PowerShell 5.1
         shell: powershell
         run: |
-          foreach ($path in @('build/package-licenses.ps1', 'build/test-package-licenses.ps1')) {
+          foreach ($path in @('build/package-licenses.ps1', 'build/test-package-licenses.ps1', 'build/package-wine-compat.ps1', 'build/tests/wine-compat.ps1')) {
             $tokens = $null
             $errors = $null
             [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD $path), [ref]$tokens, [ref]$errors) | Out-Null
@@ -57,7 +70,7 @@ jobs:
       - name: Parse and test on PowerShell 7
         shell: pwsh
         run: |
-          foreach ($path in @('build/package-licenses.ps1', 'build/test-package-licenses.ps1')) {
+          foreach ($path in @('build/package-licenses.ps1', 'build/test-package-licenses.ps1', 'build/package-wine-compat.ps1', 'build/tests/wine-compat.ps1')) {
             $tokens = $null
             $errors = $null
             [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD $path), [ref]$tokens, [ref]$errors) | Out-Null

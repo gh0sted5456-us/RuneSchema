@@ -1,9 +1,9 @@
 {
   "SchemaVersion": 1,
   "Component": "RSNetworking",
-  "Version": "0.7.8.0-alpha",
+  "Version": "0.8.1.0",
   "Engine": "5.6",
-  "VerifiedDate": "2026-10-16",
+  "VerifiedDate": "2026-11-03",
   "IdentityContract": {
     "Class": "/RuneSchema/Networking/BPC_RuneSchemaIdentity.BPC_RuneSchemaIdentity_C",
     "Field": "IdentityPayload",
@@ -17,15 +17,77 @@
   "Verification": {
     "EditorContract": true,
     "CookErrors": 0,
-    "CookWarnings": 0,
-    "NativeMenuProbe": "Steam CL248854",
-    "Before": "IdentityPayload and OnRep_IdentityPayload absent",
-    "After": "Identity, primary registry RPCs and world-state checks passed",
+    "CookWarnings": 11,
+    "NativeMenuProbe": "Steam CL254097",
+    "Before": "Identity and generic transports present; typed character-appearance client RPC absent",
+    "After": "All six class contracts, typed client appearance RPC and server visibility RPC passed shipping reflection",
     "MultiplayerWorldValidation": false
   },
   "Containers": [
-    {"Name": "Networking_P.pak", "Bytes": 7418, "SHA256": "A6ACB0F8EB59F2FA1B474A6ABC5AD87B525C2F73F959FCB389F0AFF82342C8E5"},
-    {"Name": "Networking_P.ucas", "Bytes": 19936, "SHA256": "238A0E7FACE5A77C62DE9C769E6B1529946D2A61771D0F886F1F5C5F40F59254"},
-    {"Name": "Networking_P.utoc", "Bytes": 997, "SHA256": "02B68BCD65A6AFF98A6F0EB4BA4A2D3C5C10621FA9AE4FD711289A28F9629797"}
-  ]
+    {
+      "Name": "Networking_P.pak",
+      "Bytes": 787,
+      "SHA256": "EF526F9783D51D4A0C85C3A21585364FD3C0CFDD83D018461A296CEA8E3B7E57"
+    },
+    {
+      "Name": "Networking_P.ucas",
+      "Bytes": 7872,
+      "SHA256": "30262629A782C8AD38767559DBFA212FA34D3168CC55517A2E3DCAFA46D58D14"
+    },
+    {
+      "Name": "Networking_P.utoc",
+      "Bytes": 1029,
+      "SHA256": "00154677A9669EE37FBBFD750A2707E30334F138C92AD847B342F9B7E81EE7A5"
+    }
+  ],
+  "AppearanceContract": {
+    "Class": "/RuneSchema/Networking/BPC_RuneSchemaRegistryBridge.BPC_RuneSchemaRegistryBridge_C",
+    "Function": "ClientRuneSchemaCharacterAppearance",
+    "NetClient": true,
+    "Reliable": true,
+    "ParmsSize": 65,
+    "Fields": [
+      {
+        "Type": "String",
+        "Name": "RegistryKey"
+      },
+      {
+        "Type": "/Script/Engine.Actor",
+        "Name": "Subject"
+      },
+      {
+        "Type": "String",
+        "Name": "CharacterGuid"
+      },
+      {
+        "Type": "String",
+        "Name": "Payload"
+      },
+      {
+        "Type": "Int64",
+        "Name": "Revision"
+      },
+      {
+        "Type": "Boolean",
+        "Name": "Removed"
+      }
+    ]
+  },
+  "CookWarningScope": "Nine optional ACL animation/default TextureFormatOodle warnings and two sandbox async-delete cleanup warnings; no animation/texture payloads are included",
+  "VisibilityContract": {
+    "Function": "ServerSetRuneSchemaAppearanceSubject",
+    "Reliable": true,
+    "NetServer": true,
+    "Fields": [
+      {
+        "Type": "/Script/Engine.Actor",
+        "Name": "Subject"
+      },
+      {
+        "Type": "Boolean",
+        "Name": "Present"
+      }
+    ],
+    "Purpose": "Advertise known subjects on spawn; withdraw on end-play; remote replay requires recipient membership"
+  }
 }

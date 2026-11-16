@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/HelpyRemoteResult.h"
 
 #include <cstdint>
 #include <chrono>
@@ -11,6 +12,11 @@
 #include "SDK/WeakObjectHandle.h"
 #include "Runtime/BridgeDiagnostics.h"
 #include "Core/ModDataRelay.h"
+#include "Core/ConsumedOwnerPresentation.h"
+#include "Core/CharacterAppearance.h"
+#include "Core/ServerModList.h"
+#include "Runtime/ServerModNotice.h"
+#include "Core/BuildingNetworkGuard.h"
 #include "Unreal/Hooks.hpp"
 
 namespace RC::Unreal {
@@ -22,6 +28,7 @@ namespace RC::Unreal {
     class UEngine;
     class FIntProperty;
     class FStrProperty;
+    struct FFrame;
 }
 
 namespace PS::Network {
@@ -39,6 +46,7 @@ public:
     // Receives the validated, merged mod-owned registry contract directly
     // from the registry loader. No runtime manifest file is involved.
     void SetRegistrySnapshot(std::string snapshot);
+    void SetEnabledMods(const nlohmann::json& mods);
     std::map<std::string, std::string> RegistryOwnerFingerprints() const;
     ~RegistryBridge() { Stop(); }
 
@@ -55,6 +63,10 @@ public:
     // Sends a bounded request through the bridge component owned by the local
     // player. The server remains the only executor and applies its own policy.
     bool RequestAuthority(const std::string& action,const std::string& payload);
+    void PublishHelpyResult(RC::Unreal::UObject* player,int64_t revision,const nlohmann::json& result);
+    bool PublishCleanupNotice(RC::Unreal::UObject* controller,std::size_t removed,const std::string& mod);
+    // Host -> owning client: a confirmed kill for that player's Helpy achievements (channel helpy.activity).
+    bool PublishPlayerActivity(RC::Unreal::UObject* controller,const std::string& payload);
     // Publishes an allow-listed presentation event through the replicated
     // GameState bridge. The payload contains semantic cue data only; asset
     // paths are rejected and client consumers remain mod-owned.
@@ -71,8 +83,22 @@ public:
     ClientNotificationHandler ClientNotification;
     ClientNotificationHandler PersistentState;
     std::function<void(const PS::ModDataRelay::Message&)> ModDataReceived;
+    std::function<PS::BuildingNetworkGuard::Registry(RC::Unreal::UObject*)> BuildingRegistry;
 
 private:
+    int64_t m_helpyAccessRevision=0;
+    uint64_t m_helpyAccessGeneration=0;
+    bool m_helpyPinNoticeSent=false;
+    PS::WeakObjectHandle m_helpyAccessComponent;
+    PS::WeakObjectHandle m_helpyPolicyController;
+    uint64_t m_helpyPolicyGeneration=0,m_sentHelpyAuthorityVersion=0;
+    int64_t m_receivedHelpyPolicyRevision=0;
+    std::unordered_map<RC::Unreal::UObject*,PS::WeakObjectHandle> m_helpyPolicyPeers;
+    int64_t m_helpyMutationRevision=0;
+    uint64_t m_helpyMutationGeneration=0;
+    PS::WeakObjectHandle m_helpyMutationComponent;
+    PS::HelpyRemoteResult::Assembly m_helpyResultParts;
+    std::chrono::steady_clock::time_point m_helpyMutationDeadline{};
     struct Contract {
         RC::Unreal::UClass* Type = nullptr;
         // 0.7.0 can use the compact, proven IdentityPayload RepNotify contract
@@ -102,6 +128,7 @@ private:
     RC::Unreal::Hook::GlobalCallbackId m_authorityPre = RC::Unreal::Hook::ERROR_ID;
     RC::Unreal::Hook::GlobalCallbackId m_processEvent = RC::Unreal::Hook::ERROR_ID;
     RC::Unreal::Hook::GlobalCallbackId m_retryTick = RC::Unreal::Hook::ERROR_ID;
+    RC::Unreal::Hook::GlobalCallbackId m_localProfileHook = RC::Unreal::Hook::ERROR_ID;
     RC::Unreal::UObject* m_authorityComponent = nullptr;
     RC::Unreal::UObject* m_worldAuthorityComponent = nullptr;
     RC::Unreal::UObject* m_presentationAuthorityComponent = nullptr;
@@ -117,9 +144,37 @@ private:
     uint32_t m_seenPersistentRevision = 0;
     bool m_started = false;
     PS::ModDataRelay::Server m_modDataRelay;
+    std::string m_enabledMods=PS::ServerModList::Encode(nlohmann::json::array());
+    PS::ModDataRelay::Assembler m_serverModAssembly;
+    PS::WeakObjectHandle m_serverModComponent;
+    bool m_serverModsAvailable=false;
+    bool m_serverModsReady=false;
+    bool m_serverModsPublished=false;
+    int64_t m_serverModSequence=0;
+    int64_t m_receivedServerModSequence=0;
+    ServerModNotice m_serverModNotice;
     std::unordered_map<std::string,PS::WeakObjectHandle> m_relayPeers;
     float m_relayElapsed=0;
     void TickModDataRelay(float deltaSeconds);
+    std::map<std::string,PS::CharacterAppearance::Route> m_characterAppearanceRoutes;
+    PS::CharacterAppearance::Ledger m_characterAppearances;
+    std::map<std::string,PS::WeakObjectHandle> m_appearanceSubjects;
+    struct AppearancePeer {PS::WeakObjectHandle Component;PS::CharacterAppearance::Recipient Delivery;};
+    std::map<std::string,AppearancePeer> m_appearancePeers;
+    std::map<std::pair<std::string,std::string>,int64_t> m_appearanceClientSeen;
+    PS::WeakObjectHandle m_appearanceLocalBridge,m_appearanceClientWorld;
+    std::map<std::string,PS::WeakObjectHandle> m_appearanceClientSubjects;
+    std::unordered_set<std::string> m_appearanceAdvertisedSubjects;
+    bool m_appearancePending=false,m_appearanceResyncPending=false;
+    uint32_t m_appearanceResyncAttempts=0;
+    std::chrono::steady_clock::time_point m_appearanceMaintenance{},m_appearanceResyncAt{};
+    void LoadCharacterAppearances();
+    void HandleCharacterAppearance(RC::Unreal::UObject*,RC::Unreal::UObject*,RC::Unreal::UFunction*,const std::string&,const std::string&,const std::string&,int64_t);
+    void TickCharacterAppearances();
+    void ReceiveCharacterAppearance(RC::Unreal::UObject*,RC::Unreal::UFunction*,void*);
+    void RequestCharacterAppearances(RC::Unreal::UObject*);
+    void SetCharacterAppearanceSubject(RC::Unreal::UObject*,RC::Unreal::UFunction*,void*);
+    void AdvertiseCharacterAppearanceSubject(RC::Unreal::UObject*,bool);
     struct AuthorityAction {
         std::string Action;
         std::string DataAsset;
@@ -127,6 +182,7 @@ private:
         std::string GraphClass;
         std::string EntryFunction = "Trigger";
         std::unordered_map<std::string,std::string> Bindings;
+        std::string OwnerConnection,OwnerKey;
         RC::Unreal::FName EntryName;
         PS::WeakObjectHandle GraphType;
     };
@@ -165,6 +221,13 @@ private:
         std::chrono::steady_clock::time_point Started{};
     };
     std::unordered_map<std::string,ConsumptionPermit> m_consumptionPermits;
+    PS::ConsumedOwnerPresentation::Ledger m_consumedOwnerLedger;
+    PS::ConsumedOwnerPresentation::ReplayWindow m_consumedOwnerReplay;
+    std::unordered_map<std::string,PS::WeakObjectHandle> m_consumedOwnerActors;
+    RC::Unreal::UObject* m_invokingConsumedItem=nullptr;
+    uint64_t m_consumedOwnerClaim=0;
+    bool m_consumedOwnerAlreadyNative=false;
+    bool m_consumedOwnerPending=false;
     std::vector<PendingAuthorityAction> m_pendingAuthorityActions;
     std::vector<PendingClientAction> m_pendingClientActions;
     bool m_lastAuthorityDeferred = false;
@@ -185,20 +248,31 @@ private:
     uint32_t m_activationRevision = 0;
     uint32_t m_persistentRevision = 0;
     int64_t m_outboundRevision = 0;
+    int64_t m_receivedCleanupRevision = 0;
     int64_t m_activeRequestRevision = 0;
     std::string m_activeRequestCorrelation;
-    struct RequestWindow {std::chrono::steady_clock::time_point Started{};uint32_t Count=0;int64_t Revision=0;bool RegistryRejected=false;};
+    struct RequestWindow {std::chrono::steady_clock::time_point Started{};uint32_t Count=0;int64_t Revision=0;bool RegistryRejected=false,ItemIdsVerified=false;std::string ItemFingerprint;};
     std::unordered_map<std::string,RequestWindow> m_requestWindows;
+    struct BuildingPeer {PS::WeakObjectHandle Actor;PS::BuildingNetworkGuard::Registry Registry;};
+    std::unordered_map<RC::Unreal::UObject*,BuildingPeer> m_buildingPeers;
+    PS::WeakObjectHandle m_buildingAuthorityWorld;
+    PS::BuildingNetworkGuard::Registry m_buildingAuthority;
+    PS::BuildingNetworkGuard::HandshakeRetry m_buildingHandshake;
+    std::string m_buildingAckFingerprint;
+    std::chrono::steady_clock::time_point m_buildingAckAt{};
+    std::unordered_set<std::string> m_buildingRejections;
+    bool BlockBuildingRequest(RC::Unreal::UObject*,RC::Unreal::UFunction*,void*);
     struct PresentationRoute {
         std::string PluginId;
         std::string Connection;
         std::string ClassPath;
         std::string Function = "OnRuneSchemaPresentation";
         std::unordered_set<std::string> AllowedKeys;
+        bool OwnerOnly=false;
     };
     std::unordered_map<std::string,PresentationRoute> m_presentationRoutes;
     std::unordered_set<std::string> m_reportedMissingPresentationRoutes;
-    std::unordered_map<std::string,RC::Unreal::UObject*> m_presentationConsumers;
+    std::unordered_map<std::string,PS::WeakObjectHandle> m_presentationConsumers;
     std::unordered_map<std::string,int64_t> m_presentationAuthorityRevisions;
     std::unordered_map<std::string,int64_t> m_presentationClientRevisions;
     std::unordered_map<std::string,std::string> m_worldInstances;
@@ -214,6 +288,9 @@ private:
     RC::Unreal::UObject* EnsurePresentationComponent(RC::Unreal::AActor* actor,bool replicated);
     void LoadAuthorityActions();
     void LoadPresentationRoutes();
+    void LoadLocalProfiles();
+    bool HandleLocalProfile(RC::Unreal::UObject*,RC::Unreal::FFrame&);
+    std::unordered_map<std::string,std::string> m_localProfiles;
     void EnsurePlayerBridges();
     RC::Unreal::UObject* EnsureBridgeComponent(RC::Unreal::AActor* actor,bool publishRegistry);
     bool Attach(RC::Unreal::AGameModeBase* mode);
@@ -231,22 +308,28 @@ private:
     void TickAuthorityActions(float deltaSeconds);
     bool ConsumeAuthorityPermit(RC::Unreal::UObject* caster,const AuthorityAction& action);
     void InvokeConsumedItemAuthority(RC::Unreal::UObject* caster,const AuthorityAction& action);
+    void ObserveConsumedOwnerPresentation(RC::Unreal::UObject*,RC::Unreal::UFunction*,void*);
+    void TickConsumedOwnerPresentations();
+    void ReceiveConsumedOwnerPresentation(RC::Unreal::UObject*,RC::Unreal::UFunction*,const std::string&,int64_t,const nlohmann::json&);
     void HandleGenericRequest(RC::Unreal::UObject* source,RC::Unreal::UFunction* function,void* parameters);
     void ObserveClientTransport(RC::Unreal::UObject* source,RC::Unreal::UFunction* function,void* parameters);
+    void ApplyHelpyAccessStatus(const nlohmann::json& access,bool success,const std::string& detail);
+    void PublishHelpyPolicy();
+    void ResetHelpyClientAccess();
     void ObservePresentationTransport(RC::Unreal::UObject* source,RC::Unreal::UFunction* function,void* parameters);
     void DeliverPresentation(RC::Unreal::UObject* context,const std::string& pluginId,const std::string& connection,
-        const std::string& entityId,const std::string& payload,int64_t revision);
+        const std::string& entityId,const std::string& payload,int64_t revision,RC::Unreal::UObject* ownerPawn=nullptr);
     void AcknowledgePresentation(const PresentationRoute& route,const std::string& entityId,
         int64_t revision,bool success,const std::string& detail);
     void ReplayPresentationSnapshot(RC::Unreal::UObject* context,const std::string& payload);
     void SendReceipt(RC::Unreal::UObject* component,const std::string& channel,const std::string& entity,int64_t revision,bool success,const std::string& detail);
     void SendNotification(RC::Unreal::UObject* component,const std::string& channel,const std::string& entity,int64_t revision,const std::string& payload);
     int64_t ForwardRegistryRequest(RC::Unreal::UObject* component,const std::string& key,int64_t revision=0);
-    void SendCompatibilityAck(const std::string& remoteFingerprint);
+    void SendCompatibilityAck(const std::string& remoteFingerprint,bool resync=true);
     void InvokeAuthorityAction(RC::Unreal::UObject* graph,const AuthorityAction& action);
     void InvokeAuthorityActionForCaster(RC::Unreal::UObject* caster,const AuthorityAction& action);
     void PublishActionActivation(RC::Unreal::UObject* caster,const AuthorityAction& action);
-    std::string CompactPayload() const;
+    std::string CompactPayload(RC::Unreal::UObject* buildingContext) const;
     void PublishCompactPayload();
     bool PublishWorldSnapshot();
     void RecordDiagnostic(const std::string& channel,const std::string& entity,int64_t revision,

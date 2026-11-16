@@ -1,5 +1,6 @@
 #pragma once
 #include "Core/ItemNameOrder.h"
+#include "Core/ItemName.h"
 #include "Core/ItemCategory.h"
 #include <nlohmann/json.hpp>
 #include <algorithm>
@@ -46,13 +47,12 @@ public:
     }
     void Restore(const Json& rows){
         if(!rows.is_array()||rows.size()>MaxRows)throw std::runtime_error("Invalid item manifest row count");
-        for(const auto& row:rows){
+        for(const auto& value:rows){auto row=value;ItemName::Repair(row);
             if(!row.is_object()||row.dump().size()>32768)throw std::runtime_error("Invalid item manifest row");
             const auto path=row.at("Path").get<std::string>(),name=row.at("Name").get<std::string>();
             if(path.empty()||path.front()!='/'||path.size()>1024||path.find("..")!=path.npos||name.size()>4096||!m_paths.insert(path).second)
                 throw std::runtime_error("Invalid item manifest path");
-            auto repaired=row;ItemCategory::Repair(repaired);
-            m_items.emplace(ItemNameOrder::Key(name,path),std::make_shared<const Json>(std::move(repaired)));
+            ItemCategory::Repair(row);m_items.emplace(ItemNameOrder::Key(name,path),std::make_shared<const Json>(std::move(row)));
         }
         m_order.reserve(m_items.size());for(const auto& [key,row]:m_items)m_order.push_back(row.get());
         m_scan=m_items.size();m_ready=m_sourceReady=true;++m_progress;
@@ -80,8 +80,7 @@ public:
             for(auto& row:slice.at("Rows")){
                 if(!row.is_object())continue;const auto path=row.value("Path",std::string{});if(path.empty()||!m_paths.insert(path).second)continue;
                 if(m_items.size()>=MaxRows)throw std::runtime_error("Alphabetical item catalogue exceeds its safe row limit");
-                const auto key=ItemNameOrder::Key(row.value("Name",path),path);
-                ItemCategory::Repair(row);
+                ItemName::Repair(row);ItemCategory::Repair(row);const auto key=ItemNameOrder::Key(row.value("Name",path),path);
                 m_items.emplace(key,std::make_shared<const Json>(std::move(row)));
             }
             m_sourceReady=!slice.value("HasMore",false);

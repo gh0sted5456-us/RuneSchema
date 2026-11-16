@@ -4,6 +4,7 @@
 #include <array>
 #include <cstring>
 #include <memory>
+#include <optional>
 #include "Core/NetworkIdentitySync.h"
 #include "Core/CacheBundleIO.h"
 #include "Core/HelpyCacheSources.h"
@@ -58,29 +59,13 @@ namespace PS::NetworkIdentityWelcome {
         });
         return result;
     }
-    inline std::string Encode(const nlohmann::json& document) {
-        Validate(document);
-        auto wire = document;
-        wire["indexEncoding"] = "identity-delta-v1";
-        for (auto& [key, lane] : wire["lanes"].items()) {
-            const auto canonical = CanonicalEntries(lane["entries"]);
-            lane["identityProof"] = CacheBundleIO::Hash(canonical.dump());
-            std::set<std::string> sources;
-            for (const auto& row : canonical) {
-                const auto source=HelpyCacheSources::Source(row.at("path").get<std::string>());
-                Compatible(!source.empty(),"An authority asset source cannot be identified; native handling retained"); sources.insert(source);
-            }
-            lane["sources"] = sources;
-            std::map<std::string, std::size_t> indices;
-            for (std::size_t i = 0; i < canonical.size(); ++i) indices.emplace(canonical.at(i).at("path").get<std::string>(), i);
-            std::int64_t previous = 0;
-            for (auto& row : lane["entries"]) {
-                const auto index = static_cast<std::int64_t>(indices.at(row.at("path").get<std::string>()));
-                row = index - previous; previous = index;
-            }
-        }
+    inline std::string OrderProof(const nlohmann::json& document) {
+        return CacheBundleIO::Hash(nlohmann::json{{"kind",document.at("kind")},{"version",document.at("version")},
+            {"lanes",document.at("lanes")},{"fixedLanes",document.at("fixedLanes")}}.dump());
+    }
+    inline std::optional<std::string> EncodeWire(const nlohmann::json& wire) {
         const auto raw = wire.dump();
-        Require(raw.size() <= MaxDocument, "Registry welcome document exceeds its limit");
+        if(raw.size()>MaxDocument)return std::nullopt;
         Compressor compressor;
         Require(CreateCompressor(COMPRESS_ALGORITHM_XPRESS_HUFF, nullptr, &compressor.Value), "Welcome compressor unavailable");
         SIZE_T needed = 0; Compress(compressor.Value, raw.data(), raw.size(), nullptr, 0, &needed);
@@ -89,8 +74,33 @@ namespace PS::NetworkIdentityWelcome {
         const auto size = static_cast<std::uint32_t>(raw.size()); std::memcpy(buffer.data(), &size, 4);
         Require(Compress(compressor.Value, raw.data(), raw.size(), buffer.data() + 4, needed, &needed), "Registry welcome compression failed");
         buffer.resize(4 + needed); auto token = std::string(WelcomePrefix) + Base64(buffer);
-        Require(token.size() <= MaxWelcome, "Registry table exceeds native welcome budget");
+        if(token.size()>MaxWelcome)return std::nullopt;
         return token;
+    }
+    inline std::string Encode(const nlohmann::json& document) {
+        Validate(document);auto wire=document;wire["indexEncoding"]="mixed-v2";
+        for(auto& [key,lane]:wire["lanes"].items()){
+            const auto canonical=CanonicalEntries(lane["entries"]);lane["identityProof"]=CacheBundleIO::Hash(canonical.dump());
+            std::set<std::string> sources;std::map<std::string,std::size_t> indices;
+            for(std::size_t i=0;i<canonical.size();++i){
+                const auto path=canonical.at(i).at("path").get<std::string>();const auto source=HelpyCacheSources::Source(path);
+                Compatible(!source.empty(),"An authority asset source cannot be identified; native handling retained");sources.insert(source);indices.emplace(path,i);
+            }
+            lane["sources"]=sources;std::int64_t previous=0;
+            for(auto& row:lane["entries"]){const auto index=static_cast<std::int64_t>(indices.at(row.at("path").get<std::string>()));row=index-previous;previous=index;}
+        }
+        auto token=EncodeWire(wire);
+        if(!token&&wire.contains("sourceVersions")){wire.erase("sourceVersions");wire["telemetryOmitted"]=true;token=EncodeWire(wire);}
+        if(!token&&!wire.at("registryOwners").empty()){wire["registryOwners"]=nlohmann::json::object();wire["telemetryOmitted"]=true;token=EncodeWire(wire);}
+        Require(token.has_value(),"Registry table exceeds native welcome budget");
+        // Upgrade individual lanes without losing the compact representation needed by large mod sets.
+        for(auto& [key,lane]:wire["lanes"].items()){
+            auto compact=lane;lane["entries"]=document.at("lanes").at(key).at("entries");
+            for(auto& row:lane["entries"])row=row.at("path").get<std::string>();
+            lane.erase("sources");lane["entryEncoding"]="asset-path-v2";
+            if(auto exact=EncodeWire(wire))token=std::move(exact);else lane=std::move(compact);
+        }
+        return std::move(*token);
     }
     inline nlohmann::json Decode(std::string_view token, const nlohmann::json& local) {
         Require(token.starts_with(WelcomePrefix) && token.size() <= MaxWelcome, "Unsupported registry welcome");
@@ -103,20 +113,38 @@ namespace PS::NetworkIdentityWelcome {
         Require(Decompress(decompressor.Value, data.data() + 4, data.size() - 4, output.data(), output.size(), &written)
             && written == size, "Invalid compressed registry welcome");
         Validate(local);
-        auto document = nlohmann::json::parse(output, [](int depth, auto, auto&) {
-            Require(depth <= 16, "Registry welcome nesting exceeds its limit"); return true;
-        });
+        auto document = ParseJson(output);
         Require(document.is_object() && document.contains("lanes") && document.at("lanes").is_object()
             && document.at("lanes").size() <= 256, "Invalid welcome lane table");
-        Require(document.value("indexEncoding", std::string{}) == "identity-delta-v1", "Unsupported welcome index encoding");
+        const auto encoding=document.value("indexEncoding",std::string{});
+        Require(encoding=="identity-delta-v1"||encoding=="mixed-v2", "Unsupported welcome index encoding");
         document.erase("indexEncoding");
         for (auto& [key, lane] : document["lanes"].items()) {
             Compatible(local.at("lanes").contains(key), "Authority registry lane is unavailable locally");
+            Require(lane.is_object(),"Invalid welcome registry lane");
+            const auto entryEncoding=encoding=="mixed-v2"?lane.value("entryEncoding",std::string("identity-delta-v1")):encoding;
+            lane.erase("entryEncoding");
+            Require(entryEncoding=="asset-path-v2"||entryEncoding=="identity-delta-v1","Unsupported welcome lane encoding");
+            if(entryEncoding=="asset-path-v2"){
+                Require(lane.is_object()&&lane.contains("entries")&&lane.at("entries").is_array()&&lane.at("entries").size()<=NetworkIdentityPlan::Capacity
+                    &&lane.contains("identityProof")&&lane.at("identityProof").is_string(),"Invalid authority path roster");
+                std::map<std::string,nlohmann::json> lookup;
+                for(const auto& row:local.at("lanes").at(key).at("entries"))
+                    lookup.emplace(row.at("path").get<std::string>(),row);
+                auto rows=nlohmann::json::array();std::set<std::string> used;
+                for(const auto& entry:lane.at("entries")){
+                    Require(entry.is_string(),"Invalid authority asset path");const auto path=entry.get<std::string>();Token(path,2048);
+                    Require(used.insert(path).second,"Duplicate authority asset path");
+                    Compatible(lookup.contains(path),"An authority asset is unavailable locally; shared IDs were not changed");rows.push_back(lookup.at(path));
+                }
+                Compatible(lane.at("identityProof").get<std::string>()==CacheBundleIO::Hash(CanonicalEntries(rows).dump()),"Authority asset identities or native types differ locally; shared IDs were not changed");
+                lane["entries"]=std::move(rows);lane.erase("identityProof");continue;
+            }
             Require(lane.is_object()
                 && lane.contains("entries") && lane.at("entries").is_array()
                 && lane.at("entries").size() <= NetworkIdentityPlan::Capacity
                 && lane.contains("identityProof") && lane.at("identityProof").is_string(), "Incompatible welcome registry lane");
-            Require(lane.contains("sources") && lane.at("sources").is_array() && lane.at("sources").size() <= 512, "Invalid authority source roster");
+            Require(lane.contains("sources") && lane.at("sources").is_array() && lane.at("sources").size() <= MaxSources, "Invalid authority source roster");
             std::set<std::string> sources;
             for (const auto& source : lane.at("sources")) { Require(source.is_string(), "Invalid authority source"); const auto value=source.get<std::string>(); Token(value,192); Require(sources.insert(value).second, "Duplicate authority source"); }
             auto candidates = nlohmann::json::array();

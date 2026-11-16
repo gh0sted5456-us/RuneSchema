@@ -7,6 +7,11 @@ static std::string Read(const std::filesystem::path& path){std::ifstream input(p
 static void Check(bool value,const char* reason){if(!value)throw std::runtime_error(reason);}
 int main(int argc,char** argv){
     Check(argc==2,"Expected source root");const std::filesystem::path source(argv[1]);
+    const auto mainLoader=Read(source/"raw/src/Loader/DragonWildsMainLoader.cpp"),buildings=Read(source/"raw/src/Loader/DragonWildsBuildingModLoader.cpp");
+    const auto expectation=buildings.find("DragonWildsBuildingModLoader::CleanupExpectations("),expectationEnd=buildings.find("DragonWildsBuildingModLoader::~",expectation);
+    const auto expectationBody=buildings.substr(expectation,expectationEnd-expectation);
+    Check(expectationBody.find("m_applied.contains")==std::string::npos&&expectationBody.find("if(present&&!present->contains(id))continue;")!=std::string::npos,"Pre-world cleanup must protect verified pending building IDs and scope expectations to the selected world");
+    Check(mainLoader.find("if(parsed.pieces.empty())return PS::WorldBuildingSavePreflight::Repair{};")!=std::string::npos&&mainLoader.find("CleanupExpectations(&present)")!=std::string::npos,"Game Pass cleanup must not require unrelated building definitions for an empty or differently populated world");
     const auto runtime=Read(source/"raw/src/Generator/HelpyMapRuntime.cpp");
     for(const auto* field:{"TEXT(\"Pages\")","TEXT(\"Collection\")","TEXT(\"Label\")","TEXT(\"DisplayIcon\")","\"Categories\"","\"CategoryId\"","\"Group\""})
         Check(runtime.find(field)!=std::string::npos,"Native menu label/icon/hierarchy contract regressed");
@@ -37,6 +42,9 @@ int main(int argc,char** argv){
     Check(ui.find("Import prefab...")!=std::string::npos&&ui.find("Place & save prefab")!=std::string::npos,"Prefab map placement controls missing");
     const auto players=Read(source/"raw/src/Loader/Spawn/PlayerRules.cpp");
     Check(players.find("PlayerCarryWeight::Verified(actual,requested)")!=std::string::npos&&players.find("CARRY-OVERRIDE")!=std::string::npos,"Capacity claims require native readback and conflict diagnostics");
+    const auto worldEffects=Read(source/"raw/include/Runtime/BuildingPolicy/WorldEffects.h");
+    const auto rest=worldEffects.find("void Rest("),refresh=worldEffects.find("trigger.Invoke();",rest),resolve=worldEffects.find("L\"TrackedStatusEffectInstances\"",rest);
+    Check(rest!=std::string::npos&&refresh!=std::string::npos&&resolve!=std::string::npos&&refresh<resolve,"Blessings must create/refresh native Well Rested before resolving the tracked instance");
     const auto accounts=Read(source/"raw/include/SDK/Helper/PlayerStatus.h"),steam=Read(source/"raw/include/Runtime/SteamBuild.h");
     Check(accounts.find("if(local){const auto steam=SteamBuild::PersonaName();")!=std::string::npos&&runtime.find("AccountName(state,isLocal)")!=std::string::npos,"A remote player must never inherit the local Steam account");
     Check(accounts.find("ControllerAccountName(UObject* controller)")!=std::string::npos&&tools.find("ControllerAccountName(target)")!=std::string::npos&&tools.find("ControllerAccountName(controller)")!=std::string::npos,"Map and player rosters must use the same local-aware account provider");

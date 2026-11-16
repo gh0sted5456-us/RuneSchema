@@ -1,6 +1,13 @@
 #include <algorithm>
 #include "Core/HelpyCacheSources.h"
+#include "Core/AutoReloadScope.h"
+#include "../../../shared/SaveBackupStore.h"
+#include "../../../shared/SaveWorldBackups.h"
+#include "Core/LoadProtectionNotice.h"
+#include "SDK/WeakObjectHandle.h"
+#include "Core/RuneSchemaDataRoot.h"
 #include "Core/PakDiscovery.h"
+#include "Runtime/PakLoader.h"
 #include "Core/NativePersistencePolicy.h"
 #include "Core/ModIdentity.h"
 #include "Core/ModManager.h"
@@ -62,6 +69,7 @@
 #include "Runtime/WorldBuildingSavePreflight.h"
 #include "Runtime/WorldBuildingRegistryValidation.h"
 #include "Runtime/PluginCatalog.h"
+#include "Runtime/SisterContent.h"
 #include "Runtime/Storefront.h"
 #include "Runtime/NativeExecutableDiscovery.h"
 #include "Runtime/NativeHookPatterns.h"
@@ -95,6 +103,9 @@ using namespace RC::Unreal;
 namespace fs = std::filesystem;
 
 namespace {
+    std::vector<PS::SisterContent::Root> SisterContentRoots;
+    PS::CleanupNotice::WorldReceipt WorldCleanupReceipt;
+    PS::WeakObjectHandle WorldCleanupReceiptWorld;
     // Each world is handled independently. The complete live building registry
     // is required before an unresolved type can be removed from any save.
     std::unordered_set<std::string> ReadValidatedLiveBuildingIds(
@@ -274,9 +285,11 @@ namespace {
         return live;
     }
 
+    fs::path BackupWorldBuildingPayload(const std::wstring& slot,std::span<const std::uint8_t> original,bool enteringWorld=true);
+
     void RunLocalWorldBuildingPreflight(const fs::path& target,
         const std::unordered_set<std::string>& live,
-        const std::shared_ptr<PS::WorldCleanupPolicy::MenuWindow>& window = {})
+        const std::shared_ptr<PS::WorldCleanupPolicy::MenuWindow>& window = {},bool enteringWorld=false)
     {
         namespace Preflight = PS::WorldBuildingSavePreflight;
         if(window&&!window->MayWrite())throw std::runtime_error("startup cleanup write window has closed");
@@ -305,13 +318,10 @@ namespace {
         recheck.close();
         if (current != original) throw std::runtime_error("save changed during preflight");
         const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
-        const bool backupEnabled = true;
-        const fs::path backup = backupEnabled
-            ? fs::path(target.wstring() + L".runeschema-" + std::to_wstring(nonce) + L".bak")
-            : fs::path{};
+        const auto backup=BackupWorldBuildingPayload(target.stem().wstring(),original,enteringWorld);
         const fs::path temporary = target.wstring() + L".runeschema-"
             + std::to_wstring(nonce) + L".tmp";
-        if ((backupEnabled && fs::exists(backup)) || fs::exists(temporary))
+        if (fs::exists(temporary))
             throw std::runtime_error("preflight output path already exists");
         {
             std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
@@ -328,15 +338,6 @@ namespace {
                 throw std::runtime_error("temporary repaired save did not verify");
             (void)Preflight::Parse(written);
         }
-        if (backupEnabled) {
-            if (!fs::copy_file(target, backup, fs::copy_options::none))
-                throw std::runtime_error("pre-cleanup backup could not be created; original retained");
-            std::ifstream verification(backup, std::ios::binary);
-            const Preflight::Bytes saved(std::istreambuf_iterator<char>{verification},
-                std::istreambuf_iterator<char>{});
-            if (!verification || saved != original)
-                throw std::runtime_error("pre-cleanup backup did not verify; original retained");
-        }
         const auto repairedBytes = std::make_shared<const Preflight::Bytes>(std::move(repair.bytes));
         const auto logSuccess = [target, backup, removedIds = repair.removedIds,
             persistenceIds = repair.removedPersistenceIds, repairedBytes]() {
@@ -344,9 +345,10 @@ namespace {
             const Preflight::Bytes saved(std::istreambuf_iterator<char>{verification},
                 std::istreambuf_iterator<char>{});
             if (!verification || saved != *repairedBytes)
-                throw std::runtime_error("committed repaired save did not verify; pre-cleanup backup retained");
+                throw std::runtime_error("committed repaired save did not verify; preserve the source and available recovery copies");
             (void)Preflight::Parse(saved);
-            const auto backupLabel = backup.empty() ? L"disabled" : backup.filename().wstring();
+            WorldCleanupReceipt.Record(target.stem().wstring(),removedIds.size());
+            const auto backupLabel = backup.empty() ? L"not created" : backup.filename().wstring();
             PS::ConsolidatedLog<RC::LogLevel::Normal>(STR(
                 "[RuneSchema] [summary] Save cleanup | world='{}' | missing building IDs removed={} | backup='{}'.\n"),
                 target.filename().wstring(), removedIds.size(), backupLabel);
@@ -478,7 +480,7 @@ namespace {
             ~CloseBeforeNativeLoad(){Window->Close();}
         } close{window};
         // A locked file must never be replaced later, after native loading starts.
-        RunLocalWorldBuildingPreflight(target,live,window);
+        RunLocalWorldBuildingPreflight(target,live,window,true);
     }
 
     void RunAllLocalWorldBuildingPreflights(DragonWilds::DragonWildsBuildingModLoader* buildingLoader,
@@ -630,46 +632,23 @@ namespace {
     }
 
     fs::path BackupWorldBuildingPayload(const std::wstring& slot,
-        std::span<const std::uint8_t> original)
+        std::span<const std::uint8_t> original,bool enteringWorld)
     {
-        std::wstring safeSlot;
-        for (const auto ch : slot) {
-            if (safeSlot.size() == 48) break;
-            safeSlot.push_back((ch >= L'a' && ch <= L'z')
-                || (ch >= L'A' && ch <= L'Z')
-                || (ch >= L'0' && ch <= L'9')
-                || ch == L'-' || ch == L'_' ? ch : L'_');
+        try{
+            const auto runtime=std::string(PS::Storefront::MappingCachePlatform(PS::Storefront::CurrentDetection()));
+            const auto directory=PS::WorldBackups::Directory(PS::RuneSchemaData::Directory(),runtime);
+            std::string issue;
+            PS::SaveBackups::Json context={{"Mods",PS::SaveBackups::ActiveMods()}};
+            if(enteringWorld)context["LastPlayedUtc"]=PS::SaveBackups::Now();
+            const auto file=PS::WorldBackups::BeforeCleanup(directory,PS::WorldBackups::Slot(fs::path(slot)),
+                std::string_view(reinterpret_cast<const char*>(original.data()),original.size()),
+                std::move(context),issue);
+            if(!issue.empty())PS::Log<LogLevel::Warning>(STR("[RS-SAVE-005] Optional world backup unavailable: {}. Validated world cleanup continues.\n"),PS::ToWideSafe(issue));
+            return file;
+        }catch(const std::exception& error){
+            PS::Log<LogLevel::Warning>(STR("[RS-SAVE-005] Optional world backup unavailable: {}. Validated world cleanup continues.\n"),PS::ToWideSafe(error.what()));return {};
         }
-        if (safeSlot.empty()) throw std::runtime_error("world slot is unavailable");
-        const auto directory = PS::HostServices::StateDirectory()
-            / L"backups" / L"world-building";
-        std::error_code error;
-        fs::create_directories(directory, error);
-        if (error) throw std::runtime_error("world backup directory is unavailable");
-        static std::atomic<std::uint64_t> sequence{0};
-        const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
-        const auto name = safeSlot + L"-" + std::to_wstring(nonce) + L"-"
-            + std::to_wstring(sequence.fetch_add(1, std::memory_order_relaxed)) + L".sav";
-        const auto backup = directory / name;
-        if (fs::exists(backup)) throw std::runtime_error("world backup path already exists");
-        {
-            std::ofstream output(backup, std::ios::binary | std::ios::trunc);
-            if (!output) throw std::runtime_error("world backup could not be created");
-            output.write(reinterpret_cast<const char*>(original.data()),
-                static_cast<std::streamsize>(original.size()));
-            output.flush();
-            if (!output) throw std::runtime_error("world backup write failed");
-        }
-        std::ifstream verification(backup, std::ios::binary);
-        const std::vector<std::uint8_t> written(std::istreambuf_iterator<char>{verification},
-            std::istreambuf_iterator<char>{});
-        if (!verification.is_open() || verification.bad()
-            || written.size() != original.size()
-            || !std::equal(written.begin(), written.end(), original.begin()))
-            throw std::runtime_error("world backup verification failed");
-        return backup;
     }
-
     void NativeSpudLoadGameReadOnly(void* subsystem, const void* slotName,
         std::uint8_t clientLoadingListen)
     {
@@ -735,17 +714,43 @@ namespace {
                             if (bounded) std::memcpy(&marker, bytes, sizeof(marker));
                             if (bounded && marker == 0x45564153u) {
                                 try {
-                                    const std::vector<std::uint8_t> original(bytes,
+                                    std::vector<std::uint8_t> original(bytes,
                                         bytes + static_cast<std::size_t>(count));
+                                    if(PS::WorldCleanupPolicy::ArchiveEligible(ActiveSpudLoadSlot,loadingListen,position,limit,count)){
+                                        try{
+                                            const auto runtime=std::string(PS::Storefront::MappingCachePlatform(PS::Storefront::CurrentDetection()));
+                                            const auto root=PS::RuneSchemaData::Directory(),directory=PS::WorldBackups::Directory(root,runtime);const auto slot=PS::WorldBackups::Slot(fs::path(ActiveSpudLoadSlot));
+                                            const auto view=[&]{return std::string_view(reinterpret_cast<const char*>(original.data()),original.size());};
+                                            if(PS::WorldBackups::Enabled(directory)){
+                                            if(PS::WorldBackups::ApplyQueued(directory,slot,view(),[&](const std::string& restored){
+                                                std::vector<std::uint8_t> next(restored.begin(),restored.end());(void)PS::WorldBuildingSavePreflight::Parse(next);
+                                                if(!RC::Unreal::GMalloc||!*RC::Unreal::GMalloc||!ProbeMemoryWritable(array,0x10)||!ProbeMemoryWritable(static_cast<const std::uint8_t*>(innerArchive)+0xA0,sizeof(limit))
+                                                    ||std::memcmp(bytes,original.data(),original.size())!=0)throw std::runtime_error("Native world reader changed or its allocator is unavailable");
+                                                auto* storage=reinterpret_cast<RC::Unreal::TArray<std::uint8_t>*>(const_cast<void*>(array));static_assert(sizeof(*storage)==0x10);
+                                                if(storage->GetData()!=bytes||storage->Num()!=count||storage->Max()!=capacity)throw std::runtime_error("Native world array identity changed");
+                                                RC::Unreal::TArray<std::uint8_t> replacement;replacement.SetNumUninitialized(static_cast<std::int32_t>(next.size()));
+                                                if(replacement.Num()!=next.size()||!ProbeMemoryWritable(replacement.GetData(),next.size()))throw std::runtime_error("Native world restore allocation did not verify");
+                                                std::memcpy(replacement.GetData(),next.data(),next.size());
+                                                if(storage->GetData()!=bytes||storage->Num()!=count||storage->Max()!=capacity||std::memcmp(bytes,original.data(),original.size())!=0)
+                                                    throw std::runtime_error("Native world reader changed while allocating its restore");
+                                                *storage=std::move(replacement);
+                                                bytes=storage->GetData();count=storage->Num();capacity=storage->Max();limit=count;
+                                                std::memcpy(static_cast<std::uint8_t*>(const_cast<void*>(innerArchive))+0xA0,&limit,sizeof(limit));original.swap(next);
+                                            }))PS::Log<LogLevel::Normal>(STR("[RS-SAVE-004] Selected world snapshot loaded once through the native archive. Its prior payload was backed up; normal world saving remains game-owned.\n"));
+                                            if(PS::SaveBackups::Automatic(PS::SaveBackups::Directory(root,runtime)))PS::WorldBackups::Store(directory,slot,view(),"Automatic",{{"Mods",PS::SaveBackups::ActiveMods()},{"LastPlayedUtc",PS::SaveBackups::Now()}});
+                                            }
+                                        }catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[RS-SAVE-005] World snapshot/recovery needs review: {}. Native loading continues.\n"),PS::ToWideSafe(error.what()));}
+                                    }
                                     const auto parsed = PS::WorldBuildingSavePreflight::Parse(
                                         original);
                                     try {
-                                        if (!NativeWorldBuildingLoader)
-                                            throw std::runtime_error("building loader is unavailable for Game Pass world cleanup");
-                                        const auto live = ReadValidatedLiveBuildingIds(
-                                            NativeWorldBuildingLoader->CleanupExpectations());
-                                        const auto repair = PS::WorldBuildingSavePreflight::RemoveUnresolved(
-                                            original, live);
+                                        const auto repair=[&]{
+                                            if(parsed.pieces.empty())return PS::WorldBuildingSavePreflight::Repair{};
+                                            if(!NativeWorldBuildingLoader)throw std::runtime_error("building loader is unavailable for Game Pass world cleanup");
+                                            std::unordered_set<std::string> present;for(const auto& piece:parsed.pieces)present.insert(piece.persistenceId);
+                                            const auto live=ReadValidatedLiveBuildingIds(NativeWorldBuildingLoader->CleanupExpectations(&present));
+                                            return PS::WorldBuildingSavePreflight::RemoveUnresolved(original,live);
+                                        }();
                                         const bool loadEligible = PS::WorldCleanupPolicy::ArchiveEligible(
                                             ActiveSpudLoadSlot,loadingListen,position,limit,count)
                                             && !repair.removedIds.empty()
@@ -815,11 +820,12 @@ namespace {
                                                 std::memcpy(static_cast<std::uint8_t*>(
                                                     const_cast<void*>(array)) + 0x08,
                                                     &repairedCount, sizeof(repairedCount));
+                                                WorldCleanupReceipt.Record(ActiveSpudLoadSlot,removed.size());
                                                 PS::ConsolidatedLog<RC::LogLevel::Normal>(STR(
                                                     "[RuneSchema] [summary] Save cleanup | world='{}' | missing building IDs removed={} | retained={} | backup='{}'.\n"),
                                                     ActiveSpudLoadSlot, removed.size(),
                                                     verified.pieces.size(),
-                                                    backup.empty() ? L"disabled" : backup.filename().wstring());
+                                                    backup.empty() ? L"not created" : backup.filename().wstring());
                                             } else {
                                                 PS::CodedLog<RC::LogLevel::Warning>(PS::Diagnostics::Id::WorldCleanupBufferChanged,STR(
                                                     "[SAVE-CLEANUP][BUILDINGS][SKIPPED] Native buffer changed during validation; world unchanged.\n"));
@@ -948,6 +954,7 @@ namespace DragonWilds {
         GameInstanceInitCallbacks.clear();
         PS::NetworkIdentityBootstrap::Stop();
         PS::ServerFilterStartup::Stop();
+        m_worldComponents.Stop();
         m_registryBridge.Stop();
         m_dataRegistrar.Shutdown();
         m_characterEntryRecovery.Shutdown();
@@ -974,8 +981,16 @@ namespace DragonWilds {
 
     }
 
-    void DragonWildsMainLoader::PreInitialize()
+    void DragonWildsMainLoader::PreInitialize(bool sisterContentEnabled)
     {
+        SisterContentRoots.clear();
+        if (sisterContentEnabled) {
+            try { SisterContentRoots = PS::SisterContent::Discover(GetModsPath()); }
+            catch (const std::exception& error) {
+                PS::Log<LogLevel::Warning>(STR("[SISTER-CONTENT][SKIPPED] Discovery failed: {}.\n"),
+                    PS::ToWideSafe(error.what()));
+            }
+        }
         const auto& settings=PS::PSConfig::Get()->GetSettings();
         if (PS::NativePersistencePolicy::BypassRequested(PS::Storefront::IsDedicatedServer(),
                 settings.persistence.allowCorruptCharacterEntry,settings.quickLaunch.mode))
@@ -1100,11 +1115,14 @@ namespace DragonWilds {
 
             auto existing = std::find_if(PendingAutoReloads.begin(), PendingAutoReloads.end(),
                 [&](const PendingAutoReload& pendingAutoReload) {
-                    return pendingAutoReload.FilePath == filePath;
+                    return pendingAutoReload.FolderType == folderType
+                        && PS::AutoReloadScope::Key(pendingAutoReload.FilePath,folderType)
+                            == PS::AutoReloadScope::Key(filePath,folderType);
                 });
 
             if (existing != PendingAutoReloads.end())
             {
+                existing->FilePath = filePath;
                 existing->FolderType = folderType;
                 existing->ModName = modName;
             }
@@ -1121,6 +1139,10 @@ namespace DragonWilds {
     void DragonWildsMainLoader::IterateModsFolder(const std::function<void(const std::filesystem::path&, const RC::StringType&)>& callback)
     {
         const auto modsPath = GetModsPath();
+        const auto visit = [&](const auto& load) {
+            for (const auto& name : m_orderedMods) load(modsPath / name, name);
+            for (const auto& root : SisterContentRoots) load(root.Content, root.Name);
+        };
         if (!m_orderResolved) {
             std::vector<RC::StringType> discovered;
             if (fs::exists(modsPath))
@@ -1129,10 +1151,25 @@ namespace DragonWilds {
                         discovered.push_back(entry.path().filename().native());
             m_orderedMods = ModLoadOrder::Resolve(modsPath, discovered);
             m_orderResolved = true;
-            for (const auto& name : m_orderedMods)
-                PS::StartupTrace::Mark("mod order: " + RC::to_string(name));
+            nlohmann::json enabledMods=nlohmann::json::array();
+            visit([&](const fs::path& path, const RC::StringType& folder) {
+                const auto id=RC::to_string(folder);std::string name=id,version,website,modId;
+                try{
+                    const auto metadata=PS::ModManager::Metadata(path);
+                    if(metadata.contains("name")&&PS::ServerModList::Text(metadata["name"],256)&&metadata["name"]!="")name=metadata["name"].get<std::string>();
+                    if(metadata.contains("version")&&PS::ServerModList::Text(metadata["version"],64))version=metadata["version"].get<std::string>();
+                    if(metadata.contains("modId")&&PS::ServerModList::Text(metadata["modId"],128)&&metadata["modId"]!="")modId=metadata["modId"].get<std::string>();
+                    if(metadata.contains("website")&&metadata["website"].is_string()&&PS::ModDownloadLink::Valid(metadata["website"].get_ref<const std::string&>()))website=metadata["website"].get<std::string>();
+                }catch(...){}
+                enabledMods.push_back({{"Id",id},{"Name",name},{"Version",version}});
+                if(!modId.empty())enabledMods.back()["ModId"]=modId;
+                if(!website.empty())enabledMods.back()["Website"]=website;
+                PS::StartupTrace::Mark("mod order: " + id);
+            });
+            try{m_registryBridge.SetEnabledMods(enabledMods);}
+            catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[RS-NET-005] Enabled-mod list unavailable: {}. Content loading continues.\n"),PS::ToWideSafe(error.what()));}
         }
-        for (const auto& folderName : m_orderedMods) callback(modsPath / folderName, folderName);
+        visit(callback);
     }
 
     void DragonWildsMainLoader::SetupPostEngineInitLoaders()
@@ -1141,6 +1178,11 @@ namespace DragonWilds {
         InitializeMods(EEngineLifecyclePhase::PostEngineInit);
         LoadMods(EEngineLifecyclePhase::PostEngineInit);
         SetupLogicPakBridge();
+        if(m_spawnLoader&&PS::PSConfig::Get()->ItemDeliveryMode()!="off")
+            IterateModsFolder([&](const fs::path& path,const RC::StringType& owner){
+                m_spawnLoader->RegisterItemDeliverySource(path,owner);
+            });
+        if(auto ready=std::move(m_modsReady))ready();
         PS::StartupTrace::Mark("PostEngineInit complete");
     }
 
@@ -1179,17 +1221,19 @@ namespace DragonWilds {
         }
         Hook::FCallbackOptions loadOptions{};loadOptions.OwnerModName=TEXT("RuneSchema");loadOptions.HookName=TEXT("SaveCleanupEntryPolicy");
         m_cleanupLoadMapPreId=Hook::RegisterLoadMapPreCallback(
-            [this](auto&,UEngine*,FWorldContext&,FURL url,UPendingNetGame* pending,FString&) {
+            [this](auto&,UEngine*,FWorldContext& context,FURL url,UPendingNetGame* pending,FString&) {
                 if(GetCurrentThreadId()!=m_cleanupThread)return;
                 const auto map=ReadProbeFString(&url.Map);
-                if(!PS::WorldCleanupPolicy::NativeGameplayMap(map)){m_cleanupPrepared=false;return;}
+                if(!PS::WorldCleanupPolicy::NativeGameplayMap(map)){m_cleanupPrepared=false;WorldCleanupReceipt.Begin({});WorldCleanupReceiptWorld.Reset();return;}
+                if(WorldCleanupReceipt.Bound())WorldCleanupReceipt.Begin({});
+                WorldCleanupReceipt.Entering(context.GetThisCurrentWorld().Get());WorldCleanupReceiptWorld.Reset();
                 // Direct joins/new worlds may have no local SPUD file-read boundary.
                 // Character cleanup can still run; an already-read world file is not replaced.
                 if(!m_cleanupPrepared)PrepareWorldSaveCleanup({},pending!=nullptr,false);
             },loadOptions);
         loadOptions.HookName=TEXT("SaveCleanupEntryPolicyFinished");
         m_cleanupLoadMapPostId=Hook::RegisterLoadMapPostCallback(
-            [this](auto&,auto*,FWorldContext&,auto&&...){if(GetCurrentThreadId()==m_cleanupThread)m_cleanupPrepared=false;},loadOptions);
+            [this](auto&,auto*,FWorldContext& context,auto&&...){if(GetCurrentThreadId()==m_cleanupThread){m_cleanupPrepared=false;auto* world=context.GetThisCurrentWorld().Get();WorldCleanupReceipt.Entered(world);WorldCleanupReceiptWorld.Assign(world);}},loadOptions);
         if(m_cleanupLoadMapPreId==Hook::ERROR_ID||m_cleanupLoadMapPostId==Hook::ERROR_ID)
             PS::CodedLog<LogLevel::Warning>(PS::Diagnostics::Id::WorldCleanupHookUnavailable,STR(
                 "[SAVE-CLEANUP][ENTRY-HOOK][PARTIAL] Map entry callbacks are unavailable; only verified native load boundaries can apply cleanup.\n"));
@@ -1234,6 +1278,7 @@ namespace DragonWilds {
     {
         if(GetCurrentThreadId()!=m_cleanupThread||m_cleanupPrepared)return;
         m_cleanupPrepared=true;
+        if(beforeWorldRead)WorldCleanupReceipt.Begin(!clientLoadingListen?std::wstring(slot):std::wstring{});
         if(beforeWorldRead&&!clientLoadingListen&&!PS::WorldCleanupPolicy::LocalSlotEligible(slot,false)) {
             PS::CodedLog<LogLevel::Warning>(PS::Diagnostics::Id::WorldCleanupContractUnsafe,STR(
                 "[SAVE-CLEANUP][ENTRY][UNIDENTIFIED] Native slot could not be verified; no folder sweep or world replacement was authorized.\n"));
@@ -1259,6 +1304,17 @@ namespace DragonWilds {
             }
         }catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[SAVE-CLEANUP][CHARACTERS][SKIPPED] Character cleanup incomplete: {}. No broader scope was substituted; native loading continues.\n"),PS::ToWideSafe(error.what()));}
         if(clientLoadingListen)return;
+        if(beforeWorldRead&&PS::Storefront::Current()!=PS::Storefront::Kind::GamePass)try{
+            const auto runtime=std::string(PS::Storefront::MappingCachePlatform(PS::Storefront::CurrentDetection()));const auto root=PS::RuneSchemaData::Directory();
+            if(PS::WorldBackups::Enabled(PS::WorldBackups::Directory(root,runtime))&&PS::SaveBackups::Automatic(PS::SaveBackups::Directory(root,runtime))){
+                const auto target=LocalWorldSaveDirectory()/(std::wstring(slot)+L".sav");
+                if(fs::is_regular_file(target)){
+                    const auto bytes=PS::CacheBundleIO::Read(target,PS::WorldBackups::MaximumWorldBytes);
+                    PS::WorldBackups::Store(PS::WorldBackups::Directory(root,runtime),PS::WorldBackups::Slot(fs::path(slot)),bytes,"Automatic",{{"Mods",PS::SaveBackups::ActiveMods()},{"LastPlayedUtc",PS::SaveBackups::Now()}});
+                    PS::Log<LogLevel::Normal>(STR("[RS-SAVE-003] Selected world entry snapshot verified.\n"));
+                }
+            }
+        }catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[RS-SAVE-005] World snapshot unavailable: {}. Native loading continues.\n"),PS::ToWideSafe(error.what()));}
         if(!beforeWorldRead) {
             PS::Log<LogLevel::Verbose>(STR("[SAVE-CLEANUP][BUILDINGS][PROVIDER-DEFERRED] No verified local slot read was observed; world files were not replaced after native loading started.\n"));
             return;
@@ -1278,6 +1334,20 @@ namespace DragonWilds {
     void DragonWildsMainLoader::SetupGameInstanceInitLoaders()
     {
         PS::StartupTrace::Mark("GameInstanceInit loaders begin");
+        {
+            PS::AssetPreload::Plan<RC::StringType> plan;
+            const auto* config=PS::PSConfig::Get();
+            if(config->IsLoaderEnabled("recipes"))for(auto& loader:m_loaders)if(loader->GetModFolderType()=="recipes"){
+                auto& recipes=static_cast<DragonWildsRecipeModLoader&>(*loader);
+                recipes.ImportCookedDefinitions();
+                for(const auto& path:recipes.CookedReferencePaths())plan.Add(path);
+            }
+            if(config->IsLoaderEnabled("assets"))for(auto& loader:m_loaders)if(loader->GetModFolderType()=="assets")
+                for(const auto& path:static_cast<DragonWildsAssetModLoader*>(loader.get())->CookedReferencePaths())plan.Add(path);
+            PS::StartupTrace::Mark("cooked asset prefetch begin");
+            try {PrefetchCookedAssets(plan);}catch(const std::exception& error){PS::Log<LogLevel::Normal>(STR("[PERF][ASSETS] Native prefetch unavailable: {}. Required-asset loading continues normally.\n"),PS::ToWideSafe(error.what()));}
+            PS::StartupTrace::Mark("cooked asset prefetch complete");
+        }
         InitializeMods(EEngineLifecyclePhase::GameInstanceInit);
         LoadMods(EEngineLifecyclePhase::GameInstanceInit);
 
@@ -1317,6 +1387,7 @@ namespace DragonWilds {
                 "DataRegistrar","Application"))
                 PS::Log<LogLevel::Error>(STR("[DEGRADED][SERVICE:data-registrar] General registration and character-save cleanup unavailable: {}. Dedicated-server building cleanup will still check its live registries independently.\n"),PS::ToWideSafe(error.what()));
         }
+        m_worldComponents.Start();
         // All lanes attempt building cleanup independently of unrelated item,
         // quest or journal service health. Its own live registries must validate.
         SetupWorldBuildingCleanup();
@@ -1335,9 +1406,20 @@ namespace DragonWilds {
         try {
             PS::NetworkIdentityBootstrap::Start([this] {
                 auto result = m_dataRegistrar.NetworkIdentityManifest();
+                PS::NetworkIdentitySync::Require(m_buildingLoader!=nullptr,"Building registry service is unavailable");
+                result["lanes"]["BUILDING"]=m_buildingLoader->NetworkIdentityManifest();
                 result["registryOwners"] = m_registryBridge.RegistryOwnerFingerprints();
                 result["sourceVersions"] = PS::HelpyCacheSources::Snapshot().Versions; return result;
-            }, [this](const auto& order) { m_dataRegistrar.ApplyNetworkIdentityOrder(order); });
+            }, [this](const auto& order) {
+                auto dataOrder=order;
+                const auto building=dataOrder.find("BUILDING");
+                PS::NetworkIdentitySync::Require(building!=dataOrder.end(),"Building registry order is missing");
+                PS::NetworkIdentitySync::Require(m_buildingLoader!=nullptr,"Building registry service is unavailable");
+                auto buildings=m_buildingLoader->PlanNetworkOrder(building->second);
+                dataOrder.erase(building);
+                m_dataRegistrar.ApplyNetworkIdentityOrder(dataOrder);
+                m_buildingLoader->SetNetworkOrder(std::move(buildings));
+            });
         } catch (const std::exception& error) {
             PS::NetworkIdentityBootstrap::Stop();
             PS::Log<LogLevel::Warning>(STR("[NETWORK-ID-SYNC][UNAVAILABLE] {}\n"), PS::ToWideSafe(error.what()));
@@ -1433,6 +1515,13 @@ namespace DragonWilds {
         RegisterLoader(std::move(recipes));
         auto npcs=std::make_unique<DragonWildsNpcLoader>(recipeService);
         auto* npcService=npcs.get();
+        npcService->PublishCleanupNotice=[this](RC::Unreal::UObject* controller,std::size_t removed,const std::string& mod){return m_registryBridge.PublishCleanupNotice(controller,removed,mod);};
+        npcService->PublishPlayerActivity=[this](RC::Unreal::UObject* controller,const std::string& payload){return m_registryBridge.PublishPlayerActivity(controller,payload);};
+        npcService->NotifyWorldCleanup=[this](RC::Unreal::UObject* controller){
+            auto* world=WorldCleanupReceiptWorld.Get();
+            if(controller&&world&&WorldCleanupReceipt.Pending(controller,controller->GetWorld())&&controller->GetWorld()==world
+                &&m_registryBridge.PublishCleanupNotice(controller,WorldCleanupReceipt.Removed,{}))WorldCleanupReceipt.Acknowledge(controller);
+        };
         m_dataRegistrar.SetCharacterRegistryPreparation([npcService](RC::Unreal::UObject* context){npcService->PrepareQuests(context);});
         m_registryBridge.QuestControl=[npcService](RC::Unreal::UObject* player,const std::string& quest,
             const std::string& action,const std::string& payload){
@@ -1441,6 +1530,7 @@ namespace DragonWilds {
         m_registryBridge.ClientNotification=[this,npcService](RC::Unreal::UObject* player,const std::string& channel,
             const std::string& entity,const std::string& payload){
             if(channel=="helpy.marks"){if(m_spawnLoader)m_spawnLoader->HandleNetworkHelpyMarks(player,payload);return;}
+            if(channel=="helpy.activity"){(void)GameplayEventObserver::ReceiveRemote(payload);return;}
             npcService->HandleNetworkNotification(player,channel,entity,payload);
         };
         npcService->PublishWorldState=[this](const std::string& instance,const std::string& record){
@@ -1467,6 +1557,7 @@ namespace DragonWilds {
 
         auto buildingModLoader = std::make_unique<DragonWildsBuildingModLoader>();
         m_buildingLoader = buildingModLoader.get();
+        m_registryBridge.BuildingRegistry=[service=m_buildingLoader](RC::Unreal::UObject* context){return service->NetworkIdentity(context);};
         RegisterLoader(std::move(buildingModLoader));
 
         auto spawnLoader = std::make_unique<DragonWildsSpawnLoader>();
@@ -1490,6 +1581,7 @@ namespace DragonWilds {
         m_spawnLoader->ForwardHelpyAuthority=[this](const std::string& action,const std::string& payload){
             return m_registryBridge.RequestAuthority(action,payload);
         };
+        m_spawnLoader->PublishHelpyResult=[this](RC::Unreal::UObject* player,int64_t revision,const nlohmann::json& result){m_registryBridge.PublishHelpyResult(player,revision,result);};
         m_spawnLoader->IsQuestCompleted=[npcService](RC::Unreal::UWorld* world,const std::string& quest){
             return npcService->IsQuestCompleted(world,quest);
         };
@@ -1731,6 +1823,7 @@ namespace DragonWilds {
         GameInstanceInitCallbacks.clear();
         PS::NetworkIdentityBootstrap::Stop();
         PS::ServerFilterStartup::Stop();
+        m_worldComponents.Stop();
         m_registryBridge.Stop();
         m_dataRegistrar.Shutdown();
         m_characterEntryRecovery.Shutdown();
@@ -1787,7 +1880,6 @@ namespace DragonWilds {
     {
         bool buildingOwnershipComplete=true;
         if(engineLifecyclePhase==EEngineLifecyclePhase::GameInstanceInit){
-            PS::AssetPreload::Plan<RC::StringType> plan;
             for(auto& loader:m_loaders){
                 const auto& kind=loader->GetModFolderType();
                 if(!PS::PSConfig::Get()->IsLoaderEnabled(kind)){
@@ -1801,13 +1893,9 @@ namespace DragonWilds {
                     }
                     continue;
                 }
-                if(kind=="recipes")static_cast<DragonWildsRecipeModLoader*>(loader.get())->ImportCookedDefinitions();
                 if(kind=="buildings")static_cast<DragonWildsBuildingModLoader*>(loader.get())->ImportCookedDefinitions();
                 if(kind=="journal"||kind=="lore")static_cast<DragonWildsJournalModLoader*>(loader.get())->ImportCookedDefinitions();
-                if(kind=="recipes")for(const auto& path:static_cast<DragonWildsRecipeModLoader*>(loader.get())->CookedReferencePaths())plan.Add(path);
-                if(kind=="assets")for(const auto& path:static_cast<DragonWildsAssetModLoader*>(loader.get())->CookedReferencePaths())plan.Add(path);
             }
-            try {PrefetchCookedAssets(plan);}catch(const std::exception& error){PS::Log<LogLevel::Normal>(STR("[PERF][ASSETS] Native prefetch unavailable: {}. Required-asset loading continues normally.\n"),PS::ToWideSafe(error.what()));}
         }
         if (engineLifecyclePhase == EEngineLifecyclePhase::GameInstanceInit
             && PS::PSConfig::Get()->IsLoaderEnabled("recipes")) {
@@ -1867,6 +1955,7 @@ namespace DragonWilds {
                 auto sourceVersion=identity.Version;
                 try{const auto metadata=PS::ModManager::Metadata(modPath);sourceName=metadata.value("nickname",std::string{});if(sourceName.empty())sourceName=metadata.value("name",identity.Name);sourceVersion=metadata.value("version",sourceVersion);}catch(...){}
                 PS::HelpyCacheSources::SetDisplayName(RC::to_string(modName),sourceName,sourceVersion);
+                PS::SaveBackups::ObserveMod(RC::to_string(modName),sourceName,sourceVersion);
                 bool modSuccessful=true;
                 PS::StartupTrace::Mark("load mod: " + RC::to_string(modName));
 
@@ -2012,9 +2101,13 @@ namespace DragonWilds {
     void DragonWildsMainLoader::GetPakFolders(const TCHAR* CmdLine, TArray<FString>* OutPakFolders)
     {
         GetPakFolders_Hook.call(CmdLine, OutPakFolders);
+        if (!OutPakFolders || OutPakFolders->Num() < 0 || OutPakFolders->Num() > 4096) return;
         PS::PakDiscovery::ResetRoots();
-        if(OutPakFolders&&OutPakFolders->Num()>=0&&OutPakFolders->Num()<=4096)
-            for(const auto& folder:*OutPakFolders)PS::PakDiscovery::RememberRoot(fs::path(folder.GetCharArray().GetData()));
+        std::vector<fs::path> nativeRoots;
+        for (const auto& folder : *OutPakFolders) {
+            nativeRoots.emplace_back(folder.GetCharArray().GetData());
+            PS::PakDiscovery::RememberRoot(nativeRoots.back());
+        }
 
         try
         {
@@ -2037,9 +2130,10 @@ namespace DragonWilds {
         std::map<fs::path,std::string> pakOwners;
         const auto pluginRootBegin=pakRoots.size();
         try {
-            for(const auto& plugin:PS::PluginCatalog::Discover(runeSchemaRoot/"plugins")) {
+            for(const auto& plugin:PS::PluginCatalog::DiscoverRuntime(runeSchemaRoot)) {
                 if(!plugin.Enabled)continue;
-                for(const auto& package:PS::PluginCatalog::PakDirectories(plugin)){pakRoots.push_back(package);pakOwners[package]=plugin.Id;}
+                try{for(const auto& package:PS::PluginCatalog::PakDirectories(plugin)){pakRoots.push_back(package);pakOwners[package]=plugin.Id;}}
+                catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[RS-PLUG-009] Plugin '{}' content rejected: {}; independent PAK directories continue.\n"),PS::ToWideSafe(plugin.Id),PS::ToWideSafe(error.what()));}
             }
         } catch(const std::exception& error) {
             pakRoots.resize(pluginRootBegin);
@@ -2083,6 +2177,29 @@ namespace DragonWilds {
                 PS::Log<LogLevel::Error>(STR(
                     "Mod pak order rejected; no mod PAK directories were added (fail-closed): {}\n"),
                     PS::ToWideSafe(error.what()));
+        }
+        for (const auto& root : SisterContentRoots) {
+            try {
+                const auto directories = PS::ModFolderLayout::PakReadDirectories(root.Content);
+                const auto owner = RC::to_string(root.Name);
+                for (const auto& directory : directories) {
+                    pakRoots.push_back(directory);
+                    pakOwners[directory] = owner;
+                }
+                if (!directories.empty()) {
+                    PS::MountedModRegistryOwners::Remember(owner);
+                    PS::Log<LogLevel::Normal>(STR("[SISTER-CONTENT][PAK] {}: {} startup container directories.\n"),
+                        root.Name, directories.size());
+                }
+            } catch (const std::exception& error) {
+                PS::Log<LogLevel::Warning>(STR("[SISTER-CONTENT][PAK][SKIPPED] {}: {}.\n"),
+                    root.Name, PS::ToWideSafe(error.what()));
+            }
+        }
+        for (const auto& paks : PS::PakLoader::Roots()) {
+            if (!PS::PakLoader::AlreadyRegistered(paks, nativeRoots)
+                && !PS::PakLoader::AlreadyRegistered(paks, pakRoots))
+                pakRoots.push_back(paks);
         }
         std::unordered_set<std::wstring> registered;
         size_t addedPakDirectories = 0;

@@ -7,6 +7,7 @@
 #include "Generator/HelpyPropertyValue.h"
 #include "Generator/QuickMenuDecorations.h"
 #include "SDK/Structs/Custom/FManagedStruct.h"
+#include "SDK/Structs/Custom/FArrayCopy.h"
 #include "Runtime/AuthoredFile.h"
 #include "Runtime/HelpyBundlePublish.h"
 #include "Loader/AssetAuthoringMetadata.h"
@@ -2459,30 +2460,53 @@ namespace DragonWilds {
 
         int appendCount = 0;
         int replaceCount = 0;
-        int reuseCount = 0;
-        for (const auto& action : plan)
-        {
-            if (action.Kind == ActionKind::Reuse) { ++reuseCount; continue; }
-            if (settings.Dry) continue;
-            if (action.Kind == ActionKind::Replace)
+        const int reuseCount = static_cast<int>(std::count_if(plan.begin(),plan.end(),
+            [](const auto& action){return action.Kind==ActionKind::Reuse;}));
+        const auto applyPlan = [&](void* target) {
+            FScriptArrayHelper applied(arrayProperty,target);
+            UECustom::FScriptArrayHelper destination(target,arrayProperty);
+            for (const auto& action : plan)
             {
-                auto* value = moduleProperty->ContainerPtrToValuePtr<void>(
-                    inspect.GetRawPtr(action.ExistingIndex));
-                auto* replacement = action.Module;
-                FMemory::Memcpy(value, &replacement, sizeof(replacement));
-                ++replaceCount;
-                ++outResult.PropertiesWritten;
-                continue;
+                if (action.Kind == ActionKind::Reuse) continue;
+                if (action.Kind == ActionKind::Replace)
+                {
+                    auto* value = moduleProperty->ContainerPtrToValuePtr<void>(applied.GetRawPtr(action.ExistingIndex));
+                    auto* replacement = action.Module;
+                    FMemory::Memcpy(value, &replacement, sizeof(replacement));
+                    ++replaceCount;
+                }
+                else
+                {
+                    FManagedStruct prepared(entryProperty->GetStruct().Get());
+                    auto* value = moduleProperty->ContainerPtrToValuePtr<void>(prepared.GetData());
+                    auto* imported = action.Module;
+                    FMemory::Memcpy(value, &imported, sizeof(imported));
+                    destination.Add(prepared.GetData());
+                    ++appendCount;
+                }
             }
-            UECustom::FScriptArrayHelper destination(arrayAddress, arrayProperty);
-            UECustom::FManagedValue prepared;
-            destination.InitializeValue(prepared);
-            auto* value = moduleProperty->ContainerPtrToValuePtr<void>(prepared.GetData());
-            auto* imported = action.Module;
-            FMemory::Memcpy(value, &imported, sizeof(imported));
-            destination.Add(prepared);
-            ++appendCount;
-            ++outResult.PropertiesWritten;
+        };
+        if (!settings.Dry && plan.size() != static_cast<std::size_t>(reuseCount))
+        {
+            try
+            {
+                if (settings.Atomic)
+                {
+                    UECustom::FArrayCopy copy(arrayProperty,arrayAddress);
+                    applyPlan(copy.Data);
+                    copy.Commit();
+                }
+                else applyPlan(arrayAddress);
+                outResult.PropertiesWritten += appendCount + replaceCount;
+            }
+            catch (const std::exception& error)
+            {
+                ++outResult.ErrorCount;
+                if (!settings.Atomic) outResult.PropertiesWritten += appendCount + replaceCount;
+                reportImport("RS-IMP-014","Error",settings.Atomic?"Blocked":"Partial","Import application failed",
+                    std::string(error.what()) + (settings.Atomic?"; the destination is unchanged.":"; earlier actions may already be applied."),"Application");
+                return false;
+            }
         }
 
         const auto shortObjectName = [](const std::string& path) -> std::string {
@@ -2966,7 +2990,13 @@ namespace DragonWilds {
                     + std::to_string(requests.size()) + " resolved, " + std::to_string(plan.size())
                     + " planned, " + std::to_string(totalErrors) + " errors; no changes applied.","Planning");
             if (totalErrors == 0)
+            {
+                reportImport("RS-IMP-013","Info","Succeeded","Dry-run import plan ready",
+                    "Dry-run only: " + std::to_string(settings.Modules.size()) + " requested, "
+                    + std::to_string(requests.size()) + " resolved, " + std::to_string(plan.size())
+                    + " planned, " + std::to_string(reuseCount) + " reused; no changes applied.","Planning");
                 PS::Log<LogLevel::Normal>(STR("{}"), RC::to_generic_string(report.str()));
+            }
             else
                 PS::Log<LogLevel::Error>(STR("{}"), RC::to_generic_string(report.str()));
         }

@@ -1,3 +1,4 @@
+#include "RuntimePaths.h"
 #pragma once
 #include "Core/RuneSchemaDataRoot.h"
 #include "imgui.h"
@@ -79,7 +80,7 @@ inline std::string Status="Theme not loaded yet.";
 
 inline bool UseUserAppData = true;
 inline std::filesystem::path RootThemePath() {
-    return HostServices::WorkingDirectory()/"Mods"/"RuneSchema"/"plugins"/"RuneSchema.Helpy"/"settings"/"ui.jsonc";
+    return RuntimePaths::Helpy(HostServices::ModDirectory())/"settings/ui.jsonc";
 }
 inline std::filesystem::path UserThemePath() {
     return RuneSchemaData::SharedDirectory("HELPY")/"ui.jsonc";

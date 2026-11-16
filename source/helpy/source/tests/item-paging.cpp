@@ -17,6 +17,21 @@ int main(){using namespace PS::ItemPaging;
     assert(Describe("discovering-items",false,0,{},false).Label=="Discovering items...");
     assert(Describe("discovering-items",false,12,{},false).Label.find("12 found")!=std::string::npos);
     for(const float angle:{0.f,1.f,3.14f,10.f}){const auto quad=PS::LoadingIndicator::Quad({200,150},13,angle);float x=0,y=0;for(const auto& p:quad){x+=p.X;y+=p.Y;}assert(std::abs(x/4-200)<.001f&&std::abs(y/4-150)<.001f);}
+    for(int frame=0;frame<720;++frame){const double time=frame/60.;const auto a=PS::LoadingIndicator::Startup(time,true),b=PS::LoadingIndicator::Startup(time+1./60,true);
+        assert(a.RuneAlpha>=0&&a.RuneAlpha<=1&&std::isfinite(a.Angle));
+        assert(std::abs(std::sin(a.Angle)-std::sin(b.Angle))<.054f&&std::abs(std::cos(a.Angle)-std::cos(b.Angle))<.054f&&std::abs(a.RuneAlpha-b.RuneAlpha)<.051f);
+    }
+    const auto still=PS::LoadingIndicator::Startup(99,false);assert(still.RuneAlpha==1&&still.Angle==0);
+    for(const auto size:{PS::LoadingIndicator::Point{320,240},{760,560},{1280,720},{1920,1080},{3840,2160}})for(const float scale:{.75f,1.f,1.5f,3.f})for(const float font:{.75f,1.f,3.f}){
+        const auto layout=PS::LoadingIndicator::FitStartup(size.X,size.Y,scale,font);
+        assert(layout.Width<=size.X&&layout.Height<=size.Y&&layout.Width>0&&layout.Height>0);
+        assert(layout.WheelY-layout.WheelRadius>layout.LogoY+layout.RuneSize*.5f);
+        assert(layout.TextY>layout.WheelY+layout.WheelRadius*std::sqrt(2.f)&&layout.TipY>layout.TextY);
+        assert((size.Y-layout.Height)*.5f+layout.LogoY<size.Y*.5f);
+    }
+    const auto large=PS::LoadingIndicator::FitStartup(1920,1080,1);
+    assert(large.GameWidth==720&&large.RuneSize==260&&large.WheelRadius==24);
+    assert(PS::LoadingIndicator::StartupFps(true)==60&&PS::LoadingIndicator::StartupFps(false)==2);
     assert(Describe("reading-catalogue",false,0,{},false).Label=="Loading cached items...");
     const auto icons=Describe("cached-items",true,100,{3,5,0},false);assert(icons.Busy&&icons.Fraction==.6f&&icons.Label.find("3 / 5")!=std::string::npos);
     assert(!Describe("items-ready",true,100,{4,5,1},false).Busy);

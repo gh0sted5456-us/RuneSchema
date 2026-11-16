@@ -47,7 +47,10 @@ public:
     bool Accept(uint64_t id,const Json& receipt){
         if(!m_pending||id!=m_pending||Finished())return false;
         const bool complete=std::all_of(m_items.begin(),m_items.end(),[&](const auto& item){return Outcome(receipt,item)!="Unconfirmed";});
-        m_receipts.push_back({{"Player",m_players[m_next].Path},{"Name",m_players[m_next].Name},{"Receipt",receipt}});
+        Json compact=Json::object();
+        if(const auto status=receipt.find("Status");status!=receipt.end()&&status->is_string())compact["Status"]=*status;
+        if(const auto rows=receipt.find("GrantResults");rows!=receipt.end()&&rows->is_array()&&rows->size()<=ItemCart::Model::Limit)compact["GrantResults"]=*rows;
+        m_receipts.push_back({{"Player",m_players[m_next].Path},{"Name",m_players[m_next].Name},{"Receipt",std::move(compact)}});
         m_pending=0;++m_next;if(!complete)m_stopped=true;return true;
     }
     void Stop(){m_pending=0;m_stopped=true;}

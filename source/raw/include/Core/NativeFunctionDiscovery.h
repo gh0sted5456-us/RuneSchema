@@ -1,7 +1,6 @@
 #pragma once
 #include <algorithm>
 #include <cstdint>
-#include <cstring>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -30,18 +29,20 @@ inline std::optional<std::uint32_t> FindUnique(std::span<const Region> regions,
     const auto pattern=Parse(signature);std::optional<std::uint32_t> result;
     for(const auto& region:regions) {
         if(region.Bytes.size()<pattern.size())continue;
-        size_t position=0;
-        const auto limit=region.Bytes.size()-pattern.size()+1;
-        while(position<limit) {
-            const auto* next=static_cast<const std::uint8_t*>(std::memchr(region.Bytes.data()+position,pattern[0],limit-position));
-            if(!next)break;position=static_cast<size_t>(next-region.Bytes.data());
+        const auto limit=region.Bytes.size()-pattern.size();
+        const auto first=std::lower_bound(sortedEntries.begin(),sortedEntries.end(),region.Rva);
+        for(auto entry=first;entry!=sortedEntries.end();++entry) {
+            const auto offset=static_cast<size_t>(*entry-region.Rva);
+            if(offset>limit)break;
+            if(entry!=first&&*entry==entry[-1])continue;
+            const auto* bytes=region.Bytes.data()+offset;
+            if(bytes[0]!=pattern[0])continue;
             bool matched=true;
-            for(size_t i=1;i<pattern.size();++i)if(pattern[i]>=0&&next[i]!=pattern[i]){matched=false;break;}
-            const auto rva=static_cast<std::uint64_t>(region.Rva)+position;
-            if(matched&&rva<=UINT32_MAX&&std::binary_search(sortedEntries.begin(),sortedEntries.end(),static_cast<std::uint32_t>(rva))) {
-                if(result)return {};result=static_cast<std::uint32_t>(rva);
+            for(size_t i=1;i<pattern.size();++i)if(pattern[i]>=0&&bytes[i]!=pattern[i]){matched=false;break;}
+            if(matched) {
+                if(result)return {};
+                result=*entry;
             }
-            ++position;
         }
     }
     return result;

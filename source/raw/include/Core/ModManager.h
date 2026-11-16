@@ -4,6 +4,7 @@
 #include "Utility/ModFolderLayout.h"
 #include "Core/ConfigFiles.h"
 #include "Core/ModIdentity.h"
+#include "Core/CacheTips.h"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <set>
@@ -35,12 +36,16 @@ inline Json Metadata(const std::filesystem::path& folder){
     if(std::filesystem::exists(identityFile)){const auto identity=ModIdentity::Parse(ConfigFiles::Read(identityFile,64*1024),folder.filename().string());
         display={{"name",identity.Name},{"nickname",identity.Nickname},{"author",identity.Author},{"version",identity.Version},{"website",identity.Website},{"modId",identity.Id},{"build",identity.Build},{"nexusModId",identity.NexusModID},{"nexusFileId",identity.NexusFileID},{"description",identity.Description}};
         if(!identity.Banner.empty())display["banner"]=identity.Banner;
+        if(!identity.Tips.empty())display["tips"]=identity.Tips;
     }
+    const auto tips=folder/"cache/tips.json";
+    try{Safe(tips);if(std::filesystem::is_regular_file(tips)){auto entries=display.value("tips",Json::array());for(const auto& [key,tip]:CacheTips::Read(tips,"mods/"+Order::Fold(folder.filename().string())))if(std::find(entries.begin(),entries.end(),tip.at("Text"))==entries.end())entries.push_back(tip.at("Text"));display["tips"]=std::move(entries);}}
+    catch(const std::exception& error){display["tipsIssue"]=std::string(error.what()).substr(0,512);}
     const auto file=folder/"mod.json";Safe(file);
     if(!std::filesystem::exists(file))return display;
     auto document=Json::parse(ConfigFiles::Read(file,128*1024));
     if(!document.is_object()||(document.contains("format")&&document.at("format")!=1)||document.value("id",folder.filename().string())!=folder.filename().string())throw std::runtime_error("mod.json has an unsupported format or a different folder ID.");
-    for(const auto* key:{"name","version","author","description","banner"})if(document.contains(key)&&document[key].is_string())display[key]=document[key].get<std::string>().substr(0,1024);
+    for(const auto* key:{"name","version","author","description","banner"})if(document.contains(key)&&document[key].is_string()&&(std::string_view(key)!="version"||display.value("version",std::string{}).empty()))display[key]=document[key].get<std::string>().substr(0,1024);
     for(const auto* key:{"website","url"})if(document.value(key,Json{}).is_string()){const auto url=document.at(key).get<std::string>();if(url.size()<=2048&&(url.starts_with("https://")||url.starts_with("http://"))&&std::none_of(url.begin(),url.end(),[](unsigned char c){return c<32||c==127;}))display["website"]=url;}
     if(document.value("contentRoot",Json{}).is_string())display["contentRoot"]=document.at("contentRoot").get<std::string>().substr(0,1024);
     if(document.contains("history")&&document["history"].is_array()){
@@ -85,6 +90,7 @@ inline Json Read(const std::filesystem::path& root,bool orderEnabled){
                 else if(ModFolderLayout::IsContentDirectoryName(name))row["Loaders"].push_back("RuneSchema: "+name);
             }
             row["HasCache"]=std::filesystem::is_directory(folder/"cache");
+            if(std::error_code ignored;std::filesystem::is_regular_file(folder/"cache"/"achievements.json",ignored))row["HasAchievements"]=true;
         }output.push_back(std::move(row));
     }
     return {{"Ok",true},{"OrderEnabled",orderEnabled},{"ExpectedExists",before.Exists},{"ExpectedContents",before.Contents},{"Rows",std::move(output)}};
@@ -93,10 +99,13 @@ inline Json Save(const std::filesystem::path& root,bool enabled,const Json& requ
     std::lock_guard lock(Gate);if(!enabled)throw std::runtime_error("Enable RuneSchema load-order handling in Settings first.");
     const auto current=Read(root,enabled);const Order::Snapshot expected{request.at("ExpectedExists").get<bool>(),request.at("ExpectedContents").get<std::string>()};
     if(expected.Contents.size()>8*1024*1024||current.at("ExpectedContents")!=expected.Contents||current.at("ExpectedExists")!=expected.Exists)throw std::runtime_error("Mod order changed externally. Refresh before applying.");
-    std::set<std::string> required,provided;for(const auto& row:current.at("Rows"))required.insert(Order::Fold(row.at("Name").get<std::string>()));
+    std::set<std::string> allowed,required,provided;for(const auto& row:current.at("Rows")){
+        const auto name=Order::Fold(row.at("Name").get<std::string>());allowed.insert(name);if(row.value("Present",true))required.insert(name);
+    }
     std::vector<Order::Entry> entries;const auto& rows=request.at("Rows");if(!rows.is_array()||rows.size()>1024)throw std::runtime_error("Invalid mod order.");
     for(const auto& row:rows){const auto name=row.at("Name").get<std::string>();if(!Name(name)||!provided.insert(Order::Fold(name)).second)throw std::runtime_error("Invalid or duplicate mod folder.");entries.push_back({name,row.at("Enabled").get<bool>()});}
-    if(required!=provided)throw std::runtime_error("The mod list changed. Refresh before applying.");
+    if(!std::includes(provided.begin(),provided.end(),required.begin(),required.end())
+        ||!std::includes(allowed.begin(),allowed.end(),provided.begin(),provided.end()))throw std::runtime_error("The mod list changed. Refresh before applying.");
     const auto file=root/"mods"/"runeschema.txt";Safe(file);
     if(expected.Exists)ConfigFiles::Backup(file);
     if(!Order::WriteExpected(file,expected,Order::Serialize(entries,expected,true)))throw std::runtime_error("Mod order changed externally; nothing applied.");

@@ -8,6 +8,8 @@ int main(int argc,char** argv){
     file(root/"MaxCape/ue4ss/MaxCape/Scripts/main.lua");file(root/"MaxCape/ue4ss/MaxCape/config.txt");file(root/"MaxCape/ue4ss/MaxCape/modmenu.json");
     auto packages=Discover(root/"MaxCape","MaxCape");assert(packages.size()==1&&packages[0].Name=="MaxCape"&&packages[0].Main.filename()=="main.lua");
     assert(fs::is_regular_file(packages[0].Root/"config.txt")&&fs::is_regular_file(packages[0].Root/"modmenu.json"));
+    {std::ofstream status(root/"MaxCape/ue4ss/status.txt");status<<"0\n";}auto disabled=Discover(root/"MaxCape","MaxCape");assert(disabled.size()==1&&!disabled[0].Enabled&&Manifest(root,disabled).find("\tlua\n")==std::string::npos);
+    {std::ofstream status(root/"MaxCape/ue4ss/status.txt");status<<"1\n";}assert(Discover(root/"MaxCape","MaxCape")[0].Enabled);
     file(root/"MaxCape/ue4ss/NativePart/dlls/main.dll");packages=Discover(root/"MaxCape","MaxCape");assert(packages.size()==2&&!packages[1].Native.empty());
     const auto manifest=Manifest(root,packages);assert(manifest.find("MaxCape/ue4ss/MaxCape\tScripts/main.lua\tlua")!=std::string::npos&&manifest.find("\tnative\n")!=std::string::npos);
     file(root/"Legacy/ue4ss/scripts/main.lua");assert(Discover(root/"Legacy","Legacy").size()==1);
@@ -20,4 +22,10 @@ int main(int argc,char** argv){
     assert(Manifest(root,{}).find("\tlua\n")==std::string::npos); // Disabled parents produce no executable rows.
     file(root/"CustomDll/ue4ss/A/Scripts/main.lua");file(root/"CustomDll/ue4ss/A/dlls/custom.DLL");
     packages=Discover(root/"CustomDll","CustomDll");assert(packages.size()==1&&!packages[0].Native.empty());
+    const auto sister = root / "SisterContentExample/runeschema";
+    file(sister / "raws/example.json");
+    assert(PS::ModFolderLayout::LooksLikeRuneSchemaMod(sister));
+    assert(PS::ModFolderLayout::ResolveLoaderDirectory(sister, "raw") == sister / "raws");
+    file(sister / "raw/example.json");
+    assert(PS::ModFolderLayout::ResolveLoaderDirectory(sister, "raw") == sister / "raw");
 }

@@ -1,6 +1,8 @@
 #pragma once
 #include "Utility/Config.h"
 #include "Core/HelpyShortcut.h"
+#include "../../../shared/InputBindings.h"
+#include "Core/HelpyRemoteAccess.h"
 #include "glaze/glaze.hpp"
 #include <stdexcept>
 #include <string_view>
@@ -29,8 +31,14 @@ namespace PS {
         const auto error = glz::read<glz::opts{.error_on_unknown_keys = false, .error_on_missing_keys = false}>(candidate, json);
         if (error) throw std::runtime_error(glz::format_error(error, json));
         const auto source=nlohmann::json::parse(json);
-        const auto* shortcut=HelpyShortcut::Find(candidate.helpyHotkey);
-        candidate.helpyHotkey=shortcut?std::string(shortcut->Name):"F2";
+        if(candidate.helpyAuthority.maximumItemCount<0)
+            throw std::runtime_error("Helpy maximumItemCount must be zero or a positive whole number");
+        for(const auto& player:candidate.helpyAuthority.authorizedPlayers)
+            if(!HelpyPlayerAuthorization::Valid(player))throw std::runtime_error("Invalid saved Helpy player authorization");
+        if(candidate.helpyAuthority.allowPinAccess&&!HelpyRemoteAccess::Sessions::ValidPin(candidate.helpyAuthority.accessPin))
+            throw std::runtime_error("Helpy server PIN must contain 8-64 printable characters without spaces");
+        try{candidate.helpyHotkey=InputBindings::Text(InputBindings::Parse(candidate.helpyHotkey));}
+        catch(const std::exception&){candidate.helpyHotkey="F2";}
         auto& launch=candidate.quickLaunch;
         if(!source.contains(nlohmann::json::json_pointer("/quickLaunch/mode")))
             launch.mode=launch.enabled?"quickLaunch":"lessRestrictive";
@@ -49,6 +57,6 @@ namespace PS {
         return std::string{
             "// RuneSchema settings. Edit with the game closed, then restart.\n"
             "// Advanced logging controls detail; advanced runtime unlocks authoring and diagnostics.\n"
-            "// Plugin-owned settings live below plugins/<PluginId>/settings/.\n"}+text+"\n";
+            "// Plugin-owned settings live below dlls/plugins/<PluginId>/settings/ or Helpy/settings/.\n"}+text+"\n";
     }
 }

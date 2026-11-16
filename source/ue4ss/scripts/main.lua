@@ -41,6 +41,18 @@ if mappingOk and type(mappingLoader) == "function" then
     if not ran then log("[MAPPINGS][DEFERRED] " .. tostring(failure)) end
 end
 
+-- The native gate only registers this entry point after both developer opt-ins
+-- and the separate Mod Menu's configured state have been checked.
+if type(RuneSchemaModMenuExchange)=="function" then
+    local ok, issue=pcall(dofile,root.."/scripts/helpy-mod-menu.lua")
+    if not ok then log("[MOD-MENU][INACTIVE] "..tostring(issue)) end
+end
+
+if type(RuneSchemaHUDRegister)=="function" then
+    local ok,issue=pcall(dofile,root.."/scripts/helpy-hud.lua")
+    if not ok then log("[HUD][INACTIVE] "..tostring(issue)) end
+end
+
 local relayOk, relayApi = pcall(dofile, root .. "/scripts/mod-data-relay.lua")
 if relayOk then RuneSchemaRelay=relayApi else log("[MOD-DATA][UNAVAILABLE] "..tostring(relayApi)) end
 

@@ -1,4 +1,5 @@
 #pragma once
+#include "Generator/HelpyTextInput.h"
 #include "Generator/HelpyImGuiTheme.h"
 #include "Generator/AuthoringClient.h"
 #include <imgui.h>
@@ -21,7 +22,7 @@ inline bool TraceControls(Json& options){
         bool on=options.value(key,std::string_view(key)=="SuppressTicks");if(ImGui::Checkbox(label,&on)){options[key]=on;changed=true;}
     }
     char filter[129]{};std::snprintf(filter,sizeof(filter),"%s",options.value("Filter",std::string{}).c_str());
-    if(ImGui::InputText("Function path contains",filter,sizeof(filter))){options["Filter"]=filter;changed=true;}
+    if(HelpyTextInput::InputText("Function path contains",filter,sizeof(filter))){options["Filter"]=filter;changed=true;}
     if(changed){options["Seconds"]=seconds;options["MaxEvents"]=events;options["Categories"]=mask;}
     ImGui::TextWrapped("IncludeAny / ExcludeAny filter lists and EventCaptures field paths are editable in the JSONC below. Parameter or field capture requires a specific function filter. Native limits and validation are unchanged.");
     return changed;
@@ -44,14 +45,14 @@ inline void Object(const Json& object,ImGuiTextFilter& filter){
     }ImGui::PopID();
 }
 inline void Snapshot(const Json& report,ImGuiTextFilter& filter){
-    ImGui::BeginChild("##captured-fields",ImVec2(0,260),true);
+    HelpyImGuiTheme::BeginPanel("##captured-fields",ImVec2(0,260),true);
     if(report.contains("object")&&report["object"].is_object())Object(report["object"],filter);
     if(report.contains("components")&&report["components"].is_array())for(const auto& component:report["components"]){
         const auto path=component.value("path",std::string{});if(ImGui::TreeNode(path.c_str())){Object(component,filter);ImGui::TreePop();}
     }
     if(report.contains("controller")&&report["controller"].is_object()&&ImGui::TreeNode("Controller fields")){Object(report["controller"],filter);ImGui::TreePop();}
     if(report.contains("functions")&&ImGui::TreeNode("Function signatures")){for(const auto& fn:report["functions"]){const auto line=fn.dump();if(filter.PassFilter(line.c_str()))ImGui::TextWrapped("%s",line.c_str());}ImGui::TreePop();}
-    ImGui::EndChild();
+    PS::HelpyImGuiTheme::EndPanel();
 }
 inline void SavedReport(const Json& report,bool world){
     ImGui::TextWrapped("%s",report.value("Coverage",std::string{}).c_str());

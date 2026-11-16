@@ -11,6 +11,7 @@
 #include "Engine/Blueprint.h"
 #include "Engine/DataAsset.h"
 #include "Components/ActorComponent.h"
+#include "GameFramework/Actor.h"
 #include "UObject/Package.h"
 #include "UObject/UnrealType.h"
 
@@ -25,7 +26,7 @@ constexpr TCHAR PluginConnectionPath[] = TEXT("/RuneSchema/Networking/Extensions
 constexpr TCHAR PluginStatePath[] = TEXT("/RuneSchema/Networking/Extensions/BPC_RuneSchemaPluginState.BPC_RuneSchemaPluginState");
 constexpr TCHAR PluginPresentationPath[] = TEXT("/RuneSchema/Networking/Extensions/BPC_RuneSchemaPluginPresentation.BPC_RuneSchemaPluginPresentation");
 constexpr TCHAR ContentRegistryBridgePath[] = TEXT("/RuneSchema/Registry/PDA_RuneSchemaRegistryBridgeBase.PDA_RuneSchemaRegistryBridgeBase");
-struct PinSpec { const TCHAR* Name; FName Category; };
+struct PinSpec { const TCHAR* Name; FName Category; UClass* ObjectClass=nullptr; };
 struct EventSpec { const TCHAR* Name; EFunctionFlags Flags; TArray<PinSpec> Pins; int32 Y; };
 
 bool HasEvent(const UEdGraph* Graph, const FName Name)
@@ -56,6 +57,7 @@ bool AddEvent(UEdGraph* Graph, const EventSpec& Spec)
     {
         FEdGraphPinType Type;
         Type.PinCategory = Pin.Category;
+        Type.PinSubCategoryObject = Pin.ObjectClass;
         if (!Event->CreateUserDefinedPin(Pin.Name, Type, EGPD_Output)) return false;
     }
     return true;
@@ -195,6 +197,22 @@ bool VerifyIdentityContract()
     return Valid;
 }
 
+bool VerifyCharacterAppearanceContract()
+{
+    UBlueprint* Blueprint=LoadObject<UBlueprint>(nullptr,RegistryPath);
+    UFunction* Function=Blueprint&&Blueprint->GeneratedClass?Blueprint->GeneratedClass->FindFunctionByName(TEXT("ClientRuneSchemaCharacterAppearance")):nullptr;
+    if(!Function||!Function->HasAllFunctionFlags(FUNC_Net|FUNC_NetClient|FUNC_NetReliable)||Function->NumParms!=6)return false;
+    const FObjectProperty* Subject=FindFProperty<FObjectProperty>(Function,TEXT("Subject"));
+    UFunction* Visibility=Blueprint->GeneratedClass->FindFunctionByName(TEXT("ServerSetRuneSchemaAppearanceSubject"));
+    const FObjectProperty* VisibleSubject=Visibility?FindFProperty<FObjectProperty>(Visibility,TEXT("Subject")):nullptr;
+    return Visibility&&Visibility->HasAllFunctionFlags(FUNC_Net|FUNC_NetServer|FUNC_NetReliable)&&Visibility->NumParms==2
+        &&VisibleSubject&&VisibleSubject->PropertyClass==AActor::StaticClass()&&FindFProperty<FBoolProperty>(Visibility,TEXT("Present"))
+        &&Subject&&Subject->PropertyClass==AActor::StaticClass()
+        &&FindFProperty<FStrProperty>(Function,TEXT("RegistryKey"))&&FindFProperty<FStrProperty>(Function,TEXT("CharacterGuid"))
+        &&FindFProperty<FStrProperty>(Function,TEXT("Payload"))&&FindFProperty<FInt64Property>(Function,TEXT("Revision"))
+        &&FindFProperty<FBoolProperty>(Function,TEXT("Removed"));
+}
+
 bool AuthorBridges()
 {
     if (!MigrateCoreAssets()) return false;
@@ -225,7 +243,13 @@ bool AuthorBridges()
         {TEXT("ClientRuneSchemaReceipt"), Common | FUNC_NetClient,
             {{TEXT("Channel"), UEdGraphSchema_K2::PC_String}, {TEXT("EntityId"), UEdGraphSchema_K2::PC_String},
              {TEXT("Revision"), UEdGraphSchema_K2::PC_Int64}, {TEXT("Success"), UEdGraphSchema_K2::PC_Boolean},
-             {TEXT("Detail"), UEdGraphSchema_K2::PC_String}}, 1536}
+             {TEXT("Detail"), UEdGraphSchema_K2::PC_String}}, 1536},
+        {TEXT("ClientRuneSchemaCharacterAppearance"), Common | FUNC_NetClient,
+            {{TEXT("RegistryKey"), UEdGraphSchema_K2::PC_String}, {TEXT("Subject"), UEdGraphSchema_K2::PC_Object, AActor::StaticClass()},
+             {TEXT("CharacterGuid"), UEdGraphSchema_K2::PC_String}, {TEXT("Payload"), UEdGraphSchema_K2::PC_String},
+             {TEXT("Revision"), UEdGraphSchema_K2::PC_Int64}, {TEXT("Removed"), UEdGraphSchema_K2::PC_Boolean}}, 1792},
+        {TEXT("ServerSetRuneSchemaAppearanceSubject"), Common | FUNC_NetServer,
+            {{TEXT("Subject"), UEdGraphSchema_K2::PC_Object, AActor::StaticClass()}, {TEXT("Present"), UEdGraphSchema_K2::PC_Boolean}}, 2048}
     };
     const TArray<EventSpec> IdentityEvents{
         {TEXT("OnRep_IdentityPayload"), FUNC_BlueprintEvent | FUNC_Public, {}, 64},
@@ -263,7 +287,7 @@ bool AuthorBridges()
     UEditorAssetSubsystem* Assets = GEditor ? GEditor->GetEditorSubsystem<UEditorAssetSubsystem>() : nullptr;
     if (World->Status == BS_Error || !Assets || !Assets->SaveLoadedAsset(World,false)) return false;
     if (!AuthorBlueprint(RegistryPath, RegistryEvents) || !AuthorBlueprint(IdentityPath, IdentityEvents)
-        || !VerifyIdentityContract()) return false;
+        || !VerifyIdentityContract() || !VerifyCharacterAppearanceContract()) return false;
     const TArray<EventSpec> ConnectionEvents{
         {TEXT("ServerRuneSchemaPluginRequest"), Common | FUNC_NetServer,
             {{TEXT("PluginId"), UEdGraphSchema_K2::PC_String}, {TEXT("Connection"), UEdGraphSchema_K2::PC_String},

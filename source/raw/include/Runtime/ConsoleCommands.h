@@ -2,6 +2,8 @@
 #include "Core/ConsoleCommand.h"
 #include "Runtime/PluginHost.h"
 #include "Runtime/ConsoleMenu.h"
+#include "Runtime/ModConsoleCommands.h"
+#include "Utility/StructuredDiagnosticB3D.h"
 #include "Unreal/FOutputDevice.hpp"
 #include "Unreal/Hooks.hpp"
 #include "Utility/Logging.h"
@@ -43,7 +45,7 @@ public:
             [this,&host](auto& iteration,RC::Unreal::ULocalPlayer* player,RC::Unreal::UWorld*,const TCHAR* input,RC::Unreal::FOutputDevice& output){
                 if(!input||iteration.OriginalFunctionCallPrevented()||iteration.IsReturnValueOverrode())return;
                 // Bound inspection; commands outside our exact namespace pass through untouched.
-                const auto length=wcsnlen_s(input,512);
+                const auto length=wcsnlen_s(input,1024);
                 const auto command=Parse(std::wstring_view(input,length));
                 if(command==Command::NotOurs)return;
                 if(!iteration.TrySetReturnValue(true))return;
@@ -51,6 +53,7 @@ public:
                 RC::StringType reply;
                 try{
                     if(command==Command::Help)reply=Help;
+                    else if(command==Command::Mod)reply=ToWideSafe(DispatchMod(player,*ParseMod(std::wstring_view(input,length))));
                     else if(command==Command::Invalid)reply=TEXT("Invalid RuneSchema command. Use: rs help");
                     else{
                         nlohmann::json result;
@@ -74,7 +77,10 @@ public:
                         const auto text=result.dump(2);
                         reply=text.size()<=16384?ToWideSafe(text):TEXT("Diagnostic response exceeds console limit; use Helpy for full details.");
                     }
-                }catch(const std::exception& error){reply=ToWideSafe(std::string("RuneSchema command unavailable: ")+error.what());}
+                }catch(const std::exception& error){
+                    reply=ToWideSafe(std::string("RuneSchema command unavailable: ")+error.what());
+                    if(command==Command::Mod)StructuredDiagnosticB3D::Report("RS-CMD-001","Warning","Rejected","Mod console command unavailable",error.what(),"ModConsoleCommands","Application");
+                }
                 catch(...){reply=TEXT("RuneSchema command unavailable. See RuneSchema.log.");}
                 output.Log(reply.c_str());
                 Log<RC::LogLevel::Normal>(TEXT("[CONSOLE] {}\n"),reply);

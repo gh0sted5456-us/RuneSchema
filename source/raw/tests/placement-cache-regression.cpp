@@ -32,7 +32,7 @@ int main(int argc,char** argv)try{
     Check(spawn.find("SetActorLocation(")==std::string::npos,"Event reconciliation uses an unchecked positional write");
     const auto metadata=catalog.find("static std::string mountedScope");
     const auto scope=catalog.find("const auto metadataScope=json::array({generation,HelpySourceCache::PublishedCatalogKey(),HelpySourceCache::Current.Authoritative,HelpySourceCache::Current.Provisional}).dump()",metadata);
-    const auto refresh=catalog.find("if(!mountedReady||mountedScope!=metadataScope)",scope);
+    const auto refresh=catalog.find("if(refreshMounted||!mountedReady||mountedScope!=metadataScope)",scope);
     const auto reset=catalog.find("if(mountedScope!=metadataScope){mountedReady=false;mountedItems.clear();}",refresh);
     const auto ensure=catalog.find("if(!classMetadataReady&&CookedAssets::TryEnsure())",reset);
     const auto committed=catalog.find("mountedReady=true",ensure);
@@ -46,7 +46,7 @@ int main(int argc,char** argv)try{
         &&catalog.find("if(Usable(loaded))continue")==std::string::npos,
         "Mounted items loaded after the class snapshot must remain discoverable, including recycled UObject handles");
     Check(catalog.find("ItemManifest.Restore(manifest,diskScope,basicCache,legacyScope)")!=std::string::npos&&catalog.find("ItemManifest.Persist(manifest,diskScope,cache)")!=std::string::npos,"Item browsing must restore and retain a verified source-scoped manifest");
-    Check(catalog.find("PersistentItemCatalog::DiskScope(published,paths,language)")!=std::string::npos,"Item browsing must use the stable content catalogue fingerprint");
+    Check(catalog.find("PersistentItemCatalog::DiskScope(published,pathDigest,language)")!=std::string::npos&&catalog.find("pathDigest=CacheBundleIO::Hash(json(paths).dump())")!=std::string::npos,"Item browsing must use the stable content catalogue and roster fingerprints");
     Check(catalog.find("published.value(\"Authoritative\",false)")<catalog.find("ItemManifest.Restore("),"Saved item rows must wait for the live mounted source manifest");
     Check(npc.find("PS::WorkSlice work")!=std::string::npos&&npc.find("m_npcWorkPending || groundRetryReady")!=std::string::npos,"NPC batches must resume across frames without consuming scan/retry gates");
     Check(bulk.find("MetadataWindow(MetadataAt,128)")!=std::string::npos&&bulk.find("page.Revision!=MetadataRevision")!=std::string::npos,"Icon discovery must use bounded, revision-checked metadata windows");

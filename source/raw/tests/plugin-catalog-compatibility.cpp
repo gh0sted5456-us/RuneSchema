@@ -34,7 +34,7 @@ static void AddPakTriplet(const fs::path& plugin)
     Write(package / "CompatibilityContent.utoc");
 }
 
-int main()
+int main() try
 {
     const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
     const auto root = fs::temp_directory_path() / ("runeschema-plugin-contract-" + std::to_string(nonce));
@@ -87,6 +87,23 @@ int main()
         if(plugin.Id=="Alpha") Check(packs.empty(),"MountPaks false ignores stale native-plugin package content");
         else Check(packs.size()==1,"complete PAK triplet remains independently mountable");
     }
+    {
+        PS::PluginCatalog::Plugin linked;linked.Id="VortexLinked";linked.PaksRoot=root/"vortex"/"paks";
+        const auto stage=root/"staging",package=linked.PaksRoot/"RegistryBridge";
+        fs::create_directories(package);
+        for(const auto& name:{"RegistryBridge_P.PAK","registrybridge_p.ucas","RegistryBridge_P.UTOC"}){
+            Write(stage/name,"fixture");fs::create_hard_link(stage/name,package/name);
+        }
+        Write(linked.PaksRoot/"metadata-only"/"__folder_managed_by_vortex","ignored");
+        Check(PS::PluginCatalog::PakDirectories(linked).size()==1,"mixed-case hardlinked triplet accepts Windows filename semantics");
+        fs::remove(package/"registrybridge_p.ucas");bool rejected=false;
+        try{PS::PluginCatalog::PakDirectories(linked);}catch(const std::exception& error){
+            const std::string message=error.what();rejected=message.find("missing")!=message.npos&&message.find(".ucas")!=message.npos&&message.find("found")!=message.npos;
+        }
+        Check(rejected,"missing hardlink is rejected with the exact absent part and observed filenames");
+        fs::create_hard_link(stage/"registrybridge_p.ucas",package/"registrybridge_p.ucas");
+        Check(PS::PluginCatalog::PakDirectories(linked).size()==1,"redeployed complete triplet recovers without renaming staging files");
+    }
 
     bool missingDependency = false;
     bool cycle = false;
@@ -105,8 +122,13 @@ int main()
         Write(folder/"plugin.json",
             std::string("{\"SchemaVersion\":1,\"Id\":\"")+id+"\",\"Version\":\"1.0.0\"}");
     }
-    Write(orderRoot/"plugins.txt","GammaOrder:1\nAlphaOrder:1\nBetaOrder:1\n");
-    const auto ordered=PS::PluginCatalog::Discover(orderRoot);
+    Write(orderRoot/"GammaOrder/plugin.json",std::string(300*1024,' ')+R"({"Id":"GammaOrder","Version":"1.0.0"})");
+    Write(orderRoot/"plugins.txt","\xEF\xBB\xBF" "GammaOrder:1\n#"+std::string(300*1024,' ')
+        +"\ninvalid entry\nAlphaOrder:1\nBetaOrder:1\n");
+    std::vector<std::string> orderDiagnostics;
+    const auto ordered=PS::PluginCatalog::Discover(orderRoot,&orderDiagnostics);
+    Check(orderDiagnostics.size()==1&&orderDiagnostics.front().find("line 3")!=std::string::npos,
+        "only the malformed order line is ignored and reported");
     Check(ordered.size()==3,"ordered plugin fixture is complete");
     Check(ordered[0].Id=="GammaOrder"&&ordered[1].Id=="AlphaOrder"&&ordered[2].Id=="BetaOrder",
         "plugins.txt top-to-bottom order is preserved when dependencies do not constrain it");
@@ -132,6 +154,44 @@ int main()
     const auto migrated=PS::PluginCatalog::Discover(migrationRoot);
     Check(migrated.size()==1&&migrated[0].Id=="RSNetworking","renamed networking plugin suppresses leftover legacy folder");
     Check(migrated[0].Enabled,"new RSNetworking order entry wins after legacy alias normalization");
+    const auto sharedRoot=root/"shared-provider",network=sharedRoot/"RSNetworking",shared=sharedRoot/"RuneSchema.RegistryBridge";
+    Write(network/"plugin.json",R"({"SchemaVersion":99,"Id":"RSNetworking","Version":"0.8.0.3"})");
+    Write(shared/"plugin.json",R"({"Id":"RuneSchema.RegistryBridge","Version":"0.8.0.3"})");
+    AddPakTriplet(network);AddPakTriplet(shared);
+    Write(network/"paks"/"RegistryBridge"/"RegistryBridge_P.pak","obsolete partial copy");
+    const auto preferred=PS::PluginCatalog::Discover(sharedRoot);
+    const auto current=std::find_if(preferred.begin(),preferred.end(),[](const auto& plugin){return plugin.Id=="RSNetworking";});
+    Check(current!=preferred.end()&&current->PreferSharedRegistry&&PS::PluginCatalog::PakDirectories(*current).size()==1,"valid shared provider supersedes an incomplete retired networking copy");
+    Write(sharedRoot/"plugins.txt","RuneSchema.RegistryBridge:0\nRSNetworking:1\n");
+    const auto fallback=PS::PluginCatalog::Discover(sharedRoot);
+    const auto legacyFallback=std::find_if(fallback.begin(),fallback.end(),[](const auto& plugin){return plugin.Id=="RSNetworking";});
+    Check(legacyFallback!=fallback.end()&&!legacyFallback->PreferSharedRegistry,"disabled shared provider retains legacy validation");
 
+    const auto modern=root/"modern";
+    Write(modern/"Helpy/plugin.json",R"({"Id":"RuneSchema.Helpy","Version":"0.8.1.0","EntryPoint":"Helpy.dll"})");
+    Write(modern/"Helpy/plugins/RuneSchema.HUD/plugin.json",R"({"Id":"RuneSchema.HUD","Version":"0.8.1.0","EntryPoint":"RuneSchema.HUD.dll"})");
+    Write(modern/"dlls/plugins/RSNetworking/plugin.json",R"({"Id":"RSNetworking","Version":"0.8.1.0"})");
+    Write(modern/"plugins/RuneSchema.Helpy/plugin.json",R"({"Id":"RuneSchema.Helpy","Version":"0.8.0.3"})");
+    Write(modern/"plugins/ThirdParty/plugin.json",R"({"Id":"ThirdParty","Version":"1.0.0"})");
+    Write(modern/"settings/plugins.txt","RuneSchema.HUD:0\nRSNetworking:1\n");
+    Write(modern/"Helpy/plugins/RuneSchema.ModMenu2/plugin.json",R"({"Id":"RuneSchema.ModMenu2","Version":"0.8.1.0","Host":"helpy","EntryPoint":"RuneSchema.ModMenu2.dll"})");
+    Write(modern/"Helpy/plugins/InvalidHost/plugin.json",R"({"Id":"InvalidHost","Version":"1","Host":"unknown"})");
+    const auto combined=PS::PluginCatalog::DiscoverRuntime(modern,&diagnostics);
+    Check(combined.size()==4,"canonical/legacy roots combine once and canonical order disables HUD");
+    const auto app=std::find_if(combined.begin(),combined.end(),[](const auto& p){return p.Id=="RuneSchema.Helpy";});
+    Check(app!=combined.end()&&app->Version=="0.8.1.0"&&app->EntryPoint==modern/"Helpy/Helpy.dll","canonical Helpy wins over old manifest and loads flat binary");
+    Check(std::any_of(combined.begin(),combined.end(),[](const auto& p){return p.Id=="RuneSchema.ModMenu2"&&p.Host=="helpy";}),"frontend host routing is explicit");
+    Check(std::any_of(combined.begin(),combined.end(),[](const auto& p){return p.Id=="ThirdParty";}),"legacy third-party plugin stays discoverable");
+    const auto owned=modern/"mods/Example/plugins/Example.Native";
+    Write(owned/"plugin.json",R"({"Id":"Example.Native","Version":"1","Host":"game","EntryPoint":"Example.dll"})");
+    Write(owned/"dll/Example.dll");
+    Write(modern/"mods/Disabled/plugins/Disabled.Native/plugin.json",R"({"Id":"Disabled.Native","Version":"1","EntryPoint":"Disabled.dll"})");
+    Write(modern/"mods/Example/ue4ss/Unrelated/dlls/main.dll");
+    const auto native=PS::PluginCatalog::DiscoverOwned(modern,{modern/"mods/Example"},&diagnostics);
+    Check(native.size()==1&&native[0].ModOwner=="Example"&&native[0].Id=="Example.Native"&&!native[0].MountPaks,"native plugin binds its actual enabled parent and never mounts a second PAK copy");
+    Check(PS::PluginCatalog::DiscoverOwned(modern,{},&diagnostics).empty(),"disabled parent cannot load a native plugin");
+    Check(PS::PluginCatalog::DiscoverOwned(modern,{root/"elsewhere/Example"},&diagnostics).empty(),"nonruntime owner root rejected");
+    Write(owned/"plugin.json",R"({"Id":"Other.Native","Version":"1","EntryPoint":"Example.dll"})");
+    Check(PS::PluginCatalog::DiscoverOwned(modern,{modern/"mods/Example"},&diagnostics).empty(),"native plugin cannot claim another owner's namespace");
     std::cout << "Plugin catalog compatibility contract passed.\n";
-}
+}catch(const std::exception& error){std::cerr<<"FAIL: "<<error.what()<<'\n';return 1;}

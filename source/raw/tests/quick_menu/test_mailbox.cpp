@@ -40,6 +40,14 @@ int main(){
     uint64_t revision=0;json view;
     Check(SpawnToolRequests::ReadQuickIfChanged(revision,view)&&view["Definitions"][0]["Key"]=="live-f2-choice","only F2 reads live index stream");
     Check(!SpawnToolRequests::ReadQuickIfChanged(revision,view),"unchanged revision not copied");
+    const json mods=json::array({{{"Id","Scripts"},{"Name","Scripts"},{"Version","1.0"}}});
+    SpawnToolRequests::CatalogProgress({{"ServerMods",mods}});
+    Check(SpawnToolRequests::ReadQuickIfChanged(revision,-2,view)&&view["ServerMods"]==mods&&!view.contains("Items"),"metadata view receives server list without the item catalog");
+    const json access={{"Allowed",false},{"Available",true},{"PinRequired",true}};
+    SpawnToolRequests::CatalogProgress({{"RemoteAccess",access}});
+    SpawnToolRequests::Publish({{"Status","Unrelated request completed"}});
+    Check(SpawnToolRequests::ReadQuickIfChanged(revision,-2,view)&&view["RemoteAccess"]==access&&!view.contains("Items"),"PIN status survives later results and metadata reconnect");
+    Check(SpawnToolRequests::Read().value("Status",std::string{})=="Unrelated request completed","PIN observation does not consume a mutation slot");
     SpawnToolRequests::CancelRequested=true;
     Check(SpawnToolRequests::TrySubmit({{"Action","Spawn"},{"_RequestId",4}}),"next spawn can queue");
     Check(SpawnToolRequests::CancelRequested,"queue does not undo scan cancellation");

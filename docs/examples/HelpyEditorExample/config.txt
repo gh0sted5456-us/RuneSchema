@@ -1,0 +1,8 @@
+; Local demo values. The mod owns their meaning; Mod Menu 2 writes validated edits.
+Enabled = true
+Height = 1
+Build = 0.5
+Hip = 0.5
+Style = Balanced
+SkinColor = #DDB49A
+AccentColor = #BFA35AFF

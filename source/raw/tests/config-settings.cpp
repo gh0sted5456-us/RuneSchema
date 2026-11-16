@@ -1,5 +1,6 @@
-#include "Utility/ConfigCodec.h"
+#include "Utility/ConfigStore.h"
 #include "Core/ConfigFiles.h"
+#include "Generator/HelpyGrantBatch.h"
 #include <cassert>
 #include <chrono>
 #include <iostream>
@@ -35,9 +36,63 @@ int RunConfigSettings() {
     assert(!settings.colorCodeLoaderAnnotations);
     assert(!DecodeSettings("{}").advancedLogging);
     assert(DecodeSettings("{}").autoUpdateMappings);
+    const auto defaults=DecodeSettings("{}").helpyAuthority;
+    assert(defaults.maximumItemCount==0&&!defaults.allowPinAccess&&!defaults.allowClientItemGrants&&!defaults.allowClientTeleport);
+    Rejects([&]{DecodeSettings(R"({"helpyAuthority":{"maximumItemCount":-1}})");});
+    Rejects([&]{DecodeSettings(R"({"helpyAuthority":{"allowPinAccess":true,"accessPin":"123"}})");});
+    const auto pinPolicy=DecodeSettings(R"({"helpyAuthority":{"allowPinAccess":true,"accessPin":"world-2398482","allowClientTeleport":true}})");
+    assert(DecodeSettings(EncodeSettings(pinPolicy)).helpyAuthority.accessPin=="world-2398482");
+    const auto persisted=DecodeSettings(R"({"helpyAuthority":{"allowPinAccess":true,"accessPin":"world-2398482","allowClientItemGrants":true,"allowClientTeleport":true,"maximumItemCount":250,"permittedPlayerGuids":["0123456789abcdef0123456789abcdef"]}})");
+    ConfigFiles::Write(root/"server-settings.ini",EncodeIniDocument(SettingsDocument(persisted)));
+    const auto restarted=DecodeSettings(DecodeIniDocument(ConfigFiles::Read(root/"server-settings.ini")).dump()).helpyAuthority;
+    assert(restarted.allowPinAccess&&restarted.accessPin=="world-2398482"&&restarted.allowClientItemGrants&&restarted.allowClientTeleport
+        &&restarted.maximumItemCount==250&&restarted.permittedPlayerGuids==persisted.helpyAuthority.permittedPlayerGuids);
+    auto accessSettings=DecodeSettings("{}");auto& authorization=accessSettings.helpyAuthority;
+    assert(!authorization.autoAuthorizeConnectingPlayers&&authorization.authorizedPlayers.empty());
+    authorization.autoAuthorizeConnectingPlayers=true;
+    HelpyAuthorizedPlayer identity{"01234567-89ab-cdef-0123-456789abcdef","Character","Account","Game Pass",41};
+    assert(HelpyPlayerAuthorization::Remember(authorization.authorizedPlayers,identity));
+    assert(!HelpyPlayerAuthorization::Remember(authorization.authorizedPlayers,identity));
+    assert(!HelpyPlayerAuthorization::Contains(authorization.authorizedPlayers,std::string(32,'b')));
+    auto reconnected=identity;reconnected.playerId=87;reconnected.accountName="Renamed account";
+    assert(HelpyPlayerAuthorization::Remember(authorization.authorizedPlayers,reconnected)&&authorization.authorizedPlayers.size()==1);
+    ConfigFiles::Write(root/"authorized-server.ini",EncodeIniDocument(SettingsDocument(accessSettings)));
+    const auto accessRestart=DecodeSettings(DecodeIniDocument(ConfigFiles::Read(root/"authorized-server.ini")).dump()).helpyAuthority;
+    assert(accessRestart.autoAuthorizeConnectingPlayers&&HelpyPlayerAuthorization::Contains(accessRestart.authorizedPlayers,identity.characterGuid));
+    assert(accessRestart.authorizedPlayers[0].accountName=="Renamed account"&&accessRestart.authorizedPlayers[0].platform=="Game Pass"&&accessRestart.authorizedPlayers[0].playerId==87);
+    assert(!HelpyPlayerAuthorization::Contains(accessRestart.authorizedPlayers,"Renamed account"));
+    assert(!HelpyPlayerAuthorization::Contains(accessRestart.authorizedPlayers,"87"));
+    Rejects([&]{DecodeSettings(R"({"helpyAuthority":{"authorizedPlayers":[{"characterGuid":"bad","accountName":"Account"}]}})");});
+    const auto liveFile=root/"server-settings.ini";
+    const auto live=SettingsStore::ReadHelpyAuthority(liveFile);
+    const std::vector<HelpyGrants::Grant> batch{{"/Game/ItemA",300},{"/Game/ItemB",100}};
+    assert(live.maximumItemCount==250);
+    Rejects([&]{HelpyGrants::ValidateGrants(batch,live.maximumItemCount);});
+    auto disk=SettingsDocument(persisted);
+    disk["helpyAuthority"]["maximumItemCount"]=0;
+    disk["advancedLogging"]=true;
+    ConfigFiles::Write(liveFile,EncodeIniDocument(disk));
+    const auto unlimited=SettingsStore::ReadHelpyAuthority(liveFile);
+    assert(unlimited.maximumItemCount==0&&unlimited.allowClientItemGrants);
+    HelpyGrants::ValidateGrants(batch,unlimited.maximumItemCount);
+    const auto saved=SettingsStore::SaveHelpyPlayerAccess(liveFile,live,authorization);
+    assert(saved.maximumItemCount==0&&saved.autoAuthorizeConnectingPlayers&&saved.authorizedPlayers.size()==1);
+    assert(SettingsStore::Parse(liveFile,true).Settings.advancedLogging);
+    Rejects([&]{SettingsStore::SaveHelpyPlayerAccess(liveFile,live,authorization);});
+    ConfigFiles::Write(liveFile,"invalid settings");
+    Rejects([&]{SettingsStore::ReadHelpyAuthority(liveFile);});
+    disk["helpyAuthority"]["maximumItemCount"]=350;
+    ConfigFiles::Write(liveFile,EncodeIniDocument(disk));
+    const auto repaired=SettingsStore::ReadHelpyAuthority(liveFile);
+    assert(repaired.maximumItemCount==350);
+    Rejects([&]{HelpyGrants::ValidateGrants(batch,repaired.maximumItemCount);});
+    auto invalid=identity;invalid.accountName="bad\nname";
+    Rejects([&]{HelpyPlayerAuthorization::Remember(authorization.authorizedPlayers,invalid);});
     assert(DecodeSettings("{}").helpyHotkey=="F2");
     assert(DecodeSettings(R"({"helpyHotkey":"f5"})").helpyHotkey=="F5");
     assert(DecodeSettings(R"({"helpyHotkey":"X"})").helpyHotkey=="X");
+    assert(DecodeSettings(R"({"helpyHotkey":"ctrl+shift+f2"})").helpyHotkey=="Ctrl+Shift+F2");
+    assert(DecodeSettings(R"({"helpyHotkey":"Alt+F4"})").helpyHotkey=="F2");
     assert(DecodeSettings(R"({"helpyHotkey":"not-a-key"})").helpyHotkey=="F2");
     auto shortcutSettings=DecodeSettings(R"({"helpyHotkey":"PageUp"})");
     assert(DecodeSettings(EncodeSettings(shortcutSettings)).helpyHotkey=="PageUp");

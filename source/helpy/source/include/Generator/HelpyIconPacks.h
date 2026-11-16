@@ -10,6 +10,7 @@
 #include "Generator/SourceBanners.h"
 #include "Generator/HelpyLoadingIndicator.h"
 #include "Generator/ItemIconCache.h"
+#include "Generator/LazyCatalog.h"
 #include "Runtime/HostServices.h"
 #include "Runtime/HelpyDownloads.h"
 #include "Core/HelpyEnvironment.h"
@@ -43,6 +44,17 @@ inline std::string PendingBuildSource;
 inline std::chrono::steady_clock::time_point NextBuildRead{};
 inline bool BuildWasVisible=false;
 inline bool Building(){return BuildState.value("Active",false);}
+inline bool Busy(){return Worker.valid();}
+inline bool RefreshNative(const std::string& item,const std::string& source){
+    if(!RemoteBuild||Busy()||Building())return false;
+    nlohmann::json reply;
+    if(!RemoteBuild({{"Action","IconCacheRefreshStart"},{"Item",item},{"Source",source}},reply)||!reply.value("Accepted",false)){
+        Status="Live icon refresh could not start.";CompletionNotify=true;return false;
+    }
+    BuildState={{"Active",true},{"Stage","Queued"},{"Refresh",true}};NextBuildRead={};
+    Status=item.empty()?"Refreshing this mod's icons from the game.":"Refreshing the selected item's icon from the game.";
+    CompletionNotify=true;return true;
+}
 inline void PollBuild(){
     const bool visible=Open&&!HelpyTaskbar::Current.Contains(HelpyTaskbar::Window::IconCache);
     const bool opened=visible&&!BuildWasVisible;BuildWasVisible=visible;
@@ -50,9 +62,26 @@ inline void PollBuild(){
     if(!RemoteBuild||(!visible&&!active))return;
     const auto now=std::chrono::steady_clock::now();if(!opened&&now<NextBuildRead)return;
     NextBuildRead=now+std::chrono::milliseconds(active?500:2000);
-    nlohmann::json reply;if(RemoteBuild({{"Action","IconCacheBuildRead"}},reply)&&reply.is_object())BuildState=std::move(reply);
+    nlohmann::json reply;
+    if(!RemoteBuild({{"Action","IconCacheBuildRead"}},reply)||!reply.is_object())return;
+    if(active&&BuildState.value("Refresh",false)&&!reply.value("Active",false)){
+        const auto stage=reply.value("Stage",std::string{});
+        {
+            nlohmann::json manifest;
+            if(RemoteBuild({{"Action","IconCacheBuildRead"},{"IncludeManifest",true}},manifest)
+                &&manifest.value("Sequence",uint64_t{})==reply.value("Sequence",uint64_t{})){
+                if(manifest.contains("RefreshedIcons")&&manifest["RefreshedIcons"].is_array()&&!manifest["RefreshedIcons"].empty())
+                    ItemIconCache::InvalidateIcons(manifest["RefreshedIcons"].get<std::vector<std::string>>());
+                if(manifest.contains("ItemIcons"))LazyCatalog::RecordNativeIcons(manifest["ItemIcons"]);
+            }
+        }
+        if(stage=="Complete")Status="Live icon refresh finished.";
+        else if(stage=="Completed with failures")Status="Live icon refresh finished with failures. See Icon Cache for details.";
+        else Status=reply.value("Error",std::string("Live icon refresh stopped."));
+        CompletionNotify=true;
+    }
+    BuildState=std::move(reply);
 }
-inline bool Busy(){return Worker.valid();}
 inline bool Start(const std::filesystem::path& file,bool importing,const nlohmann::json& coverage=nlohmann::json::object(),bool nativeArtworkFallback=false){
     if(Busy()||Building()||SourceBanners::Busy()){Status="Wait for the active cache/artwork operation to finish.";return false;}
     try{
@@ -89,7 +118,7 @@ inline void Poll(){PollBuild();
     }
     if(!Worker.valid()||Worker.wait_for(std::chrono::seconds(0))!=std::future_status::ready)return;
     try{const auto result=Worker.get();Status=result.Message;CompletionNotify=!Packaged||HelpyModIconPacks::NotifyAutomatic(result);if(!Packaged){LastFile=ActiveFile;LastOperationOK=true;}if(Importing&&result.Imported){ItemIconCache::InvalidateIcons(result.ChangedIcons);if(ItemIconCache::RemoteResetAccounting)ItemIconCache::RemoteResetAccounting();}
-        if(Importing&&(result.RecordsImported||result.MapImported)){if(RemoteBuild){nlohmann::json ignored;RemoteBuild({{"Action","CacheBundleImported"}},ignored);}++ReferencesRevision;}
+        if(Importing&&(result.RecordsImported||result.MapImported||result.MetadataImported)){if(RemoteBuild){nlohmann::json ignored;RemoteBuild({{"Action","CacheBundleImported"}},ignored);}++ReferencesRevision;}
         if(Importing&&!Packaged){if(result.Imported||result.Unchanged||result.RecordsImported||result.MapImported)HelpyDownloads::ReleaseImportedPack(ActiveFile);HelpyDownloads::CacheApplied(Status);}}
     catch(const HelpyCacheOwnership::Unavailable& error){
         Status=error.what();CompletionNotify=!Packaged;
@@ -124,6 +153,18 @@ inline void Choose(bool importing,bool buildFirst=false){
             }else Status="Registered icon capture could not start. No export was written.";
         }else Start(file,importing);
     }
+}
+inline void ChooseTaglines(bool importing){
+    if(Busy()||Building()||SourceBanners::Busy()){Status="Wait for the current cache operation.";return;}
+    wchar_t file[32768]=L"taglines.json";OPENFILENAMEW dialog{};dialog.lStructSize=sizeof(dialog);dialog.hwndOwner=GetActiveWindow();dialog.lpstrFile=file;dialog.nMaxFile=32768;dialog.lpstrFilter=L"Helpy taglines (*.json)\0*.json\0\0";dialog.lpstrDefExt=L"json";dialog.Flags=OFN_EXPLORER|OFN_NOCHANGEDIR|OFN_PATHMUSTEXIST|(importing?OFN_FILEMUSTEXIST:OFN_OVERWRITEPROMPT);
+    if(!(importing?GetOpenFileNameW(&dialog):GetSaveFileNameW(&dialog)))return;
+    const auto cache=HelpySourceCache::Directory(false),root=HostServices::ModDirectory(),journal=HostServices::CacheDirectory()/"journal";const auto snapshot=HelpySourceCache::Current;const std::filesystem::path path=file;
+    Importing=importing;Packaged=false;ActiveFile=path;LastOperationOK=false;CompletionNotify=false;Progress.Cancel=false;Progress.Begin(HelpyIconPack::Phase::Discover);
+    Worker=std::async(std::launch::async,[path,cache,root,journal,snapshot,importing]{HelpyIconPack::Result result;
+        if(importing){ItemGroupings::Import(cache,ItemGroupings::Read(path));result.MetadataImported=true;result.Message="Grouping rules imported. They apply only to matching cached items from enabled sources.";}
+        else {auto rows=CacheBundleStore::Collect(cache,root,journal,snapshot,true);for(const auto& row:HelpyPresentationCache::Records(cache,CacheBundleStore::Locale()))rows.push_back(row);const auto plan=ItemGroupings::Generate(rows,ItemGroupings::Load(cache,root));const auto text=ItemGroupings::Document(plan).dump(2);if(text.size()>64*1024*1024)throw std::runtime_error("Taglines exceed cache metadata bounds.");CacheBundleIO::Publish(path,text);result.Message="Exported "+std::to_string(plan.size())+" category / family rules. No mods or gameplay data included.";}
+        Progress.Stage=HelpyIconPack::Phase::Complete;return result;
+    });Status=importing?"Importing grouping rules...":"Exporting combined grouping rules...";
 }
 inline void Render(bool catalogueBusy=false){
     PollBuild();HelpyCacheSources::Plan plan;plan.Registered.clear();plan.Owners=HelpySourceCache::Current.Owners;
@@ -181,13 +222,13 @@ inline void Render(bool catalogueBusy=false){
         if(!error)ShellExecuteW(nullptr,L"open",folder.c_str(),nullptr,nullptr,SW_SHOWNORMAL);
     }
     if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("%s",HostServices::CacheDirectory().string().c_str());
-    ImGui::Checkbox("Advanced",&Advanced);
+    HelpyImGuiTheme::Toggle("Advanced",&Advanced);
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::CacheAdvanced=HelpyPreviewHooks::LastRect();
 #endif
     if(Advanced&&ImGui::CollapsingHeader("PAK / container discovery")){
         ImGui::TextWrapped("Directory indexes associate packages with their supplying containers. Indexed does not certify a successful mount or live item availability.");
-        if(ImGui::BeginChild("##pak-discovery",ImVec2(0,180),ImGuiChildFlags_Borders)){
+        if(HelpyImGuiTheme::BeginPanel("##pak-discovery",ImVec2(0,180),ImGuiChildFlags_Borders)){
             for(const auto& [file,entry]:HelpySourceCache::Current.Containers.items()){
                 const auto owner=entry.value("Owner",std::string{});
                 if(!SelectedSource.empty()&&SelectedSource!=owner)continue;
@@ -196,7 +237,7 @@ inline void Render(bool catalogueBusy=false){
                 const auto reason=entry.value("Reason",std::string{});if(!reason.empty())ImGui::TextWrapped("%s",reason.c_str());
                 ImGui::Separator();
             }
-        }ImGui::EndChild();
+        }PS::HelpyImGuiTheme::EndPanel();
     }
     if(Building()){
         const auto stage=BuildState.value("Stage",std::string("Queued"));const bool verifying=stage=="Verifying complete cache";const bool capture=verifying||stage=="Caching registered icons"||stage=="Checking cached icons";
@@ -225,7 +266,7 @@ inline void Render(bool catalogueBusy=false){
     ImGui::TextWrapped("Mod authors can ship cache/*.rsmk-cache (or legacy *.rsmk-icons) inside their RuneSchema mod. Typed references are restricted to that active owner; supplied bundles are never edited.");
     ImGui::BeginDisabled(Busy()||Building()||catalogueBusy);
     if(HelpyEnvironment::Server()){
-        ImGui::Checkbox("Use client packs as display-only thumbnails",&ServerDisplayOnly);
+        HelpyImGuiTheme::Toggle("Use client packs as display-only thumbnails",&ServerDisplayOnly);
         ImGui::TextWrapped("Matches exact icon paths in active server sources, even when the server cook omits textures. These pictures may differ from the server version; they are not item definitions and are excluded from verified cache exports.");
     }
     if(ImGui::Button("Build / update, then export..."))Choose(false,true);ImGui::EndDisabled();
@@ -256,12 +297,12 @@ inline void Render(bool catalogueBusy=false){
 }
 inline void RenderWindowContents(bool catalogueBusy=false){
     ImGui::TextUnformatted("Content cache");ImGui::SameLine();
-    if(ImGui::SmallButton(Detached?"Dock back":"Detach window"))Detached=!Detached;
+    if(!HelpyImGuiTheme::NativePresentation&&ImGui::SmallButton(Detached?"Dock back":"Detach window"))Detached=!Detached;
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::CacheDetach=HelpyPreviewHooks::LastRect();
 #endif
-    ImGui::Separator();ImGui::BeginChild("##cache-body",{0,0});
-    Render(catalogueBusy);ImGui::EndChild();
+    ImGui::Separator();HelpyImGuiTheme::BeginPanel("##cache-body",{0,0});
+    Render(catalogueBusy);PS::HelpyImGuiTheme::EndPanel();
 }
 inline void RenderDockedWindow(bool catalogueBusy=false){
     if(!Open||Detached||HelpyTaskbar::Current.Contains(HelpyTaskbar::Window::IconCache))return;

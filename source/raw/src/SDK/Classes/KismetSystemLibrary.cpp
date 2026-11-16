@@ -9,6 +9,7 @@
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/Helper/ReflectedContract.h"
 #include "Core/GroundSurface.h"
+#include "Core/NativeAssetLoadTiming.h"
 
 #include <cstring>
 #include <new>
@@ -70,6 +71,7 @@ namespace UECustom {
 
     RC::Unreal::UObject* UKismetSystemLibrary::LoadAsset_Blocking(UECustom::TSoftObjectPtr<UObject> Asset)
     {
+        PS::NativeAssetLoadTiming::Call timing;
         static auto Function = UECustom::UObjectGlobals::StaticFindObject<UFunction*>(nullptr, nullptr, TEXT("/Script/Engine.KismetSystemLibrary:LoadAsset_Blocking"));
 
         if (!Function)
@@ -78,7 +80,7 @@ namespace UECustom {
             return nullptr;
         }
 
-        DragonWilds::ReflectedContract::Frame(Function);
+        // Count below validates the entire frame before allocation/invocation.
         auto* assetProperty = CastField<FSoftObjectProperty>(Function->FindProperty(FName(TEXT("Asset"), FNAME_Find)));
         auto* returnProperty = CastField<FObjectPropertyBase>(Function->GetReturnProperty());
         if (!DragonWilds::ReflectedContract::Input(assetProperty,Function) || assetProperty->GetSize()!=sizeof(Asset)
@@ -103,7 +105,9 @@ namespace UECustom {
         assetProperty->InitializeValue_InContainer(params.data());
         try {
             assetProperty->CopyCompleteValue(assetProperty->ContainerPtrToValuePtr<void>(params.data()),&Asset);
+            timing.BeginNative();
             GetDefaultObj()->ProcessEvent(Function, params.data());
+            timing.EndNative();
             auto* result=returnProperty->GetObjectPropertyValue(returnProperty->ContainerPtrToValuePtr<void>(params.data()));
             assetProperty->DestroyValue_InContainer(params.data());
             return result;

@@ -59,7 +59,8 @@ int main(int argc,char** argv) {
         &&source.find("PersistenceID no longer matches its live asset")!=std::string::npos,
         "Recipe routing bypasses shared lookup behavior or live identity validation");
     require(source.find("m_referenceBatch->Remember(recipe->GetPathName()")!=std::string::npos
-        &&source.find("m_referenceBatch->Resolve(def.Key,load,valid")!=std::string::npos
+        &&source.find("m_referenceBatch->Resolve(def.Key,[&]{return UECustom::UObjectGlobals::StaticFindObject")!=std::string::npos
+        &&source.find("},load,valid,")!=std::string::npos
         &&source.find("RF_NeedLoad|RF_NeedPostLoad|RF_NeedInitialization")!=std::string::npos,
         "Cooked reference preparation lacks its scoped live-object snapshot or ready/type validation");
     require(source.find("~BatchScope(){Active=Before;}")!=std::string::npos

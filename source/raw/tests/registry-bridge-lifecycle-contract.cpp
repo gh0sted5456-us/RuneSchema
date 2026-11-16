@@ -25,6 +25,14 @@ int main(int argc,char** argv) {
         &&source.find("modes.Num()>64")!=std::string::npos
         &&source.find("Existing authority worlds are ambiguous")!=std::string::npos,
         "late dedicated startup can miss the existing world or select an arbitrary one");
+    require(source.find("CompactPayload(actor)")!=std::string::npos
+        &&source.find("BuildingRegistry(buildingContext)")!=std::string::npos,
+        "initial registry announcement uses an unassigned authority component for building IDs");
+    require(source.find("m_buildingHandshake.Due(")!=std::string::npos
+        &&source.find("SendCompatibilityAck(m_sessionAuthorityFingerprint,false)")!=std::string::npos
+        &&source.find("if(!resync)return;")!=std::string::npos
+        &&source.find("m_buildingHandshake={};")!=std::string::npos,
+        "owned building handshake retry, resync isolation or world cleanup is missing");
     require(header.find("PS::WeakObjectHandle m_pendingMode")!=std::string::npos,
         "pending GameMode is not serial validated");
     require(source.find("m_pendingMode.Assign(mode)")!=std::string::npos
@@ -86,7 +94,7 @@ int main(int argc,char** argv) {
     require(source.find("identity.ObjectSerialNumber")!=std::string::npos
         &&source.find("m_modDataRelay.Receive(peer,payload,local.Result<bool>()")!=std::string::npos
         &&source.find("channel!=\"mod.data\"&&revision<=window.Revision")!=std::string::npos
-        &&source.find("m_modDataRelay.Drain(4,")!=std::string::npos&&source.find("m_modDataRelay.Remove(at->first)")!=std::string::npos
+        &&source.find("m_modDataRelay.Drain(PS::ModDataRelay::MaxDrainPackets,")!=std::string::npos&&source.find("m_modDataRelay.Remove(at->first)")!=std::string::npos
         &&source.find("m_modDataRelay.Reset();m_relayPeers.clear();")!=std::string::npos,
         "relay native sender/authority, independent channel sequences, bounded drain or session cleanup is missing");
 }

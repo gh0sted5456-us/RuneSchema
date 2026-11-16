@@ -1,5 +1,7 @@
 #pragma once
 #include "Core/DiagnosticToastFeed.h"
+#include "Core/ServerModVersions.h"
+#include "../../../../shared/CleanupNotice.h"
 #include <algorithm>
 #include <cctype>
 #include <string>
@@ -15,6 +17,9 @@ struct Display {
     std::string Level;
     bool Summary = false;
     bool Truncated = false;
+    bool WorldMods = false;
+    bool Success = false;
+    ServerModVersions::Tone Alignment=ServerModVersions::Tone::Neutral;
     std::uint32_t Repetitions = 1;
     enum class Icon { Information, Diagnostic, Debug, Warning, Error, Activity } Type=Icon::Information;
 };
@@ -48,6 +53,14 @@ inline std::string_view Body(std::string_view raw) {
     return raw;
 }
 inline bool LimitDetail(std::string& message){
+    // Byte limits alone cannot bound a message containing many short lines.
+    std::string compact;compact.reserve(message.size());unsigned lines=0;
+    for(const unsigned char c:message){
+        if(c=='\n'&&lines<2){while(!compact.empty()&&compact.back()==' ')compact.pop_back();compact+='\n';++lines;}
+        else if(std::isspace(c)){if(!compact.empty()&&!std::isspace(static_cast<unsigned char>(compact.back())))compact+=' ';}
+        else compact+=static_cast<char>(c);
+    }
+    message.swap(compact);
     constexpr size_t maxBytes=160;
     if(message.size()<=maxBytes)return false;
     size_t limit=maxBytes;
@@ -58,7 +71,7 @@ inline bool LimitDetail(std::string& message){
     message.resize(limit);message+=" ...";
     return true;
 }
-inline Display Format(const DiagnosticToastFeed::Notice& card) {
+inline Display Format(const DiagnosticToastFeed::Notice& card,const ServerModVersions::Summary& versions={}) {
     Display result;
     result.Summary=card.Summary;
     result.Repetitions=card.Repetitions;
@@ -80,9 +93,35 @@ inline Display Format(const DiagnosticToastFeed::Notice& card) {
     result.Subtitle.clear();
     if (card.Summary) {
         result.Title="More log activity";
-        result.Detail=card.Text; // The feed builds this bounded summary.
+        result.Detail=card.Text;result.Truncated=LimitDetail(result.Detail);
         result.Subtitle="Full details in HELPY > Diagnostics > Live Log";
         return result;
+    }
+    if(Body(card.Text).starts_with("[RS-SAVE-006] ")){
+        const auto packet=nlohmann::json::parse(Body(card.Text).substr(sizeof("[RS-SAVE-006] ")-1),nullptr,false);
+        const auto message=CleanupNotice::Message(packet);
+        if(!message.empty()){result.Success=true;result.Level="Cleanup";result.Title=message;return result;}
+    }
+    if(Body(card.Text).starts_with("[RS-NET-004] Server supplied ")){
+        result.WorldMods=true;result.Level="Connected";result.Title="Entering a RuneSchema world";
+        result.Alignment=versions.Alignment();
+        if(!versions.Ready)result.Detail="The host's mod list is ready. Checking installed client versions...";
+        else{
+            result.Level=result.Alignment==ServerModVersions::Tone::Aligned?"Versions match":result.Alignment==ServerModVersions::Tone::Differences?"Review versions":"Connected";
+            result.Detail=std::to_string(versions.Matched)+" matching, "+std::to_string(versions.Different)+" different, "+std::to_string(versions.Missing)+" missing, "+std::to_string(versions.Disabled)+" disabled.";
+            if(versions.Ambiguous)result.Detail+=" "+std::to_string(versions.Ambiguous)+" ambiguous.";
+            if(versions.Unversioned)result.Detail+=" "+std::to_string(versions.Unversioned)+" unversioned; excluded.";
+            if(!versions.Matched&&result.Alignment==ServerModVersions::Tone::Neutral)result.Detail="No versioned mods to compare. "+std::to_string(versions.Unversioned)+" unversioned; excluded.";
+        }
+        result.Subtitle="Click to view this world's mods.";return result;
+    }
+    if(Body(card.Text).starts_with("[RS-NET-007]")){
+        result.Success=true;result.Level="Connected";result.Title="Client-server authority bridged";
+        result.Detail="Requests for your current character are validated and executed by the server.";
+        result.Subtitle="Host action limits and registry checks still apply.";return result;
+    }
+    if(Body(card.Text).starts_with("[RS-NET-006]")){
+        result.Title="Server PIN access available";result.Detail="Open Helpy to enter this world's PIN for self-service items and travel.";return result;
     }
     if(card.ImportReport){
         result.Title=!card.ImportHasStatus?"Import dry-run report":
@@ -107,6 +146,7 @@ inline Display Format(const DiagnosticToastFeed::Notice& card) {
         for(const auto& asset:card.BatchAssets)result.Detail+="\n"+asset;
         if(card.BatchCount>card.BatchAssets.size())
             result.Detail+="\n+"+std::to_string(card.BatchCount-card.BatchAssets.size())+" more modifications";
+        result.Truncated=LimitDetail(result.Detail);
         result.Subtitle="Details in HELPY > Diagnostics > Live Log";
         return result;
     }

@@ -1,7 +1,12 @@
 #pragma once
 #include "Core/HelpyShortcut.h"
+#include "Core/HelpyControllerBindings.h"
+#include "InputBindings.h"
 #include "Core/RuneSchemaDataRoot.h"
 #include "imgui.h"
+#include "Generator/HelpyFocusHighlight.h"
+#include "Generator/HelpyControllerPanes.h"
+#include "Generator/HelpyTextInput.h"
 #include "Core/ConfigFiles.h"
 #include "Core/HelpyBrowsePolicy.h"
 #include "Core/ItemBayLayout.h"
@@ -31,6 +36,9 @@
 namespace PS::HelpyImGuiTheme {
 
 inline float RuntimeDpi=1.0f;
+inline float OverlayRenderScale=1.f;
+inline bool NativePresentation=false;
+inline std::string NativeOverlayStatus;
 inline bool PictureBackingActive=false; // Presentation state, not a saved preference.
 inline void SetRuntimeDpi(float dpi){RuntimeDpi=std::clamp(dpi,0.75f,3.0f);}
 inline ImVec4 Hex(unsigned value){return {((value>>16)&255)/255.0f,((value>>8)&255)/255.0f,(value&255)/255.0f,1.0f};}
@@ -65,14 +73,33 @@ struct Theme {
     bool itemGridFitRows{true},itemShowPlaceholders{false};
     int itemPageSize{ItemPaging::DefaultSize};
     int runtimeTimeUnit{0}; // Automatic, ms, seconds, minutes.
-    int helpyFpsLimit{30},fpsRefreshMs{1000};
+    int helpyFpsLimit{60},fpsRefreshMs{1000};
     bool showFps{false};
     bool showGameFps{false};
-    std::string fpsHotkey{"F10"};
+    bool showCoordinates{false};
+    bool showStartupProgress{true};
+    bool gameOverlay{true};
+    bool nativeOverlay{true};
+    int inputMode=0,controllerGlyphs=0,controllerShortcut=1;
+    bool reserveControllerGuide=true,controllerTouchpad=true,controllerCursor=true;
+    float controllerCursorSpeed=900.f;
+    float controllerDeadZone=.27f;      // Right-stick radius ignored as drift (0.08-0.50).
+    bool controllerCursorAssist=true;   // Slow the pointer while it is over a control.
+    std::string quickSendPlayerGuid;
+    bool navigationCollapsed=false,navigationPinned=false;
+    bool autoInstallAuthoringDotNet{true};
+    float overlayOpacity{.88f},overlaySize{.9f},overlayUiScale{1.f};
+    nlohmann::json hudBindings=nlohmann::json::object(),controllerBindings=nlohmann::json::object();
+    std::string fpsHotkey{"F10"},fpsControllerBinding{"None"},controllerBinding,helpyKeyboardBinding;
     std::string backgroundFile;
     float backgroundStrength{.12f};
-    bool dpiAware{true},autoReload{true},textBold{false},verboseTooltips{false},itemGridView{true},aiGridView{false},advancedMode{false};
+    bool splashGameLogo=true,splashRuntimeLogo=true,splashBackgrounds=true;
+    float splashLogoSeconds=8.f;
+    bool dpiAware{true},autoReload{true},textBold{false},verboseTooltips{false},itemGridView{true},itemInternalNames{false},aiGridView{false},advancedMode{false};
     bool automaticUpdateChecks{true};
+    bool ue4ssManageExternal{false},modsCompact{false};
+    bool resourceDiagnostics{true},gpuResourceDiagnostics{true},ue4ssDiagnostics{true},playTimeReminders{true},startupResourceAlerts{false};
+    int resourceCpuThreshold{90},resourceMemoryThreshold{90},resourceGpuThreshold{98},ue4ssLogBudget{100},ue4ssOverlapSeconds{5};
     bool updateArtwork{true},updateWorldMap{true},updateMapFilters{true};
     int previewQuality{2}; // Economy 256px / Balanced 384px / Detail 512px.
     bool previewAnimate{false},previewDetails{false},scaleUsePortrait{true};
@@ -84,6 +111,8 @@ struct Theme {
     std::string fontFamily{"Segoe UI"};
     std::vector<LiveLog::ColorRule> logColors;
     bool diagnosticToastsEnabled{true};
+    bool achievementPopups{true}, achievementSound{true};
+    bool diagnosticRegistryActivity{false};
     int diagnosticToastLimit{4},diagnosticToastDuration{6};
     int diagnosticHistoryDays{14},diagnosticHistorySessions{10},diagnosticHistoryMB{20};
     float diagnosticSplitRatio{0.40f};
@@ -97,7 +126,7 @@ struct Theme {
         const auto fb=ImGui::GetIO().DisplayFramebufferScale;dpi=std::max({dpi,std::max(fb.x,fb.y),RuntimeDpi});
         return std::clamp(dpi,0.75f,3.0f);
     }
-    float Scale() const{return std::clamp(Dpi()*userScale,0.65f,3.0f);}
+    float Scale() const{return std::clamp(Dpi()*userScale*OverlayRenderScale,0.65f,3.0f);}
     float X(float value) const{return value*Scale();}
     float Y(float value) const{return value*Scale()*density;}
 };
@@ -108,8 +137,27 @@ inline void CenterNextWindow(){
     ImGui::SetNextWindowPos(viewport->GetWorkCenter(),ImGuiCond_Appearing,{.5f,.5f});
 }
 inline bool BeginCenteredModal(const char* name,bool* open,ImGuiWindowFlags flags){
-    CenterNextWindow();const auto area=ImGui::GetMainViewport()->WorkSize;
-    ImGui::SetNextWindowSizeConstraints({0,0},{std::max(1.f,area.x-Current.X(24)),std::max(1.f,area.y-Current.Y(24))});
+    CenterNextWindow();const auto* viewport=ImGui::GetMainViewport();const auto area=viewport->WorkSize;
+    const ImVec2 margin{std::min(Current.X(12),std::max(0.f,(area.x-1)*.5f)),std::min(Current.Y(12),std::max(0.f,(area.y-1)*.5f))};
+    const ImVec2 limit{std::max(1.f,area.x-margin.x*2),std::max(1.f,area.y-margin.y*2)};
+    auto& next=ImGui::GetCurrentContext()->NextWindowData;
+    if(next.HasFlags&ImGuiNextWindowDataFlags_HasSizeConstraint){
+        // Keep the caller's width/callback; only tighten its bounds to the viewport.
+        auto& bounds=next.SizeConstraintRect;
+        for(int axis=0;axis<2;++axis)if(bounds.Min[axis]>=0&&bounds.Max[axis]>=0){bounds.Min[axis]=std::min(bounds.Min[axis],limit[axis]);bounds.Max[axis]=std::clamp(bounds.Max[axis],bounds.Min[axis],limit[axis]);}
+    }else{
+        ImVec2 minimum{0,0},maximum=limit;
+        // Full-width controls feed auto-sized windows back into themselves unless width is fixed.
+        if((flags&ImGuiWindowFlags_AlwaysAutoResize)&&(next.HasFlags&ImGuiNextWindowDataFlags_HasSize)&&next.SizeVal.x>0)minimum.x=maximum.x=std::min(next.SizeVal.x,limit.x);
+        ImGui::SetNextWindowSizeConstraints(minimum,maximum);
+    }
+    if(const auto* window=ImGui::FindWindowByName(name);window&&window->WasActive&&ImGui::IsPopupOpen(name)){
+        const ImVec2 minimum{viewport->WorkPos.x+margin.x,viewport->WorkPos.y+margin.y};
+        const ImVec2 maximum{std::max(minimum.x,viewport->WorkPos.x+area.x-margin.x-std::min(window->Size.x,limit.x)),
+                             std::max(minimum.y,viewport->WorkPos.y+area.y-margin.y-std::min(window->Size.y,limit.y))};
+        const ImVec2 position{std::clamp(window->Pos.x,minimum.x,maximum.x),std::clamp(window->Pos.y,minimum.y,maximum.y)};
+        if(position.x!=window->Pos.x||position.y!=window->Pos.y)ImGui::SetNextWindowPos(position,ImGuiCond_Always);
+    }
     return ImGui::BeginPopupModal(name,open,flags);
 }
 inline void CenterRow(float width){ImGui::SetCursorPosX(ImGui::GetCursorPosX()+std::max(0.f,(ImGui::GetContentRegionAvail().x-width)*.5f));}
@@ -137,12 +185,16 @@ inline void DetailsTextColored(const ImVec4& color,const char* format,...){char 
 // Auto-sized tooltips must not infer their width from wrapped child content.
 // In particular a tooltip opened inside a narrow table cell otherwise feeds
 // its previous width back into the next frame until paths wrap character-wise.
-inline void BeginDetailsTooltip(ImVec2 anchorMin,ImVec2 anchorMax,float logicalWidth=300.0f) {
+inline void BeginDetailsTooltip(ImVec2 anchorMin,ImVec2 anchorMax,float logicalWidth=300.0f,bool followMouse=true) {
     const auto* viewport=ImGui::GetMainViewport();const auto area=viewport->WorkSize;
     const float margin=Current.X(8),gap=Current.Y(6);
     const float width=std::max(1.0f,std::min(Current.X(logicalWidth),area.x-Current.X(24)));
     const float left=viewport->WorkPos.x+margin,right=std::max(left,viewport->WorkPos.x+area.x-margin-width);
-    const float x=std::clamp((anchorMin.x+anchorMax.x-width)*.5f,left,right);
+    const bool pointer=followMouse&&ImGui::IsMousePosValid()&&ImGui::IsMouseHoveringRect(anchorMin,anchorMax,false);
+    if(pointer){anchorMin=ImGui::GetIO().MousePos;anchorMax={anchorMin.x+Current.X(12),anchorMin.y+Current.Y(12)};}
+    float x=(anchorMin.x+anchorMax.x-width)*.5f;
+    if(pointer){x=anchorMax.x+gap;if(x+width>viewport->WorkPos.x+area.x-margin)x=anchorMin.x-gap-width;}
+    x=std::clamp(x,left,right);
     const float top=viewport->WorkPos.y+gap,bottom=std::max(top,viewport->WorkPos.y+area.y-gap);
     const float below=std::max(1.f,bottom-anchorMax.y-gap),above=std::max(1.f,anchorMin.y-gap-top);
     const bool flip=below<std::min(Current.Y(180),above);
@@ -174,9 +226,30 @@ inline bool SoftButton(const char* label,const ImVec2& size=ImVec2(0,0)){
     const auto color=Mix(ImGui::GetStyleColorVec4(ImGuiCol_Button),ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered),prior);
     ImGui::PushStyleColor(ImGuiCol_Button,color);ImGui::PushStyleColor(ImGuiCol_ButtonHovered,color);
     const bool clicked=ImGui::Button(label,size);ImGui::PopStyleColor(2);
-    const float fade=HoverFade(id,ImGui::IsItemHovered());
+    const float fade=HoverFade(id,ImGui::IsItemHovered()||ImGui::IsItemFocused());
     if(fade>0.01f){auto outline=Current.accent;outline.w*=fade*0.65f;ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(),ImGui::GetItemRectMax(),ImGui::GetColorU32(outline),Current.X(Current.frameRounding),0,1.0f);}
     return clicked;
+}
+inline bool Toggle(const char* label,bool* value){
+    const auto visible=std::string_view(label).substr(0,std::string_view(label).find("##"));
+    const float height=ImGui::GetFrameHeight(),track=height*1.75f,gap=ImGui::GetStyle().ItemInnerSpacing.x;
+    const float width=std::max(1.f,ImGui::GetContentRegionAvail().x);
+    const float labelWidth=std::max(1.f,width-track-gap);
+    const auto text=ImGui::CalcTextSize(visible.data(),visible.data()+visible.size(),false,labelWidth);
+    const ImVec2 size{std::min(width,track+gap+text.x),std::max(height,text.y)};
+    const auto at=ImGui::GetCursorScreenPos();
+    ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(0,0,0,0));
+    ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(0,0,0,0));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered,ImVec4(0,0,0,0));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,ImVec4(0,0,0,0));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize,0.f);
+    const bool pressed=ImGui::Button(label,size);ImGui::PopStyleVar();ImGui::PopStyleColor(4);
+    if(pressed)*value=!*value;
+    auto* draw=ImGui::GetWindowDrawList();const float y=at.y+(size.y-height)*.5f;
+    draw->AddRectFilled({at.x,y},{at.x+track,y+height},ImGui::GetColorU32(*value?ImGuiCol_CheckMark:ImGui::IsItemHovered()?ImGuiCol_FrameBgHovered:ImGuiCol_FrameBg),height*.5f);
+    draw->AddCircleFilled({at.x+(*value?track-height*.5f:height*.5f),y+height*.5f},height*.34f,ImGui::GetColorU32(ImGuiCol_Text));
+    draw->AddText(nullptr,0,{at.x+track+gap,at.y+(size.y-text.y)*.5f},ImGui::GetColorU32(ImGuiCol_Text),visible.data(),visible.data()+visible.size(),labelWidth);
+    return pressed;
 }
 inline std::atomic<bool> ForceReload{true};
 inline bool Loaded=false,HaveStamp=false;
@@ -185,6 +258,7 @@ inline std::chrono::steady_clock::time_point NextPoll{};
 inline std::string Status="Theme not loaded yet.";
 
 inline bool UseUserAppData = true;
+inline std::string ControllerShortcutStatus;
 inline std::filesystem::path RootThemePath() {
     return HelpyPaths::PluginRoot()/"settings"/"ui.jsonc";
 }
@@ -244,16 +318,22 @@ inline nlohmann::json ColorJson(const ImVec4& v){return nlohmann::json::array({v
 inline nlohmann::json DocumentFrom(const Theme& t,int iconCacheMB) {
     return {
         {"version",21},{"autoReload",t.autoReload},{"windowOpacity",t.windowOpacity},
-        {"workspaces",{{"authoring",t.workspaces.Authoring},{"tools",t.workspaces.Tools},{"liveLog",t.workspaces.LiveLog},{"saveEditor",t.workspaces.SaveEditor},{"serverTools",t.workspaces.ServerTools},{"journal",t.workspaces.Journal}}},
+        {"workspaces",{{"authoring",t.workspaces.Authoring},{"tools",t.workspaces.Tools},{"liveLog",t.workspaces.LiveLog},{"saveEditor",t.workspaces.SaveEditor},{"serverTools",t.workspaces.ServerTools},{"journal",t.workspaces.Journal},{"clone",t.workspaces.Clone},{"recipes",t.workspaces.Recipes}}},
         {"display",{{"dpiAware",t.dpiAware},{"userScale",t.userScale},{"fontScale",t.fontScale},{"density",t.density},{"fontFamily",t.fontFamily},{"textBold",t.textBold},{"verboseTooltips",t.verboseTooltips},{"tooltipDelay",t.tooltipDelay}}},
-        {"views",{{"advancedMode",t.advancedMode},{"itemGrid",t.itemGridView},{"itemPageSize",t.itemPageSize},{"itemGridColumns",t.itemGridColumns},{"itemGridRows",t.itemGridRows},{"itemGridFitRows",t.itemGridFitRows},{"itemShowPlaceholders",t.itemShowPlaceholders},{"aiGrid",t.aiGridView},{"itemResultHeight",t.itemResultHeight},{"aiResultHeight",t.aiResultHeight},{"itemCategory",t.itemCategory},{"itemSource",t.itemSource},{"itemBayBrowseRatio",t.itemBayBrowseRatio},{"dockedBayHeight",t.dockedBayHeight},{"itemCartWidth",t.itemCartWidth}}},
+        {"views",{{"quickSendPlayerGuid",t.quickSendPlayerGuid},{"advancedMode",t.advancedMode},{"itemGrid",t.itemGridView},{"itemInternalNames",t.itemInternalNames},{"itemPageSize",t.itemPageSize},{"itemGridColumns",t.itemGridColumns},{"itemGridRows",t.itemGridRows},{"itemGridFitRows",t.itemGridFitRows},{"itemShowPlaceholders",t.itemShowPlaceholders},{"aiGrid",t.aiGridView},{"itemResultHeight",t.itemResultHeight},{"aiResultHeight",t.aiResultHeight},{"itemCategory",t.itemCategory},{"itemSource",t.itemSource},{"itemBayBrowseRatio",t.itemBayBrowseRatio},{"dockedBayHeight",t.dockedBayHeight},{"itemCartWidth",t.itemCartWidth}}},
         {"cache",{{"iconCacheMB",std::clamp(iconCacheMB,0,16384)},{"loadOrder",HelpyRuntimePreferences::CacheFirst.load()?"cacheFirst":"gameFirst"},{"passiveRefresh",HelpyRuntimePreferences::PassiveRefresh.load()}}},
+        {"monitoring",{{"resources",t.resourceDiagnostics},{"gpu",t.gpuResourceDiagnostics},{"ue4ss",t.ue4ssDiagnostics},{"playTimeReminders",t.playTimeReminders},{"startupResourceAlerts",t.startupResourceAlerts},{"cpuThreshold",t.resourceCpuThreshold},{"memoryThreshold",t.resourceMemoryThreshold},{"gpuThreshold",t.resourceGpuThreshold},{"luaMessages",t.ue4ssLogBudget},{"overlapSeconds",t.ue4ssOverlapSeconds}}},
+        {"input",{{"mode",t.inputMode},{"glyphs",t.controllerGlyphs},{"shortcut",t.controllerShortcut},{"binding",t.controllerBinding},{"keyboardBinding",t.helpyKeyboardBinding},{"hudBindings",t.hudBindings},{"reserveGuide",t.reserveControllerGuide},{"touchpad",t.controllerTouchpad},{"cursor",t.controllerCursor},{"cursorSpeed",t.controllerCursorSpeed},{"deadZone",t.controllerDeadZone},{"cursorAssist",t.controllerCursorAssist},{"controllerBindings",t.controllerBindings}}},
+        {"navigation",{{"collapsed",t.navigationCollapsed},{"pinned",t.navigationPinned}}},
+        {"authoring",{{"autoInstallDotNet",t.autoInstallAuthoringDotNet}}},
+        {"mods",{{"manageExternalUE4SS",t.ue4ssManageExternal},{"compactView",t.modsCompact}}},
         {"updates",{{"automaticChecks",t.automaticUpdateChecks},{"artwork",t.updateArtwork},{"worldMap",t.updateWorldMap},{"mapFilters",t.updateMapFilters}}},
         {"preview",{{"quality",t.previewQuality},{"animation",t.previewAnimate},{"details",t.previewDetails},{"scaleUsePortrait",t.scaleUsePortrait},{"scaleReferenceIcon",t.scaleReferenceIcon}}},
-        {"runtime",{{"timeUnit",t.runtimeTimeUnit},{"helpyFpsLimit",t.helpyFpsLimit},{"showFps",t.showFps},{"fpsRefreshMs",t.fpsRefreshMs},{"showGameFps",t.showGameFps},{"fpsHotkey",t.fpsHotkey}}},
+        {"runtime",{{"timeUnit",t.runtimeTimeUnit},{"helpyFpsLimit",t.helpyFpsLimit},{"showFps",t.showFps},{"fpsRefreshMs",t.fpsRefreshMs},{"showGameFps",t.showGameFps},{"showCoordinates",t.showCoordinates},{"showStartupProgress",t.showStartupProgress},{"fpsHotkey",t.fpsHotkey},{"fpsControllerBinding",t.fpsControllerBinding},{"gameOverlay",t.gameOverlay},{"nativeOverlay",t.nativeOverlay},{"overlayOpacity",t.overlayOpacity},{"overlaySize",t.overlaySize},{"overlayUiScale",t.overlayUiScale}}},
         {"background",{{"file",t.backgroundFile},{"strength",t.backgroundStrength}}},
+        {"splash",{{"gameLogo",t.splashGameLogo},{"runtimeLogo",t.splashRuntimeLogo},{"rotateBackgrounds",t.splashBackgrounds},{"logoSeconds",t.splashLogoSeconds}}},
         {"liveLog",{{"colorRules",LiveLog::WriteColors(t.logColors)}}},
-        {"notifications",{{"enabled",t.diagnosticToastsEnabled},{"visibleLimit",t.diagnosticToastLimit},{"durationSeconds",t.diagnosticToastDuration}}},
+        {"notifications",{{"enabled",t.diagnosticToastsEnabled},{"achievements",t.achievementPopups},{"achievementSound",t.achievementSound},{"visibleLimit",t.diagnosticToastLimit},{"durationSeconds",t.diagnosticToastDuration},{"registryActivity",t.diagnosticRegistryActivity}}},
         {"diagnosticHistory",{{"ageDays",t.diagnosticHistoryDays},{"maxSessions",t.diagnosticHistorySessions},{"maxStorageMB",t.diagnosticHistoryMB}}},
         {"diagnosticPresentation",{{"splitRatio",t.diagnosticSplitRatio},{"developerMode",t.diagnosticDeveloperMode}}},
         {"colors",{
@@ -313,6 +393,12 @@ inline void Reload(bool createIfMissing=true) {
         const auto doc=nlohmann::json::parse(ConfigFiles::Read(file),nullptr,true,true);Theme next{};next.autoReload=doc.value("autoReload",true);const int version=doc.value("version",0);
         next.windowOpacity=ReadFloat(doc,"windowOpacity",next.windowOpacity,0.60f,1.0f);
         const auto display=doc.value("display",nlohmann::json::object());
+        const auto navigation=doc.value("navigation",nlohmann::json::object());next.navigationCollapsed=navigation.value("collapsed",false);next.navigationPinned=navigation.value("pinned",false);
+        const auto mods=doc.value("mods",nlohmann::json::object());next.ue4ssManageExternal=mods.value("manageExternalUE4SS",false);next.modsCompact=mods.value("compactView",mods.value("compactUE4SS",false));
+        const auto monitoring=doc.value("monitoring",nlohmann::json::object());
+        next.resourceDiagnostics=monitoring.value("resources",true);next.gpuResourceDiagnostics=monitoring.value("gpu",true);next.ue4ssDiagnostics=monitoring.value("ue4ss",true);next.playTimeReminders=monitoring.value("playTimeReminders",true);
+        next.startupResourceAlerts=monitoring.value("startupResourceAlerts",false);
+        next.resourceCpuThreshold=ReadInt(monitoring,"cpuThreshold",90,10,100);next.resourceMemoryThreshold=ReadInt(monitoring,"memoryThreshold",90,50,100);next.resourceGpuThreshold=ReadInt(monitoring,"gpuThreshold",98,10,100);next.ue4ssLogBudget=ReadInt(monitoring,"luaMessages",100,10,5000);next.ue4ssOverlapSeconds=ReadInt(monitoring,"overlapSeconds",5,1,30);
         const auto cache=doc.value("cache",nlohmann::json::object());const auto browse=HelpyBrowsePolicy::Read(cache);
         const int cacheLimit=ReadInt(cache,"iconCacheMB",200,0,16384);
         next.automaticUpdateChecks=doc.value("updates",nlohmann::json::object()).value("automaticChecks",true);
@@ -320,7 +406,8 @@ inline void Reload(bool createIfMissing=true) {
         next.updateWorldMap=doc.value("updates",nlohmann::json::object()).value("worldMap",true);
         next.updateMapFilters=doc.value("updates",nlohmann::json::object()).value("mapFilters",true);
         const auto notifications=doc.value("notifications",nlohmann::json::object());
-        next.diagnosticToastsEnabled=notifications.value("enabled",true);
+        next.diagnosticToastsEnabled=notifications.value("enabled",true);next.achievementPopups=notifications.value("achievements",true);next.achievementSound=notifications.value("achievementSound",true);
+        next.diagnosticRegistryActivity=notifications.value("registryActivity",false);
         next.diagnosticToastLimit=ReadInt(notifications,"visibleLimit",4,1,10);
         next.diagnosticToastDuration=ReadInt(notifications,"durationSeconds",6,2,15);
         const auto history=doc.value("diagnosticHistory",nlohmann::json::object());
@@ -333,26 +420,45 @@ inline void Reload(bool createIfMissing=true) {
         try{next.logColors=LiveLog::ReadColors(doc.value("liveLog",nlohmann::json::object()).value("colorRules",nlohmann::json::array()));}catch(...){next.logColors.clear();}
         next.dpiAware=display.value("dpiAware",true);next.userScale=ReadFloat(display,"userScale",1.18f,0.60f,2.50f);
         next.fontScale=ReadFloat(display,"fontScale",1.34f,0.70f,1.75f);next.density=ReadFloat(display,"density",1.14f,0.65f,1.50f);try{next.fontFamily=display.value("fontFamily",std::string("Segoe UI"));}catch(...){next.fontFamily="Segoe UI";}next.textBold=display.value("textBold",false);next.verboseTooltips=display.value("verboseTooltips",false);next.tooltipDelay=ReadFloat(display,"tooltipDelay",next.tooltipDelay,0.0f,2.0f);
-        const auto workspaces=doc.value("workspaces",nlohmann::json::object());next.workspaces={workspaces.value("authoring",false),workspaces.value("tools",false),workspaces.value("liveLog",false),workspaces.value("saveEditor",false),workspaces.value("serverTools",false),workspaces.value("journal",true)};
+        const auto workspaces=doc.value("workspaces",nlohmann::json::object());next.workspaces={workspaces.value("authoring",false),workspaces.value("tools",false),workspaces.value("liveLog",false),workspaces.value("saveEditor",false),workspaces.value("serverTools",false),workspaces.value("journal",true),false,workspaces.value("clone",false),workspaces.value("recipes",false)};
         const auto preview=doc.value("preview",nlohmann::json::object());next.previewQuality=ReadInt(preview,"quality",2,0,2);next.previewAnimate=preview.value("animation",false);next.previewDetails=preview.value("details",false);next.scaleUsePortrait=preview.value("scaleUsePortrait",true);next.scaleReferenceIcon=preview.value("scaleReferenceIcon",std::string{});
-        const auto views=doc.value("views",nlohmann::json::object());next.advancedMode=views.value("advancedMode",false);next.itemGridView=views.value("itemGrid",true);next.aiGridView=views.value("aiGrid",false);next.itemResultHeight=ReadFloat(views,"itemResultHeight",320.0f,180.0f,900.0f);next.aiResultHeight=ReadFloat(views,"aiResultHeight",320.0f,180.0f,900.0f);try{const auto value=views.value("itemCategory",std::string("All"));if(value=="All"||value=="Weapons"||value=="Armor"||value=="Consumables"||value=="Ammo"||value=="Resources"||value=="Tools"||value=="Building"||value=="Quest"||value=="Misc")next.itemCategory=value;}catch(...){}
+        const auto views=doc.value("views",nlohmann::json::object());next.advancedMode=views.value("advancedMode",false);next.itemGridView=views.value("itemGrid",true);next.itemInternalNames=views.value("itemInternalNames",false);next.aiGridView=views.value("aiGrid",false);next.itemResultHeight=ReadFloat(views,"itemResultHeight",320.0f,180.0f,900.0f);next.aiResultHeight=ReadFloat(views,"aiResultHeight",320.0f,180.0f,900.0f);try{const auto value=views.value("itemCategory",std::string("All"));if(value=="All"||value=="Weapons"||value=="Armor"||value=="Consumables"||value=="Ammo"||value=="Resources"||value=="Tools"||value=="Building"||value=="Quest"||value=="Misc")next.itemCategory=value;}catch(...){}
         try{const auto value=views.value("itemSource",std::string("all"));const auto kind=ItemSource::Decode(value);if(value==ItemSource::Token(kind)||(ContentSource::Valid(value)&&value==HelpyCacheSources::Lower(value)))next.itemSource=value;}catch(...){}
         next.itemBayBrowseRatio=ReadFloat(views,"itemBayBrowseRatio",0.74f,0.25f,0.90f);
         next.dockedBayHeight=ReadFloat(views,"dockedBayHeight",280.0f,160.0f,900.0f);
         next.itemCartWidth=ReadFloat(views,"itemCartWidth",270.0f,210.0f,500.0f);
         next.itemGridColumns=ReadInt(views,"itemGridColumns",ItemBayLayout::DefaultColumns,1,ItemBayLayout::MaxColumns);
-        next.itemPageSize=ReadInt(views,"itemPageSize",ItemPaging::DefaultSize,1,ItemPaging::MaximumSize);
+        next.itemPageSize=ReadInt(views,"itemPageSize",ItemPaging::DefaultSize,1,ItemPaging::MaximumSize);next.quickSendPlayerGuid=views.value("quickSendPlayerGuid",std::string{});if(next.quickSendPlayerGuid.size()>128)next.quickSendPlayerGuid.clear();
         next.itemGridRows=ReadInt(views,"itemGridRows",ItemBayLayout::DefaultRows,1,ItemBayLayout::MaxRows);
         next.itemGridFitRows=views.value("itemGridFitRows",true);
         next.itemShowPlaceholders=views.value("itemShowPlaceholders",false);
         next.runtimeTimeUnit=ReadInt(doc.value("runtime",nlohmann::json::object()),"timeUnit",0,0,3);
         const auto runtime=doc.value("runtime",nlohmann::json::object());
-        next.helpyFpsLimit=ReadInt(runtime,"helpyFpsLimit",30,15,60);
+        next.helpyFpsLimit=ReadInt(runtime,"helpyFpsLimit",60,15,144);
         next.fpsRefreshMs=ReadInt(runtime,"fpsRefreshMs",1000,500,2000);
         next.showFps=runtime.value("showFps",false);
         next.showGameFps=runtime.value("showGameFps",false);
+        next.showCoordinates=runtime.value("showCoordinates",false);
+        next.showStartupProgress=runtime.value("showStartupProgress",true);
+        next.gameOverlay=runtime.value("gameOverlay",true);
+        next.nativeOverlay=runtime.value("nativeOverlay",true);
+        const auto input=doc.value("input",nlohmann::json::object());next.inputMode=ReadInt(input,"mode",0,0,2);next.controllerGlyphs=ReadInt(input,"glyphs",0,0,4);next.controllerShortcut=ReadInt(input,"shortcut",1,0,2);
+        next.hudBindings=input.value("hudBindings",nlohmann::json::object());if(!next.hudBindings.is_object()||next.hudBindings.size()>256)throw std::runtime_error("Invalid HUD bindings.");
+        for(auto& [id,binding]:next.hudBindings.items()){if(id.empty()||id.size()>256)throw std::runtime_error("Invalid HUD binding identity.");binding={{"Keyboard",InputBindings::Text(InputBindings::Parse(binding.value("Keyboard",std::string("None"))))},{"Controller",InputBindings::PadText(InputBindings::ParsePad(binding.value("Controller",std::string("None"))))}};}
+        next.helpyKeyboardBinding=input.value("keyboardBinding",std::string{});if(!next.helpyKeyboardBinding.empty())try{next.helpyKeyboardBinding=InputBindings::Text(InputBindings::Parse(next.helpyKeyboardBinding));}catch(const std::exception&){next.helpyKeyboardBinding.clear();}
+        next.controllerBinding=input.value("binding",std::string{});if(!next.controllerBinding.empty())try{next.controllerBinding=InputBindings::PadText(InputBindings::ParsePad(next.controllerBinding));}catch(const std::exception&){next.controllerBinding.clear();}next.controllerBindings=HelpyControllerBindings::Validate(input.value("controllerBindings",nlohmann::json::object()));next.reserveControllerGuide=input.value("reserveGuide",true);next.controllerTouchpad=input.value("touchpad",true);next.controllerCursor=input.value("cursor",true);next.controllerCursorSpeed=ReadFloat(input,"cursorSpeed",900.f,200.f,1800.f);next.controllerDeadZone=ReadFloat(input,"deadZone",.27f,.08f,.5f);next.controllerCursorAssist=input.value("cursorAssist",true);
+        next.autoInstallAuthoringDotNet=doc.value("authoring",nlohmann::json::object()).value("autoInstallDotNet",true);
+        next.overlayOpacity=ReadFloat(runtime,"overlayOpacity",.88f,.60f,1.f);
+        next.overlaySize=ReadFloat(runtime,"overlaySize",.9f,.45f,.98f);
+        next.overlayUiScale=ReadFloat(runtime,"overlayUiScale",1.f,.65f,1.5f);
         next.fpsHotkey=runtime.value("fpsHotkey",std::string("F10"));
-        if(const auto* key=HelpyShortcut::Find(next.fpsHotkey))next.fpsHotkey=key->Name;else next.fpsHotkey="F10";
+        try{next.fpsHotkey=InputBindings::Text(InputBindings::Parse(next.fpsHotkey));}catch(const std::exception&){next.fpsHotkey="F10";}
+        next.fpsControllerBinding=runtime.value("fpsControllerBinding",std::string("None"));try{next.fpsControllerBinding=InputBindings::PadText(InputBindings::ParsePad(next.fpsControllerBinding));}catch(const std::exception&){next.fpsControllerBinding="None";}
+        const auto splash=doc.value("splash",nlohmann::json::object());
+        next.splashGameLogo=splash.value("gameLogo",true);
+        next.splashRuntimeLogo=splash.value("runtimeLogo",true);
+        next.splashBackgrounds=splash.value("rotateBackgrounds",true);
+        next.splashLogoSeconds=ReadFloat(splash,"logoSeconds",8.f,2.f,30.f);
         const auto background=doc.value("background",nlohmann::json::object());
         next.backgroundFile=background.value("file",std::string{});if(!BackgroundPolicy::Filename(next.backgroundFile))next.backgroundFile.clear();
         next.backgroundStrength=ReadFloat(background,"strength",.12f,0,.3f);
@@ -412,6 +518,7 @@ struct Scope {
         pc(ImGuiCol_Button,t.button);pc(ImGuiCol_ButtonHovered,t.buttonHover);pc(ImGuiCol_ButtonActive,t.buttonActive);
         pc(ImGuiCol_Header,t.control);pc(ImGuiCol_HeaderHovered,t.controlHover);pc(ImGuiCol_HeaderActive,t.controlActive);
         pc(ImGuiCol_CheckMark,t.accentHover);pc(ImGuiCol_SliderGrab,t.accent);pc(ImGuiCol_SliderGrabActive,t.accentHover);
+        pc(ImGuiCol_NavCursor,t.accentHover);
         pc(ImGuiCol_TextLink,t.accentHover);pc(ImGuiCol_PlotHistogram,t.accent);pc(ImGuiCol_PlotHistogramHovered,t.accentHover);
         pc(ImGuiCol_ResizeGrip,t.border);pc(ImGuiCol_ResizeGripHovered,t.accent);pc(ImGuiCol_ResizeGripActive,t.accentHover);
         pc(ImGuiCol_DragDropTarget,t.accentHover);pc(ImGuiCol_NavCursor,t.accent);
@@ -437,7 +544,7 @@ inline bool TooltipReady(std::string_view key,bool hovered) {
 
 inline bool SearchIconButton(const char* id,float logicalSize=0.0f) {
     const auto& t=Current;const float side=logicalSize>0.0f?t.Y(logicalSize):ImGui::GetFrameHeight();
-    ImGui::PushID(id);const bool clicked=ImGui::InvisibleButton("##search",ImVec2(side,side));
+    ImGui::PushID(id);const bool clicked=ImGui::InvisibleButton("##search",ImVec2(side,side),ImGuiButtonFlags_EnableNav);
     const auto a=ImGui::GetItemRectMin(),b=ImGui::GetItemRectMax();auto* draw=ImGui::GetWindowDrawList();
     const ImU32 bg=ImGui::GetColorU32(ImGui::IsItemActive()?t.buttonActive:ImGui::IsItemHovered()?t.buttonHover:t.button);
     draw->AddRectFilled(a,b,bg,t.X(t.frameRounding));
@@ -446,9 +553,51 @@ inline bool SearchIconButton(const char* id,float logicalSize=0.0f) {
     ImGui::PopID();return clicked;
 }
 
-inline bool BeginScroll(const char* id,const ImVec2& size=ImVec2(0,0),bool border=false) {
+inline bool ControllerNavigation=false,EnterNextSection=false;
+struct PaneNavigationScope {ImGuiWindow* Source=nullptr;ImGuiNavItemData Saved;bool Section=false;ImGuiWindow* PreviousFocus=nullptr;};
+inline std::vector<PaneNavigationScope> PaneNavigationStack;
+inline ImGuiContext* PaneNavigationContext=nullptr;inline int PaneNavigationFrame=-1;
+inline ImGuiWindow* PaneNavigationSource=nullptr;inline ImGuiNavItemData PaneNavigationBest;
+inline bool Nearer(const ImGuiNavItemData& a,const ImGuiNavItemData& b){return a.ID&&(!b.ID||a.DistBox<b.DistBox||(a.DistBox==b.DistBox&&a.DistCenter<b.DistCenter));}
+inline bool BeginPanel(const char* id,const ImVec2& size=ImVec2(0,0),ImGuiChildFlags childFlags=0,ImGuiWindowFlags windowFlags=0,bool section=false) {
+    auto& context=*ImGui::GetCurrentContext();
+    if(PaneNavigationContext!=&context||PaneNavigationFrame!=context.FrameCount){PaneNavigationContext=&context;PaneNavigationFrame=context.FrameCount;PaneNavigationStack.clear();PaneNavigationSource=nullptr;PaneNavigationBest.Clear();}
+    const bool contained=section&&ControllerNavigation;
+    const bool visible=ImGui::BeginChild(id,size,contained?childFlags:childFlags|ImGuiChildFlags_NavFlattened,windowFlags);
+    PaneNavigationScope scope;scope.Section=contained;auto* window=ImGui::GetCurrentWindow();
+    if(contained&&visible)HelpyControllerPanes::Register(window);
+    if(contained&&EnterNextSection){
+        EnterNextSection=false;scope.PreviousFocus=context.NavWindow;
+        ImGui::FocusWindow(window);ImGui::NavInitWindow(window,false);ImGui::SetNavCursorVisible(true);
+    }
+    if(context.NavWindow&&window->RootWindowForNav==context.NavWindow->RootWindowForNav&&window!=context.NavWindow&&context.NavMoveScoringItems&&!(context.NavMoveFlags&(ImGuiNavMoveFlags_IsTabbing|ImGuiNavMoveFlags_AlsoScoreVisibleSet))&&ImGui::IsWindowChildOf(window,context.NavWindow,false)){
+        scope.Source=context.NavWindow;scope.Saved=context.NavMoveResultOther;context.NavMoveResultOther.Clear();
+    }
+    PaneNavigationStack.push_back(scope);return visible;
+}
+inline void EndPanel(){
+    auto& context=*ImGui::GetCurrentContext();IM_ASSERT(!PaneNavigationStack.empty());
+    const auto scope=PaneNavigationStack.back();PaneNavigationStack.pop_back();
+    if(scope.Source){
+        const auto candidate=context.NavMoveResultOther;
+        if(scope.Source==context.NavWindow&&candidate.ID&&ImGui::IsWindowChildOf(candidate.Window,scope.Source,false)){
+            // Retain the best content target before a nearby sidebar can replace the shared score.
+            if(PaneNavigationSource!=scope.Source){PaneNavigationSource=scope.Source;PaneNavigationBest.Clear();}
+            if(Nearer(candidate,PaneNavigationBest))PaneNavigationBest=candidate;
+        }
+        if(Nearer(scope.Saved,context.NavMoveResultOther))context.NavMoveResultOther=scope.Saved;
+    }
+    auto* pane=ImGui::GetCurrentWindow();
+    if(scope.PreviousFocus&&context.NavWindow==pane&&!pane->DC.NavLayersActiveMaskNext){
+        ImGui::FocusWindow(scope.PreviousFocus,ImGuiFocusRequestFlags_UnlessBelowModal);
+        ImGui::SetNavCursorVisible(true);
+    }
+    if(scope.Section&&context.NavWindow&&context.NavWindow->RootWindowForNav==pane&&context.NavInputSource==ImGuiInputSource_Gamepad){const auto* window=ImGui::GetCurrentWindow();const auto a=window->Pos,b=ImVec2(a.x+window->Size.x,a.y+window->Size.y);HelpyFocusHighlight::Draw(window->DrawList,a,b,ImGui::GetColorU32(Current.accent),Current.X(Current.childRounding),false,Current.X(2));}
+    ImGui::EndChild();
+}
+inline bool BeginScroll(const char* id,const ImVec2& size=ImVec2(0,0),bool border=false,bool section=false) {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(Current.X(Current.contentPaddingX),Current.Y(Current.contentPaddingY)));
-    return ImGui::BeginChild(id,size,border,ImGuiWindowFlags_AlwaysVerticalScrollbar|ImGuiWindowFlags_AlwaysUseWindowPadding);
+    return BeginPanel(id,size,border?ImGuiChildFlags_Borders:0,ImGuiWindowFlags_AlwaysVerticalScrollbar|ImGuiWindowFlags_AlwaysUseWindowPadding,section);
 }
 inline void EndScroll(const Theme& t) {
     const float y=ImGui::GetScrollY(),max=ImGui::GetScrollMaxY(),h=t.Y(t.scrollFadeHeight);
@@ -458,13 +607,20 @@ inline void EndScroll(const Theme& t) {
         if(y>1.0f)draw->AddRectFilledMultiColor(p,ImVec2(right,p.y+h),solid,solid,clear,clear);
         if(y<max-1.0f)draw->AddRectFilledMultiColor(ImVec2(p.x,p.y+s.y-h),ImVec2(right,p.y+s.y),clear,clear,solid,solid);
     }
-    ImGui::EndChild();
+    EndPanel();
     ImGui::PopStyleVar();
 }
-enum class Icon : unsigned char { Ai, Resource, Item, Lab, Building, Cleanup, Appearance, Info, Map, Authoring, Tools, Settings, LiveLog, Server, Acknowledge, Copy, Export, Bell, Code };
+enum class Icon : unsigned char { Ai, Resource, Item, Lab, Building, Cleanup, Appearance, Info, Map, Authoring, Tools, Settings, LiveLog, Server, Acknowledge, Copy, Export, Bell, Code, Players, Package };
 inline void DrawIcon(Icon icon,const ImVec2& c,float size,const ImVec4& tint=Current.icon) {
     auto* d=ImGui::GetWindowDrawList();const ImU32 col=ImGui::GetColorU32(tint);const float r=size*0.5f,w=std::max(1.0f,size*0.09f);
     switch(icon) {
+    case Icon::Players:
+        d->AddCircle({c.x,c.y-r*.35f},r*.22f,col,12,w);
+        d->PathArcTo({c.x,c.y+r*.5f},r*.55f,3.14159265f,6.2831853f,12);d->PathStroke(col,0,w);
+        d->AddLine({c.x-r*.55f,c.y+r*.5f},{c.x+r*.55f,c.y+r*.5f},col,w);break;
+    case Icon::Package:
+        d->AddPolyline(std::array<ImVec2,6>{{{c.x,c.y-r*.65f},{c.x+r*.6f,c.y-r*.3f},{c.x+r*.6f,c.y+r*.35f},{c.x,c.y+r*.7f},{c.x-r*.6f,c.y+r*.35f},{c.x-r*.6f,c.y-r*.3f}}}.data(),6,col,ImDrawFlags_Closed,w);
+        d->AddLine({c.x-r*.6f,c.y-r*.3f},{c.x,c.y+r*.05f},col,w);d->AddLine({c.x,c.y+r*.05f},{c.x+r*.6f,c.y-r*.3f},col,w);d->AddLine({c.x,c.y+r*.05f},{c.x,c.y+r*.7f},col,w);break;
     case Icon::Acknowledge:d->AddLine({c.x-r*.45f,c.y},{c.x-r*.1f,c.y+r*.35f},col,w);d->AddLine({c.x-r*.1f,c.y+r*.35f},{c.x+r*.45f,c.y-r*.35f},col,w);break;
     case Icon::Copy:d->AddRect({c.x-r*.4f,c.y-r*.4f},{c.x+r*.2f,c.y+r*.3f},col,0,0,w);d->AddRect({c.x-r*.1f,c.y-r*.2f},{c.x+r*.5f,c.y+r*.5f},col,0,0,w);break;
     case Icon::Export:d->AddRect({c.x-r*.5f,c.y},{c.x+r*.5f,c.y+r*.5f},col,0,0,w);d->AddLine({c.x,c.y+r*.2f},{c.x,c.y-r*.5f},col,w);d->AddLine({c.x-r*.3f,c.y-r*.2f},{c.x,c.y-r*.5f},col,w);d->AddLine({c.x+r*.3f,c.y-r*.2f},{c.x,c.y-r*.5f},col,w);break;

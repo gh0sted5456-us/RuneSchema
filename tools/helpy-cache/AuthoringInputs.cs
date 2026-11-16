@@ -53,16 +53,16 @@ static class AuthoringInputs
             if (install is not null) yield return install;
         }
     }
-    internal static string Game(string? supplied, string input, Action<string> closed)
+    internal static string Game(string? supplied, string input, Action<string> closed, bool allowRunning = false)
     {
         if (supplied is not null)
         {
-            var project = Project(supplied) ?? throw new InvalidDataException("Selected game must contain RSDragonwilds/Content/Paks."); closed(project); return project;
+            var project = Project(supplied) ?? throw new InvalidDataException("Selected game must contain RSDragonwilds/Content/Paks."); if (!allowRunning) closed(project); return project;
         }
         var candidates = InstalledGames(input).Select(Project).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase);
         foreach (var candidate in candidates)
         {
-            try { closed(candidate); Console.WriteLine("Using installed game: " + candidate); return candidate; }
+            try { if (!allowRunning) closed(candidate); Console.WriteLine("Using installed game: " + candidate); return candidate; }
             catch (InvalidDataException) { Console.WriteLine("Skipping active installation: " + candidate); }
         }
         throw new InvalidDataException("No inactive Dragonwilds installation found. Close the target game, or use -Game/--game for a custom installation.");

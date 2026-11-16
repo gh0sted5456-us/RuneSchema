@@ -2,6 +2,7 @@
 #include "Generator/HelpyImGuiTheme.h"
 #include "Generator/RuneSchemaSettingsPanel.h"
 #include "Generator/RuntimeConnectionPanel.h"
+#include "Generator/ItemGridPicker.h"
 #include "Generator/DragFeedback.h"
 #include "Generator/HelpyLoadingIndicator.h"
 #include <cassert>
@@ -12,8 +13,20 @@
 #undef assert
 #define assert(value) ((value)?static_cast<void>(0):throw std::runtime_error("line "+std::to_string(__LINE__)+": "+#value))
 
+struct TrackedImGuiAllocations {
+    ImGuiMemAllocFunc Allocate{};ImGuiMemFreeFunc Free{};void* User{};
+    std::map<void*,size_t> Live;
+    TrackedImGuiAllocations(){
+        ImGui::GetAllocatorFunctions(&Allocate,&Free,&User);
+        ImGui::SetAllocatorFunctions([](size_t bytes,void* user){auto& self=*static_cast<TrackedImGuiAllocations*>(user);auto* value=self.Allocate(bytes,self.User);if(value)self.Live[value]=bytes;return value;},
+            [](void* value,void* user){auto& self=*static_cast<TrackedImGuiAllocations*>(user);self.Live.erase(value);self.Free(value,self.User);},this);
+    }
+    ~TrackedImGuiAllocations(){ImGui::SetAllocatorFunctions(Allocate,Free,User);}
+};
+
 int Run() {
     using namespace PS;
+    HelpyPaths::Configure(std::filesystem::temp_directory_path()/("HelpyIconDemand-"+std::to_string(GetCurrentProcessId()))/"RuneSchema/plugins/RuneSchema.Helpy");
     {namespace quick=RuneSchemaSettingsPanel;unsigned writes=0;
         const nlohmann::json settings={{"advancedLogging",false},{"autoUpdateMappings",true},{"persistence",{{"allowCorruptCharacterEntry",false}}}};
         quick::Accept({{"Document",settings},{"Editable",{{"/advancedLogging","boolean"},{"/autoUpdateMappings","boolean"},{"/persistence/allowCorruptCharacterEntry","boolean"}}},{"ExpectedContents","original fixture"}});
@@ -54,30 +67,116 @@ int Run() {
         SpawnToolRequests::Generation=42;assert(!connection::Read(now).Host);SpawnToolRequests::Generation=41;
         connection::Snapshot["Role"]="client";assert(!connection::Read(now).Host&&connection::Read(now).Session=="Multiplayer client");
         connection::Snapshot=nlohmann::json::object();connection::Generation=0;}
+    {namespace connection=RuntimeConnectionPanel;std::promise<void> release;const auto ready=release.get_future().share();
+        RuneSchemaSettingsPanel::Remote=[ready](const nlohmann::json&,nlohmann::json& reply){ready.wait();reply={{"Generation",41},{"Available",true},{"Fresh",true},{"Role","listen-server"},{"AgeMs",0}};return true;};
+        connection::Next={};SpawnToolRequests::Generation=41;
+        auto poll=std::async(std::launch::async,[]{connection::Poll();});const bool responsive=poll.wait_for(std::chrono::milliseconds(100))==std::future_status::ready;
+        release.set_value();poll.get();assert(responsive);RuneSchemaSettingsPanel::Remote={};SpawnToolRequests::Generation=42;
+        if(connection::Pending.valid())connection::Pending.wait();connection::Poll();assert(!connection::Read().Host);
+        connection::Snapshot=nlohmann::json::object();connection::Generation=0;connection::Next={};SpawnToolRequests::Generation=41;}
+    {namespace picker=ItemGridPicker;const auto previous=picker::SharedCart;picker::SharedCart.Clear();picker::State selection;char primary[1025]{};
+        const nlohmann::json first={{"Path","/Game/Test/One.One"},{"Name","First"}},second={{"Path","/Game/Test/Two.Two"},{"Name","Second"}};
+        assert(picker::ApplySelection(selection,first.at("Path").get<std::string>(),primary,sizeof(primary),false,true,&first));
+        assert(picker::ApplySelection(selection,second.at("Path").get<std::string>(),primary,sizeof(primary),true,true,&second));assert(selection.SelectedPaths.size()==2);
+        assert(picker::SendSelectionToCart({{"Items",nlohmann::json::array({first})}},selection,primary,sizeof(primary))==2);assert(picker::SharedCart.Entries().size()==2);
+        assert(selection.SelectedPaths.empty()&&selection.SelectedRows.empty()&&selection.SelectedPath.empty()&&!primary[0]);
+        picker::SyncLegacySelection(selection,primary);assert(selection.SelectedPaths.empty());
+        assert(picker::SendSelectionToCart(nlohmann::json::object(),selection,primary,sizeof(primary))==0&&picker::SharedCart.Entries()[0].Quantity==1);
+        assert(picker::ApplySelection(selection,second.at("Path").get<std::string>(),primary,sizeof(primary),true,true,&second));assert(selection.SelectedPaths.size()==1&&selection.SelectedRows.size()==1);
+        assert(picker::ApplySelection(selection,second.at("Path").get<std::string>(),primary,sizeof(primary),true,false,&second));assert(selection.SelectedPaths.size()==1&&selection.SelectedPaths.front()==second.at("Path").get<std::string>());
+        picker::SharedCart.Clear();for(size_t i=0;i<ItemCart::Model::Limit;++i)assert(picker::SharedCart.Add({{"Path","/Game/Full"+std::to_string(i)}}));
+        const nlohmann::json existing={{"Path","/Game/Full0"},{"Name","Existing"}};
+        assert(picker::ApplySelection(selection,existing.at("Path"),primary,sizeof(primary),true,true,&existing));
+        assert(picker::SendSelectionToCart(nlohmann::json::object(),selection,primary,sizeof(primary))==1);
+        assert(selection.SelectedPaths.size()==1&&selection.SelectedPaths.front()==second.at("Path").get<std::string>()&&primary==second.at("Path").get<std::string>()&&selection.SelectedRows.size()==1);
+        picker::SharedCart=previous;}
     auto& state=icons::detail::State();state.Generation=41;
     unsigned submissions=0;std::deque<nlohmann::json> replies;
     icons::ConfigureRemote([&](const std::string&){++submissions;return true;},[&](nlohmann::json& result){if(replies.empty())return false;result=std::move(replies.front());replies.pop_front();return true;});
     const auto begin=[] {ImGui::NewFrame();ImGui::SetNextWindowPos({0,0});ImGui::SetNextWindowSize({640,480});ImGui::Begin("test");};
     const auto end=[] {ImGui::End();ImGui::EndFrame();assert(GImGui->ErrorCountCurrentFrame==0);};
+    {const auto previousBay=ItemGridPicker::Bay;const auto previousWindow=LazyCatalog::For(0);const auto previousTheme=HelpyImGuiTheme::Current;
+        ItemGridPicker::Bay=ItemGridPicker::SharedBay{};auto& window=LazyCatalog::For(0);window=LazyCatalog::State{};window.Started=true;window.RuntimeGeneration=41;window.HasMore=false;
+        window.Rows=nlohmann::json::array({{{"Path","/Game/UIFixture/Row.Row"},{"Name","Row"}}});window.RowsRevision=++LazyCatalog::RowsClock;
+        HelpyImGuiTheme::Current.itemSource="all";HelpyImGuiTheme::Current.itemCategory="All";
+        const auto drawBay=[&](uint64_t revision){begin();ItemGridPicker::RenderShared({{"Status","metadata"}},revision);end();};
+        drawBay(1);const auto rowsRevision=ItemGridPicker::Bay.Revision;const auto* storage=&ItemGridPicker::Bay.Catalog["Items"].get_ref<const nlohmann::json::array_t&>();
+        drawBay(1);assert(ItemGridPicker::Bay.Revision==rowsRevision&& &ItemGridPicker::Bay.Catalog["Items"].get_ref<const nlohmann::json::array_t&>()==storage);
+        drawBay(2);assert(ItemGridPicker::Bay.Revision==rowsRevision&&ItemGridPicker::Bay.Picker.CatalogRevision==rowsRevision);
+        LazyCatalog::RecordNativeIcon("/Game/UIFixture/Row.Row","");drawBay(2);
+        assert(ItemGridPicker::Bay.Revision>rowsRevision&&ItemGridPicker::Bay.Catalog["Items"][0]["Icon"]=="");
+        std::snprintf(ItemGridPicker::Bay.Selected,sizeof(ItemGridPicker::Bay.Selected),"%s","/Game/UIFixture/Row.Row");drawBay(2);
+        const auto* detailsStorage=&ItemGridPicker::Bay.DetailsRow["Name"].get_ref<const std::string&>();
+        drawBay(2);assert(&ItemGridPicker::Bay.DetailsRow["Name"].get_ref<const std::string&>()==detailsStorage);
+        window.Rows[0]["Name"]="Updated row";window.RowsRevision=++LazyCatalog::RowsClock;drawBay(2);
+        assert(ItemGridPicker::Bay.DetailsRow["Name"]=="Updated row");
+        ItemGridPicker::Bay=previousBay;LazyCatalog::For(0)=previousWindow;HelpyImGuiTheme::Current=previousTheme;LazyCatalog::NativeIcons.erase("/Game/UIFixture/Row.Row");}
+    for(const float paneWidth:{192.f,240.f,480.f})for(int frame=0;frame<3;++frame){
+        begin();PS::HelpyImGuiTheme::BeginPanel("pagination",{paneWidth,120});ItemGridPicker::State page;page.PageIndex=1;
+        const float right=ImGui::GetWindowPos().x+ImGui::GetWindowContentRegionMax().x;
+        ItemGridPicker::PageControls(page,80,false,false);assert(ImGui::GetItemRectMax().x<=right+1.f);
+        PS::HelpyImGuiTheme::EndPanel();end();
+    }
+    {
+        ItemGridPicker::State picker;char filter[257]{},selected[1025]{};LazyCatalog::State local;local.Started=true;
+        const nlohmann::json catalog={{"Items",nlohmann::json::array()}};const bool previous=HelpyControllerInput::Selection.Controller;HelpyControllerInput::Selection.Controller=true;
+        io.ConfigFlags|=ImGuiConfigFlags_NavEnableGamepad;io.BackendFlags|=ImGuiBackendFlags_HasGamepad;
+        const auto draw=[&](bool editing=false){begin();ImGui::SetWindowFocus();if(editing)io.WantTextInput=true;
+            ItemGridPicker::Render("thumb-selection",catalog,filter,sizeof(filter),selected,sizeof(selected),picker,1,true,true,false,false,false,0,&local);end();};
+        draw();io.AddKeyEvent(ImGuiKey_GamepadL3,true);draw();assert(picker.MultiSelect&&HelpyControllerInput::ItemBayMultiSelect);draw();assert(picker.MultiSelect);
+        io.AddKeyEvent(ImGuiKey_GamepadL3,false);draw();io.AddKeyEvent(ImGuiKey_GamepadL3,true);draw();assert(!picker.MultiSelect);
+        io.AddKeyEvent(ImGuiKey_GamepadL3,false);draw();io.AddKeyEvent(ImGuiKey_GamepadL3,true);draw(true);assert(!picker.MultiSelect);
+        io.AddKeyEvent(ImGuiKey_GamepadL3,false);draw();HelpyControllerInput::Selection.Controller=previous;
+    }
+    {
+        ItemGridPicker::State picker;char filter[257]{},selected[1025]{};uint64_t revision=1;
+        const auto liveTyping=ItemGridPicker::SearchAsYouType;ItemGridPicker::SearchAsYouType=false;
+        LazyCatalog::State local;local.Started=true;const nlohmann::json catalog={{"Items",nlohmann::json::array()}};
+        const auto draw=[&](bool focus=false){begin();if(focus)ImGui::SetKeyboardFocusHere();
+            ItemGridPicker::Render("typing-regression",catalog,filter,sizeof(filter),selected,sizeof(selected),picker,revision++,true,false,false,false,true,0,&local);end();};
+        io.AddFocusEvent(true);draw(true);draw();std::string expected;
+        for(const auto c:std::string("fuel")){io.AddInputCharacter(c);draw();expected+=c;assert(filter==expected);}
+        io.AddKeyEvent(ImGuiKey_Backspace,true);draw();assert(std::string(filter)=="fue");
+        io.AddKeyEvent(ImGuiKey_Backspace,false);draw();io.AddInputCharacter('l');draw();assert(std::string(filter)=="fuel");
+        for(int frame=0;frame<120;++frame){draw();assert(std::string(filter)=="fuel");}
+        io.ClearInputKeys();io.ClearInputMouse();draw();assert(std::string(filter)=="fuel");
+        ItemGridPicker::SearchAsYouType=liveTyping;
+    }
+    {namespace quick=RuneSchemaSettingsPanel;unsigned reads=0;
+        quick::Remote=[&](const nlohmann::json&,nlohmann::json&){++reads;return false;};
+        quick::Loaded=false;quick::Status.clear();
+        for(int section:{0,2,3}){quick::QuickSection=section;for(int frame=0;frame<3;++frame){begin();quick::QuickSettings();end();}}
+        assert(reads==0);quick::QuickSection=1;begin();quick::QuickSettings();end();assert(reads==1);
+        quick::QuickSection=0;quick::Status.clear();quick::Remote={};
+        assert(quick::ConfigGroup("persistence")==1&&quick::ConfigGroup("quickLaunch")==1&&quick::ConfigGroup("registry")==2&&quick::ConfigGroup("network")==3&&quick::ConfigGroup("futureUnknownOption")==4);
+    }
+    {constexpr std::array labels{"Display","Startup","Cache","Performance","Saves"};int selected=0;ImVec2 target{};
+        const auto draw=[&]{begin();PS::HelpyImGuiTheme::BeginPanel("narrow tabs",{175,180});float used=0;float previousY=0;bool wrapped=false;
+            for(int i=0;i<int(labels.size());++i){if(HelpyMenu::Tab(labels[i],selected==i,used,150))selected=i;
+                const auto a=ImGui::GetItemRectMin(),b=ImGui::GetItemRectMax();assert(b.x-a.x<=150);if(previousY&&a.y>previousY)wrapped=true;previousY=a.y;
+                if(i==3)target={(a.x+b.x)*.5f,(a.y+b.y)*.5f};}
+            assert(wrapped);PS::HelpyImGuiTheme::EndPanel();end();};
+        draw();io.AddMousePosEvent(target.x,target.y);draw();io.AddMouseButtonEvent(0,true);draw();io.AddMouseButtonEvent(0,false);draw();assert(selected==3);
+    }
     begin();ImGui::Dummy({50,40});const auto sourceRect=ImGui::GetItemRectMin();const auto vertices=ImGui::GetForegroundDrawList()->VtxBuffer.Size;
     ImGui::GetIO().MousePos={639,479};DragFeedback::Held("Item","A very long held item name that wraps without changing its source layout");
     assert(ImGui::GetForegroundDrawList()->VtxBuffer.Size>vertices&&ImGui::GetMouseCursor()==ImGuiMouseCursor_Hand);
     assert(ImGui::GetItemRectMin().x==sourceRect.x&&ImGui::GetItemRectMin().y==sourceRect.y&&state.Queued.empty()&&submissions==0);end();
     const auto until=[&](auto ready){const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
-        while(!ready()){assert(std::chrono::steady_clock::now()<deadline);const auto before=state.Textures.size();icons::Update();assert(state.Textures.size()<=before+1);std::this_thread::sleep_for(std::chrono::milliseconds(1));}};
+        while(!ready()){assert(std::chrono::steady_clock::now()<deadline);const auto before=state.Textures.size();icons::Update();assert(state.Textures.size()<=before+icons::detail::MaxDiskBatch);std::this_thread::sleep_for(std::chrono::milliseconds(1));}};
     const auto cached=[&](const std::string& icon){icons::Queue(icon,true);until([&]{return state.Textures.contains(icon);});};
     // Reproduce a tooltip opened from a tiny Save Editor table cell for many
     // frames. Width must be viewport-bounded and invariant, not self-shrinking.
     for(const ImVec2 viewport:std::array{ImVec2{640,480},ImVec2{760,560},ImVec2{1280,800}}){
         io.DisplaySize=viewport;float previous=0;
-        for(int frame=0;frame<160;++frame){begin();ImGui::BeginChild("tiny-cell",{18,90});
+        for(int frame=0;frame<160;++frame){begin();PS::HelpyImGuiTheme::BeginPanel("tiny-cell",{18,90});
             HelpyImGuiTheme::BeginDetailsTooltip();
             const auto textLeft=ImGui::GetCursorScreenPos().x,textRight=textLeft+ImGui::GetContentRegionAvail().x;
             auto* draw=ImGui::GetWindowDrawList();const auto firstVertex=draw->VtxBuffer.Size;
             HelpyImGuiTheme::DetailsTextUnformatted(std::string(4096,'W').c_str());
             for(int i=firstVertex;i<draw->VtxBuffer.Size;++i)assert(draw->VtxBuffer[i].pos.x>=textLeft-2&&draw->VtxBuffer[i].pos.x<=textRight+2);
             const auto size=ImGui::GetWindowSize();if(frame>3){assert(size.x>=300&&size.x<=viewport.x&&size.y<=viewport.y);if(previous)assert(std::abs(size.x-previous)<1);previous=size.x;}
-            HelpyImGuiTheme::EndDetailsTooltip();ImGui::EndChild();end();
+            HelpyImGuiTheme::EndDetailsTooltip();PS::HelpyImGuiTheme::EndPanel();end();
         }
     }io.DisplaySize={640,480};
     for(const ImVec2 anchor:std::array{ImVec2{300,120},ImVec2{0,420},ImVec2{580,420}}){
@@ -118,21 +217,23 @@ int Run() {
     HelpySourceCache::Current.Key="icon-demand-fixture";
     begin();icons::Update();assert(submissions==0&&state.Queued.empty()); // no longer visible
     for(int i=0;i<80;++i){const auto icon="visible-"+std::to_string(i);state.DiskChecked.insert(icon);icons::Queue(icon,true);}
-    assert(state.Queued.size()==32);icons::Update();assert(submissions==1&&state.Pending.size()==1);
-    state.NextSubmit={};icons::Update();assert(submissions==1); // single in-flight capture
-    const auto active=*state.Pending.begin();end();
+    assert(state.Queued.size()==32);icons::Update();assert(submissions==icons::detail::MaxActiveRemote&&state.Pending.size()==icons::detail::MaxActiveRemote);
+    const auto initialFlight=submissions;
+    assert(state.NextSubmit<=std::chrono::steady_clock::now());
+    state.NextSubmit={};icons::Update();assert(submissions==initialFlight); // Bounded queued requests; the game still captures one icon at a time.
+    const auto accepted=state.Pending;const auto active=*accepted.begin();end();
     begin();
-    replies.push_back({{"Icon",active},{"Status","Error"},{"Retryable",true},{"Error","blank item icon"}});
+    for(const auto& icon:accepted)replies.push_back({{"Icon",icon},{"Status","Error"},{"Retryable",true},{"Error","blank item icon"}});
     icons::Update();state.NextSubmit={};icons::Update();
-    assert(submissions==1&&state.Pending.empty()&&state.Queued.empty()); // retries off-screen are discarded
+    assert(submissions==initialFlight&&state.Pending.empty()&&state.Queued.empty()); // retries off-screen are discarded
     // A visible icon may retry, but never loop indefinitely while idle.
-    state.DiskChecked.insert(active);icons::Queue(active,true);state.NextSubmit={};icons::Update();assert(submissions==2);
+    state.DiskChecked.insert(active);icons::Queue(active,true);state.NextSubmit={};icons::Update();assert(submissions==initialFlight+1);
     replies.push_back({{"Icon",active},{"Status","Error"},{"Retryable",true},{"Error","blank item icon"}});
-    icons::Update();state.NextSubmit={};icons::Update();assert(submissions==3);
+    icons::Update();state.NextSubmit={};icons::Update();assert(submissions==initialFlight+2);
     replies.push_back({{"Icon",active},{"Status","Error"},{"Retryable",true},{"Error","blank item icon"}});
     icons::Update();assert(state.Failed.contains(active)&&state.RetryAt.empty());
-    state.NextSubmit={};icons::Queue(active,true);icons::Update();assert(submissions==3);
-    icons::RetryFailed();state.DiskChecked.insert(active);icons::Queue(active,true);icons::Update();assert(submissions==4);
+    state.NextSubmit={};icons::Queue(active,true);icons::Update();assert(submissions==initialFlight+2);
+    icons::RetryFailed();state.DiskChecked.insert(active);icons::Queue(active,true);icons::Update();assert(submissions==initialFlight+3);
     end();
     // A source-scoped disk hit must install pixels without asking the engine
     // to render again. A cached file cannot stand in for source registration.
@@ -165,15 +266,28 @@ int Run() {
     icons::InvalidateIcons({cachedIcon});assert(!state.Textures.contains(cachedIcon));
     cached(cachedIcon);assert(state.Textures.contains(cachedIcon));
     assert(submissions==requestsBeforeDiskHit); // refreshed pixels still bypass engine captures
+    const bool previouslyExternal=PluginRuntimeServices::ExternalDesktop;const auto previousGamePid=PluginRuntimeServices::GameProcessId.load();
+    PluginRuntimeServices::ExternalDesktop=true;PluginRuntimeServices::GameProcessId=0;
+    icons::InvalidateIcons({cachedIcon});cached(cachedIcon);assert(state.Textures.contains(cachedIcon)&&submissions==requestsBeforeDiskHit);
+    PluginRuntimeServices::ExternalDesktop=previouslyExternal;PluginRuntimeServices::GameProcessId=previousGamePid;
     // First-open client page: cached thumbnails load off-thread with bounded uploads,
     // without entering the single-flight engine capture queue, even though
     // native captures are available and the normal queue has a 32-entry cap.
     HelpyEnvironment::Configure({{"DedicatedServer",false},{"Storefront","Steam/Epic"},{"Platform","Steam"},{"NativeIconCaptureAvailable",true}});
     assert(HelpyEnvironment::NativeIconCaptureAvailable);
     HelpySourceCache::Current.Provisional=true;
+    std::vector<std::string> pageIcons;
     for(int i=0;i<40;++i){const auto icon="/Game/Art/Test/T_FirstOpen_"+std::to_string(i)+".T_FirstOpen_"+std::to_string(i);
         const auto target=icons::detail::DiskFile(icon);std::filesystem::create_directories(target.parent_path());std::filesystem::copy_file(file,target,std::filesystem::copy_options::overwrite_existing);
-        cached(icon);assert(state.Textures.contains(icon));}
+        pageIcons.push_back(icon);}
+    end();const auto pageStarted=std::chrono::steady_clock::now();unsigned pageFrames=0;
+    while(std::any_of(pageIcons.begin(),pageIcons.end(),[&](const auto& icon){return !state.Textures.contains(icon);})){
+        assert(++pageFrames<=12);begin();for(const auto& icon:pageIcons)icons::Queue(icon,true);
+        const auto before=state.Textures.size();icons::Update();assert(state.Textures.size()<=before+icons::detail::MaxDiskBatch);end();
+        if(state.DiskWorker.valid())assert(state.DiskWorker.wait_for(std::chrono::seconds(5))==std::future_status::ready);
+    }
+    std::cout<<"Cached page: 40 pictures in "<<pageFrames<<" UI frames / "<<std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-pageStarted).count()<<" ms; native submissions="<<submissions-requestsBeforeDiskHit<<".\n";
+    begin();for(const auto& icon:pageIcons)icons::Queue(icon,true);icons::Update();assert(!state.DiskWorker.valid()&&state.DiskQueue.empty());
     icons::Update();assert(submissions==requestsBeforeDiskHit&&state.Pending.empty()&&state.Queued.empty());
     const std::string provisionalMissing="/Game/Art/Test/T_ProvisionalMiss.T_ProvisionalMiss";
     icons::Queue(provisionalMissing,true);state.NextSubmit={};icons::Update();
@@ -225,8 +339,22 @@ int Run() {
     const auto diskUsage=icons::ScanDiskStats(icons::ActiveDiskFolder());assert(diskUsage.Files>=1&&diskUsage.Bytes>=std::filesystem::file_size(file));
     assert(icons::CleanDiskCache()&&accountingResets==1&&!std::filesystem::exists(file));
     icons::RemoteResetAccounting={};
-    for(auto* texture:state.RetiredTextures)if(texture)texture->SetStatus(ImTextureStatus_Destroyed);
-    icons::detail::ReapRetired(state);icons::ClearRemote();ImGui::DestroyContext();
+    icons::Shutdown();icons::ReleaseTextures();assert(state.Textures.empty()&&state.RetiredTextures.empty());ImGui::DestroyContext();
+    {
+        TrackedImGuiAllocations allocations;
+        for(int cycle=0;cycle<50;++cycle){
+            ImGui::CreateContext();ImGui::GetIO().IniFilename=nullptr;
+            auto* texture=IM_NEW(ImTextureData)();texture->Create(ImTextureFormat_RGBA32,16,16);texture->RefCount=1;texture->SetStatus(ImTextureStatus_OK);
+            texture->BackendUserData=&allocations;ImGui::RegisterUserTexture(texture);state.Textures["fixture"]=texture;state.Failed.insert("old miss");state.WantedFrame["old row"]=1;
+            state.DiskWorker=std::async(std::launch::async,[]{std::vector<icons::detail::DiskRead> result(1);result[0].Pixels.resize(1024*1024);return result;});
+            icons::Shutdown();assert(!state.DiskWorker.valid()&&state.Textures.empty());
+            icons::ReleaseTextures();assert(state.RetiredTextures.size()==1); // GPU ownership must be released first.
+            texture->BackendUserData=nullptr;texture->SetStatus(ImTextureStatus_Destroyed);
+            icons::ReleaseTextures();assert(state.RetiredTextures.empty()&&state.Failed.empty()&&state.WantedFrame.empty());
+            ImGui::DestroyContext();assert(allocations.Live.empty());
+        }
+        std::cout<<"50 renderer lifecycles: zero outstanding ImGui allocations after each shutdown.\n";
+    }
     HelpyEnvironment::Configure(nlohmann::json::object());
     return 0;
 }

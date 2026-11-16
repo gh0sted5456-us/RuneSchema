@@ -1,5 +1,6 @@
 #pragma once
 #include "Core/DiagnosticCodes.h"
+#include "Core/DiagnosticLogPaths.h"
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -26,10 +27,18 @@ inline std::string HelpUrl(const Guide& guide){return Diagnostics::Url(guide);}
 enum class Stream { RuneSchema, UE4SS, Game, EOS };
 inline const char* StreamName(Stream stream){switch(stream){case Stream::UE4SS:return "UE4SS";case Stream::Game:return "Game";case Stream::EOS:return "EOS";default:return "RuneSchema";}}
 inline const char* FileName(Stream stream){return stream==Stream::UE4SS?"UE4SS.log":stream==Stream::RuneSchema?"RuneSchema.log":"RSDragonwilds.log";}
-inline std::filesystem::path LogPath(const std::filesystem::path& mod,Stream stream){if(stream==Stream::UE4SS)return mod.parent_path().parent_path()/FileName(stream);if(stream==Stream::RuneSchema)return mod/FileName(stream);return mod.parent_path().parent_path().parent_path().parent_path().parent_path()/"Saved"/"Logs"/FileName(stream);}
+inline std::filesystem::path LogPath(const std::filesystem::path& mod,Stream stream){if(stream==Stream::UE4SS)return DiagnosticLogPaths::UE4SS(mod)/FileName(stream);if(stream==Stream::RuneSchema)return DiagnosticLogPaths::Directory(mod)/FileName(stream);return mod.parent_path().parent_path().parent_path().parent_path().parent_path()/"Saved"/"Logs"/FileName(stream);}
 // Called only by a file worker. Shipping builds may not create a game log.
 // EOS is a category-filtered view of that log unless the user chooses a file.
+inline std::filesystem::path GamePassLog(const std::filesystem::path& mod,const std::filesystem::path& local){
+    const auto binaries=mod.parent_path().parent_path().parent_path();
+    if(local.empty()||Lower(binaries.filename().string())!="wingdk"||Lower(binaries.parent_path().filename().string())!="binaries")return {};
+    return DiagnosticLogPaths::UseUE4SS?DiagnosticLogPaths::UE4SS(mod)/"RSDragonwilds.log":local/"RSDragonwilds"/"RuneSchema"/"gamepass"/"diagnostics"/"RSDragonwilds.log";
+}
 inline std::filesystem::path ResolveGameLog(const std::filesystem::path& mod,const std::filesystem::path& local){
+    if(DiagnosticLogPaths::UseUE4SS){const auto central=DiagnosticLogPaths::UE4SS(mod)/"RSDragonwilds.log";std::error_code error;if(std::filesystem::is_regular_file(central,error)&&!std::filesystem::is_symlink(central,error))return central;}
+    const auto assigned=GamePassLog(mod,local);std::error_code assignedError;
+    if(!assigned.empty()&&std::filesystem::is_regular_file(assigned,assignedError)&&!std::filesystem::is_symlink(assigned,assignedError))return assigned;
     std::vector<std::filesystem::path> folders;if(!local.empty())folders.push_back(local/"RSDragonwilds"/"Saved"/"Logs");folders.push_back(LogPath(mod,Stream::Game).parent_path());
     std::filesystem::path newest;std::filesystem::file_time_type stamp{};bool found=false;
     for(const auto& folder:folders){std::error_code ec;if(!std::filesystem::is_directory(folder,ec))continue;size_t count=0;
@@ -45,10 +54,13 @@ inline std::string GameBinaryDirectory(std::string_view header){
     const auto start=at+marker.size(),end=header.find_first_of("\r\n",start);auto path=std::string(header.substr(start,end==header.npos?header.size()-start:end-start));
     if(path.empty()||path.size()>32768||std::any_of(path.begin(),path.end(),[](unsigned char c){return c<32||c==127;}))return {};return path;
 }
-inline std::filesystem::path ArchivePath(const std::filesystem::path& mod){return mod/"logs";}
+inline std::filesystem::path ArchivePath(const std::filesystem::path& mod){return DiagnosticLogPaths::Directory(mod)/"logs";}
 // Caller resolves filesystem aliases first; compare normalized Windows names.
 inline bool ProtectedExport(const std::filesystem::path& destination,const std::filesystem::path& mod){
     const auto parent=Lower(destination.lexically_normal().parent_path().generic_string()),name=Lower(destination.filename().string());
+    if(parent==Lower(DiagnosticLogPaths::UE4SS(mod).lexically_normal().generic_string())
+        &&(name.starts_with("runeschema.log")||name.starts_with("rsdiaglog")||name.starts_with("helpy-desktop.log")||(name.starts_with("rsdragonwilds")&&name.ends_with(".log"))))return true;
+    if(parent.ends_with("/rsdragonwilds/runeschema/gamepass/diagnostics")&&name.starts_with("rsdragonwilds")&&name.ends_with(".log"))return true;
     if(parent==Lower(ArchivePath(mod).lexically_normal().generic_string())&&name.starts_with("runeschema-")&&name.ends_with(".log"))return true;
     for(const auto stream:{Stream::RuneSchema,Stream::UE4SS,Stream::Game})
         if(parent==Lower(LogPath(mod,stream).lexically_normal().parent_path().generic_string())

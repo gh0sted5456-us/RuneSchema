@@ -4,6 +4,7 @@
 #include <cassert>
 using namespace PS;
 int main(){
+    assert(DiagnosticLegacyIntake::Eligible(LiveLog::Parse("[RuneSchema] [RS-SAVE-006] cleanup")));
     const auto warning=LiveLog::Parse("[RuneSchema] [warning] [RS-CACHE-001] Source changed");
     assert(DiagnosticLegacyIntake::Eligible(warning));
     assert(DiagnosticLegacyIntake::HasEmittedCode(warning));

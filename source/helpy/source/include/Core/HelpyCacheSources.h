@@ -47,7 +47,7 @@ inline void SetDisplayName(const std::string& owner,const std::string& label,con
         ||std::any_of(owner.begin(),owner.end(),[](unsigned char c){return c<32||c==127;})
         ||std::any_of(label.begin(),label.end(),[](unsigned char c){return c<32||c==127;}))return;
     std::lock_guard lock(Mutex);const auto key=Lower(owner);
-    if(Current.DisplayNames.size()>=512&&!Current.DisplayNames.contains(key))return;
+    if(Current.DisplayNames.size()>=1024&&!Current.DisplayNames.contains(key))return;
     if(Current.DisplayNames[key]!=label){Current.DisplayNames[key]=label;++Current.Revision;}
     if(!version.empty()&&version.size()<=128&&version.find_first_of("\r\n\t")==version.npos
         &&std::none_of(version.begin(),version.end(),[](unsigned char c){return c<32||c==127;})&&Current.Versions[key]!=version){Current.Versions[key]=version;++Current.Revision;}
@@ -99,6 +99,8 @@ template<class Manifest> inline void DeclareManifest(const Manifest& manifest) n
     }catch(...){} // Optional bookkeeping cannot undo an accepted registry.
 }
 inline Plan Snapshot(){std::lock_guard lock(Mutex);auto result=Current;result.AssetOwners=CurrentAssetOwners;return result;}
+// Cheap change probe for per-frame/per-tick pollers; Snapshot() copies every owner map.
+inline std::uint64_t CurrentRevision(){std::lock_guard lock(Mutex);return Current.Revision;}
 // A registered item can reference an icon in another mounted content source.
 // Observe that native relationship, not a UI-supplied or cached asset list.
 inline void Reference(const std::string& asset,const std::string& icon) noexcept {

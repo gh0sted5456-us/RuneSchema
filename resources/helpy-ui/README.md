@@ -6,6 +6,9 @@ first launch; the remaining UI artwork is optional. This folder contains only
 Helpy's logos, platform/community marks, loading artwork and
 destination preview screenshots, not game item caches, fonts, DLLs or scripts.
 
+Experimental Helpy also embeds the native `loading-ring.png` artwork in its
+executable so the startup wheel is available before optional artwork downloads.
+
 **Download Initial Assets** fetches the compiled list of PNGs over HTTPS and
 checks exact sizes and SHA-256 hashes. Files stay in
 `%LOCALAPPDATA%/RuneSchema/HELPY/ui-assets/1/` for future launches. No download

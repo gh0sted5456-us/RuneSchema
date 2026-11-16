@@ -1,8 +1,10 @@
 #pragma once
+#include "Generator/HelpyTextInput.h"
 #include "Core/ProcessExitFuture.h"
 #include "Core/LiveLog.h"
 #include "Core/DiagnosticLegacyIntake.h"
 #include "Core/StructuredDiagnosticRegistry.h"
+#include "Core/GamePassLogging.h"
 #include "Generator/HelpyImGuiTheme.h"
 #include "Generator/RuneSchemaSettingsPanel.h"
 #include "Runtime/HostServices.h"
@@ -31,6 +33,7 @@ struct StreamState {
     std::set<std::string> Scopes;
     std::deque<std::string> PausedLines;
     size_t PausedBytes=0;
+    bool RestartPending=false;
     std::uint64_t Selected=0,Revision=~std::uint64_t{};
 };
 inline std::array<StreamState,4> Streams;
@@ -45,19 +48,29 @@ inline bool PreviewOptions=false;
 inline int PreviewStream=-1;
 inline std::function<void(const LiveLog::Entry&)> OnEntry;
 inline std::function<void(const LiveLog::Entry&)> OnBackfillEntry;
+inline std::function<void(const LiveLog::Entry&,bool)> OnUE4SSEntry;
+inline bool UE4SSLiveReady=false;
 inline bool RuneSchemaLiveReady=false;
 inline std::uint64_t RevealId=0;
 inline bool SelectRuneSchemaTab=false;
 inline auto Path(size_t index=0){return Streams[index].File.empty()?LiveLog::LogPath(HostServices::ModDirectory(),static_cast<LiveLog::Stream>(index)):Streams[index].File;}
-inline void Shutdown(){OnEntry={};OnBackfillEntry={};for(auto& stream:Streams)if(stream.Worker.valid())try{(void)stream.Worker.get();}catch(...){}if(ExportWorker.valid())try{(void)ExportWorker.get();}catch(...){};}
-inline void Poll(size_t index,bool background=false){
+inline void Shutdown(){OnEntry={};OnBackfillEntry={};OnUE4SSEntry={};for(auto& stream:Streams)if(stream.Worker.valid())try{(void)stream.Worker.get();}catch(...){}if(ExportWorker.valid())try{(void)ExportWorker.get();}catch(...){};}
+inline void RestartRuneSchemaRead(){
+    auto& state=Streams[0];
+    state.RestartPending=state.Worker.valid();state.Cursor={};state.NextRead={};state.File.clear();
+    state.History.Clear();state.PausedLines.clear();state.PausedBytes=0;
+    state.Selected=0;RevealId=0;
+}
+inline void Poll(size_t index,bool background=false,int intervalMs=0){
     auto& state=Streams[index];auto& Worker=state.Worker;auto& Cursor=state.Cursor;auto& History=state.History;
     auto& ReadError=state.ReadError;auto& Status=state.Status;auto& Selected=state.Selected;auto& NextRead=state.NextRead;
     if(ExportWorker.valid()&&ExportWorker.wait_for(std::chrono::seconds(0))==std::future_status::ready){try{Streams[ExportStream].Status=ExportWorker.get();}catch(...){Streams[ExportStream].Status="Export failed.";}}
     if(Preview)return;
     if(Worker.valid()&&Worker.wait_for(std::chrono::seconds(0))==std::future_status::ready){
-        try{auto batch=Worker.get();Cursor=std::move(batch.Next);ReadError=std::move(batch.Error);
-            if(batch.Reset||(!state.File.empty()&&state.File!=batch.File)){History.Clear();Selected=0;Status="Log rotated or changed; showing the new file.";}
+        const bool discard=std::exchange(state.RestartPending,false);
+        try{auto batch=Worker.get();if(discard)return;
+            Cursor=std::move(batch.Next);ReadError=std::move(batch.Error);
+            if(batch.Reset||(!state.File.empty()&&state.File!=batch.File)){History.Clear();Selected=0;Status="Log rotated or changed; showing the new file.";if(index==1)UE4SSLiveReady=false;}
             state.File=std::move(batch.File);
             if(batch.Skipped)Status="Showing the recent log tail; the original full log is unchanged.";
             for(auto& line:batch.Lines){
@@ -71,6 +84,7 @@ inline void Poll(size_t index,bool background=false){
                     }
                 }else{
                     History.Append(std::move(line));
+                    if(index==1&&OnUE4SSEntry)OnUE4SSEntry(History.Rows.back(),UE4SSLiveReady);
                     if(index==0){
                         const auto& entry=History.Rows.back();
                         if(RuneSchemaLiveReady){if(OnEntry)OnEntry(entry);}
@@ -78,8 +92,9 @@ inline void Poll(size_t index,bool background=false){
                     }
                 }
             }
-            if(index==0&&!batch.More&&(!batch.Error.empty()||batch.Next.Started))RuneSchemaLiveReady=true;
-        }catch(const std::exception& error){ReadError=error.what();}
+            if(index==0&&!batch.More&&ReadError.empty()&&Cursor.Started)RuneSchemaLiveReady=true;
+            if(index==1&&!batch.More&&batch.Error.empty()&&batch.Next.Started)UE4SSLiveReady=true;
+        }catch(const std::exception& error){if(!discard)ReadError=error.what();}
     }
     if(index==0&&!state.Paused&&!state.PausedLines.empty()){
         while(!state.PausedLines.empty()){
@@ -89,7 +104,7 @@ inline void Poll(size_t index,bool background=false){
     }
     const auto now=std::chrono::steady_clock::now();
     if((index==0||!state.Paused)&&!Worker.valid()&&now>=NextRead){
-        NextRead=now+std::chrono::milliseconds(background?1000:250);const auto path=Path(index),override=state.Override,mod=HostServices::ModDirectory();const auto cursor=Cursor;const auto previous=state.File;
+        NextRead=now+std::chrono::milliseconds(intervalMs?std::clamp(intervalMs,250,10000):background?1000:250);const auto path=Path(index),override=state.Override,mod=HostServices::ModDirectory();const auto cursor=Cursor;const auto previous=state.File;
         wchar_t local[32768]{};const auto length=GetEnvironmentVariableW(L"LOCALAPPDATA",local,32768);const std::filesystem::path localRoot=length&&length<32768?local:L"";
         Worker=std::async(std::launch::async,[path,override,mod,localRoot,cursor,previous,index]{
             const auto file=!override.empty()?override:index>=2?LiveLog::ResolveGameLog(mod,localRoot):path;
@@ -155,7 +170,7 @@ inline void RenderColors(){
         pendingSave|=ImGui::Checkbox("##enabled",&rule.Enabled);ImGui::SameLine();
         int kind=rule.Source?1:0;ImGui::SetNextItemWidth(100);if(ImGui::Combo("##kind",&kind,"Keyword\0Source\0")){rule.Source=kind==1;pendingSave=true;}
         ImGui::SameLine();char match[129]{};strncpy_s(match,rule.Match.c_str(),_TRUNCATE);ImGui::SetNextItemWidth(180);
-        if(ImGui::InputText("##match",match,sizeof(match))){rule.Match=match;pendingSave=true;}
+        if(HelpyTextInput::InputText("##match",match,sizeof(match))){rule.Match=match;pendingSave=true;}
         ImGui::SameLine();pendingSave|=ImGui::ColorEdit4("##color",rule.RGBA.data(),ImGuiColorEditFlags_NoInputs);
         ImGui::SameLine();const bool remove=ImGui::SmallButton("Remove");ImGui::PopID();
         if(remove){rules.erase(rules.begin()+i);pendingSave=true;}else ++i;
@@ -169,15 +184,14 @@ inline void RenderStream(size_t index){
     auto& Search=state.Search;auto& Scope=state.Scope;auto& Dirty=state.Dirty;auto& Revision=state.Revision;auto& Scopes=state.Scopes;auto& Visible=state.Visible;
     ImGui::TextColored(Paused?theme.warning:theme.accentHover,"%s",Paused?"PAUSED":"LIVE");ImGui::SameLine();const auto filename=Path(index).filename().string();ImGui::TextDisabled("%s",filename.c_str());
     if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("%s",Path(index).string().c_str());
-    if(index==3){ImGui::TextDisabled("EOS events from the game log");if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Use Actions to choose a separate EOS log.");}
-    ImGui::SetNextItemWidth(std::max(theme.X(60),std::min(theme.X(380),ImGui::GetContentRegionAvail().x-theme.X(60))));Dirty|=ImGui::InputTextWithHint("##log-search","Search words, phrases or codes…",Search,sizeof(Search));
+    if(index==3){ImGui::TextDisabled("EOS events from the game log");if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Use More to choose a separate EOS log.");}
+    ImGui::SetNextItemWidth(std::max(theme.X(60),std::min(theme.X(380),ImGui::GetContentRegionAvail().x-theme.X(60))));Dirty|=HelpyTextInput::InputTextWithHint("##log-search","Search words, phrases or codes…",Search,sizeof(Search));
     if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("All words must match. Use quotes for a phrase, -word to exclude, or source:, code: and level:. Example: source:loganimation guid -optional");
     ImGui::SameLine();ImGui::BeginDisabled(!Search[0]);if(ImGui::SmallButton("Clear")){Search[0]=0;Dirty=true;}ImGui::EndDisabled();
     int preset=std::all_of(Levels.begin(),Levels.end(),[](bool value){return value;})?0:Levels==std::array<bool,4>{false,false,true,true}?1:Levels==std::array<bool,4>{false,false,false,true}?2:3;
     ImGui::SetNextItemWidth(theme.X(180));if(ImGui::Combo("Severity",&preset,"All\0Warnings + errors\0Errors\0Custom\0")){if(preset<3){Levels={preset==0,preset==0,preset<=1,true};Dirty=true;}}
-    if(ImGui::Checkbox("Pause",&Paused))NextRead={};ImGui::SameLine();ImGui::Checkbox("Follow newest",&Follow);ImGui::SameLine();
-    if(HelpyImGuiTheme::SoftButton("Actions"))ImGui::OpenPopup("Log actions");
-    if(ImGui::BeginPopup("Log actions")){
+    if(HelpyImGuiTheme::Toggle("Pause",&Paused))NextRead={};ImGui::SameLine();HelpyImGuiTheme::Toggle("Follow newest",&Follow);ImGui::SameLine();
+    if(HelpyMenu::BeginMore("log-actions")){
         if(ImGui::MenuItem("Open log file"))ShellExecuteW(nullptr,L"open",Path(index).c_str(),nullptr,nullptr,SW_SHOWNORMAL);
         if(ImGui::MenuItem("Open log folder"))ShellExecuteW(nullptr,L"open",Path(index).parent_path().c_str(),nullptr,nullptr,SW_SHOWNORMAL);
         if(index>=2&&ImGui::MenuItem("Choose log file...",nullptr,false,!state.Worker.valid())){
@@ -202,7 +216,7 @@ inline void RenderStream(size_t index){
     const bool filtersActive=!Scope.empty()||std::any_of(Levels.begin(),Levels.end(),[](bool enabled){return !enabled;});
     if(ImGui::CollapsingHeader(filtersActive?"Filters & colors (active)###log-filters":"Filters & colors###log-filters")){
         for(size_t i=0;i<Levels.size();++i){if(i)ImGui::SameLine();Dirty|=ImGui::Checkbox(LiveLog::Label(static_cast<LiveLog::Level>(i)),&Levels[i]);}
-        Dirty|=ImGui::Checkbox("Group consecutive repeats",&state.GroupRepeats);
+        Dirty|=HelpyImGuiTheme::Toggle("Group consecutive repeats",&state.GroupRepeats);
         ImGui::SetNextItemWidth(theme.X(230));if(ImGui::BeginCombo("Source / subsystem",Scope.empty()?"All sources":Scope.c_str())){
             if(ImGui::Selectable("All sources",Scope.empty())){Scope.clear();Dirty=true;}
             for(const auto& source:Scopes)if(ImGui::Selectable(source.c_str(),source==Scope)){Scope=source;Dirty=true;}ImGui::EndCombo();}
@@ -252,15 +266,15 @@ inline void RenderStream(size_t index){
         }else if(Follow&&changed)ImGui::SetScrollY(ImGui::GetScrollMaxY());ImGui::EndTable();
     }
     if(selected!=History.Rows.end()){
-        if(ImGui::BeginChild("Selected log details",ImVec2(0,0),true)){
+        if(HelpyImGuiTheme::BeginPanel("Selected log details",ImVec2(0,0),true)){
             if(ImGui::SmallButton("Copy original"))ImGui::SetClipboardText(selected->Text.c_str());ImGui::SameLine();
-            if(ImGui::SmallButton("Close details"))Selected=0;ImGui::SameLine();ImGui::Checkbox("Technical text",&state.RawDetails);
+            if(ImGui::SmallButton("Close details"))Selected=0;ImGui::SameLine();HelpyImGuiTheme::Toggle("Technical text",&state.RawDetails);
             if(selected->Help>=0){const auto& guide=LiveLog::Guides[selected->Help];ImGui::SeparatorText(selected->Suggested?"Suggested reference - not a diagnosed cause":guide.Title.data());
                 ImGui::TextWrapped("%s",guide.Summary.data());ImGui::TextWrapped("Runtime response: %s",guide.Impact.data());ImGui::TextColored(theme.accentHover,"Next step");ImGui::TextWrapped("%s",guide.Action.data());
                 if(ImGui::SmallButton("Open code reference")){const auto url=LiveLog::HelpUrl(guide);ShellExecuteA(nullptr,"open",url.c_str(),nullptr,nullptr,SW_SHOWNORMAL);}ImGui::SameLine();if(ImGui::SmallButton("Copy code"))ImGui::SetClipboardText(guide.Code.data());
             }else{ImGui::TextWrapped("%s",selected->Message.c_str());if(!selected->ReportedCode.empty())ImGui::TextDisabled("Unrecognized code: %s",selected->ReportedCode.c_str());if(ImGui::SmallButton("Open reference")){const auto url=LiveLog::ReferenceUrl(*selected);ShellExecuteA(nullptr,"open",url.c_str(),nullptr,nullptr,SW_SHOWNORMAL);}}
             if(state.RawDetails){ImGui::SeparatorText("Original entry");ImGui::TextWrapped("%s",selected->Text.c_str());}
-        }ImGui::EndChild();
+        }PS::HelpyImGuiTheme::EndPanel();
     }
 }
 inline void RenderCrashDumpOptions(){
@@ -273,7 +287,7 @@ inline void RenderCrashDumpOptions(){
     ImGui::SeparatorText("Crash capture");
     bool full=snapshot.is_object()&&snapshot.value("FullMemoryDump",false)&&snapshot.value("EnableDumping",true);
     ImGui::BeginDisabled(!snapshot.is_object()||error);
-    if(ImGui::Checkbox("Full-memory crash dumps (next launch)",&full)){
+    if(HelpyImGuiTheme::Toggle("Full-memory crash dumps (next launch)",&full)){
         nlohmann::json result;
         if(RuneSchemaSettingsPanel::Remote&&RuneSchemaSettingsPanel::Remote({{"Action","CrashDumpSave"},{"FullMemoryDump",full},{"ExpectedContents",snapshot.at("ExpectedContents")}},result)&&result.is_object()&&result.value("Ok",false)){
             snapshot=std::move(result);error=false;status=snapshot.value("Status",std::string{});
@@ -284,6 +298,22 @@ inline void RenderCrashDumpOptions(){
     ImGui::TextWrapped("Includes process memory, may contain private data and can create multiple GB files. Dumps stay local. Turn off after capturing the problem; restart the game to apply.");
     if(!status.empty())ImGui::TextWrapped("%s",status.c_str());ImGui::PopTextWrapPos();
     if(HelpyImGuiTheme::SoftButton("Reload crash capture settings"))read();
+}
+inline void RenderGamePassLogging(){
+    if(HelpyEnvironment::Current!=HelpyEnvironment::Kind::GamePass)return;
+    ImGui::SeparatorText("Game Pass game log");static std::string status;
+    ImGui::TextUnformatted("Optional logging shortcut");ImGui::SameLine();ImGui::TextDisabled("(?)");
+    if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Save a shortcut, close Dragonwilds normally, then launch Game Pass through it. It passes -log and -ABSLOG before Unreal starts. The game log uses the saved log-folder choice and appears in the Game stream. Some shipping builds disable native logging; a shortcut cannot guarantee a log. Normal Xbox launches are unchanged. Recreate an existing shortcut after changing the log folder.");
+    if(HelpyImGuiTheme::SoftButton("Save logging shortcut..."))try{
+        const auto setup=GamePassLogging::For(HostServices::ModDirectory(),RuneSchemaData::LocalDirectory(),RuneSchemaSettingsPanel::Loaded?RuneSchemaSettingsPanel::Snapshot.at("Document").value("logsInUE4SS",false):DiagnosticLogPaths::UseUE4SS);GamePassLogging::Prepare(setup);
+        wchar_t path[32768]{};const auto suggested=setup.Log.parent_path()/"Launch Game Pass with game logging.lnk";wcsncpy_s(path,suggested.c_str(),_TRUNCATE);
+        OPENFILENAMEW dialog{sizeof(dialog)};dialog.hwndOwner=GetActiveWindow();dialog.lpstrFile=path;dialog.nMaxFile=32768;dialog.lpstrFilter=L"Windows shortcut (*.lnk)\0*.lnk\0\0";dialog.lpstrDefExt=L"lnk";dialog.Flags=OFN_EXPLORER|OFN_NOCHANGEDIR|OFN_PATHMUSTEXIST|OFN_OVERWRITEPROMPT;
+        if(GetSaveFileNameW(&dialog)){GamePassLogging::SaveShortcut(setup,path);status="Shortcut saved. Close the game normally, then use it for your next Game Pass launch.";}
+    }catch(const std::exception& error){status=error.what();}
+    ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Copy launch command"))try{
+        const auto setup=GamePassLogging::For(HostServices::ModDirectory(),RuneSchemaData::LocalDirectory(),RuneSchemaSettingsPanel::Loaded?RuneSchemaSettingsPanel::Snapshot.at("Document").value("logsInUE4SS",false):DiagnosticLogPaths::UseUE4SS);GamePassLogging::Prepare(setup);ImGui::SetClipboardText(GamePassLogging::Command(setup).c_str());status="PowerShell command copied. Use it after closing Dragonwilds normally.";
+    }catch(const std::exception& error){status=error.what();}
+    if(!status.empty()){ImGui::PushTextWrapPos(ImGui::GetCursorPosX()+ImGui::GetFontSize()*28);ImGui::TextWrapped("%s",status.c_str());ImGui::PopTextWrapPos();}
 }
 inline void Render(){
     static nlohmann::json options=nlohmann::json::object();static std::string optionStatus;static bool optionError=false;static double nextOptionsRead=0;
@@ -298,14 +328,14 @@ inline void Render(){
     };
     bool enabled=!options.empty()&&options.at("Document").value("enabled",false);
     ImGui::BeginDisabled(options.empty()||optionError||!RuneSchemaSettingsPanel::Patch().empty());
-    if(ImGui::Checkbox("Additional Logging Information",&enabled)){saveOption("enabled",enabled);if(enabled&&!optionError)ImGui::OpenPopup("Additional logging options");}
+    if(HelpyImGuiTheme::Toggle("Additional Logging Information",&enabled)){saveOption("enabled",enabled);if(enabled&&!optionError)ImGui::OpenPopup("Additional logging options");}
     hint("Optional context in RuneSchema.log only. Off by default. Select individual fields in Options; saved changes apply on the next sampler tick. Full local paths can reveal personal folder names. Turning this off does not erase existing entries or redact paths already present in ordinary native/mod messages.");
     ImGui::EndDisabled();ImGui::SameLine();
     if(HelpyImGuiTheme::SoftButton("Options##additional-logging"))ImGui::OpenPopup("Additional logging options");
     if(Preview&&PreviewOptions)ImGui::OpenPopup("Additional logging options");
     if(ImGui::BeginPopup("Additional logging options")){
         const auto option=[&](const char* label,const char* key,const char* description){bool selected=!options.empty()&&options.at("Document").value(key,false);
-            ImGui::BeginDisabled(options.empty()||optionError||!RuneSchemaSettingsPanel::Patch().empty());if(ImGui::Checkbox(label,&selected))saveOption(key,selected);hint(description);ImGui::EndDisabled();};
+            ImGui::BeginDisabled(options.empty()||optionError||!RuneSchemaSettingsPanel::Patch().empty());if(HelpyImGuiTheme::Toggle(label,&selected))saveOption(key,selected);hint(description);ImGui::EndDisabled();};
         option("Installation / log paths","filePaths","Full executable, RuneSchema, cache and log paths. Can reveal usernames in directory names.");
         option("Windows region","region","Configured Windows country/region. No IP lookup, GPS, location permission or geolocation service.");
         option("Upload / download rates","networkRates","Observed traffic across active physical Ethernet/Wi-Fi interfaces, in Mbps. Device-wide traffic, not game-only traffic or connection capacity. Needs two comparable samples; no speed test is performed.");
@@ -313,7 +343,14 @@ inline void Render(){
         option("World average network latency","averageLatency","Mean native player ping in a verified multiplayer world, with observed/total sample counts. Zero/invalid samples are excluded. Client-replicated ping can be stale; unavailable data is never reported as zero latency.");
         if(HelpyImGuiTheme::SoftButton("Reload logging options"))readOptions();
         if(!optionStatus.empty()){ImGui::TextDisabled(optionError?"Change needs attention — hover for details.":"Saved — hover for details.");hint(optionStatus);}
+        ImGui::SeparatorText("Log folder");
+        if(!RuneSchemaSettingsPanel::Loaded)RuneSchemaSettingsPanel::Load();
+        if(RuneSchemaSettingsPanel::Loaded)RuneSchemaSettingsPanel::QuickToggle("Keep logs in UE4SS (next launch)","/logsInUE4SS");
+        hint("Saved per installation in settings.ini. On the next game and Helpy launch, RuneSchema.log, RSDiagLog.jsonl, and Helpy-Desktop.log are written beside UE4SS.log. RuneSchema archives use ue4ss/logs/. Old logs remain in place. Game Pass native logging shortcuts use this choice when created; recreate older shortcuts. Other game launchers must pass -ABSLOG with ue4ss/RSDragonwilds.log to put the native game/EOS log here. This adds no polling or background copies.");
+        if(RuneSchemaSettingsPanel::QuickToggleError)ImGui::TextWrapped("%s",RuneSchemaSettingsPanel::Status.c_str());
+        if(HelpyImGuiTheme::SoftButton("Open UE4SS folder")){const auto folder=DiagnosticLogPaths::UE4SS(HostServices::ModDirectory());ShellExecuteW(nullptr,L"open",folder.c_str(),nullptr,nullptr,SW_SHOWNORMAL);}
         RenderCrashDumpOptions();
+        RenderGamePassLogging();
         ImGui::EndPopup();
     }
     if(optionError){ImGui::TextColored(HelpyImGuiTheme::Current.warning,"Logging options need attention. Hover for details.");hint(optionStatus);}

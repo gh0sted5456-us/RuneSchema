@@ -28,12 +28,12 @@ int main(int argc,char**argv){
     const auto saves=Read(root/"raw/src/Generator/CharacterSaveEditor.inl");
     Check(saves.find("XboxCharacterSaves::Candidates")!=saves.npos&&saves.find("XboxCharacterSaves::Character(source)")!=saves.npos&&saves.find("if(xbox||copyOnly)path=WriteSaveCopy")!=saves.npos,"Xbox and active character opening must validate and snapshot provider-owned payloads");
     Check(saves.find("CharacterSaveEditor::Identity(source)!=expected")<saves.find("if(xbox||copyOnly)path=WriteSaveCopy"),"Current character identity must be checked before its isolated snapshot is written");
-    Check(saves.contains("HostServices::ProfileDirectory()/\"characters\"")&&saves.contains("OriginalPath"),"Profile character copies must retain source identification without replacing native saves");
+    Check(saves.contains("RuneSchemaData::CharacterCopiesDirectory()")&&saves.contains("OriginalPath"),"Profile character copies must retain source identification without replacing native saves");
     const auto platform=Read(root/"raw/include/SDK/Helper/PlayerStatus.h");
     Check(platform.contains("AccountName(UObject* state,bool local=false)")&&platform.contains("TEXT(\"DisplayName\")")&&platform.contains("chars.Num()>129")&&platform.contains("DomPlatformData"),"Account display names require the exact bounded native platform-data contract");
     Check(platform.contains("if(local){const auto steam=SteamBuild::PersonaName();")&&platform.contains("return AccountName(AH::GetObjectRef(controller,TEXT(\"PlayerState\")),local);"),"Steam persona fallback must be limited to the verified local controller");
     const auto relay=Read(root/"raw/include/SDK/Helper/InventoryMarkRelay.h"),authority=Read(root/"raw/src/Loader/SpawnTools.inl");
-    Check(relay.contains("ProfileSerial")&&relay.contains("ack.at(\"CharacterGuid\")==ProfilePending.at(\"CharacterGuid\")")&&relay.contains("ClearPublicProfiles")&&relay.contains("ProfileAttempts++>=3"),"Public profile replies must bind to a current owned-player request and expire on world change");
+    Check(relay.contains("ProfileSerial")&&relay.contains("ack.at(\"CharacterGuid\")==ProfilePending.at(\"CharacterGuid\")")&&relay.contains("ClearPublicProfiles")&&relay.contains("ProfileRetry.Exhausted()")&&relay.contains("ProfileRetry.Next(true)")&&relay.contains("Defer(MarkRetry,now,\"mark\")"),"Public profile replies must bind to a current owned-player request and expire on world change");
     Check(authority.contains("ReceivePublicProfile")&&authority.contains("{\"CharacterGuid\",guid}")&&authority.contains("Profile target is not connected"),"Only the authenticated owned player may publish a profile; reads require a connected target");
     const auto editor=Read(root/"helpy/source/include/Generator/SaveEditorPanel.h");
     const auto studio=Read(root/"helpy/source/include/Generator/CharacterStudioPanel.inl");

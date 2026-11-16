@@ -1,0 +1,103 @@
+---
+channel: experimental
+promote_to: RELEASE-1.0.0.md
+---
+
+# RuneSchema 0.9.0.0 Pre Release
+
+<div class="rs-actions">
+  <a class="md-button md-button--primary" href="https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.9.0.0-pre.20261115.1/RuneSchema-0.9.0.0-preview-20261115.1.zip">Download RuneSchema</a>
+  <a class="md-button" href="../INSTALLATION/">Installation</a>
+</div>
+
+This prerelease packages RuneSchema and Helpy for Dragonwilds CL260223. Install the pinned UE4SS build separately. Close the game and choose **Exit Helpy** before updating. Keep your settings, mods, saves, and activation keys.
+
+<span id="pending-changelog"></span>
+
+## Changes since 0.8.0.3
+
+### Helpy desktop, overlay, and settings
+
+- Helpy runs as a separate desktop app with a system tray icon and a shortcut for each installed runtime. A desktop-launched session can stay open for offline browsing after the game closes. A game-launched session can close with its attached game or server.
+- Settings, Quick Settings, Tools, and mod management share a two-pane layout with a category rail and independently scrolling controls. The rail can collapse or stay pinned. Startup, overlay, shortcuts, performance, and cache preferences are available from Settings.
+- The themed game overlay has adjustable opacity, size, and interface scale. The desktop window and tray remain available. New settings default to native presentation, and existing window preferences are preserved.
+- The overlay includes Direct3D 11, Direct3D 12, OpenGL, and opt-in Vulkan presentation paths. Changes address rejected resizes, 10-bit SDR target handling, Direct3D 12 frame submission, hybrid-GPU adapter changes, and stale cursor and panel pixels.
+- Interactive overlays capture keyboard, mouse, and controller input and release it when hidden or disconnected. Passive startup, coordinates, and notification displays leave game input available.
+- The welcome screen supports rotating platform and theme-colored RuneSchema logos, adjustable timing, and artwork crossfades. Windows reduced-motion settings keep the splash static. The in-app Help guide covers controls and troubleshooting.
+
+### Controller and keyboard navigation
+
+- Helpy adds automatic input-mode detection and selectable Xbox, PlayStation, and generic button glyphs. Controller input gives the welcome screen and Home an initial selection without requiring a mouse click.
+- Triggers switch main sections, bumpers switch panes or tabs, and the D-pad moves focus. The left stick scrolls or pans. The right stick can move a pointer, click, and drag. Back returns through dialogs and panels.
+- Controller actions cover Item Bay selection and quantity controls, cart drops, mod actions, Settings, Tools, and map panning and zoom. Text fields include an on-screen keyboard, including the server PIN field.
+- The controller menu shortcut is configurable. Supported PlayStation touchpads have an optional pointer mode. Native overlay input is reacquired after focus returns.
+
+### Item Bay, filters, and caches
+
+- Interactive live checks continue sooner between slices. Learned-item writes preserve the newest observation, skip redundant settled repeats, and coalesce cached-search index rebuilds across live search slices.
+- Item Bay can browse saved items and icons offline. The search bar groups source, category, family, and display-name filters. The display/internal-name switch preserves the current query, selection, and asset identity.
+- Cached searches reuse prepared indexes and unchanged rows. Live searches reuse the mounted item index, and discoveries with valid asset identities are saved for later searches. Live work and cancellation run off Helpy’s UI thread.
+- Downloaded records and icon packs remain available to the cache. Learned-item writes retry in order after a failure. Diagnostics report failed writes and discarded observations. Unchanged cache writes and repeated source-plan copies are reduced.
+- **Refresh search** reruns the query with the active filters. Right-click an item to request a new in-game icon capture or refresh icons for its mod. Mod-wide icon refresh requires **Keep icons between launches**.
+- Search and cache controls retain cached results during updates. Source grouping and name recovery preserve readable labels and distinguish different assets with the same display name. Cooked equipment types help categorize weapons, armor, and ammunition.
+- Select individual items or groups and move them to the cart. **Send to player…** opens a separate quantity and recipient picker for one item while preserving the staged cart.
+- **Cache enabled mods** runs a sequential queue with pause, resume, stop, and per-mod results. Installed mods and vanilla files can be read in the cache worker. Cache bundles preserve portable item taglines and tips.
+
+### Mod achievements and Gamer Points
+
+- Mods can declare achievements and award RuneSchema Gamer Points. In **Mods**, right-click an enrolled mod and choose **View Achievements**, or open **View All Achievements** to browse every enrolled mod.
+- Achievement placards show the award's points and dim locked entries. Hover to see unlock details when available. The player profile shows the total with a color-tiered points badge.
+- The native HUD plays a RuneSchema logo reveal for an unlock while the game keeps focus. The award can play an optional chime, and the notification respects Windows reduced-motion settings.
+
+### Helpy responsiveness
+
+- Input state updates and achievement requests use a background connection to RuneSchema Core. Closing Helpy coordinates with pending input work, and replies from a previous attachment cannot replace the active player's achievement view.
+- Catalog responses reuse a shared snapshot so Helpy's transport can read a consistent catalog without copying the full result while the catalog lock is held.
+
+### World map, HUD, and presentation
+
+- The world atlas adds selectable zone close-ups, transport outlines, a coordinate view, and player centering. Scorned Wilderness has its own view. The map includes a named Dragon Gate destination for Rasthin’s Rest.
+- Helpy adds optional startup artwork and progress, a coordinate HUD, and a HUD layout preview for minimap, coordinates, notifications, and loading artwork. HUD positions can be saved from the preview.
+- Mods can use the shared HUD and presentation interfaces, declare input bindings, and supply an optional owner-only presentation handler for a registered consumable.
+
+### Dedicated servers and multiplayer
+
+- RuneSchema adds the CL260223 native dedicated-server filter binding. In an isolated Steam dedicated-server run, the server opened its game port, loaded the world, and requested native filter setup.
+- The authority sends item-grant and access policy when the client connects and pushes policy changes to connected clients. A limit of **0** means no server total per grant request. Existing configured limits still apply.
+- Hosts can configure world PIN access with separate self-delivery and self-teleport permissions, or save grants by character GUID. The server checks request identity, item IDs, quantity, and destination. Correlated results distinguish an accepted request from a completed action.
+- **Mods → Server mods** shows the host’s enabled mods and versions beside local entries, including missing, disabled, version-different, and client-only entries. Authors can supply a download-page link through mod metadata.
+- The bundled RSNetworking policy plugin adds opt-in actor policies and larger network payload budgets. The network bridge adds declared character-appearance snapshots and namespaced mod-data channels.
+- The building registry checks compatibility before modded placement by comparing network ID fingerprints while retaining the verified native ID prefix.
+- Item Delivery adds host-configured delivery lists with **Off**, **Deliver Once**, and **Always Deliver**. Its receipt logic binds deliveries to character identity and records completion on the matching save acknowledgement.
+
+### Mods, authoring, and content registration
+
+- Named `$RuntimeWidget` and `$RuntimeUI` rules filter events before walking the owner hierarchy. Wildcard rules and UI teardown retain their normal handling.
+- Helpy's **Mods → UE4SS mods** list shows **J4S PAKLoader** and **Maxx's Mod Menu** badges on cards and in Compact view. Refresh the inventory after adding a descriptor.
+- RuneSchema and UE4SS share a compact mod-management view with metadata, license inspection, next-launch loader controls, and cache actions. The UE4SS inventory distinguishes external packages and RuneSchema-owned packages.
+- The bundled **RuneSchema.UE4SS.Bridge** lets an enabled standalone UE4SS mod declare and register RuneSchema content, including appearance and mod-data declarations.
+- **Mods → Mod Menu 2** adds a key-gated Helpy editor with legacy callbacks, offline editing for supported settings, optional character tabs, and template import and export. Supported controls include sliders, radial choices, and RGB/RGBA colors. A schema error stays on its own page so valid pages remain available. The existing external Mod Menu keeps precedence when enabled.
+- The runtime includes optional, key-gated Advanced Tooling. Helpy’s authoring tools build and update caches, and the repair tool verifies the matching package, backs up replacements, and preserves user mods, settings, saves, and caches.
+- Cooked registry support expands to table extensions, skill declarations, world components, and guarded host console commands. Mods can declare local profiles, typed templates, and numeric providers. The settings processor handles up to 1,024 combined schema settings, tab keys, and template entries.
+- Cooked world policies add hooks for building support, placement and dismantling, player phasing, material requirements, farming, resource yields, player effects, and enemy spawning. Material policy calls preserve native unlock, quantity, station, and authority checks.
+
+### Saves, startup, and diagnostics
+
+- RuneSchema reads and parses mod JSON ahead on a bounded worker pool when the host has at least four hardware threads. Loader callbacks and diagnostics still run in file order on the calling thread.
+- Automatic reflection mapping capture now requires a fresh request from RuneSchema Core. Steam and Game Pass both reused their cached mappings on the next startup without writing a new dump.
+- Helpy’s Save Recovery view lists character snapshots with their reason and active mod metadata. World snapshot and restore controls are opt-in. Cleanup stays scoped to the selected save and uses verified backups on supported paths.
+- Character copy, import, and export follow redirected save roots. Core and Helpy share the resolved AppData root while guarding nested paths. Optional world archive errors are reported separately from verified cleanup backups.
+- Startup discovery reuses mounted-directory results, ownership checks, and ready recipe references. Registry merging reduces duplicate copies. Recipe prefetch stays bounded, malformed plugin order entries leave other plugins available, and temporary reflected map and array values release nested allocations.
+- The core and Helpy reduce repeated transport work, idle cache copies, registry notices, and diagnostic traffic. Helpy recovers its previous render target after a rejected resize and reports the window, graphics error, and source plugin where available.
+- Diagnostics reset with each attached session and include resource sampling, startup timings, and bounded Lua and UE4SS activity reports. Helpy adds a persistent notification inbox, stable-release and hotfix notices, and a clipboard bug report.
+- The runtime groups core plugins under `dlls/plugins` and the desktop app, HUD, and Helpy plugins under `Helpy`. The complete ZIP pairs the core, Helpy, cooked bridges, Lua adapters, and licenses from the same build.
+
+## Verification
+
+The release includes a SHA-256 verification manifest covering all 86 files in the runtime ZIP. See the GitHub pre-release for the build and test results.
+
+[Release files and checksums](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.9.0.0-pre.20261115.1)
+
+## Feedback
+
+[Report a bug on Nexus](https://www.nexusmods.com/runescapedragonwilds/mods/570?tab=bugs) with the build, platform, reproduction, and relevant diagnostic codes.

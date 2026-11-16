@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
+#include <thread>
 #include <vector>
 
 int main() {
@@ -46,5 +47,23 @@ int main() {
             if(document.contains("order"))sources.push_back(source.generic_string());
         },[](const auto&,const auto&){});
     check(sources==std::vector<std::string>({"a.jsonc","b.json","nested/c.json"}));
+    const auto batch=folder/"prefetch";
+    fs::create_directory(batch);
+    for(int index=10;index<22;++index)
+        std::ofstream(batch/(std::to_string(index)+".json"))<<nlohmann::json{{"order",index}};
+    const auto caller=std::this_thread::get_id();
+    visited.clear();
+    failures.clear();
+    ParseJsonFilesInPathIsolated(batch,[&](const auto& document){
+        check(std::this_thread::get_id()==caller);
+        const auto order=document.at("order").template get<int>();
+        if(order==14)throw std::runtime_error("fixture callback refused");
+        visited.push_back(order);
+    },[&](const auto& path,const auto&){
+        check(std::this_thread::get_id()==caller);
+        failures.push_back(path.filename().string());
+    });
+    check(visited==std::vector<int>({10,11,12,13,15,16,17,18,19,20,21}));
+    check(failures==std::vector<std::string>({"14.json"}));
     std::cout<<"JSON document contracts passed\n";
 }

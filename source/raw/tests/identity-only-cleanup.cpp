@@ -87,6 +87,40 @@ int main()
     if(!registry.Ready())throw std::runtime_error("Fresh initialization did not reset the failure veto");
 
     {
+        auto equipment=source;
+        equipment["GameProgress"]["Inventory"]["MaxSlotIndex"]=31;
+        const Json worn={{"ItemData","item0"},{"GUID","equipped-instance"},{"Durability",42},
+            {"NumUpgradesApplied",2},{"PlayerInventoryItemIndex",1},{"ModData",{{"Preserve",true}}}};
+        auto& loadout=equipment["GameProgress"]["Loadout"]=Json::object();
+        loadout["0"]=worn;
+        loadout["1"]={{"ItemData","missing-equipment"},{"GUID","missing-equipped"},{"PlayerInventoryItemIndex",0}};
+        loadout["2"]={{"PlayerInventoryItemIndex",1}};
+        loadout["3"]=worn;loadout["3"]["PlayerInventoryItemIndex"]=-1;
+        loadout["4"]={{"GUID","unresolved-equipped"},{"PlayerInventoryItemIndex",1}};
+        loadout["5"]={{"ItemData",""},{"PlayerInventoryItemIndex",1}};
+        loadout["6"]={{"PlayerInventoryItemIndex",1},{"FutureEquipmentField",{{"Preserve",true}}}};
+        loadout["MaxSlotIndex"]=8;
+        const auto original=equipment;
+        for(const auto& result:{Plan(equipment,{},false,&registry),PlanAvailable(equipment,registry),
+            PlanOwned(equipment,{{"missing-item","Example"},{"missing-equipment","Example"}},{})}){
+            const auto& kept=result.Save.at("GameProgress").at("Loadout");
+            if(kept.at("MaxSlotIndex")!=8||result.Save.at("GameProgress").at("Inventory").at("MaxSlotIndex")!=31
+                ||kept.at("0")!=worn||kept.at("3")!=loadout.at("3")||kept.at("4")!=loadout.at("4")
+                ||kept.at("5")!=loadout.at("5")||kept.at("6")!=loadout.at("6")||kept.contains("1")||kept.contains("2"))
+                throw std::runtime_error("Bag cleanup treated an independent equipped record as an inventory reference");
+            if(PlanAvailable(result.Save,registry).Save.at("GameProgress").at("Loadout")!=kept)
+                throw std::runtime_error("Independent equipment cleanup was not idempotent");
+        }
+        if(equipment!=original)throw std::runtime_error("Equipment cleanup mutated its input");
+        auto base=equipment,live=source;live["GameProgress"]["Loadout"]=Json::object();
+        base["GameProgress"]["Loadout"]["1"]["PlayerInventoryItemIndex"]=0;
+        base["GameProgress"]["Loadout"]["2"]["PlayerInventoryItemIndex"]=0;
+        const auto restored=MergeBaseline(live,base,registry,{.Items=true}).Save.at("GameProgress").at("Loadout");
+        if(restored.at("0")!=worn||!restored.contains("2")||restored.contains("1")||restored.contains("4")||restored.contains("5"))
+            throw std::runtime_error("Baseline equipment borrowed another item's registered identity");
+    }
+
+    {
         auto mixed=source;
         auto& quests=mixed["GameProgress"]["QuestProgress"];
         quests["QuestTracked"]="completed";

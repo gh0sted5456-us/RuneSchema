@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstdio>
 #include "Core/HelpyPersonalization.h"
+#include "Core/ItemName.h"
 namespace PS::ItemPresentation {
 using Json=nlohmann::json;
 struct Fact {std::string Label,Value;};
@@ -36,15 +37,9 @@ inline std::string Label(const std::string& name) {
         result+=static_cast<char>(c);
     }return result;
 }
-inline std::string CleanName(std::string value) {
-    const auto first=value.find_first_not_of(" \t\r\n");if(first==value.npos)return {};
-    value=value.substr(first,value.find_last_not_of(" \t\r\n")-first+1);
-    auto folded=value;for(auto& c:folded)if(c>='A'&&c<='Z')c=char(c+('a'-'A'));
-    if(folded=="none"||folded.find("missing string")!=folded.npos||folded.find("string table entry")!=folded.npos)return {};
-    return value;
-}
+inline std::string CleanName(std::string value){return ItemName::Clean(std::move(value));}
 inline std::string OriginalName(const Json& row) {
-    for(const auto* field:{"Name","DisplayName"})if(auto name=CleanName(Text(row,field));!name.empty())return name;
+    for(const auto* field:{"DisplayName","Name"})if(auto name=CleanName(Text(row,field));!name.empty())return name;
     // Blank/missing cooked localization must not make a row invisible. This
     // is a presentation fallback only; identity remains the canonical Path.
     auto leaf=Text(row,"Path");if(const auto split=leaf.find_last_of("/.");split!=leaf.npos)leaf.erase(0,split+1);
@@ -53,7 +48,11 @@ inline std::string OriginalName(const Json& row) {
     if(leaf.ends_with("_C"))leaf.resize(leaf.size()-2);
     return leaf.empty()?"Unnamed item":Label(leaf);
 }
-inline std::string Name(const Json& row){const auto nickname=HelpyPersonalization::Nickname(HelpyPersonalization::ItemKey(row));return nickname.empty()?OriginalName(row):nickname;}
+inline std::string Name(const Json& row,bool internal=false){
+    if(internal){auto name=Text(row,"InternalName");if(name.find_first_not_of(" \t\r\n")!=name.npos)return name;
+        name=Text(row,"Path");if(const auto at=name.find_last_of("/.");at!=name.npos)name.erase(0,at+1);if(!name.empty())return name;}
+    const auto nickname=HelpyPersonalization::Nickname(HelpyPersonalization::ItemKey(row));return nickname.empty()?OriginalName(row):nickname;
+}
 inline bool Placeholder(const Json& row){auto name=OriginalName(row);return name.size()>=4&&name[0]=='['&&(name[1]=='P'||name[1]=='p')&&(name[2]=='H'||name[2]=='h')&&name[3]==']';}
 inline bool DisplayField(const std::string& name) {
     if(name.empty()||name.size()>100)return false;

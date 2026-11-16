@@ -1,4 +1,5 @@
 #pragma once
+#include "Generator/HelpyTextInput.h"
 #include "Core/RuneSchemaProfile.h"
 #include "Generator/ToolRequest.h"
 #include "Generator/HelpyWindowChrome.h"
@@ -103,7 +104,7 @@ inline void Inventory(float height){
         }ImGui::EndTabBar();
     }
     ImGui::SetNextItemWidth(std::max(60.f,ImGui::GetContentRegionAvail().x-t.X(135)));
-    const bool enter=ImGui::InputTextWithHint("##live-inventory-search","Search inventory…",Search,sizeof(Search),ImGuiInputTextFlags_EnterReturnsTrue);ImGui::SameLine();
+    const bool enter=HelpyTextInput::InputTextWithHint("##live-inventory-search","Search inventory…",Search,sizeof(Search),ImGuiInputTextFlags_EnterReturnsTrue);ImGui::SameLine();
     if(HelpyImGuiTheme::SoftButton("Search")||enter)SearchQuery=ItemGridPicker::Lower(Search);
     ImGui::SameLine();ImGui::BeginDisabled(Pending!=0);if(HelpyImGuiTheme::SoftButton("Refresh"))Reload();ImGui::EndDisabled();
     ImGui::SetNextItemWidth(-1);if(ImGui::BeginCombo("##inventory-source",ItemSource::Label(Source))){
@@ -120,7 +121,7 @@ inline void Inventory(float height){
         matches.push_back(i);
     }
     ImGui::TextDisabled("%zu items%s",matches.size(),Pending||Refresh?" · reading…":"");
-    ImGui::BeginChild("##inventory-rows",{0,t.Y(height)},true);
+    HelpyImGuiTheme::BeginPanel("##inventory-rows",{0,t.Y(height)},true);
     const auto dropMin=ImGui::GetWindowPos(),dropSize=ImGui::GetWindowSize();
 #ifdef HELPY_PREVIEW
     HelpyPreviewHooks::LiveInventoryViewport=HelpyPreviewHooks::WindowRect();
@@ -130,7 +131,7 @@ inline void Inventory(float height){
     ImGuiListClipper clip;clip.Begin(int((matches.size()+columns-1)/columns),cardHeight+ImGui::GetStyle().ItemSpacing.y);
     while(clip.Step())for(int line=clip.DisplayStart;line<clip.DisplayEnd;++line)for(int column=0;column<columns;++column){const size_t index=size_t(line)*columns+column;if(index>=matches.size())break;
         const auto& row=rows[matches[index]];const auto slot=std::to_string(row.value("Slot",0)),path=ItemPresentation::Text(row,"Path"),name=ItemPresentation::Name(row);
-        if(column)ImGui::SameLine();ImGui::PushID(slot.c_str());const auto a=ImGui::GetCursorScreenPos();if(ImGui::InvisibleButton("##inventory-card",{width,cardHeight})){SelectedSlot=slot;SelectedInventory=row;ItemGridPicker::PinDetails(row);}
+        if(column)ImGui::SameLine();ImGui::PushID(slot.c_str());const auto a=ImGui::GetCursorScreenPos();if(ImGui::InvisibleButton("##inventory-card",{width,cardHeight},ImGuiButtonFlags_EnableNav)){SelectedSlot=slot;SelectedInventory=row;ItemGridPicker::PinDetails(row);}
         ItemGridPicker::DrawPlacard(row,a,{a.x+width,a.y+cardHeight},SelectedSlot==slot,ImGui::IsItemHovered());
         const auto count=std::string("×")+std::to_string(row.value("Count",1));const auto extent=ImGui::CalcTextSize(count.c_str());ImGui::GetWindowDrawList()->AddText({a.x+width-extent.x-t.X(8),a.y+t.Y(6)},ImGui::GetColorU32(t.text),count.c_str());
         if(HelpyImGuiTheme::TooltipReady("live-inventory:"+slot,ImGui::IsItemHovered()))ItemGridPicker::VerboseTooltip(row,name,path,false,true);
@@ -140,20 +141,20 @@ inline void Inventory(float height){
     }
     if(matches.empty())ImGui::TextWrapped("%s",Pending||Refresh?"Reading inventory pages…":Group=="Equipped"&&Snapshot.contains("LoadoutError")?Snapshot["LoadoutError"].get_ref<const std::string&>().c_str():"No matching items in this tab.");
     if(ImGui::BeginDragDropTargetCustom(ImRect(dropMin,{dropMin.x+dropSize.x,dropMin.y+dropSize.y}),ImGui::GetID("##inventory-cart-drop"))){if(auto row=ItemGridPicker::AcceptItemDrop(Status))Stage(*row);ImGui::EndDragDropTarget();}
-    ImGui::EndChild();ImGui::TextDisabled("Drop Item Bay items here to stage delivery—not move existing items.");ImGui::PopID();
+    PS::HelpyImGuiTheme::EndPanel();ImGui::TextDisabled("Drop Item Bay items here to stage delivery—not move existing items.");ImGui::PopID();
 }
 inline void Contents(){
     const auto& t=HelpyImGuiTheme::Current;ImGui::PushID("live-inventory-workbench");
-    ImGui::TextWrapped("%s",RuneSchemaProfile::Name(Target).c_str());ImGui::SameLine();if(HelpyImGuiTheme::SoftButton(Detached?"Dock inventory":"Detach inventory"))Detached=!Detached;
+    ImGui::TextWrapped("%s",RuneSchemaProfile::Name(Target).c_str());ImGui::SameLine();if(!HelpyImGuiTheme::NativePresentation&&HelpyImGuiTheme::SoftButton(Detached?"Dock inventory":"Detach inventory"))Detached=!Detached;
     const bool delivering=ItemGridPicker::SharedCart.Delivery()!=0;if(WasDelivering&&!delivering&&Generation==SpawnToolRequests::CurrentGeneration())Reload();WasDelivering=delivering;
-    ImGui::BeginChild("##inventory-workbench-body",{0,0});
+    HelpyImGuiTheme::BeginPanel("##inventory-workbench-body",{0,0});
     if(Container){ImGui::TextWrapped("Lock status: Unknown · locked by: not verified");ImGui::TextWrapped("%s",Snapshot.value("AccessReason",std::string("Direct chest deposits and unlock overrides require a verified native access contract.")).c_str());}
     ImGui::TextWrapped("%s",Status.c_str());
     if(ChangingGear){
         ImGui::SeparatorText(("Change gear · "+GearLocation).c_str());
-        ItemBayBrowser::Controls(Bay,BaySearch,sizeof(BaySearch),[]{SelectedBay=Json::object();BaySelected[0]=0;ResetGearCatalog();},false);
-        LazyCatalog::State view;view.Started=true;view.HasMore=GearMore;view.Pending=GearCatalogRequest!=0;
         Json catalog={{"Items",GearRows}};
+        ItemBayBrowser::Controls(Bay,catalog,Revision+GearRevision,BaySearch,sizeof(BaySearch),[]{SelectedBay=Json::object();BaySelected[0]=0;ResetGearCatalog();},false);
+        LazyCatalog::State view;view.Started=true;view.HasMore=GearMore;view.Pending=GearCatalogRequest!=0;
         const auto result=ItemGridPicker::Render("matching-equipment-bay",catalog,BaySearch,sizeof(BaySearch),BaySelected,sizeof(BaySelected),Bay,Revision+GearRevision,false,false,true,true,false,320,&view);
         if(result.SelectedRow)SelectedBay=*result.SelectedRow;
         const Json* owned=nullptr;if(ValidSnapshot()&&Snapshot.contains("Items"))for(const auto& row:Snapshot["Items"])if(!SelectedBay.empty()&&ItemPresentation::Text(row,"Path")==ItemPresentation::Text(SelectedBay,"Path")&&row.contains("Instance")){owned=&row;break;}
@@ -169,7 +170,7 @@ inline void Contents(){
         ImGui::TableNextColumn();Inventory(280);if(wide)ImGui::TableNextColumn();ImGui::PushID("live-item-bay-pane");ImGui::SeparatorText("Item Bay");
         if(!LazyCatalog::For(0).Started&&!LazyCatalog::For(0).Pending)LazyCatalog::Search(0,ItemGridPicker::BackendQuery(Bay));
         Json catalog=Json::object();LazyCatalog::Overlay(catalog,0);
-        ItemBayBrowser::Controls(Bay,BaySearch,sizeof(BaySearch));
+        ItemBayBrowser::Controls(Bay,catalog,Revision+LazyCatalog::For(0).AppliedRevision,BaySearch,sizeof(BaySearch));
         const auto result=ItemGridPicker::Render("live-inventory-item-bay",catalog,BaySearch,sizeof(BaySearch),BaySelected,sizeof(BaySelected),Bay,Revision+LazyCatalog::For(0).AppliedRevision,false,false,true,true,false,280);
         if(result.SelectedRow)SelectedBay=*result.SelectedRow;
         ImGui::BeginDisabled(SelectedBay.empty()||Container||Personal||delivering);if(HelpyImGuiTheme::SoftButton("Stage selected for delivery"))Stage(SelectedBay);ImGui::EndDisabled();ImGui::PopID();ImGui::EndTable();
@@ -182,7 +183,7 @@ inline void Contents(){
         ImGui::BeginDisabled(!ready);if(RenderCart)RenderCart(t.Y(400));ImGui::EndDisabled();
         if(FocusCart){ImGui::SetScrollHereY(1.f);FocusCart=false;}
     }else if(!ChangingGear)ImGui::TextDisabled("Your cart will appear here when you stage items.");
-    ImGui::EndChild();ImGui::PopID();
+    PS::HelpyImGuiTheme::EndPanel();ImGui::PopID();
 }
 inline void RenderDocked(){if(!Open||Detached||HelpyTaskbar::Current.Contains(HelpyTaskbar::Window::Inventory))return;HelpyWindowChrome::Prepare(Chrome);ImGui::SetNextWindowSize({1000,760},ImGuiCond_FirstUseEver);if(ImGui::Begin("Inventory workbench",&Open,ImGuiWindowFlags_NoSavedSettings)){HelpyWindowChrome::Render(Chrome,HelpyTaskbar::Window::Inventory);Contents();}ImGui::End();}
 }

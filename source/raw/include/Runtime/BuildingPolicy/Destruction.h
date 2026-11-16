@@ -1,5 +1,6 @@
 #pragma once
 #include "Policy.h"
+#include "Placement.h"
 #include "DestructionTarget.h"
 #include <polyhook2/Detour/x64Detour.hpp>
 #include <Zydis/Zydis.h>
@@ -8,11 +9,23 @@
 #include <memory>
 #include <functional>
 #include <cassert>
+#include <optional>
 namespace PS::Buildings {
+// Explicit actor opt-in replaces that actor's player dismantle policy only.
+inline std::optional<bool> OwnDismantlePermission(UObject* actor,UObject* controller){
+ if(!Live(actor)||!actor->GetFunctionByNameInChain(L"RuneSchemaCanDismantleOwnBuilding"))return std::nullopt;
+ if(!Live(controller)||!controller->IsA(Find<UClass>(L"/Script/Dominion.DominionPlayerControllerBase")))return false;
+ Call pawn(controller,L"K2_GetPawn");pawn.Invoke();if(!Live(pawn.Result()))return false;
+ Call permission(actor,L"RuneSchemaCanDismantleOwnBuilding");Check(permission.fn,L"Player",L"ObjectProperty",sizeof(UObject*));Check(permission.fn,L"ReturnValue",L"BoolProperty",1);permission.Object(L"Player",pawn.Result());permission.Invoke();return permission.Bool();
+}
 class DestructionGuard {
  static inline std::unique_ptr<PLH::x64Detour> detour;
  static inline uint64_t trampoline=0;
  static inline std::function<void(const std::string&)> report;
+ static bool AllowsPlayerDismantle(void* piece,unsigned char reason,UObject* controller){
+  if(reason!=1)return false;
+  auto result=OwnDismantlePermission(Placement::ActorFor(piece),controller);return result&&*result;
+ }
  static bool Destroy(void* piece,unsigned char reason,UObject* controller){
   try{
    if(reason==1||reason==2||reason==3||reason==5){
@@ -20,7 +33,7 @@ class DestructionGuard {
     auto* world=reinterpret_cast<UWorld*(*)(void*)>((*static_cast<void***>(piece))[17])(piece);
     // Preview cleanup can destroy a facade before it has a transform.
     auto* transform=reinterpret_cast<const Transform*(*)(void*)>((*static_cast<void***>(piece))[20])(piece);
-    if(transform&&BlocksDestruction(world,transform->location,reason)){if(report)report("BUILDING_POLICY_DESTRUCTION_BLOCKED reason="+std::to_string(reason));return false;}
+    if(transform&&BlocksDestruction(world,transform->location,reason)&&!AllowsPlayerDismantle(piece,reason,controller)){if(report)report("BUILDING_POLICY_DESTRUCTION_BLOCKED reason="+std::to_string(reason));return false;}
 
    }
   }catch(const std::exception& error){if(report)report(std::string("DEVELOPMENT_DESTRUCTION_FAILED ")+error.what());}

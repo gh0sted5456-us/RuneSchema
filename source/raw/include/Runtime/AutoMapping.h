@@ -10,14 +10,17 @@
 #include "Utility/Logging.h"
 #include "Utility/Config.h"
 #include "Unreal/Hooks.hpp"
+#include "LuaMadeSimple/LuaMadeSimple.hpp"
 #include <windows.h>
+#include <atomic>
 #include <map>
 #include <cmath>
 namespace PS::AutoMapping {
 namespace fs=std::filesystem;using Json=nlohmann::json;
-inline fs::path Root,Host,Request;inline std::string Build,Nonce;inline bool Pending=false;inline double Elapsed=0;inline ULONGLONG Started=0;
+inline fs::path Root,Host,Request;inline std::string Build,Nonce;inline std::atomic_bool Pending{false};inline double Elapsed=0;inline ULONGLONG Started=0;
 struct CacheLease {HANDLE Handle=INVALID_HANDLE_VALUE;~CacheLease(){if(Handle!=INVALID_HANDLE_VALUE)CloseHandle(Handle);}};
 inline CacheLease Lease;
+inline std::atomic_bool RequestHandedOff{false};
 inline std::map<fs::path,std::pair<uintmax_t,fs::file_time_type>> Before;
 inline std::string Key(std::string_view text){uint64_t hash=14695981039346656037ull;for(unsigned char c:text){hash^=c;hash*=1099511628211ull;}std::ostringstream out;out<<std::hex<<std::setfill('0')<<std::setw(16)<<hash;return out.str();}
 inline bool Hex(const std::string& value){return value.size()==16&&value.find_first_not_of("0123456789abcdef")==value.npos;}
@@ -26,7 +29,7 @@ inline void Safe(const fs::path& path){for(auto current=fs::absolute(path);!curr
     auto parent=current.parent_path();if(parent==current)break;current=parent;
 }}
 inline MappingBackbone::Mapping Validate(const fs::path& file){
-    Safe(file);const auto bytes=fs::file_size(file);if(bytes<16||bytes>32*1024*1024)throw std::runtime_error("Automatic mapping exceeds size bounds");
+    Safe(file);const auto bytes=fs::file_size(file);Usmap::ValidateFileSize(bytes);
     const auto stamp=fs::last_write_time(file);const auto fingerprint=MappingBackbone::Fingerprint(file);
     for(const char* type:{"/Script/Dominion.ItemData","/Script/Dominion.RecipeData","/Script/Dominion.JournalComponent"}){
         const auto result=Usmap::Index::Shared().Handle(file,fingerprint,Root/"index",{{"Action","DescribeType"},{"Type",type}});
@@ -44,7 +47,6 @@ inline void Prune(const Json& receipt)noexcept{try{
 inline void FinishRequest()noexcept{try{
     if(Request.empty())return;
     for(const auto& path:{Request,fs::path(Request.wstring()+L".result")}){Safe(path);fs::remove(path);}
-    SetEnvironmentVariableW(L"RUNESCHEMA_AUTO_MAPPING_REQUEST",nullptr);_putenv_s("RUNESCHEMA_AUTO_MAPPING_REQUEST","");
 }catch(...){/* Stale handoff files are bounded by the next validated cache cleanup. */}}
 inline void Prepare()noexcept{try{
     if(Lease.Handle!=INVALID_HANDLE_VALUE)return;
@@ -71,16 +73,23 @@ inline void Prepare()noexcept{try{
         ConsolidatedLog<RC::LogLevel::Normal>(STR("[RuneSchema] [MAPPINGS][UNAVAILABLE] No matching cached mapping; automatic capture is disabled. Live reflection remains active.\n"));return;
     }
     fs::create_directories(Root/"requests");Nonce=Key(Build+"|"+std::to_string(GetCurrentProcessId())+"|"+std::to_string(GetTickCount64()));Request=Root/"requests"/(Nonce+".request");Safe(Request);
-    size_t count=0;for(const auto& entry:fs::directory_iterator(Host))if(entry.is_regular_file()&&entry.path().extension()==L".usmap"){
-        if(++count>64)throw std::runtime_error("Automatic mapping candidate limit exceeded");Safe(entry.path());Before[entry.path()]={entry.file_size(),entry.last_write_time()};
+    for(const auto& entry:fs::directory_iterator(Host))if(entry.is_regular_file()&&entry.path().extension()==L".usmap"){
+        Safe(entry.path());Before[entry.path()]={entry.file_size(),entry.last_write_time()};
     }
     ConfigFiles::Write(Request,Nonce+"\n");
-    const auto utf8=Request.u8string();const std::string requestPath(utf8.begin(),utf8.end());
-    if(!SetEnvironmentVariableW(L"RUNESCHEMA_AUTO_MAPPING_REQUEST",Request.c_str())||_putenv_s("RUNESCHEMA_AUTO_MAPPING_REQUEST",requestPath.c_str())!=0)
-        throw std::runtime_error("Automatic mapping Lua/CRT handoff failed");
     Pending=true;Started=GetTickCount64();
     ConsolidatedLog<RC::LogLevel::Normal>(STR("[RuneSchema] [MAPPINGS][CAPTURE] No matching cached mapping yet; native UE4SS capture queued. Once capture completes, the next launch will reuse it. Live reflection and native safety checks remain active.\n"));
 }catch(const std::exception& error){Pending=false;FinishRequest();Log<RC::LogLevel::Warning>(STR("[MAPPINGS][DEFERRED] {}. Existing cache files retained; live reflection remains active.\n"),ToWideSafe(error.what()));}}
+inline void InstallLua(const RC::LuaMadeSimple::Lua& lua) {
+    if (!Pending) return;
+    lua.register_function("RuneSchemaTakeMappingRequest", [](const RC::LuaMadeSimple::Lua& state) -> int {
+        if (!Pending || RequestHandedOff.exchange(true)) return 0;
+        const auto utf8 = Request.u8string();
+        state.set_string(reinterpret_cast<const char*>(utf8.data()), utf8.size());
+        state.set_string(Nonce);
+        return 2;
+    });
+}
 inline void Start(){if(!Pending)return;
     RC::Unreal::Hook::FCallbackOptions options{};options.OwnerModName=STR("RuneSchema");options.HookName=STR("RuneSchemaAutoMapping");
     RC::Unreal::Hook::RegisterEngineTickPostCallback([](auto& iteration,RC::Unreal::UEngine*,float delta,bool){
@@ -90,9 +99,9 @@ inline void Start(){if(!Pending)return;
             const fs::path resultFile=Request.wstring()+L".result";Safe(resultFile);
             if(!fs::is_regular_file(resultFile)){if(Elapsed>180)throw std::runtime_error("Native Lua mapping dump did not complete within three minutes");return;}
             const auto result=ConfigFiles::Read(resultFile,1024);if(result!=Nonce+"\nok\n")throw std::runtime_error("Native DumpUSMAP capability unavailable or dump failed");
-            fs::path source;size_t changed=0,count=0;
+            fs::path source;size_t changed=0;
             for(const auto& entry:fs::directory_iterator(Host))if(entry.is_regular_file()&&entry.path().extension()==L".usmap"){
-                if(++count>64)throw std::runtime_error("Mapping candidate limit exceeded");Safe(entry.path());const auto old=Before.find(entry.path());
+                Safe(entry.path());const auto old=Before.find(entry.path());
                 if(old==Before.end()||old->second!=std::pair{entry.file_size(),entry.last_write_time()}){source=entry.path();++changed;}
             }
             if(changed!=1)throw std::runtime_error("Native mapping output is missing or ambiguous");

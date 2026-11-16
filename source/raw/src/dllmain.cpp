@@ -1,4 +1,6 @@
+#include "Runtime/HelpyHudInterfaces.h"
 #include "Runtime/BuildingPolicy/Bridge.h"
+#include "Runtime/HelpyModMenu.h"
 #include "Core/ProcessExitFuture.h"
 #include "Utility/StructuredDiagnostics.h"
 #include "Utility/StructuredDiagnosticB3D.h"
@@ -33,6 +35,7 @@
 #include "Generator/AppearanceTrace.h"
 #include "Generator/PlayerTrace.h"
 #include "Loader/DragonWildsMainLoader.h"
+#include "Runtime/PakLoader.h"
 #include "Runtime/PluginHost.h"
 #include "Runtime/QuickLoad.h"
 #include "Runtime/AdditionalLogging.h"
@@ -327,8 +330,9 @@ public:
                     PS::ToWideSafe(result.Detail.c_str()));
         }
         {
-            const auto pluginRoot=std::filesystem::path(PS::HostServices::WorkingDirectory())/"Mods"/"RuneSchema"/"plugins";
+            const auto pluginRoot=std::filesystem::path(PS::HostServices::WorkingDirectory())/"Mods"/"RuneSchema";
             m_pluginHost.Load(pluginRoot);
+            m_pluginHost.StartDesktop();
             for(const auto& message:m_pluginHost.Diagnostics())
                 PS::Log<LogLevel::Normal>(TEXT("Plugin host: {}\n"),PS::ToWideSafe(message.c_str()));
             for(const auto& connection:m_pluginHost.Connections())
@@ -374,7 +378,7 @@ public:
         DragonWilds::UnrealOffsets::Initialize();
         PS::StartupTrace::Mark("offsets complete; early hooks begin");
 
-        MainLoader.PreInitialize();
+        MainLoader.PreInitialize(m_pluginHost.HasCapability("ue4ss.sister-content"));
         PS::StartupTrace::Mark("early hooks complete");
 
         PS::ConsolidatedLog<RC::LogLevel::Normal>(STR("[RuneSchema] v{} loaded | UE4SS | network role determined by game state.\n"), ModVersion);
@@ -471,7 +475,8 @@ public:
             ImGui::TextWrapped("Core settings that affect the whole RuneSchema runtime.");
             ImGui::SeparatorText("Messages");
             ImGui::Checkbox("Advanced logging", &settings.advancedLogging);
-            ImGui::TextWrapped("RuneSchema.log always mirrors normal RuneSchema messages in the mod root. Advanced logging adds detailed loader and bridge traces to that file only; UE4SS keeps concise output.");
+            ImGui::TextWrapped("RuneSchema.log mirrors normal messages in the selected log folder. Advanced logging adds detailed loader and bridge traces to that file only; UE4SS keeps concise output.");
+            ImGui::Checkbox("Keep logs in UE4SS (next launch)", &settings.logsInUE4SS);
             ImGui::Checkbox("Archive RuneSchema logs (restart required)", &settings.archiveLogs);
             ImGui::TextWrapped("Each launch starts a fresh continuous RuneSchema.log. Archiving keeps the previous run in logs/ with a UTC date-time filename. No mid-run size rotation or automatic archive deletion. UE4SS.log is unchanged.");
             ImGui::Checkbox("Color-code loader annotations", &settings.colorCodeLoaderAnnotations);
@@ -517,7 +522,7 @@ public:
             ImGui::Checkbox("Save RuneSchema quest progress", &settings.persistence.quests);
             ImGui::TextWrapped("On by default. Off leaves quest definitions available to other loaders but blocks RuneSchema quest actions because native quest progress is save-backed.");
             ImGui::SeparatorText("World save cleanup");
-            ImGui::TextWrapped("A verified backup is required before building cleanup in either mode. The legacy backupBeforePrune setting cannot disable this protection.");
+                ImGui::TextWrapped("World cleanup runs independently of optional world backups. Enable world recovery in Helpy to archive the original payload in AppData before repair.");
             ImGui::SeparatorText("Default baseline recovery");
             ImGui::Checkbox("Enable baseline recovery (restart required)", &settings.defaultRecovery.enabled);
             ImGui::TextWrapped("Off by default. When enabled, RuneSchema fills only missing or invalid selected fields after live-registry orphan pruning. Healthy live values and later progress always win.");
@@ -533,18 +538,19 @@ public:
             ImGui::SeparatorText("Server Helpy permissions");
             ImGui::TextWrapped("These permissions are disabled by default. Allowed client requests are executed and validated by server authority; clients can never export files or create permanent placements through this bridge.");
             ImGui::Checkbox("Allow client item grants", &settings.helpyAuthority.allowClientItemGrants);
+            ImGui::Checkbox("Allow client self-teleport", &settings.helpyAuthority.allowClientTeleport);
             ImGui::Checkbox("Allow client temporary spawns", &settings.helpyAuthority.allowClientTemporarySpawns);
             ImGui::SetNextItemWidth(140.0f);
-            ImGui::InputInt("Maximum items per request", &settings.helpyAuthority.maximumItemCount);
+            ImGui::InputInt("Maximum items per request (0 = no limit)", &settings.helpyAuthority.maximumItemCount);
             ImGui::SetNextItemWidth(140.0f);
             ImGui::InputInt("Maximum actors per request", &settings.helpyAuthority.maximumSpawnCount);
             ImGui::SetNextItemWidth(140.0f);
             ImGui::InputInt("Maximum temporary NPC seconds", &settings.helpyAuthority.maximumNpcDurationSeconds);
-            settings.helpyAuthority.maximumItemCount=std::clamp(settings.helpyAuthority.maximumItemCount,1,10000);
+            settings.helpyAuthority.maximumItemCount=std::max(settings.helpyAuthority.maximumItemCount,0);
             settings.helpyAuthority.maximumSpawnCount=std::clamp(settings.helpyAuthority.maximumSpawnCount,1,100);
             settings.helpyAuthority.maximumNpcDurationSeconds=std::clamp(settings.helpyAuthority.maximumNpcDurationSeconds,1,3600);
-            ImGui::TextWrapped("Remote users must also match permittedPlayerGuids or permittedPlayerNames in settings/settings.ini [helpyAuthority] (legacy JSONC is also supported). An empty allowlist denies all remote Helpy mutations; GUIDs are preferred.");
-            ImGui::TextWrapped("Plugin controls are owned by each plugin under plugins/<PluginId>/settings/. Helpy activation and its hotkey are managed by RuneSchema.Helpy.");
+            ImGui::TextWrapped("Remote users need an allowlist entry or opted-in world PIN access. Configure the PIN in Helpy > Settings > Server access. PIN access covers only self-delivery and self-teleport; action limits and registry checks still apply. GUIDs are preferred for allowlists.");
+            ImGui::TextWrapped("Plugin controls are owned by each plugin under dlls/plugins/<PluginId>/settings/ or Helpy/settings/. Helpy activation and its hotkey are managed by RuneSchema.Helpy.");
             ImGui::TextWrapped("Settings: settings/settings.ini (legacy settings.jsonc supported) | Live jobs: runtime/live/jobs | Live state: runtime/live/saved");
             ImGui::TextWrapped("Hotloading applies supported JSON changes while the game is running. Blueprint patches and ghost appearance changes still require a restart.");
             ImGui::SeparatorText("Load-order prefixes");
@@ -827,7 +833,12 @@ public:
     }
 
     void InstallPackageDiscovery(RC::StringViewType modName,RC::LuaMadeSimple::Lua& lua) {
-        if(m_startupFailed.load(std::memory_order_acquire)||m_packageDiscoveryBootstrap.empty())return;
+        if (m_startupFailed.load(std::memory_order_acquire)) return;
+        if (PS::ModFolderLayout::EqualsInsensitive(RC::to_string(modName), "RuneSchema"))
+            PS::AutoMapping::InstallLua(lua);
+        if (m_packageDiscoveryBootstrap.empty()) return;
+        if(PS::ModFolderLayout::EqualsInsensitive(RC::to_string(modName),"RuneSchema"))try{PS::HelpyHudInterfaces::Install(PS::HostServices::ModDirectory(),lua);}catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[RuneSchema][HUD][INACTIVE] {}\n"),PS::ToWideSafe(error.what()));}
+        if(PS::ModFolderLayout::EqualsInsensitive(RC::to_string(modName),"RuneSchema"))try{PS::HelpyModMenu::Install(PS::HostServices::ModDirectory(),lua);}catch(const std::exception& error){PS::Log<LogLevel::Warning>(STR("[RuneSchema][MOD-MENU][INACTIVE] {}\n"),PS::ToWideSafe(error.what()));}
         try {lua.execute_string(m_packageDiscoveryBootstrap);}
         catch(const std::exception& error) {
             PS::Log<LogLevel::Warning>(STR("[UE4SS-PACKAGES][DISCOVERY][DEFERRED] {}: {}. Native discovery retained.\n"),
@@ -855,6 +866,9 @@ public:
                 m_networkRoleMonitor.Stop();
                 PS::RuntimeJobs::Shutdown();
                 m_pluginHost.Shutdown();
+            });
+            MainLoader.SetModsReadyHandler([this]{
+                m_pluginHost.LoadOwned(PS::HostServices::ModDirectory(),MainLoader.EnabledModRoots());
             });
             MainLoader.Initialize();
             m_buildingPolicy.Start();
@@ -951,6 +965,11 @@ BOOL APIENTRY DllMain(HMODULE,DWORD reason,LPVOID reserved) {
 }
 extern "C"
 {
+    RuneSchema_API bool RuneSchema_RegisterPakLoaderRootV1(const wchar_t* path) noexcept
+    {
+        return PS::PakLoader::Register(path);
+    }
+
     RuneSchema_API RC::CppUserModBase* start_mod()
     {
         try {

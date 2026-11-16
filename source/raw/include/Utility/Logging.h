@@ -45,6 +45,14 @@ namespace PS {
         return wide;
     }
 
+    template <RC::Unreal::int32 level>
+    void PluginLog(std::string_view plugin,std::string_view message){
+        const auto id=ToWideSafe(plugin),text=ToWideSafe(message);
+        const bool overlay=plugin=="RuneSchema.Helpy"&&(message.starts_with("[RS-OVL-")||message.starts_with("[HELPY][OVERLAY]"));
+        if(overlay)DiagnosticLog::Formatted(STR("[RuneSchema] [plugin={}] [{}] {}\n"),level==RC::LogLevel::Warning||level==RC::LogLevel::Error,id,level==RC::LogLevel::Error?STR("error"):level==RC::LogLevel::Warning?STR("warning"):STR("info"),text);
+        else ConsolidatedLog<level>(STR("[RuneSchema] Plugin {}: {}\n"),id,text);
+    }
+
     // Stable codes are emitted at the decision site, not inferred by the sink.
     template <RC::Unreal::int32 level,typename... Args>
     void CodedLog(Diagnostics::Id id,RC::File::StringViewType content,Args&&... args){

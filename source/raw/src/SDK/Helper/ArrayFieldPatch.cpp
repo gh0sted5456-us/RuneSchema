@@ -1,6 +1,7 @@
 #include "SDK/Helper/ArrayFieldPatch.h"
 #include "SDK/Helper/PropertyHelper.h"
 #include "SDK/Structs/Custom/FManagedStruct.h"
+#include "SDK/Structs/Custom/FArrayCopy.h"
 #include "Core/JsonArrayPatch.h"
 #include "Unreal/CoreUObject/UObject/Class.hpp"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
@@ -12,19 +13,7 @@ using namespace RC::Unreal;
 
 namespace DragonWilds::PropertyHelper {
     namespace {
-        struct ArrayCopy {
-            FArrayProperty* Property;
-            void* Data;
-            ArrayCopy(FArrayProperty* property, void* source) : Property(property),
-                Data(FMemory::Malloc(property->GetElementSize())) {
-                Property->InitializeValue(Data);
-                try { Property->CopySingleValue(Data, source); }
-                catch (...) { Property->DestroyValue(Data); FMemory::Free(Data); throw; }
-            }
-            ~ArrayCopy() { Property->DestroyValue(Data); FMemory::Free(Data); }
-            ArrayCopy(const ArrayCopy&) = delete;
-            ArrayCopy& operator=(const ArrayCopy&) = delete;
-        };
+
 
         FProperty* RequireField(UScriptStruct* type, const std::string& key) {
             if (key.starts_with("$")) throw std::runtime_error("Directive is not a reflected array-entry field: " + key);
@@ -84,7 +73,7 @@ namespace DragonWilds::PropertyHelper {
             CheckFields(type, edit.Target, false);
             if (!edit.Index) CheckFields(type, edit.Match, true);
         }
-        ArrayCopy copy(property, data);
+        UECustom::FArrayCopy copy(property, data);
         auto* array = static_cast<FScriptArray*>(copy.Data);
         for (const auto& edit : edits) {
             const auto selected = JsonArrayPatch::Select(edit, array->Num(), [&](int index) {
@@ -95,6 +84,6 @@ namespace DragonWilds::PropertyHelper {
             for (const auto& [key, target] : edit.Target.items())
                 CopyJsonValueToContainer(entry, RequireField(type, key), target);
         }
-        property->CopySingleValue(data, copy.Data);
+        copy.Commit();
     }
 }

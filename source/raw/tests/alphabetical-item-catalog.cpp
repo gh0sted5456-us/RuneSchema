@@ -69,6 +69,15 @@ int main(int argc,char** argv){try{
         assert(result&&result->at("Rows").size()==1&&result->at("Rows")[0]["Name"]=="Health Tincture");
         assert(result->at("PopulationDone")==6000&&result->at("CacheHit")==true);paged.Shutdown();}
     std::filesystem::remove(PS::PagedItemCatalog::File(sparseFile));
+    const auto familyFile=folder/"family.json";diskRows.clear();
+    for(int i=0;i<5000;++i)diskRows.push_back(std::make_shared<const Json>(Json{{"Path","/Game/A"+std::to_string(i)},{"Name","Earlier item "+std::to_string(i)}}));
+    for(const auto* slot:{"Body","Helm","Legs"})diskRows.push_back(std::make_shared<const Json>(Json{{"Path",std::string("/Game/Splitbark")+slot},{"Name",std::string("Splitbark ")+slot}}));
+    PS::PagedItemCatalog::Save(familyFile,"family-scope",diskRows);
+    const auto familyPage=PS::PagedItemCatalog::Read(PS::PagedItemCatalog::File(familyFile),"family-scope","__helpyfamily:splitbark","",24);
+    assert(familyPage["Rows"].size()==3&&familyPage["Rows"][0]["Name"]=="Splitbark Body");
+    std::set<std::string> paths;auto rotating=PS::PagedItemCatalog::Read(PS::PagedItemCatalog::File(familyFile),"family-scope","item","",128);
+    for(;;){for(const auto& row:rotating["Rows"])assert(paths.insert(row.at("Path").get<std::string>()).second);if(!rotating.value("HasMore",false))break;rotating=PS::PagedItemCatalog::Read(PS::PagedItemCatalog::File(familyFile),"family-scope","item",rotating.at("NextCursor"),128);}
+    assert(paths.size()==5000);std::filesystem::remove(PS::PagedItemCatalog::File(familyFile));
     const auto previewFile=folder/"preview.json";
     const auto teaFile=folder/"native-tea.json";const std::string teaPath="/UmbralSands/Gameplay/Items/Resources/Processed/ITEM_Resources_Tea_Dried.ITEM_Resources_Tea_Dried";
     PS::PagedItemCatalog::Save(teaFile,"tea-scope",std::vector<std::shared_ptr<const Json>>{std::make_shared<const Json>(Json{{"Path",teaPath},{"Name","Dried Tea Leaves"},{"SourceKind","modded"},{"SourceName","maxcape"}})});
@@ -77,6 +86,23 @@ int main(int argc,char** argv){try{
     const auto notModded=PS::PagedItemCatalog::Read(PS::PagedItemCatalog::File(teaFile),"tea-scope","__helpysource:modded Dried Tea","",4,false,{},std::set<std::string>{"umbralsands"});
     assert(notModded["Rows"].empty());std::filesystem::remove(PS::PagedItemCatalog::File(teaFile));
     const auto previewScope=PS::PersistentItemCatalog::DiskScope({{"CatalogKey","content-A"}},Json::array(),"en-US");
+    // A real mod roster exceeds the old 16 KiB sidecar header limit.
+    Json roster=Json::array();for(int i=0;i<13000;++i)roster.push_back("/Game/Mods/Siege/Workshop/Contract"+std::to_string(i)+".Contract"+std::to_string(i));
+    const auto largeScope=Json::array({"item-browse-v2","content-A",roster,"en-US"}).dump();
+    assert(largeScope.size()>16384);
+    const auto compactScope=PS::PersistentItemCatalog::DiskScope({{"CatalogKey","content-A"}},roster,"en-US");
+    assert(compactScope.size()<256&&PS::PagedItemCatalog::CompactScope(largeScope)==compactScope);
+    PS::PersistentItemCatalog::Save(previewFile,largeScope,cache.Snapshot());
+    assert(PS::PagedItemCatalog::Read(PS::PagedItemCatalog::File(previewFile),compactScope,"bronze","",2)["Rows"].size()==1);
+    bool compactMigrated=false;assert(PS::PersistentItemCatalog::Load(previewFile,compactScope,{},&compactMigrated)&&compactMigrated);
+    const auto staleTime=std::filesystem::last_write_time(previewFile)-std::chrono::seconds(2);
+    std::filesystem::last_write_time(PS::PagedItemCatalog::File(previewFile),staleTime);
+    Reject([&]{PS::PagedItemCatalog::Read(PS::PagedItemCatalog::File(previewFile),compactScope,"bronze","",2);});
+    {PS::PagedItemCatalog::Store worker;auto value=worker.Lookup(previewFile,compactScope,"bronze","",2);
+        for(int i=0;i<2000&&value;++i){Sleep(1);value=worker.Lookup(previewFile,compactScope,"bronze","",2);}assert(!value);
+        PS::PagedItemCatalog::Save(previewFile,compactScope,cache.Snapshot());
+        for(int i=0;i<2000&&(!value||!value->value("AlphabeticalReady",false));++i){Sleep(1);value=worker.Lookup(previewFile,compactScope,"bronze","",2);}
+        assert(value&&value->at("Rows").size()==1);worker.Shutdown();}
     PS::PersistentItemCatalog::Save(previewFile,previewScope,cache.Snapshot());
     const auto preview=PS::PagedItemCatalog::Read(PS::PagedItemCatalog::File(previewFile),"unverified","bronze","",2,true,"en-US");
     assert(preview["Rows"].size()==1&&preview["Rows"][0]["Name"]=="Bronze");

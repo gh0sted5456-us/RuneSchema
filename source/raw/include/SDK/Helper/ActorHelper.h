@@ -93,6 +93,9 @@ namespace DragonWilds::ActorHelper {
         FunctionCall& StructArg(const RC::CharType* Name,RC::Unreal::FProperty* SourceProperty,const void* SourceValue);
         FunctionCall& StructArg(const RC::CharType* Name,RC::Unreal::FProperty* SourceProperty,const void* SourceValue,const nlohmann::json& Patch);
         template <typename T> T Output(const RC::CharType* Name){T value{};ReadOutput(Name,&value,sizeof(T));return value;}
+        FunctionCall& InitializeOutput(const RC::CharType* Name);
+        bool BooleanOutput(const RC::CharType* Name);
+        std::string StringOutput(const RC::CharType* Name,size_t MaximumBytes);
         FunctionCall& FirstNumericArg(double Value);
 
         void Invoke();

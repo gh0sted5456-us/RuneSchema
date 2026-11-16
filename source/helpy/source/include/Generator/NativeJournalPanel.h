@@ -1,4 +1,5 @@
 #pragma once
+#include "Generator/HelpyTextInput.h"
 #include "Generator/NativeJournalCache.h"
 #include "Generator/JournalAuthorPanel.h"
 #include "Generator/PlayerPortraitPicker.h"
@@ -21,10 +22,10 @@ inline void Render(){
     if(ImGui::Button("Refresh from game")){NativeJournalCache::Refresh=true;NativeJournalCache::Scanning=false;}
     ImGui::EndDisabled();
     ImGui::SetNextItemWidth(-1);ImGui::Combo("##journal-source",&Source,"All sources\0Vanilla\0Modded\0Other / unverified\0");
-    ImGui::SetNextItemWidth(-1);ImGui::InputTextWithHint("##journal-search","Search title, type, ID or source...",Search,sizeof(Search));
+    ImGui::SetNextItemWidth(-1);HelpyTextInput::InputTextWithHint("##journal-search","Search title, type, ID or source...",Search,sizeof(Search));
     const bool wide=ImGui::GetContentRegionAvail().x>=t.X(650);const bool table=wide&&ImGui::BeginTable("##native-journal",2,ImGuiTableFlags_SizingStretchProp);
     if(table){ImGui::TableSetupColumn("Entries",ImGuiTableColumnFlags_WidthStretch,.65f);ImGui::TableSetupColumn("Journal",ImGuiTableColumnFlags_WidthStretch,1.35f);ImGui::TableNextColumn();}
-    ImGui::BeginChild("##native-journal-list",{0,wide?t.Y(430):t.Y(150)},true);
+    HelpyImGuiTheme::BeginPanel("##native-journal-list",{0,wide?t.Y(430):t.Y(150)},true);
     for(const auto& row:NativeJournalCache::Entries){
         if(Section&&JournalSections::For(row)!=JournalSections::Names[Section])continue;
         const auto group=row.value("SourceKind",std::string{});
@@ -32,8 +33,8 @@ inline void Render(){
         if(Search[0]&&!MapFilters::Matches(MapFilters::Fold(row.value("Name",std::string{})+" "+row.value("Type",std::string{})+" "+row.value("PersistenceID",std::string{})+" "+row.value("InternalName",std::string{})+" "+row.value("SourceName",std::string{})),Search))continue;
         const auto path=row.value("Path",std::string{});ImGui::PushID(path.c_str());if(ImGui::Selectable(row.value("Name",path).c_str(),Selected==path)){Selected=path;Page=0;}ImGui::PopID();
     }
-    if(NativeJournalCache::Entries.empty())ImGui::TextWrapped("No native journal entries cached yet. Load a world to read its loaded journal data.");ImGui::EndChild();
-    if(table)ImGui::TableNextColumn();ImGui::BeginChild("##native-journal-entry",{0,t.Y(430)},true);
+    if(NativeJournalCache::Entries.empty())ImGui::TextWrapped("No native journal entries cached yet. Load a world to read its loaded journal data.");PS::HelpyImGuiTheme::EndPanel();
+    if(table)ImGui::TableNextColumn();HelpyImGuiTheme::BeginPanel("##native-journal-entry",{0,t.Y(430)},true);
     const Json* chosen=nullptr;for(const auto& row:NativeJournalCache::Entries)if(row.value("Path",std::string{})==Selected){chosen=&row;break;}
     if(chosen){const auto& row=*chosen;
         ImGui::TextWrapped("%s",row.value("Name",Selected).c_str());ImGui::TextWrapped("Type: %s | Source: %s",row.value("Type",std::string{}).c_str(),row.value("SourceName",std::string("Unknown")).c_str());
@@ -47,6 +48,6 @@ inline void Render(){
         if(ImGui::Button("Use as new draft"))JournalAuthorPanel::Template(row);
         if(ImGui::CollapsingHeader("Asset details"))ImGui::TextWrapped("%s",row.value("Path",std::string{}).c_str());
     }else ImGui::TextWrapped("Choose an entry to view native pages and artwork.");
-    ImGui::EndChild();if(table)ImGui::EndTable();
+    PS::HelpyImGuiTheme::EndPanel();if(table)ImGui::EndTable();
 }
 }

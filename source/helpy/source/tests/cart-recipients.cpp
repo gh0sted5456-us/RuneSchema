@@ -42,4 +42,13 @@ int main(){
     assert(batch.Accept(30,equipFailure)&&!batch.Stopped());assert(batch.Request(31)["EquipOnReceipt"]==true);
     assert(batch.Accept(31,equipFailure)&&batch.Finished()&&!batch.Stopped());assert(batch.Aggregate()["GrantResults"][0]["State"]=="Confirmed");
     batch.Begin(items,players);assert(batch.Request(32)["EquipOnReceipt"]==false);batch.Stop();
+    auto large=receipt(true);large["Status"]="Delivery confirmed";large["UnrelatedCatalog"]=std::string(2*1024*1024,'x');
+    for(unsigned cycle=0;cycle<5000;++cycle){
+        batch.Begin(items,players);
+        for(const auto& player:players){const auto id=100+cycle*players.size()+batch.Completed();assert(batch.Request(id)["Player"]==player.Path);assert(batch.Accept(id,large));}
+        assert(batch.Finished()&&!batch.Stopped()&&batch.Receipts().size()==players.size());
+        assert(batch.Receipts().dump().size()<4096&&batch.Aggregate()["GrantResults"][0]["State"]=="Confirmed");
+    }
+    batch.Begin(items,players);batch.Request(999999);auto oversized=receipt(true);while(oversized["GrantResults"].size()<=PS::ItemCart::Model::Limit)oversized["GrantResults"].push_back(items[0]);
+    assert(batch.Accept(999999,oversized)&&batch.Stopped()&&!batch.Receipts()[0]["Receipt"].contains("GrantResults"));
 }

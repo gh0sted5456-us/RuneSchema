@@ -43,6 +43,11 @@ static class AuthoringInputTests
             Check(AuthoringInputs.Project(Path.GetDirectoryName(game)!) == game, "Installed root normalization failed");
             Check(AuthoringInputs.Game(game, root, _ => { }) == game, "Explicit game selection failed");
             Refuses(() => AuthoringInputs.Game(game, root, _ => throw new InvalidDataException("active")));
+            Check(AuthoringInputs.Game(game, root, _ => throw new InvalidDataException("active"), true) == game, "Read-only capture should accept the selected running installation");
+            CacheTool.CaptureOutput(game,Path.Combine(root,"stage"),true);
+            Refuses(()=>CacheTool.CaptureOutput(game,Path.Combine(game,"Content","Paks"),true));
+            Refuses(()=>CacheTool.CaptureOutput(game,game,true));
+            Refuses(()=>CacheTool.CaptureOutput(game,Path.Combine(Path.GetDirectoryName(game)!,"Engine","Plugins"),true));
             var steam = Path.Combine(root, "Steam"); Directory.CreateDirectory(Path.Combine(steam, "steamapps"));
             File.WriteAllText(Path.Combine(steam, "steamapps", "libraryfolders.vdf"), "\"path\" \"D:\\\\Library With Spaces\"");
             Check(AuthoringInputs.SteamLibraries(steam).Last() == @"D:\Library With Spaces", "Steam library decoding failed");

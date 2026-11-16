@@ -1,6 +1,8 @@
 #pragma once
 #include "Loader/HumanNpc.h"
 #include "Generator/SaveReport.h"
+#include "Core/SavedLoadout.h"
+#include <limits>
 #include <set>
 namespace PS::NpcSaveExport {
 using Json=nlohmann::json;
@@ -21,9 +23,13 @@ inline Json Preview(const Json& save) {
     for(const auto& [slot,value]:loadout.items()) {
         if(slot=="MaxSlotIndex")continue;
         auto item=value;
-        if(item.is_object() && item.contains("PlayerInventoryItemIndex")) {
-            const auto index=item.at("PlayerInventoryItemIndex").get<int>();
-            if(index<0 || !game.contains("Inventory") || !game.at("Inventory").contains(std::to_string(index))) {
+        if(SavedLoadout::InventoryReference(item)) {
+            const auto& saved=item.at("PlayerInventoryItemIndex");
+            if(!saved.is_number_integer()||saved<0||saved>std::numeric_limits<int>::max()){
+                warnings.push_back("Loadout "+slot+": invalid inventory reference");continue;
+            }
+            const auto index=saved.get<int>();
+            if(!game.contains("Inventory") || !game.at("Inventory").contains(std::to_string(index))) {
                 warnings.push_back("Loadout "+slot+": missing inventory reference");continue;
             }
             item=game.at("Inventory").at(std::to_string(index));

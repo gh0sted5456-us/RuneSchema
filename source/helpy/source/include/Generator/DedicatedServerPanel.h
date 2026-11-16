@@ -1,7 +1,9 @@
 #pragma once
+#include "Generator/HelpyTextInput.h"
 #include "Core/DedicatedServerIni.h"
 #include "Core/HelpyEnvironment.h"
 #include "Generator/HelpyImGuiTheme.h"
+#include "Generator/HelpyMenu.h"
 #include "Runtime/HostServices.h"
 #include <commdlg.h>
 #include <optional>
@@ -16,6 +18,7 @@ inline bool ShowSecrets=false,Initialized=false,ChooseAfterDiscard=false;
 inline char Search[128]{};
 inline bool Preview=false;
 inline std::filesystem::path Staged;
+inline int Category=0;
 inline void Stage(){
     if(!HelpyEnvironment::Server()||Preview||!Draft)return;
     Draft->ValidateChanges();(void)Draft->Serialize();
@@ -38,10 +41,16 @@ inline void Render(){
     if(!HelpyEnvironment::Server()){ImGui::TextWrapped("Available only in Helpy running on the dedicated server itself. A connected client cannot edit server configuration.");return;}
     if(!Initialized){Initialized=true;File=HostServices::WorkingDirectory().parent_path().parent_path().parent_path()/"Saved"/"Config"/"WindowsServer"/"DedicatedServer.ini";if(!Preview)Load();}
     const bool dirty=Draft&&Draft->Dirty();
+    constexpr std::array categories{"Server","World","Passwords","Files & changes"};
+    HelpyMenu::Tabs("server-settings",categories,Category);
+    const bool body=HelpyMenu::BeginBody("Server settings body",Category);if(body){
+    ImGui::SeparatorText(categories[Category]);
+    if(Category==3){
     ImGui::TextWrapped("Local server configuration only. Confirm this is the active profile, especially if you use -UserDir or another save directory. Unknown keys, repeated GUID entries, order and comments are retained.");
     ImGui::TextWrapped("File: %s",File.string().c_str());
     if(ImGui::Button("Select active DedicatedServer.ini")){if(dirty){ChooseAfterDiscard=true;ImGui::OpenPopup("Discard server configuration edits?");}else Choose();}
     ImGui::SameLine();if(ImGui::Button("Reload from disk")){if(dirty){ChooseAfterDiscard=false;ImGui::OpenPopup("Discard server configuration edits?");}else Load();}
+    }
     if(HelpyImGuiTheme::BeginCenteredModal("Discard server configuration edits?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
         ImGui::TextUnformatted("Discard unsaved edits before selecting or reloading a file?");if(ImGui::Button("Discard edits")){if(ChooseAfterDiscard)Choose();else Load();ImGui::CloseCurrentPopup();}ImGui::SameLine();if(ImGui::Button("Cancel"))ImGui::CloseCurrentPopup();ImGui::EndPopup();}
     ImGui::TextColored(HelpyImGuiTheme::Current.warning,"Stage while running; apply only after stopping the server. Live INI edits can be overwritten by the game.");
@@ -50,8 +59,8 @@ inline void Render(){
         ImGui::TextWrapped("Write a private adjacent change file, leaving the active INI unchanged? Only documented scalar settings are staged. Runtime player/admin records are preserved by the offline apply helper. No live rights are granted.");
         if(ImGui::Button("Confirm stage")){try{Stage();}catch(const std::exception& error){Status=error.what();}ImGui::CloseCurrentPopup();}
         ImGui::SameLine();if(ImGui::Button("Cancel"))ImGui::CloseCurrentPopup();ImGui::EndPopup();}
-    ImGui::Checkbox("Reveal sensitive values locally",&ShowSecrets);
-    ImGui::TextWrapped("Passwords are masked by default; raw player/admin records stay redacted. Only OwnerId, ServerName, DefaultWorldName, AdminPassword and WorldPassword are editable. Other keys are preserved, not assumed supported.");
+    if(Category==2)HelpyImGuiTheme::Toggle("Reveal sensitive values locally",&ShowSecrets);
+    if(Category==3)ImGui::TextWrapped("Passwords are masked by default; raw player/admin records stay redacted. Only OwnerId, ServerName, DefaultWorldName, AdminPassword and WorldPassword are editable. Other keys are preserved, not assumed supported.");
     if(!Staged.empty()){
         if(ImGui::Button("Copy offline apply command")){const auto script=HelpyPaths::Asset("Apply-DedicatedServerSettings.ps1");const auto command="powershell.exe -NoProfile -File \""+script.string()+"\" -Changes \""+Staged.string()+"\"";ImGui::SetClipboardText(command.c_str());}
         ImGui::TextWrapped("Staged file: %s",Staged.string().c_str());
@@ -61,9 +70,11 @@ inline void Render(){
         ImGui::TextWrapped("Official guide: owners can ban/unban online or offline players; admins can ban online regular players, not unban. These game roles do not automatically authorize RuneSchema item grants, spawns or teleportation.");
     }
     if(!Status.empty())ImGui::TextWrapped("%s",Status.c_str());
-    ImGui::SetNextItemWidth(-1);ImGui::InputTextWithHint("##server-ini-filter","Filter sections or keys...",Search,sizeof(Search));const auto query=LiveLog::Lower(Search);
-    if(Draft){ImGui::BeginChild("Server INI fields",{0,0},true);std::string section;
+    ImGui::SetNextItemWidth(-1);HelpyTextInput::InputTextWithHint("##server-ini-filter","Filter sections or keys...",Search,sizeof(Search));const auto query=LiveLog::Lower(Search);
+    if(Draft){HelpyImGuiTheme::BeginPanel("Server INI fields",{0,0},true);std::string section;
         for(size_t i=0;i<Draft->Lines.size();++i){auto& line=Draft->Lines[i];if(!line.Editable||(!query.empty()&&LiveLog::Lower(line.Section+" "+line.Key).find(query)==std::string::npos))continue;
+            const int group=line.Key=="DefaultWorldName"?1:line.Key=="AdminPassword"||line.Key=="WorldPassword"?2:0;
+            if(Category!=3&&Category!=group)continue;
             if(line.Section!=section){section=line.Section;ImGui::SeparatorText(section.empty()?"General":section.c_str());}
             ImGui::PushID(static_cast<int>(i));ImGui::TextUnformatted(line.Key.c_str());
             ImGui::TextWrapped("%s",DedicatedServerIni::Description(line.Key));
@@ -71,7 +82,8 @@ inline void Render(){
             else if(line.Value.size()>8192)ImGui::TextDisabled("Value exceeds editor limit; edit externally.");else{std::array<char,8193> value{};std::copy(line.Value.begin(),line.Value.end(),value.begin());ImGui::SetNextItemWidth(-1);
                 const auto flags=!ShowSecrets&&DedicatedServerIni::Sensitive(line.Key)?ImGuiInputTextFlags_Password:ImGuiInputTextFlags_None;
                 const bool writable=DedicatedServerIni::Writable(line.Section,line.Key);ImGui::BeginDisabled(!writable);
-                if(ImGui::InputText("##value",value.data(),value.size(),flags))line.Value=value.data();ImGui::EndDisabled();}ImGui::PopID();}
-        ImGui::EndChild();}
+                if(HelpyTextInput::InputText("##value",value.data(),value.size(),flags))line.Value=value.data();ImGui::EndDisabled();}ImGui::PopID();}
+        PS::HelpyImGuiTheme::EndPanel();}
+    }HelpyMenu::EndBody();
 }
 }

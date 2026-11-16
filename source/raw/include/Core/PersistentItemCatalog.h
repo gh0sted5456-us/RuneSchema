@@ -16,7 +16,8 @@ inline constexpr uintmax_t MaxBytes=64*1024*1024;
 inline std::string DiskScope(const Json& published,const Json& paths,const std::string& locale){
     const auto content=published.value("CatalogKey",std::string{});
     if(content.empty())throw std::runtime_error("Verified item catalogue fingerprint is unavailable");
-    return Json::array({"item-browse-v2",content,paths,locale}).dump();
+    const auto digest=paths.is_string()&&CacheBundleIO::Digest(paths.get<std::string>())?paths.get<std::string>():CacheBundleIO::Hash(paths.dump());
+    return Json::array({"item-browse-v2",content,digest,locale}).dump();
 }
 inline bool DurableRow(const Json& row){
     if(!row.is_object())return false;const auto path=row.value("Path",std::string{});
@@ -30,7 +31,10 @@ inline std::unique_ptr<Cache> Load(const std::filesystem::path& file,const std::
     if(ec||bytes>MaxBytes)return {};
     try{std::ifstream input(file,std::ios::binary);auto doc=Json::parse(input);
         if(doc.at("Version")!=1)return {};
-        if(doc.at("Scope")!=scope){if(legacyScope.empty()||doc.at("Scope")!=legacyScope)return {};if(migrated)*migrated=true;}
+        if(doc.at("Scope")!=scope){
+            const bool compatible=PagedItemCatalog::CompactScope(doc.at("Scope").get<std::string>())==PagedItemCatalog::CompactScope(scope);
+            if(!compatible&&(legacyScope.empty()||doc.at("Scope")!=legacyScope))return {};if(migrated)*migrated=true;
+        }
         auto& rows=doc.at("Rows");if(!rows.is_array())return {};
         std::erase_if(rows.get_ref<Json::array_t&>(),[](const Json& row){return !DurableRow(row);});
         auto result=std::make_unique<Cache>();result->Scope(scope);result->Restore(rows);return result;

@@ -1,5 +1,6 @@
 #pragma once
 #include "Policy.h"
+#include "BindingTargets.h"
 #include <polyhook2/Detour/x64Detour.hpp>
 #include <Zydis/Zydis.h>
 #include <Windows.h>
@@ -59,31 +60,40 @@ class SupportTick {
  }
  static void Install(UObject* component){
   if(component->GetClassPrivate()->GetPropertiesSize()!=1296)throw std::runtime_error("Native stability component layout differs");
-  auto address=reinterpret_cast<uintptr_t>((*reinterpret_cast<void***>(component))[128]);uintptr_t inner=0;
-  for(unsigned at=0;at<512;){ZydisDisassembledInstruction ins;if(!ZYAN_SUCCESS(ZydisDisassembleIntel(ZYDIS_MACHINE_MODE_LONG_64,address+at,reinterpret_cast<void*>(address+at),16,&ins)))break;
-   if(ins.info.mnemonic==ZYDIS_MNEMONIC_RET)break;
-   if(ins.info.mnemonic==ZYDIS_MNEMONIC_CALL&&ins.operands[0].type==ZYDIS_OPERAND_TYPE_IMMEDIATE){ZyanU64 target;ZydisCalcAbsoluteAddress(&ins.info,&ins.operands[0],address+at,&target);inner=target;}
-   at+=ins.info.length;
-  }
-  if(!inner)throw std::runtime_error("Native stability calculation path differs");
+  const auto targets=[](uintptr_t start){return DirectBindingTargets(start,512,[](uintptr_t address,unsigned available){
+   MEMORY_BASIC_INFORMATION page{};
+   if(!VirtualQuery(reinterpret_cast<void*>(address),&page,sizeof(page))||page.State!=MEM_COMMIT||page.Protect&(PAGE_GUARD|PAGE_NOACCESS)||!(page.Protect&(PAGE_EXECUTE|PAGE_EXECUTE_READ|PAGE_EXECUTE_READWRITE|PAGE_EXECUTE_WRITECOPY)))throw std::runtime_error("Native stability entry is not executable");
+   const auto length=std::min<std::size_t>({16,available,page.RegionSize-(address-reinterpret_cast<uintptr_t>(page.BaseAddress))});
+   DestructionStep step;ZydisDisassembledInstruction ins;
+   if(!ZYAN_SUCCESS(ZydisDisassembleIntel(ZYDIS_MACHINE_MODE_LONG_64,address,reinterpret_cast<void*>(address),length,&ins)))return step;
+   step.length=ins.info.length;
+   if(ins.info.mnemonic==ZYDIS_MNEMONIC_RET)step.kind=DestructionStepKind::Return;
+   else if((ins.info.mnemonic==ZYDIS_MNEMONIC_CALL||ins.info.mnemonic==ZYDIS_MNEMONIC_JMP)&&ins.operands[0].type==ZYDIS_OPERAND_TYPE_IMMEDIATE){ZyanU64 target;if(!ZYAN_SUCCESS(ZydisCalcAbsoluteAddress(&ins.info,&ins.operands[0],address,&target)))return DestructionStep{};step.target=target;step.kind=ins.info.mnemonic==ZYDIS_MNEMONIC_CALL?DestructionStepKind::Call:DestructionStepKind::Jump;}
+   return step;
+  });};
+  const auto workers=targets(reinterpret_cast<uintptr_t>((*reinterpret_cast<void***>(component))[128]));
+  if(workers.empty())throw std::runtime_error("Native stability calculation path differs");
   uintptr_t consume=0;const unsigned char signature[]={0x40,0x57,0x48,0x83,0xec,0x30,0x83,0xb9,0xd8,0x02,0x00,0x00,0x00};
-  for(unsigned at=0;at<512;){ZydisDisassembledInstruction ins;if(!ZYAN_SUCCESS(ZydisDisassembleIntel(ZYDIS_MACHINE_MODE_LONG_64,inner+at,reinterpret_cast<void*>(inner+at),16,&ins)))break;
-   if(ins.info.mnemonic==ZYDIS_MNEMONIC_CALL&&ins.operands[0].type==ZYDIS_OPERAND_TYPE_IMMEDIATE){ZyanU64 target;ZydisCalcAbsoluteAddress(&ins.info,&ins.operands[0],inner+at,&target);if(!std::memcmp(reinterpret_cast<void*>(target),signature,sizeof(signature))){if(consume&&consume!=target)throw std::runtime_error("Native stability output path is ambiguous");consume=target;}}
-   at+=ins.info.length;
+  for(auto worker:workers)for(auto target:targets(worker)){
+   MEMORY_BASIC_INFORMATION page{};
+   if(!VirtualQuery(reinterpret_cast<void*>(target),&page,sizeof(page))||page.State!=MEM_COMMIT||page.Protect&(PAGE_GUARD|PAGE_NOACCESS)||!(page.Protect&(PAGE_EXECUTE|PAGE_EXECUTE_READ|PAGE_EXECUTE_READWRITE|PAGE_EXECUTE_WRITECOPY))||page.RegionSize-(target-reinterpret_cast<uintptr_t>(page.BaseAddress))<sizeof(signature))continue;
+   if(!std::memcmp(reinterpret_cast<void*>(target),signature,sizeof(signature))){if(consume&&consume!=target)throw std::runtime_error("Native stability output path is ambiguous");consume=target;}
   }
   if(!consume)throw std::runtime_error("Native stability output method differs");
+  ptrdiff_t candidateOffset=0;
   for(unsigned at=0;at<256;){ZydisDisassembledInstruction ins;if(!ZYAN_SUCCESS(ZydisDisassembleIntel(ZYDIS_MACHINE_MODE_LONG_64,consume+at,reinterpret_cast<void*>(consume+at),16,&ins)))break;
-   if(ins.info.mnemonic==ZYDIS_MNEMONIC_MOV&&ins.operands[0].type==ZYDIS_OPERAND_TYPE_REGISTER&&ins.operands[0].reg.value==ZYDIS_REGISTER_RBX&&ins.operands[1].type==ZYDIS_OPERAND_TYPE_MEMORY&&ins.operands[1].mem.base==ZYDIS_REGISTER_RDI){if(outputOffset)throw std::runtime_error("Native stability output array is ambiguous");outputOffset=ins.operands[1].mem.disp.value;}
+   if(ins.info.mnemonic==ZYDIS_MNEMONIC_MOV&&ins.operands[0].type==ZYDIS_OPERAND_TYPE_REGISTER&&ins.operands[0].reg.value==ZYDIS_REGISTER_RBX&&ins.operands[1].type==ZYDIS_OPERAND_TYPE_MEMORY&&ins.operands[1].mem.base==ZYDIS_REGISTER_RDI){if(candidateOffset)throw std::runtime_error("Native stability output array is ambiguous");candidateOffset=ins.operands[1].mem.disp.value;}
    at+=ins.info.length;
   }
-  if(outputOffset<192||outputOffset+sizeof(FScriptArray)>1296)throw std::runtime_error("Native stability output array is outside component");
+  if(candidateOffset<192||candidateOffset+sizeof(FScriptArray)>1296)throw std::runtime_error("Native stability output array is outside component");
+  outputOffset=candidateOffset;
   detour=std::make_unique<PLH::x64Detour>(consume,reinterpret_cast<uint64_t>(&Apply),&trampoline);
-  if(!detour->hook())throw std::runtime_error("Could not bind native stability output");
+  if(!detour->hook()){detour.reset();outputOffset=0;trampoline=0;throw std::runtime_error("Could not bind native stability output");}
  }
 public:
  static void SetLogger(std::function<void(const std::string&)> logger){report=std::move(logger);}
  static void Update(UObject* manager){
-  auto* component=Object(manager,L"StabilityComponent");if(!Live(component))throw std::runtime_error("Native stability component is absent");
+  auto* component=Object(manager,L"StabilityComponent");if(!Live(component))return;
   if(!detour)Install(component);
   auto& context=contexts[component];if(context.manager.Get()!=manager){context.originals.clear();context.manager=manager;context.thread=GetCurrentThreadId();}
  }

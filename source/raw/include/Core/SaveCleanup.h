@@ -2,6 +2,7 @@
 #include "Loader/QuestSaveOwnership.h"
 #include "Loader/JournalSaveOwnership.h"
 #include "Core/SaveRegistrySnapshot.h"
+#include "Core/SavedLoadout.h"
 #include <cctype>
 #include <map>
 #include <limits>
@@ -103,6 +104,7 @@ inline Preview Plan(const Json& source,const std::set<std::string>& requested,
             auto& entries=game.at(section);
             if(!entries.is_object())throw std::runtime_error("Unsupported inventory/loadout save layout");
             for(auto it=entries.begin();it!=entries.end();) {
+                if(it.key()=="MaxSlotIndex"){++it;continue;}
                 const auto& item=it.value();
                 if(!item.is_object() || (item.contains("ItemData") && !item.at("ItemData").is_string())) {
                     if(unresolvedOnly) {retainUnknown(section);++it;continue;}
@@ -112,7 +114,7 @@ inline Preview Plan(const Json& source,const std::set<std::string>& requested,
                 const auto id=item.value("ItemData",std::string{});
                 bool remove=!id.empty() && !registry->Items.contains(id)
                     && !RegistryEnrollment::IsPending(RegistryEnrollment::IdentityKind::Item,id);
-                if(std::string_view(section)=="Loadout" && item.contains("PlayerInventoryItemIndex")) {
+                if(std::string_view(section)=="Loadout" && SavedLoadout::InventoryReference(item)) {
                     const auto& index=item.at("PlayerInventoryItemIndex");
                     if(!index.is_number_integer() || index<0 || index>std::numeric_limits<int>::max()) {
                         if(unresolvedOnly) {retainUnknown(section);++it;continue;}
@@ -395,7 +397,7 @@ inline Preview MergeBaseline(const Json& source,const Json& baseline,
                 }
                 bool safe=validItem(row);
                 std::string id=safe?row.at("ItemData").get<std::string>():std::string{};
-                if(!safe && row.contains("PlayerInventoryItemIndex")
+                if(!safe && SavedLoadout::InventoryReference(row)
                     && row.at("PlayerInventoryItemIndex").is_number_integer()
                     && live.contains("Inventory") && live.at("Inventory").is_object()) {
                     const auto inventorySlot=std::to_string(
@@ -580,8 +582,7 @@ inline Preview PlanOwned(const Json& source,
                 const auto owned=retiredItems.find(id);
                 if(owned!=retiredItems.end()) {remove=true;owner=owned->second;}
             }
-            if(!remove && item.is_object()
-                && item.contains("PlayerInventoryItemIndex")
+            if(!remove && SavedLoadout::InventoryReference(item)
                 && item.at("PlayerInventoryItemIndex").is_number_integer()
                 && item.at("PlayerInventoryItemIndex")>=0
                 && item.at("PlayerInventoryItemIndex")<=std::numeric_limits<int>::max()) {

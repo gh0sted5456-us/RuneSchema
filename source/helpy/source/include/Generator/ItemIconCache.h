@@ -32,7 +32,8 @@ inline std::function<void()> RemoteResetAccounting;
 inline void ConfigureRemote(std::function<bool(const std::string&)> submit,std::function<bool(nlohmann::json&)> read){RemoteSubmit=std::move(submit);RemoteRead=std::move(read);}
 inline void ClearRemote();
 namespace detail {
-    constexpr std::size_t MaxActiveRemote=1;
+    constexpr std::size_t MaxActiveRemote=4;
+    constexpr std::size_t MaxDiskBatch=8;
     constexpr std::size_t MaxQueued=32;
     constexpr std::size_t MaxResidentTextures=256;
     constexpr int ProtectRecentFrames=8;
@@ -49,10 +50,9 @@ namespace detail {
         std::uint64_t Generation=0;
         int CacheMode=-1;
         std::chrono::steady_clock::time_point NextSubmit{};
-        PS::ProcessExitFuture<DiskRead> DiskWorker;
-        std::deque<DiskRead> DiskQueue;
-        std::unordered_set<std::string> DiskQueued;
-        std::string DiskActive;
+        PS::ProcessExitFuture<std::vector<DiskRead>> DiskWorker;
+        std::deque<DiskRead> DiskQueue,DiskReady;
+        std::unordered_set<std::string> DiskQueued,DiskActive;
         uint64_t DiskEpoch=0;
     };
     inline CacheState& State(){static auto* state=new CacheState();return *state;}
@@ -123,7 +123,8 @@ namespace detail {
     inline bool Install(const std::string& iconPath,const std::filesystem::path& file) {
         auto& state=State();const auto expected=DiskFile(iconPath);
         if(!file.empty()&&(expected.empty()||file.lexically_normal()!=expected.lexically_normal()))return false;
-        if(state.Textures.contains(iconPath)||state.DiskQueued.contains(iconPath)||state.DiskActive==iconPath)return true;
+        if(state.Textures.contains(iconPath)||state.DiskQueued.contains(iconPath)||state.DiskActive.contains(iconPath)
+            ||std::any_of(state.DiskReady.begin(),state.DiskReady.end(),[&](const auto& row){return row.Icon==iconPath;}))return true;
         if(state.DiskQueue.size()>=128)return false;
         state.DiskQueue.push_back({iconPath,HelpySourceCache::Fingerprint(iconPath),file,state.DiskEpoch});state.DiskQueued.insert(iconPath);return true;
     }
@@ -134,20 +135,31 @@ namespace detail {
     }
     inline void PollDisk(CacheState& state){
         if(state.DiskWorker.valid()&&state.DiskWorker.wait_for(std::chrono::seconds(0))==std::future_status::ready){
-            auto result=state.DiskWorker.get();state.DiskActive.clear();
+            auto results=state.DiskWorker.get();state.DiskActive.clear();
+            for(auto& result:results)state.DiskReady.push_back(std::move(result));
+        }
+        const auto deadline=std::chrono::steady_clock::now()+std::chrono::milliseconds(2);
+        for(size_t uploaded=0;uploaded<MaxDiskBatch&&!state.DiskReady.empty();++uploaded){
+            auto result=std::move(state.DiskReady.front());state.DiskReady.pop_front();
             if(result.Epoch==state.DiskEpoch&&(result.Presentation||result.Source==HelpySourceCache::Fingerprint(result.Icon))){
                 state.DiskChecked.insert(result.Icon);
                 if(result.Valid&&!InstallPixels(result))state.DiskChecked.erase(result.Icon);
                 if(state.Textures.contains(result.Icon)){state.Queued.erase(result.Icon);std::erase(state.High,result.Icon);std::erase(state.Normal,result.Icon);}
             }
+            if(std::chrono::steady_clock::now()>=deadline)break;
         }
-        while(!state.DiskWorker.valid()&&!state.DiskQueue.empty()){
+        if(state.DiskWorker.valid()||!state.DiskReady.empty())return;
+        std::vector<DiskRead> batch;
+        while(batch.size()<MaxDiskBatch&&!state.DiskQueue.empty()){
             auto request=std::move(state.DiskQueue.front());state.DiskQueue.pop_front();state.DiskQueued.erase(request.Icon);
             const auto wanted=state.WantedFrame.find(request.Icon);
             if(request.Epoch!=state.DiskEpoch||wanted==state.WantedFrame.end()||ImGui::GetFrameCount()-wanted->second>1)continue;
-            state.DiskActive=request.Icon;
+            state.DiskActive.insert(request.Icon);batch.push_back(std::move(request));
+        }
+        if(!batch.empty()){
             const auto cache=HelpySourceCache::Directory(false);const bool persistent=HelpyRuntimePreferences::IconCacheLimitMB.load()>0;
-            state.DiskWorker=std::async(std::launch::async,[result=std::move(request),cache,persistent]()mutable{
+            state.DiskWorker=std::async(std::launch::async,[batch=std::move(batch),cache,persistent]()mutable{
+                for(auto& result:batch){
                 try{if(!result.File.empty()){HelpyIconPack::Safe(result.File);result.Valid=ReadThumbnail(result.File,result.Width,result.Height,result.Pixels);}
                     if(result.Valid){HelpyIconPack::Index(result.File,result.Icon);std::error_code ec;std::filesystem::last_write_time(result.File,std::filesystem::file_time_type::clock::now(),ec);}
                     else if(persistent){const auto file=HelpyPresentationCache::IconFile(cache,result.Icon);if(!file.empty()){
@@ -155,7 +167,8 @@ namespace detail {
                         if(HelpyIconPack::Hash(bytes)!=file.stem().string())throw std::runtime_error("[RS-CACHE-004] Cached picture checksum mismatch.");
                         result.File=file;result.Presentation=true;result.Valid=ReadThumbnail(file,result.Width,result.Height,result.Pixels);
                     }}
-                }catch(...){result.Valid=false;}return result;
+                }catch(...){result.Valid=false;}}
+                return batch;
             });
         }
     }
@@ -202,7 +215,7 @@ namespace detail {
 
 inline void InvalidateIcons(const std::vector<std::string>& icons){
     auto& state=detail::State();
-    ++state.DiskEpoch;state.DiskQueue.clear();state.DiskQueued.clear();
+    ++state.DiskEpoch;state.DiskQueue.clear();state.DiskQueued.clear();state.DiskReady.clear();
     for(const auto& icon:icons){
         const auto found=state.Textures.find(icon);
         if(found!=state.Textures.end()){
@@ -215,7 +228,7 @@ inline void InvalidateIcons(const std::vector<std::string>& icons){
 }
 inline void InvalidateSource(bool preserveUnchanged=false){
     auto& state=detail::State();
-    ++state.DiskEpoch;state.DiskQueue.clear();state.DiskQueued.clear();
+    ++state.DiskEpoch;state.DiskQueue.clear();state.DiskQueued.clear();state.DiskReady.clear();
     for(auto it=state.Textures.begin();it!=state.Textures.end();){
         const auto fingerprint=HelpySourceCache::Fingerprint(it->first);
         const auto saved=state.TextureSourceKeys.find(it->first);
@@ -246,12 +259,12 @@ inline void InvalidateSource(bool preserveUnchanged=false){
 inline void Update() {
     auto& state=detail::State();detail::ReapRetired(state);
     const int cacheMode=HelpyRuntimePreferences::IconCacheLimitMB.load()==0?0:1;
-    if(state.CacheMode!=cacheMode){state.CacheMode=cacheMode;state.DiskChecked.clear();++state.DiskEpoch;state.DiskQueue.clear();state.DiskQueued.clear();HelpyIconTrace::Event("cache-mode","",std::string("persistent=")+(cacheMode?"true":"false"));}
+    if(state.CacheMode!=cacheMode){state.CacheMode=cacheMode;state.DiskChecked.clear();++state.DiskEpoch;state.DiskQueue.clear();state.DiskQueued.clear();state.DiskReady.clear();HelpyIconTrace::Event("cache-mode","",std::string("persistent=")+(cacheMode?"true":"false"));}
     const auto generation=SpawnToolRequests::CurrentGeneration();
     if(state.Generation!=generation) {
         state.Generation=generation;state.Pending.clear();state.High.clear();state.Normal.clear();state.Queued.clear();state.Failed.clear();state.WantedFrame.clear();state.Attempts.clear();state.RetryAt.clear();state.RequestSourceKeys.clear();state.NextSubmit={};
     }
-    detail::PollDisk(state); // One completed disk read/upload per frame; workers never touch ImGui.
+    detail::PollDisk(state); // Bounded cache batches; file workers never touch ImGui.
     for(auto& [icon,texture]:state.Textures)if(texture&&texture->Status==ImTextureStatus_OK){
         if(state.ReadyTraced.insert(icon).second)HelpyIconTrace::Event("texture-ready",icon);
         if(texture->Pixels)texture->DestroyPixels();
@@ -281,15 +294,25 @@ inline void Update() {
         // An automatic/manual pack import may finish after the first disk
         // miss. Recheck at dispatch so cached pixels win over a new capture.
         if(detail::TryInstallDisk(next))continue;
-        if(state.DiskQueued.contains(next)||state.DiskActive==next){state.Queued.insert(next);state.High.push_front(std::move(next));return;}
+        if(state.DiskQueued.contains(next)||state.DiskActive.contains(next)
+            ||std::any_of(state.DiskReady.begin(),state.DiskReady.end(),[&](const auto& row){return row.Icon==next;})){state.Queued.insert(next);state.High.push_front(std::move(next));return;}
         if(HelpySourceCache::Current.Provisional){state.Queued.insert(next);state.High.push_front(std::move(next));state.NextSubmit=now+std::chrono::milliseconds(250);return;}
         state.RequestSourceKeys[next]=HelpySourceCache::Fingerprint(next);
         const bool accepted=RemoteSubmit?RemoteSubmit(next):ItemIconRequests::TrySubmit({{"Icon",next}});
         if(!accepted){HelpyIconTrace::Event("submit-rejected",next);state.Queued.insert(next);state.High.push_front(std::move(next));state.NextSubmit=now+std::chrono::milliseconds(16);return;}
-        HelpyIconTrace::Event("submit",next,"accepted=true");state.Pending.insert(std::move(next));state.NextSubmit=now+std::chrono::milliseconds(100);
+        HelpyIconTrace::Event("submit",next,"accepted=true");state.Pending.insert(std::move(next));
     }
 }
-inline void ClearRemote(){auto& state=detail::State();++state.DiskEpoch;state.DiskQueue.clear();state.DiskQueued.clear();if(state.DiskWorker.valid())try{(void)state.DiskWorker.get();}catch(...){}state.DiskActive.clear();RemoteSubmit={};RemoteRead={};}
+inline void ClearRemote(){auto& state=detail::State();++state.DiskEpoch;state.DiskQueue.clear();state.DiskQueued.clear();state.DiskReady.clear();if(state.DiskWorker.valid())try{(void)state.DiskWorker.get();}catch(...){}state.DiskActive.clear();RemoteSubmit={};RemoteRead={};}
+inline void Shutdown(){ClearRemote();InvalidateSource();}
+// After renderer shutdown, while its ImGui context can still unregister user textures.
+inline void ReleaseTextures(){
+    if(!ImGui::GetCurrentContext())return;
+    auto& state=detail::State();
+    for(auto* texture:state.RetiredTextures)if(texture&&!texture->BackendUserData)texture->SetStatus(ImTextureStatus_Destroyed);
+    detail::ReapRetired(state);
+    if(state.RetiredTextures.empty()){const auto epoch=state.DiskEpoch;state=detail::CacheState{};state.DiskEpoch=epoch;}
+}
 inline ImTextureData* Get(const std::string& iconPath){const auto& textures=detail::State().Textures;const auto found=textures.find(iconPath);return found==textures.end()?nullptr:found->second;}
 inline bool Failed(const std::string& iconPath){return detail::State().Failed.contains(iconPath);}
 inline void RetryFailed(){auto& state=detail::State();for(const auto& icon:state.Failed){state.DiskChecked.erase(icon);state.Attempts.erase(icon);}state.Failed.clear();state.RetryAt.clear();}
@@ -365,7 +388,7 @@ inline bool RemoveDiskFolder(const std::filesystem::path& folder){
     }
     if(ec)return false;std::filesystem::remove_all(target,ec);return !ec;
 }
-inline bool CleanDiskCache(){auto& state=detail::State();++state.DiskEpoch;state.DiskQueue.clear();state.DiskQueued.clear();if(state.DiskWorker.valid())try{(void)state.DiskWorker.get();}catch(...){}state.DiskActive.clear();const bool persistent=RemoveDiskFolder(HostServices::CacheDirectory()/"item-icons");const bool live=RemoveDiskFolder(HostServices::CacheDirectory()/"item-icons-live");
+inline bool CleanDiskCache(){auto& state=detail::State();++state.DiskEpoch;state.DiskQueue.clear();state.DiskQueued.clear();state.DiskReady.clear();if(state.DiskWorker.valid())try{(void)state.DiskWorker.get();}catch(...){}state.DiskActive.clear();const bool persistent=RemoveDiskFolder(HostServices::CacheDirectory()/"item-icons");const bool live=RemoveDiskFolder(HostServices::CacheDirectory()/"item-icons-live");
     InvalidateSource();HelpyRuntimePreferences::IconCacheEpoch.fetch_add(1);if(RemoteResetAccounting)RemoteResetAccounting();return persistent&&live;}
 inline size_t Count(){return detail::State().Textures.size();}
 inline size_t QueuedCount(){auto& state=detail::State();return state.Queued.size()+state.Pending.size();}

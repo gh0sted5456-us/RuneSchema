@@ -21,6 +21,8 @@ inline bool Open=false,Detached=false,FocusWanted=false,SelectTab=false;
 inline HelpyWindowChrome::State Chrome;
 inline Tab Selected=Tab::Runtime;
 inline ImTextureRef GameLogo;
+inline ImTextureRef ModManagerIcon;
+inline bool VortexInstalled=false;
 inline void RenderGameLogo(){
     const auto& theme=HelpyImGuiTheme::Current;const float available=ImGui::GetContentRegionAvail().x;
     if(GameLogo.GetTexID()!=ImTextureID{}){
@@ -49,6 +51,11 @@ inline void PollStats(){
 inline void RenderRuntime(){
     PollStats();const auto& theme=HelpyImGuiTheme::Current;
     RenderGameLogo();
+    if(VortexInstalled){
+        if(ModManagerIcon.GetTexID()){ImGui::Image(ModManagerIcon,{theme.X(24),theme.Y(24)});ImGui::SameLine();}
+        ImGui::TextUnformatted("Vortex installed · Mod manager");
+        if(ImGui::IsItemHovered())HelpyImGuiTheme::Tooltip("Vortex is a mod manager. This indicator does not change the selected runtime or prove this installation is managed by Vortex.");
+    }
     if(ImGui::BeginTable("runtime-versions",2,ImGuiTableFlags_SizingStretchProp)){
         ImGui::TableSetupColumn("Name",ImGuiTableColumnFlags_WidthFixed,theme.X(120));ImGui::TableSetupColumn("Value");
         const auto row=[](const char* name,const std::string& value){ImGui::TableNextRow();ImGui::TableNextColumn();ImGui::TextDisabled("%s",name);ImGui::TableNextColumn();ImGui::TextWrapped("%s",value.empty()?"Not reported":value.c_str());};
@@ -96,7 +103,7 @@ inline void RenderRuntime(){
 }
 inline void RenderContents(){
     const int surface=Detached?1:0;if(LastSurface!=surface){LastSurface=surface;SelectTab=true;}
-    if(HelpyImGuiTheme::SoftButton(Detached?"Dock back":"Detach window"))Detached=!Detached;
+    if(!HelpyImGuiTheme::NativePresentation&&HelpyImGuiTheme::SoftButton(Detached?"Dock back":"Detach window"))Detached=!Detached;
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::RuntimeDetach=HelpyPreviewHooks::LastRect();
 #endif
@@ -106,7 +113,7 @@ inline void RenderContents(){
             const char* name=tab==Tab::Runtime?"Runtime":tab==Tab::Attributions?"Attributions":"Legal";
             if(ImGui::BeginTabItem(name,nullptr,select&&requested==tab?ImGuiTabItemFlags_SetSelected:0)){
                 Selected=tab;
-                if(ImGui::BeginChild("runtime-tab-body",{0,0},false)){
+                if(HelpyImGuiTheme::BeginPanel("runtime-tab-body",{0,0},false)){
                     if(tab==Tab::Runtime)RenderRuntime();else{
                         ImGui::TextWrapped("%s",tab==Tab::Attributions?HelpyBranding::Credits:HelpyBranding::Legal);
                         if(tab==Tab::Legal&&HelpyImGuiTheme::SoftButton("Open complete legal notice")){
@@ -114,7 +121,7 @@ inline void RenderContents(){
                             ShellExecuteW(nullptr,L"open",file.c_str(),nullptr,nullptr,SW_SHOWNORMAL);
                         }
                     }
-                }ImGui::EndChild();ImGui::EndTabItem();
+                }PS::HelpyImGuiTheme::EndPanel();ImGui::EndTabItem();
             }
         }ImGui::EndTabBar();SelectTab=false;
     }

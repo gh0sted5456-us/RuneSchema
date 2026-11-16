@@ -18,8 +18,11 @@
    from your background. Add this folder to your RuneSchema mod ZIP alongside
    `paks/`. Your original ZIP and PAKs are unchanged.
 
-An existing output cache is preserved as `cache.previous-<unique-id>` before the
-new folder is published. A failed build leaves the current output in place.
+An existing output cache is copied and SHA-256 verified in AppData before the
+new folder is published. Helpy uses the assigned platform's cache-builder
+backups folder; the standalone BAT defaults to
+`%LOCALAPPDATA%/RSDragonwilds/RuneSchema/core/tools/cache-builder/backups`.
+The mod keeps its current `/cache` only. A failed build leaves it in place.
 Review the report: this is a partial presentation cache, not proof that every
 cooked asset was registered or that gameplay works. Path traversal, duplicate
 paths, links, ambiguous package names and incomplete trios are rejected before

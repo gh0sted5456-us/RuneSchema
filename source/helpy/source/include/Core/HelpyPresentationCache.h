@@ -62,7 +62,7 @@ inline Result Commit(const fs::path& icons,const std::vector<Group>& groups,uint
             auto owner=known?old.value("Owner",group.Owner):group.Owner;std::map<std::string,Json> records;
             for(const auto& row:data["Records"])records[row.at("Kind").get<std::string>()+"|"+row.at("Path").get<std::string>()]=row;
             for(const auto& value:group.Records){auto row=CacheBundle::Parse(value);if(!Native(owner)&&row.Owner!=owner){row.Owner=owner;row=CacheBundle::Parse(CacheBundle::Document(row));}
-                const auto key=row.Kind+"|"+row.Path;const auto doc=CacheBundle::Document(row);if(!records.contains(key)||records.at(key)!=doc)++result.Records;records[key]=doc;}
+                const auto key=row.Kind+"|"+row.Path;if(records.contains(key))row.Data=ItemName::Merge(records.at(key).at("Data"),row.Data);const auto doc=CacheBundle::Document(row);if(!records.contains(key)||records.at(key)!=doc)++result.Records;records[key]=doc;}
             data["Records"]=Json::array();for(const auto& [key,row]:records)data["Records"].push_back(row);(void)CacheBundle::Records(data["Records"]);
             for(const auto& [icon,pixel]:group.Icons.items()){if(!CacheBundle::Asset(icon)||!CacheBundleIO::Digest(pixel.at("SHA256").get<std::string>()))throw std::runtime_error("[RS-CACHE-002] Invalid picture identity.");
                 if(!data["Icons"].contains(icon)||data["Icons"][icon]!=pixel)result.ChangedIcons.insert(icon);data["Icons"][icon]=pixel;}
@@ -106,7 +106,9 @@ inline Json Records(const fs::path& icons,const std::string& locale,const std::s
     for(const auto& [id,entry]:index["Sources"].items())entries.push_back(entry);
     const auto rank=[&](const Json& entry){const auto language=entry.value("Locale",std::string{});return language==locale?0:language=="en-US"?1:2;};
     std::stable_sort(entries.begin(),entries.end(),[&](const auto& a,const auto& b){return rank(a)<rank(b);});
-    for(const auto& entry:entries)try{for(auto value:Data(folder,entry)["Records"]){auto row=CacheBundle::Parse(value);if(!kind.empty()&&kind!=row.Kind)continue;
+    // Keep the loaded document alive for the whole loop. Iterating Data(...)["Records"] directly
+    // walks a member of a destroyed temporary (C++20 range-for), which GCC reads as zero rows.
+    for(const auto& entry:entries)try{const auto data=Data(folder,entry);for(auto value:data.at("Records")){auto row=CacheBundle::Parse(value);if(!kind.empty()&&kind!=row.Kind)continue;
         if(!seen.insert(row.Kind+"|"+row.Path).second)continue;row.Data["CacheSourceVerified"]=false;row.Data["ObservedCurrent"]=false;row.Data["CacheLocale"]=entry.at("Locale");row.Data["CacheOwners"]=entry.value("Aliases",Json::array());row.Data["CacheRevision"]=entry.value("Revision",uint64_t{});row.Data["CacheFingerprint"]=entry.value("Fingerprint",std::string{});result.push_back(CacheBundle::Document(row));if(result.size()>=CacheBundle::MaxRecords)return result;}}catch(...){}
     return result;
 }
@@ -118,7 +120,7 @@ inline fs::path IconFile(const fs::path& icons,const std::string& icon){
         std::error_code error;const auto modified=fs::last_write_time(folder/"index.json",error);
         next=now+std::chrono::seconds(2);if(folder==location&&epoch==Epoch.load()&&!error&&modified==stamp){const auto found=files.find(icon);return found==files.end()?fs::path{}:found->second;}
         location=folder;epoch=Epoch;stamp=modified;files.clear();
-        const auto index=Index(folder);for(const auto& [id,entry]:index["Sources"].items())try{for(const auto& [path,pixel]:Data(folder,entry)["Icons"].items())files[path]=folder/"pixels"/(pixel.at("SHA256").get<std::string>()+".rsicon");}catch(...){}
+        const auto index=Index(folder);for(const auto& [id,entry]:index["Sources"].items())try{const auto data=Data(folder,entry);for(const auto& [path,pixel]:data.at("Icons").items())files[path]=folder/"pixels"/(pixel.at("SHA256").get<std::string>()+".rsicon");}catch(...){}
     }
     const auto found=files.find(icon);return found==files.end()?fs::path{}:found->second;
 }

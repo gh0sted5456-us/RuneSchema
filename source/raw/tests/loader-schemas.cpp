@@ -9,10 +9,20 @@
 int RunLoaderSchemas(int argc,char** argv) {
     const auto schemas=PS::JsonSchemaGenerator::LoaderSchemas();
     assert(schemas.size()==22);
-    assert(schemas["registry"]["properties"]["NativeRegistries"]["properties"].size()==24);
+    const auto& ownerEntry=schemas.at("registry").at("properties").at("Entries").at("items");
+    assert(ownerEntry.at("properties").at("Authority").at("properties").contains("OwnerPresentation"));
+    assert(ownerEntry.at("properties").at("Consumer").at("properties").at("Audience").at("enum")==nlohmann::json::array({"World","Owner"}));
+    assert(ownerEntry.at("properties").at("Profile").at("required")==nlohmann::json::array({"Class"}));
+    assert(ownerEntry.at("allOf").size()==3);
+    assert(ownerEntry.at("properties").at("Appearance").at("properties").at("MaxBytes").at("maximum")==4096);
+    assert(schemas["registry"]["properties"]["NativeRegistries"]["properties"].size()==27);
+    const auto& worldComponents=schemas["registry"]["properties"]["NativeRegistries"]["properties"]["WorldComponents"];
+    assert(worldComponents["items"]["type"]=="string" && worldComponents["uniqueItems"]==true);
+    assert(worldComponents["items"]["pattern"]=="^/[^\\r\\n\\t]+\\.[^/]+_C$");
     for(const auto& family:PS::NativeDataFamilies::Families)assert(schemas["registry"]["properties"]["NativeRegistries"]["properties"][family.Lane]["items"]["type"]=="string");
     for(const auto* lane:{"Skills","SkillPerks","Enums"})assert(schemas["registry"]["properties"]["NativeRegistries"]["properties"][lane]["$ref"]=="#/definitions/modOwnedCookedPaths");
-    assert(schemas["registry"]["properties"]["LoaderDefinitions"]["properties"].size()==4);
+    assert(schemas["registry"]["properties"]["LoaderDefinitions"]["properties"].size()==5);
+    assert(schemas["registry"]["properties"]["LoaderDefinitions"]["properties"]["DataTables"]["additionalProperties"]["required"][0]=="Target");
     assert(schemas["registry"]["properties"]["NativeRegistries"]["properties"]["Buildings"]["items"]["type"]=="string");
     assert(schemas["registry"]["properties"]["LoaderDefinitions"]["properties"]["Buildings"]["additionalProperties"]["additionalProperties"]==false);
     assert(schemas["assets"]["patternProperties"]["^(?!(?:RuneSchema|Modded)$)[^$]"]["properties"]["$WearableBridge"]["type"]=="boolean");

@@ -12,10 +12,10 @@ int main(int argc,char** argv){
     const auto plugin=Read(root/"source/helpy/source/plugins/helpy/HelpyPlugin.cpp");
     const auto build=Read(root/"source/helpy/CMakeLists.txt");
     assert(!desktop.contains("SchemaVision")&&!plugin.contains("SchemaVision"));
-    assert(!plugin.contains("HelpyNative")&&!plugin.contains("helpy.vision.status"));
-    assert(!build.contains("HelpyNative")&&!build.contains("schema-vision"));
+    assert(!plugin.contains("Runtime/HelpyNativeModule.h")&&!plugin.contains("helpy.vision.status"));
+    assert(!build.contains("HelpyNativeModule")&&!build.contains("source/native/")&&!build.contains("schema-vision"));
     assert(!Read(root/"build/build.ps1").contains("RuneSchema.Helpy.Native.dll"));
-    for(const auto* retired:{"source/helpy/source/native/SchemaVisionRuntime.cpp",
+    for(const auto* retired:{"source/raw/plugins/helpy/HelpyPlugin.cpp","source/helpy/source/native/SchemaVisionRuntime.cpp",
         "source/helpy/source/include/Generator/SchemaVisionPanel.h",
         "source/helpy/source/include/Runtime/HelpyNativeModule.h",
         "source/helpy/assets/SchemaVision","source/plugins/RuneSchema.Helpy/assets/SchemaVision"})
@@ -26,10 +26,12 @@ int main(int argc,char** argv){
     assert(!desktop.contains("DrawHomeBackdrop("));
     const auto cache=desktop.substr(desktop.find("void RenderIconCacheSettings("),desktop.find("void RenderUpdatesAndRuntime(")-desktop.find("void RenderIconCacheSettings("));
     assert(!cache.contains("RefreshSnapshot(")&&!cache.contains("CurrentDiskStats()")&&cache.contains("Refresh usage")&&cache.contains("std::launch::async"));
-    const auto settings=desktop.substr(desktop.find("case Page::Settings:\n"),desktop.find("case Page::Authoring:AuthoringPanel")-desktop.find("case Page::Settings:\n"));
+    const auto settingsStart=desktop.find("void RenderSettingsPage(");assert(settingsStart!=std::string::npos);
+    const auto settings=desktop.substr(settingsStart,desktop.find("void RenderWorkspace(",settingsStart)-settingsStart);
+    assert(settings.contains("HelpyMenu::Categories(\"settings-categories\"")&&settings.contains("##settings-details"));
     assert(!settings.contains("BeginTabItem(\"Item Cache\""));
-    const auto tools=desktop.substr(desktop.find("case Page::Tools:\n"));
-    assert(tools.contains("BeginTabItem(\"Item Cache\"")&&tools.contains("ToolSection::ItemCache;RenderIconCacheSettings(true,true)"));
+    const auto tools=desktop.substr(desktop.find("case Page::Tools:{"));
+    assert(tools.contains("case Tool::ItemCache:RenderIconCacheSettings(true,true)")&&tools.contains("case Tool::CacheBuilder:"));
     assert(!desktop.contains("page==Page::Tools&&!t.workspaces.Tools")&&!desktop.contains("CurrentPage==Page::Tools&&!t.workspaces.Tools"));
     const auto inventory=Read(root/"source/helpy/source/include/Generator/PlayerInventoryPanel.h");
     const auto repair=inventory.substr(inventory.find("inline void RestoreGear("),inventory.find("inline void PollRepair(")-inventory.find("inline void RestoreGear("));

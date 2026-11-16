@@ -36,7 +36,11 @@
 #include "Utility/StartupTrace.h"
 #include "Utility/StructuredDiagnosticB3C.h"
 #include "Utility/Config.h"
+#include "Utility/AssetAliases.h"
 #include "Core/ConfigFiles.h"
+#include "Core/AssetPreloadPlan.h"
+#include "Core/RecipeBatchWork.h"
+#include "Core/NativeAssetLoadTiming.h"
 #include "Core/CharacterSaveEditor.h"
 #include "Core/CookedPakRegistryManifest.h"
 #include "Core/CookedEnumContract.h"
@@ -54,6 +58,7 @@
 #include "Core/WorldCleanupPolicy.h"
 #include "Core/LoadProtectionNotice.h"
 #include "Core/SaveRegistrySnapshot.h"
+#include "Core/SavePruneBackup.h"
 #include "Core/HelpySourceCache.h"
 #include "Core/ItemSource.h"
 #include "Runtime/Storefront.h"
@@ -77,6 +82,8 @@ namespace DragonWilds {
         struct NetworkRegistryAudit {
             bool Valid = false;
             std::size_t Count = 0;
+            FMapProperty* ReverseProperty = nullptr;
+            FArrayProperty* ArrayProperty = nullptr;
             std::unordered_set<UObject*> Objects;
             std::vector<UObject*> OrderedObjects;
             std::vector<std::string> OrderedPaths;
@@ -115,8 +122,11 @@ namespace DragonWilds {
                 reverseProperty->ContainerPtrToValuePtr<void>(subsystem));
             FScriptArrayHelper entries(arrayProperty, array);
             std::vector<std::string> orderedPaths;
-            orderedPaths.reserve(static_cast<std::size_t>(entries.Num()));
+            const auto count = static_cast<std::size_t>(entries.Num());
+            orderedPaths.reserve(count);
+            result.OrderedObjects.reserve(count);
             std::unordered_set<UObject*> seen;
+            seen.reserve(count);
             for (int32 index = 0; index < entries.Num(); ++index)
             {
                 UObject* object = nullptr;
@@ -166,6 +176,8 @@ namespace DragonWilds {
                 return result;
             }
             result.Valid = true;
+            result.ReverseProperty = reverseProperty;
+            result.ArrayProperty = arrayProperty;
             result.Count = orderedPaths.size();
             result.Objects = std::move(seen);
             result.Fingerprint = PS::NetworkIdentityPlan::Fingerprint(orderedPaths);
@@ -267,19 +279,6 @@ namespace DragonWilds {
             return roots;
         }
 
-        bool IsMountedModPackage(const std::string& package,
-            const std::unordered_set<std::string>& roots)
-        {
-            const auto lower = LowerAscii(package);
-            if (lower.starts_with("/game/mods/")
-                || lower.starts_with("/game/runeschema/"))
-                return true;
-            if (lower.size() < 3 || lower.front() != '/') return false;
-            const auto slash = lower.find('/', 1);
-            if (slash == std::string::npos) return false;
-            return roots.contains(lower.substr(1, slash - 1));
-        }
-
         bool IsPersistenceAssetClass(const std::string& assetClass)
         {
             static const std::unordered_set<std::string> classes{
@@ -350,8 +349,11 @@ namespace DragonWilds {
         }
 
         std::filesystem::path BackupCharacterSave(
-            const std::filesystem::path& source, const std::string& original)
+            const std::filesystem::path& source, const std::string& original,bool enteringWorld=false)
         {
+            const auto guid=PS::CharacterSaveEditor::Identity(PS::SavePruneBackup::Decode(original));
+            const auto runtime=std::string(PS::Storefront::MappingCachePlatform(PS::Storefront::CurrentDetection()));
+            PS::SavePruneBackup::Write(PS::SavePruneBackup::Directory(runtime),original,guid,enteringWorld);
             for (const auto& existing : OwnedCharacterBackups(source))
             {
                 try
@@ -405,14 +407,14 @@ namespace DragonWilds {
 
         void ReplaceCharacterSave(const std::filesystem::path& path,
             const std::string& original, const nlohmann::json& clean,
-            bool utf16Le)
+            bool utf16Le,bool enteringWorld=false)
         {
             const auto encoded = EncodeCharacterText(clean, utf16Le);
             if (ParseCharacterText(encoded) != clean)
                 throw std::runtime_error("Clean character save failed pre-write verification");
             if (PS::ConfigFiles::Read(path, CharacterSaveLimit) != original)
                 throw std::runtime_error("Character save changed during cleanup");
-            const auto backup = BackupCharacterSave(path, original);
+            const auto backup = BackupCharacterSave(path, original,enteringWorld);
             try {
                 PS::ConfigFiles::Write(path, encoded);
                 if (ParseCharacterText(PS::ConfigFiles::Read(
@@ -648,6 +650,10 @@ namespace DragonWilds {
                 if(!expectedGuid.empty()&&PS::CharacterSaveEditor::Identity(source)
                     !=PS::CharacterSaveEditor::Guid(std::string(expectedGuid)))
                     throw std::runtime_error("Selected character GUID differs from the save file");
+                if(!expectedGuid.empty()){
+                    const auto runtime=std::string(PS::Storefront::MappingCachePlatform(PS::Storefront::CurrentDetection()));const auto backups=PS::SavePruneBackup::Directory(runtime);
+                    if(PS::SaveBackups::Automatic(backups))PS::SaveBackups::Store(backups,original,std::string(expectedGuid),"Automatic",{{"Mods",PS::SaveBackups::ActiveMods()},{"LastPlayedUtc",PS::SaveBackups::Now()}});
+                }
                 // Entry still precedes world-dependent quest registration;
                 // those adapters validate quests/journals after world readiness.
                 auto startupRegistry = *registry;
@@ -658,8 +664,8 @@ namespace DragonWilds {
                     PS::ToWideSafe(skipped.at("Section").get<std::string>()),PS::ToWideSafe(skipped.at("Reason").get<std::string>()));
                 if (plan.Removed.empty()) continue;
                 ReplaceCharacterSave(path, original, plan.Save,
-                    decoded.Utf16Le);
-                if(source.contains("meta_data")&&source["meta_data"].is_object())PS::LoadProtectionNotice::Record(source["meta_data"].value("char_guid",std::string{}),plan.Removed.size(),0,false);
+                    decoded.Utf16Le,!expectedGuid.empty());
+                if(source.contains("meta_data")&&source["meta_data"].is_object())PS::LoadProtectionNotice::Record(source["meta_data"].value("char_guid",std::string{}),plan.Removed.size(),0,false,PS::LoadProtectionNotice::UninstalledOwners(plan.Removed,plan.Owners,PS::SaveBackups::ActiveMods(),PS::HostServices::ModDirectory()/"mods"));
                 ++changed;
                 removed += plan.Removed.size();
                 for (const auto& row : plan.Removed)
@@ -735,6 +741,8 @@ namespace DragonWilds {
 
     void DragonWildsDataRegistrar::PreloadMountedPersistenceAssets()
     {
+        const auto started=std::chrono::steady_clock::now();
+        PS::NativeAssetLoadTiming::Batch loads;
         // PAK mounting only exposes package metadata. Unreal does not create a
         // UObject until something references the asset, so GetObjectsOfClass
         // alone misses otherwise-unreferenced mod ItemData/RecipeData/etc.
@@ -742,6 +750,20 @@ namespace DragonWilds {
         // namespaces; loading every cooked asset caused unacceptable stalls.
         const auto& combat = PS::PSConfig::Get()->GetSettings().combatFallback;
         const auto manifests = PS::CookedPakRegistryManifest::Snapshot();
+        PS::RecipeBatchWork::References<RC::StringType,PS::WeakObjectHandle> references;
+        std::unordered_set<UClass*> indexedClasses;
+        std::size_t indexedObjects=0;
+        if(!manifests.empty())for(const auto& binding:m_bindings)if(binding.DataClass&&indexedClasses.insert(binding.DataClass).second){
+            try{
+                TArray<UObject*> loaded;
+                UECustom::UObjectGlobals::GetObjectsOfClass(binding.DataClass,loaded,true);
+                for(auto* object:loaded){
+                    if(indexedObjects>=262144)break;
+                    if(!object||object->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed)))continue;
+                    references.Remember(object->GetPathName(),PS::WeakObjectHandle(object));++indexedObjects;
+                }
+            }catch(...){/* Live lookup remains the fallback for a partial snapshot. */}
+        }
         for (const auto& manifest : manifests)
         {
             const auto collectAttackLane = [&](const std::string& lane,
@@ -894,9 +916,16 @@ namespace DragonWilds {
                 for (const auto& path : lane.Paths)
                 {
                     const auto widePath = PS::ToWideSafe(path.c_str());
-                    auto* object = UECustom::UObjectGlobals::StaticFindObject<UObject*>(
-                        nullptr, nullptr, widePath.c_str(), false);
-                    if (!object) object = ActorHelper::ResolveObject(widePath);
+                    auto* object=references.Resolve(widePath,
+                        [&]{return UECustom::UObjectGlobals::StaticFindObject<UObject*>(nullptr,nullptr,widePath.c_str(),false);},
+                        [&]{return ActorHelper::ResolveObject(widePath);},
+                        [&](UObject* value){
+                            if(!value||value->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed|RF_FinishDestroyed|RF_NeedLoad|RF_NeedPostLoad|RF_NeedInitialization)))return false;
+                            const auto live=value->GetPathName();
+                            const auto matches=[&](const RC::StringType& expected){return CompareStringOrdinal(live.c_str(),-1,expected.c_str(),-1,TRUE)==CSTR_EQUAL;};
+                            return matches(widePath)||matches(PS::AssetAliases::Resolve(ActorHelper::NormalizeObjectPath(widePath)));
+                        },
+                        [](UObject* value){return PS::WeakObjectHandle(value);});
                     if (!object || !object->IsA(binding->DataClass)
                         || (binding->ExcludedClass && object->IsA(binding->ExcludedClass))
                         || PS::AssetMetadata::IsIncomplete(object))
@@ -935,6 +964,10 @@ namespace DragonWilds {
             }
         }
 
+        const auto manifestsComplete=std::chrono::steady_clock::now();
+        PS::Log<LogLevel::Normal>(STR("[PERF][REGISTRY][LOAD-COST] calls={} wrapper_ms={} native_ms={}; native includes engine loading and ProcessEvent callbacks.\n"),loads.Cost.Calls,loads.Cost.WrapperMs(),loads.Cost.NativeMs());
+        PS::Log<LogLevel::Normal>(STR("[PERF][REGISTRY][REFERENCES] indexed={} snapshot_hits={} live_hits={} resolve_requests={}; weak identity and live asset paths rechecked before lane validation.\n"),
+            indexedObjects,references.Hits,references.LiveHits,references.Loads);
         TArray<FAssetData> assets;
         try
         {
@@ -970,6 +1003,7 @@ namespace DragonWilds {
             return;
         }
 
+        const auto queryComplete=std::chrono::steady_clock::now();
         const auto roots = MountedModRootNames();
         // A single large content pack can legitimately contain ten thousand
         // ItemData assets. Stay below the uint16 network-ID ceiling while
@@ -981,23 +1015,46 @@ namespace DragonWilds {
         std::unordered_set<std::string> candidatePaths;
         std::unordered_map<std::string, std::size_t> mountedClassCounts;
         std::unordered_map<std::string, std::size_t> registryRootCounts;
+        struct Directory {std::string Root;bool Mounted=false;};
+        std::unordered_map<FName,Directory> directories;
         std::size_t mountedRecords = 0;
         std::size_t unreadableRecords = 0;
         for (auto& asset : assets)
         {
             try
             {
-                const auto package = RC::to_string(asset.PackageName().ToString());
-                if (package.size() > 1 && package.size() <= 2048 && package.front() == '/')
+                // PackagePath is the registry's containing directory. Convert it
+                // once per directory instead of formatting every package name.
+                const auto directoryName=asset.PackagePath();
+                const Directory* directory=nullptr;
+                Directory fallback;
+                if(directoryName!=NAME_None)
                 {
-                    const auto slash = package.find('/', 1);
-                    const auto root = LowerAscii(package.substr(1,
-                        slash == std::string::npos ? std::string::npos : slash - 1));
-                    if (!root.empty() && (registryRootCounts.contains(root)
-                            || registryRootCounts.size() < 256))
-                        ++registryRootCounts[root];
+                    auto found=directories.find(directoryName);
+                    if(found==directories.end())
+                    {
+                        auto path=RC::to_string(directoryName.ToString());
+                        if(!path.ends_with('/'))path+='/';
+                        const auto slash=path.find('/',1);
+                        Directory entry;
+                        if(path.size()>1&&path.front()=='/')entry.Root=LowerAscii(path.substr(1,slash-1));
+                        entry.Mounted=PS::AssetPreload::IsMountedPackage(path,roots);
+                        found=directories.emplace(directoryName,std::move(entry)).first;
+                    }
+                    directory=&found->second;
                 }
-                if (!IsMountedModPackage(package, roots)) continue;
+                else
+                {
+                    const auto package=RC::to_string(asset.PackageName().ToString());
+                    if(package.size()>1&&package.front()=='/')fallback.Root=LowerAscii(package.substr(1,package.find('/',1)-1));
+                    fallback.Mounted=PS::AssetPreload::IsMountedPackage(package,roots);
+                    directory=&fallback;
+                }
+                if(!directory->Root.empty()&&(registryRootCounts.contains(directory->Root)||registryRootCounts.size()<256))
+                    ++registryRootCounts[directory->Root];
+                if(!directory->Mounted)continue;
+                const auto package=RC::to_string(asset.PackageName().ToString());
+                if(!PS::AssetPreload::IsMountedPackage(package,roots))continue;
                 ++mountedRecords;
                 auto assetClass = AssetClassName(asset);
                 if (assetClass.empty()) assetClass = "<missing>";
@@ -1026,6 +1083,7 @@ namespace DragonWilds {
             }
         }
 
+        const auto scanComplete=std::chrono::steady_clock::now();
         const auto discovered = candidates.size();
         if (!discovered)
         {
@@ -1105,6 +1163,12 @@ namespace DragonWilds {
             PS::Log<LogLevel::Warning>(STR(
                 "[REGISTRY][PAK-DISCOVERY][UNRESOLVED-SUMMARY] {} additional unresolved assets omitted from the log.\n"),
                 failureDetails - FailureDetailLimit);
+
+        const auto finished=std::chrono::steady_clock::now();
+        const auto ms=[](auto from,auto to){return std::chrono::duration_cast<std::chrono::milliseconds>(to-from).count();};
+        PS::Log<LogLevel::Normal>(STR(
+            "[PERF][REGISTRY][DISCOVERY] manifests_ms={} query_ms={} scan_ms={} load_ms={} directories={} registry_records={}; all required candidates remain validated.\n"),
+            ms(started,manifestsComplete),ms(manifestsComplete,queryComplete),ms(queryComplete,scanComplete),ms(scanComplete,finished),directories.size(),assets.Num());
 
         PS::Log<LogLevel::Normal>(STR(
             "[REGISTRY][PAK-DISCOVERY][SUMMARY] registry_records={} mounted_records={} roots={} unreadable={} persistence_assets={} tranches={} tranche_size={} newly_loaded={} already_loaded={} unresolved={} verified={}.\n"),
@@ -1323,9 +1387,13 @@ namespace DragonWilds {
                     // Validate all aliases against this instance before the first asset commits.
                     for(const auto& record:ordered)QuestRegistry::NativeRegistry::RegisterFamily(subsystem,instance,objects[record.SourceIndex],*family,false);
                     const auto before=AuditNetworkRegistry(subsystem);if(!before.Valid)throw std::runtime_error("Existing native network identities do not round-trip: "+before.Detail);
+                    const auto key="network:"+lane.Name+":"+family->Subsystem;
+                    auto& sync=m_networkSyncLanes[key];
+                    if(sync.Subsystem.Get()!=subsystem){
+                        sync={};sync.Subsystem.Assign(subsystem);sync.PrefixCount=before.Count;sync.PrefixFingerprint=before.Fingerprint;
+                    }
                     for(const auto& record:ordered)QuestRegistry::NativeRegistry::RegisterFamily(subsystem,instance,objects[record.SourceIndex],*family);
                     const auto after=AuditNetworkRegistry(subsystem);if(!after.Valid)throw std::runtime_error("Native family network verification failed: "+after.Detail);
-                    const auto key="network:"+lane.Name+":"+family->Subsystem;
                     PS::NetworkIdentityState::Publish(key,after.Fingerprint);PS::NetworkIdentityState::PublishOwner(key,manifest.Owner,after.Fingerprint);
                     enrolled+=ordered.size();
                 }
@@ -2009,6 +2077,16 @@ namespace DragonWilds {
 
         bool complete = true;
 
+        // Reuse the reflected field within this synchronous registration pass.
+        std::unordered_map<UClass*, FStrProperty*> identityFields;
+        const auto identityField = [&](UClass* type) -> FStrProperty* {
+            if (!type) return nullptr;
+            auto [entry, inserted] = identityFields.try_emplace(type, nullptr);
+            if (inserted)
+                entry->second = CastField<FStrProperty>(PropertyHelper::GetPropertyByName(
+                    type, TEXT("PersistenceID")));
+            return entry->second;
+        };
         std::unordered_map<RC::StringType, UObject*> known;
         UECustom::FScriptMapHelper idMap(idMapProperty, idMapProperty->ContainerPtrToValuePtr<void>(subsystem));
         idMap.ForEachPair([&](void* keyPtr, void* valuePtr) {
@@ -2018,10 +2096,7 @@ namespace DragonWilds {
             if (key->GetCharArray().Num() > 1 && value)
             {
                 const auto identity = RC::StringType(**key);
-                auto* property = value->GetClassPrivate()
-                    ? CastField<FStrProperty>(PropertyHelper::GetPropertyByName(
-                        value->GetClassPrivate(), TEXT("PersistenceID")))
-                    : nullptr;
+                auto* property = identityField(value->GetClassPrivate());
                 const auto roundTrip = property
                     ? property->GetPropertyValue(
                         property->ContainerPtrToValuePtr<void>(value))
@@ -2090,11 +2165,7 @@ namespace DragonWilds {
                 || m_rejectedManifestAssets.contains(candidate)
                 || (excludedClass && candidate->IsA(excludedClass)))
                 continue;
-            auto* candidateClass = candidate->GetClassPrivate();
-            auto* idProperty = candidateClass
-                ? CastField<FStrProperty>(PropertyHelper::GetPropertyByName(
-                    candidateClass, TEXT("PersistenceID")))
-                : nullptr;
+            auto* idProperty = identityField(candidate->GetClassPrivate());
             if (!idProperty)
             {
                 PS::Log<LogLevel::Warning>(STR(
@@ -2184,7 +2255,8 @@ namespace DragonWilds {
                     throw std::runtime_error(
                         "duplicate PersistenceID resolves to multiple live assets");
 
-                const auto networkId = EnsureNetworkIdentity(candidate, subsystem);
+                const auto networkId = EnsureNetworkIdentity(candidate, subsystem,
+                    baselineAudit.ReverseProperty, baselineAudit.ArrayProperty);
                 if (networkId < 0)
                 {
                     throw std::runtime_error("network registry rejected the asset");
@@ -2375,20 +2447,9 @@ namespace DragonWilds {
     }
 
     int32_t DragonWildsDataRegistrar::EnsureNetworkIdentity(
-        UObject* dataAsset, UObject* subsystem)
+        UObject* dataAsset, UObject* subsystem,
+        FMapProperty* reverseProperty, FArrayProperty* arrayProperty)
     {
-        auto* subsystemClass = subsystem->GetClassPrivate();
-        auto* reverseProperty = CastField<FMapProperty>(
-            PropertyHelper::GetPropertyByName(subsystemClass, TEXT("DataToNetIdMap")));
-        auto* arrayProperty = CastField<FArrayProperty>(
-            PropertyHelper::GetPropertyByName(subsystemClass, TEXT("NetIdToData")));
-        if (!reverseProperty || !arrayProperty)
-        {
-            PS::Log<LogLevel::Warning>(STR("Network data registry was not found on {}.\n"),
-                subsystemClass->GetName());
-            return -1;
-        }
-
         UECustom::FScriptMapHelper reverse(
             reverseProperty, reverseProperty->ContainerPtrToValuePtr<void>(subsystem));
         auto* array = arrayProperty->ContainerPtrToValuePtr<FScriptArray>(subsystem);

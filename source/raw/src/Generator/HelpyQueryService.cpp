@@ -27,7 +27,7 @@ bool Submit(nlohmann::json request) {
     const int category=CategoryOf(request);if(category<0||category>2)return false;
     if(request.value("RequestId",std::uint64_t{})==0)return false;
     const auto cancel=CancelOf(request);const auto query=request.value("Query",std::string{});
-    if(query.size()>256)return false;
+    if(query.size()>(category==0?512:256))return false;
     const int limit=request.value("Limit",24);if(limit<1||limit>128)return false;
     std::lock_guard lock(Gate);
     auto& newest=LatestCancel[static_cast<std::size_t>(category)];
