@@ -4,7 +4,7 @@ channel: experimental
 
 # Pre-release guides
 
-Start with [RuneSchema 0.9.0.0 Pre Release downloads and changelog](PRE-RELEASE.md).
+Start with [RuneSchema 0.9.0.1 Pre Release downloads and changelog](PRE-RELEASE.md).
 These guides cover the candidate; [normal guides](../CURRENT-RELEASE.md) cover
 stable RuneSchema. Features marked as investigations still need live acceptance.
 

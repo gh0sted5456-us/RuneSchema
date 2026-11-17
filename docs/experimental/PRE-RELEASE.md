@@ -3,10 +3,10 @@ channel: experimental
 promote_to: RELEASE-1.0.0.md
 ---
 
-# RuneSchema 0.9.0.0 Pre Release
+# RuneSchema 0.9.0.1 Pre Release
 
 <div class="rs-actions">
-  <a class="md-button md-button--primary" href="https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.9.0.0-pre.20261117.1/RuneSchema-0.9.0.0-preview-20261117.1.zip">Download RuneSchema</a>
+  <a class="md-button md-button--primary" href="https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.9.0.1-pre.20261117.1/RuneSchema-0.9.0.1-preview-20261117.1.zip">Download RuneSchema</a>
   <a class="md-button" href="../INSTALLATION/">Installation</a>
 </div>
 
@@ -104,7 +104,7 @@ This prerelease packages RuneSchema and Helpy for Dragonwilds CL260223. Install 
 
 The release includes a SHA-256 verification manifest covering all 86 files in the runtime ZIP. The Helpy desktop and preview builds completed, and all ten targeted Windows checks passed, including the search-loop, cancellation, transport, and three window-size fixtures. In-game verification of this search update remains pending.
 
-[Release files and checksums](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.9.0.0-pre.20261117.1)
+[Release files and checksums](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.9.0.1-pre.20261117.1)
 
 ## Feedback
 

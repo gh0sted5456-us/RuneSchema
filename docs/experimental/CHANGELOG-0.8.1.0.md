@@ -10,7 +10,7 @@ promote_to: CHANGELOG-0.8.1.0.md
 # RuneSchema 0.8.1.0 — experimental
 
 !!! info "Complete candidate published · 2026-11-14"
-    See the [RuneSchema 0.9.0.0 Pre Release changelog](PRE-RELEASE.md) for the current package.
+    See the [RuneSchema 0.9.0.1 Pre Release changelog](PRE-RELEASE.md) for the current package.
     The entries below record earlier development and testing.
 
 ## 2026-11-17 · Helpy Item Bay search
