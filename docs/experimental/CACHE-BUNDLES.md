@@ -80,6 +80,9 @@ launches. **Passive cache updates** controls automatic rechecks of cached
 searches; turning it off leaves explicit refresh available and does not stop
 cache misses from checking a connected game.
 
+**Stop search** appears while Item Bay is working. It keeps the results already
+shown and stops further checks until you start or refresh the search.
+
 **Refresh search**, beside **Search**, immediately checks the entered text with
 the selected category, source and family filters. It keeps cached matches
 visible, prioritizes the bounded live request and saves new discoveries in

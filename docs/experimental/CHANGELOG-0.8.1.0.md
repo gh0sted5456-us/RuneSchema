@@ -10,8 +10,16 @@ promote_to: CHANGELOG-0.8.1.0.md
 # RuneSchema 0.8.1.0 — experimental
 
 !!! info "Complete candidate published · 2026-11-14"
-    See the [RuneSchema 1.0.0 Pre Release changelog](PRE-RELEASE.md) for the current package.
+    See the [RuneSchema 0.9.0.1 Pre Release changelog](PRE-RELEASE.md) for the current package.
     The entries below record earlier development and testing.
+
+## 2026-11-17 · Helpy Item Bay search
+
+- Added **Stop search** to the Item Bay controls. Stopping keeps the displayed results, selection, and delivery cart available and cancels further search requests.
+- Fixed repeated searches when the Inventory Workbench or Character Studio Item Bay adopted a saved source, category, or **Show Mod Family** filter. Filter changes are applied and shared before the grid renders.
+- A stopped search stays stopped when a saved filter changes. Rejected requests wait for an explicit retry instead of being resubmitted every frame.
+- Search progress stays in Item Bay, and filtered Item Bay results stay out of Helpy's shared tool snapshot. Gear pickers use the unfiltered browse preview.
+- Late replies from cancelled searches are ignored, and stopping an item search leaves AI and resource catalogue requests available.
 
 ## 2026-11-14 · Helpy search and cache
 
