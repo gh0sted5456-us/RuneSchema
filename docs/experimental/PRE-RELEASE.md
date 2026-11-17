@@ -6,7 +6,7 @@ promote_to: RELEASE-1.0.0.md
 # RuneSchema 0.9.0.0 Pre Release
 
 <div class="rs-actions">
-  <a class="md-button md-button--primary" href="https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.9.0.0-pre.20261115.1/RuneSchema-0.9.0.0-preview-20261115.1.zip">Download RuneSchema</a>
+  <a class="md-button md-button--primary" href="https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.9.0.0-pre.20261117.1/RuneSchema-0.9.0.0-preview-20261117.1.zip">Download RuneSchema</a>
   <a class="md-button" href="../INSTALLATION/">Installation</a>
 </div>
 
@@ -15,6 +15,14 @@ This prerelease packages RuneSchema and Helpy for Dragonwilds CL260223. Install 
 <span id="pending-changelog"></span>
 
 ## Changes since 0.8.0.3
+
+### Item Bay search fixes · November 17
+
+- Added **Stop search** to the Item Bay controls. Stopping keeps the displayed results, selection, and delivery cart available and cancels further search requests.
+- Fixed repeated searches when the Inventory Workbench or Character Studio Item Bay adopted a saved source, category, or **Show Mod Family** filter. Filter changes are applied and shared before the grid renders.
+- A stopped search stays stopped when a saved filter changes. Rejected requests wait for an explicit retry instead of being resubmitted every frame.
+- Search progress stays in Item Bay, and filtered Item Bay results stay out of Helpy's shared tool snapshot. Gear pickers use the unfiltered browse preview.
+- Late replies from cancelled searches are ignored, and stopping an item search leaves AI and resource catalogue requests available.
 
 ### Helpy desktop, overlay, and settings
 
@@ -94,9 +102,9 @@ This prerelease packages RuneSchema and Helpy for Dragonwilds CL260223. Install 
 
 ## Verification
 
-The release includes a SHA-256 verification manifest covering all 86 files in the runtime ZIP. See the GitHub pre-release for the build and test results.
+The release includes a SHA-256 verification manifest covering all 86 files in the runtime ZIP. The Helpy desktop and preview builds completed, and all ten targeted Windows checks passed, including the search-loop, cancellation, transport, and three window-size fixtures. In-game verification of this search update remains pending.
 
-[Release files and checksums](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.9.0.0-pre.20261115.1)
+[Release files and checksums](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.9.0.0-pre.20261117.1)
 
 ## Feedback
 

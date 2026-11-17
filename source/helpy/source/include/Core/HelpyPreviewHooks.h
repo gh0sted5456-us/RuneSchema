@@ -131,7 +131,7 @@ inline ImVec4 BayDock{};
 inline ImVec4 CardScale{},BayView{};
 inline ImVec4 IconCache{};
 inline ImVec4 IconCacheClose{};
-inline ImVec4 SourceFilter{},ViewFamily{},ViewModFamily{},RefreshSource{},RefreshSearch{},ItemCacheFirstSwitch{};
+inline ImVec4 SourceFilter{},ViewFamily{},ViewModFamily{},RefreshSource{},RefreshSearch{},StopSearch{},ItemCacheFirstSwitch{};
 inline std::map<std::string,ImVec4> ModTitles;
 inline ImVec4 ModDetailsMenu{},ModDetailsWindow{},ModAchievementsAction{},ModAchievementsAll{};
 inline std::map<std::string,ImVec4> SourceOptions;

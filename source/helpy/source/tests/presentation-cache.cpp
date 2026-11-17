@@ -203,6 +203,24 @@ int main(int argc,char** argv){
     assert(HelpyCachedCatalog::ReceiveCheck(manualReply())&&!selected.Pending&&selected.Rows.size()==2&&selected.PopulationStage=="items-ready");
     assert(HelpyCachedCatalog::RefreshSearch(query));HelpyCachedCatalog::PumpCheck();assert(manual.size()==2); // Manual retries bypass the one-minute automatic cooldown.
     assert(HelpyCachedCatalog::ReceiveCheck(manualReply())&&selected.Rows.size()==2&&!selected.Pending);
+    assert(HelpyCachedCatalog::RefreshSearch(query));HelpyCachedCatalog::PumpCheck();
+    auto lateReply=manualReply();
+    lateReply["Category"]=0;lateReply["CancelGeneration"]=manual.back().at("CancelGeneration");
+    auto& definitions=LazyCatalog::For(1);definitions.Pending=true;definitions.ActiveRequestId=999;
+    const auto foundRows=selected.Rows;
+    const auto stopGeneration=selected.CancelGeneration;
+    HelpyCachedCatalog::StopSearch();
+    assert(selected.Stopped&&!selected.Pending&&selected.CancelGeneration>stopGeneration&&selected.Rows==foundRows);
+    assert(definitions.Pending&&definitions.ActiveRequestId==999&&!HelpyCachedCatalog::Check);
+    const auto stoppedRequests=manual.size();
+    LazyCatalog::ApplyWindow(lateReply,100);
+    selected.HasMore=true;HelpyRuntimePreferences::PassiveRefresh=true;
+    HelpyCachedCatalog::NextPassive=std::chrono::steady_clock::now()-std::chrono::seconds(1);HelpyCachedCatalog::Pump();
+    HelpyRuntimePreferences::PassiveRefresh=false;
+    assert(!LazyCatalog::FillTo(0,50)&&manual.size()==stoppedRequests&&selected.Rows==foundRows&&definitions.Pending);
+    assert(HelpyCachedCatalog::RefreshSearch(query)&&!selected.Stopped);
+    HelpyCachedCatalog::PumpCheck();assert(HelpyCachedCatalog::ReceiveCheck(manualReply()));
+    definitions.Pending=false;
     const auto beforeRepeat=manual.size();assert(LazyCatalog::Search(0,query)&&!selected.Pending&&selected.Rows.size()==2&&manual.size()==beforeRepeat);
     selected.Rows=Json::array();selected.HasMore=true;selected.Pending=true;selected.ActiveRequestId=123;
     assert(HelpyCachedCatalog::RefreshSearch(query)&&selected.Pending&&!selected.HasMore&&selected.ActiveRequestId==0);

@@ -290,9 +290,10 @@ inline void Studio(const Json& catalog,uint64_t revision,bool inventoryOnly=fals
         if(!DroppedInventoryItem.empty()){StudioStageAddition(DroppedInventoryItem);DroppedInventoryItem=Json::object();}
         HelpyImGuiTheme::SoftButton("Drop Item Bay item here to stage an addition");if(ImGui::BeginDragDropTarget()){if(auto item=ItemGridPicker::AcceptItemDrop(Error))StudioStageAddition(*item);ImGui::EndDragDropTarget();}
         ImGui::PopID();if(wide)ImGui::TableNextColumn();ImGui::PushID("studio-item-bay-pane");ImGui::SeparatorText("Item Bay");Json bay=catalog;LazyCatalog::Overlay(bay,0);
-        StudioBayControls(bay,revision);
+        const auto bayRevision=revision+LazyCatalog::For(0).RowsRevision;
+        StudioBayControls(bay,bayRevision);
         {
-            const auto result=ItemGridPicker::Render("character-studio-bay",bay,StudioFilter,sizeof(StudioFilter),StudioSelectedPath,sizeof(StudioSelectedPath),StudioPicker,revision,false,false,true,true,false,420);
+            const auto result=ItemGridPicker::Render("character-studio-bay",bay,StudioFilter,sizeof(StudioFilter),StudioSelectedPath,sizeof(StudioSelectedPath),StudioPicker,bayRevision,false,false,true,true,false,420);
             if(result.SelectedRow){const auto previous=StudioSelected.value("Path",std::string{});StudioSelected=*result.SelectedRow;if(std::string_view(view)=="Item"&&previous!=StudioSelected.value("Path",std::string{}))StudioRequestedView.clear();}
         }
         ImGui::BeginDisabled(StudioSelected.empty());if(HelpyImGuiTheme::SoftButton("Add selected to save draft"))StudioStageAddition(StudioSelected);ImGui::EndDisabled();ImGui::PopID();ImGui::EndTable();
