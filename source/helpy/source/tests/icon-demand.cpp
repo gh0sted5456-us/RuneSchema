@@ -2,7 +2,7 @@
 #include "Generator/HelpyImGuiTheme.h"
 #include "Generator/RuneSchemaSettingsPanel.h"
 #include "Generator/RuntimeConnectionPanel.h"
-#include "Generator/ItemGridPicker.h"
+#include "Generator/ItemBayBrowser.h"
 #include "Generator/DragFeedback.h"
 #include "Generator/HelpyLoadingIndicator.h"
 #include <cassert>
@@ -111,6 +111,57 @@ int Run() {
         window.Rows[0]["Name"]="Updated row";window.RowsRevision=++LazyCatalog::RowsClock;drawBay(2);
         assert(ItemGridPicker::Bay.DetailsRow["Name"]=="Updated row");
         ItemGridPicker::Bay=previousBay;LazyCatalog::For(0)=previousWindow;HelpyImGuiTheme::Current=previousTheme;LazyCatalog::NativeIcons.erase("/Game/UIFixture/Row.Row");}
+    {
+        const auto savedBay=ItemGridPicker::Bay;
+        auto& window=LazyCatalog::For(0);
+        const auto savedWindow=window;
+        const auto savedTheme=HelpyImGuiTheme::Current;
+        const auto savedSubmit=LazyCatalog::RemoteSubmit;
+        const auto savedCancel=LazyCatalog::RemoteCancel;
+        const auto savedGeneration=SpawnToolRequests::Generation.load();
+        SpawnToolRequests::Generation=71;
+        window={};window.Started=true;window.RuntimeGeneration=71;window.HasMore=false;
+        ItemGridPicker::Bay={};
+        auto& theme=HelpyImGuiTheme::Current;
+        theme.itemSource="vanilla";theme.itemCategory="Weapons";
+        std::vector<nlohmann::json> requests;
+        bool accept=true;
+        LazyCatalog::RemoteCancel={};
+        LazyCatalog::RemoteSubmit=[&](nlohmann::json request){requests.push_back(std::move(request));return accept;};
+        ItemGridPicker::State embedded;
+        char filter[257]{},selected[1025]{};
+        const nlohmann::json catalog={{"Items",nlohmann::json::array()}};
+        const auto draw=[&](int frames){
+            for(int frame=0;frame<frames;++frame){
+                begin();
+                ItemBayBrowser::Controls(embedded,catalog,1,filter,sizeof(filter));
+                ItemGridPicker::Render("embedded-search-loop",catalog,filter,sizeof(filter),selected,sizeof(selected),embedded,1,false,false,true,true,false,160);
+                end();
+            }
+        };
+        draw(8);
+        assert(requests.size()==1&&window.Query==ItemGridPicker::BackendQuery(embedded));
+        assert(embedded.ActiveCategory=="Weapons"&&ItemGridPicker::Bay.Picker.ActiveCategory=="Weapons");
+
+        embedded.PendingFamilyKey="iron_set";embedded.PendingFamilyProvider="mods/dye";
+        draw(8);
+        assert(requests.size()==2&&window.Query==ItemGridPicker::BackendQuery(embedded));
+        assert(embedded.FamilyKey=="iron_set"&&ItemGridPicker::Bay.Picker.FamilyKey=="iron_set");
+        assert(embedded.SourceProvider=="mods/dye"&&ItemGridPicker::Bay.Picker.SourceProvider=="mods/dye");
+
+        LazyCatalog::CancelLoading(0);
+        const auto stoppedGeneration=window.CancelGeneration;
+        theme.itemSource="vanilla";theme.itemCategory="Weapons";
+        draw(8);
+        assert(requests.size()==2&&window.Stopped&&window.CancelGeneration==stoppedGeneration);
+
+        window.Stopped=false;accept=false;
+        draw(8);
+        assert(requests.size()==3&&!window.Pending&&!window.LastError.empty());
+        LazyCatalog::RemoteSubmit=savedSubmit;LazyCatalog::RemoteCancel=savedCancel;
+        SpawnToolRequests::Generation=savedGeneration;
+        window=savedWindow;ItemGridPicker::Bay=savedBay;theme=savedTheme;
+    }
     for(const float paneWidth:{192.f,240.f,480.f})for(int frame=0;frame<3;++frame){
         begin();PS::HelpyImGuiTheme::BeginPanel("pagination",{paneWidth,120});ItemGridPicker::State page;page.PageIndex=1;
         const float right=ImGui::GetWindowPos().x+ImGui::GetWindowContentRegionMax().x;

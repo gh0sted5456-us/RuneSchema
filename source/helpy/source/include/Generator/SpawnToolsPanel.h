@@ -675,8 +675,8 @@ inline void RefreshSnapshot(int category,bool force=false) {
     // before reading the new generation's roster, even if the UI was hidden.
     if(CartGeneration!=SpawnToolRequests::CurrentGeneration()){SyncCartWorld();SpawnToolRequests::ReadQuickIfChanged(UiRevision,category,UiSnapshot);force=true;}
     ReconcileCartRecipients(UiSnapshot);
-    if(force||UiRevision!=prior){LazyCatalog::Apply(UiSnapshot,UiRevision);LazyCatalog::ReleaseFailedWindow(UiRevision,UiSnapshot);LazyCatalog::Overlay(UiSnapshot,category);}
-    else LazyCatalog::Overlay(UiSnapshot,category);
+    if(force||UiRevision!=prior){LazyCatalog::Apply(UiSnapshot,UiRevision);LazyCatalog::ReleaseFailedWindow(UiRevision,UiSnapshot);}
+    if(category!=0)LazyCatalog::Overlay(UiSnapshot,category);
     const auto generation=SpawnToolRequests::CurrentGeneration();
     if(generation!=DefinitionGeneration){DefinitionGeneration=generation;DefinitionPending=0;InspectedDefinitions.clear();DefinitionStatus.clear();}
     PlayerBadges::Update(UiSnapshot);

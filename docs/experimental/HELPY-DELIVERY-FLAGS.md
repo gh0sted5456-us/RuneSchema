@@ -3,46 +3,74 @@ channel: experimental
 promote_to: HELPY-DELIVERY-FLAGS.md
 ---
 
-!!! info "Feature request"
-    This is a requested Helpy feature, not installed runtime functionality. Helpy doesn't read
-    delivery flags yet. [Experimental overview](index.md).
+!!! info "Experimental · feature branch"
+    Built and contract-tested, not yet in a candidate. Live game, server and Grand Exchange
+    acceptance are still open. [Experimental overview](index.md).
 
 # Helpy delivery flags
 
-Player deliveries are **on by default** for every character and world. A mod can switch them
-off for a particular character or world by writing a **flag** into a folder that Helpy maintains.
-Helpy reads every mod's flags before it makes a player-driven delivery. Any mod can use this; the
-first user is the Grand Exchange, a trading app for Dragonwilds. While a character trades there,
-Helpy deliveries to it would let players spawn items and sell them.
+Helpy deliveries you make to your own character are **on by default**. They can be turned off
+for a character in two ways:
 
-**Deliveries a server makes through Helpy are never blocked by flags.**
+- **By you.** In **Settings > Deliveries**, turn off *Allow Helpy deliveries to* a character.
+- **By a mod.** A mod writes a signed **flag** into a folder Helpy maintains, pausing deliveries
+  to a character or a world it manages. The first user is the Grand Exchange, a trading app for
+  Dragonwilds: while a character trades there, Helpy deliveries to it would let players spawn
+  items and sell them.
 
-## Requested behavior
+**Deliveries a host makes to another player through Helpy are never paused.**
 
-1. Before each **player-driven** delivery, Helpy gathers the valid flags (below) for the target
-   character's GUID and the target world's GUID.
-2. If any mod's newest flag for either target is `noPlayerDeliveries` with `on: true`, Helpy refuses
-   the delivery. It shows the mod's `message`, or a default like *"{mod name} has paused Helpy
-   deliveries to this character."*
-3. Helpy's Settings lists the flags currently in force: which mod set them, on what, and why. The
-   player can see what is blocking deliveries but can't turn the flags off there; only the mod that
-   set a flag can lift it.
-4. A setting that defaults to on, *Let mods pause player deliveries*, is honored per mod. Turning it
-   off for a mod is recorded, and that mod can find out through `helpy-state.json` (below). The
-   Grand Exchange treats an opted-out character as not enrolled.
+## What is paused
+
+RuneSchema checks the flags where items are granted, not only in Helpy's interface:
+
+| Path | Checked |
+| --- | --- |
+| Item Bay, cart and kit deliveries to your own character (single player or as host) | Before the grant |
+| The same requests from a client to a server | On the client before sending, and on the server against its own flags folder |
+| Clone Creator with *Give* | Before the clone is granted |
+| Character editor: adding an item or raising a stack | Before the draft changes |
+| A host delivering to another connected player | Never |
+
+A refused delivery shows the mod's message, or *"{mod name} has paused Helpy deliveries to this
+character."* A character you turned off shows *"You turned off Helpy deliveries for this character
+in Settings > Deliveries."*
+
+World flags apply where the world save is loaded: single player, a listen host and a dedicated
+server. A client doesn't know the world-save GUID, so it checks character flags only; the server
+checks world flags.
+
+If a pause exists for any character on this PC and Helpy can't identify the character a delivery
+is for (for example while the character is still loading), the delivery is refused rather than
+guessed.
+
+## Settings > Deliveries
+
+- **Your characters.** Your current character, and any character you turned off, each with an
+  *Allow Helpy deliveries* switch.
+- **Pauses set by mods.** Each registered mod, whether its key is verified, the flags currently in
+  force (character or world, and the mod's message), and how many flags failed their signature
+  check.
+- **Let this mod pause deliveries.** On by default, per mod. Turning it off is recorded in
+  `helpy-state.json`, so the mod can see it; the Grand Exchange treats such a character as not
+  enrolled. Only the mod can lift its own flags.
+- **Trust the new key.** Shown when a mod's key changed after Helpy first saw it. The reset is
+  recorded.
 
 ## The folder
 
-`%LOCALAPPDATA%\RSDragonwilds\RuneSchema\Helpy\flags\` (under Proton, the same path inside the
-game's prefix). Helpy creates the folder. Each mod gets its own subfolder:
-
 ```text
-flags\
-  helpy-state.json          Helpy writes this: which mods are registered and any opt-outs
+%LOCALAPPDATA%\RSDragonwilds\RuneSchema\core\HELPY\flags\
+  helpy-state.json          Helpy writes this; mods may read it
   grandexchange\
     mod.json                the mod's registration
-    flags.json              its flags
+    flags.json              its signed flags
 ```
+
+An older installation keeps Helpy's shared folder at `RuneSchema\HELPY`. Use that folder's
+`flags` when `RuneSchema\core\HELPY` doesn't exist and `RuneSchema\HELPY` does; never create
+`core\HELPY` yourself, because Helpy would then stop using the older folder. Under Proton the
+same path is inside the game's prefix. A dedicated server reads the folder on the server PC.
 
 **`mod.json`:**
 
@@ -51,13 +79,17 @@ flags\
  "url": "https://www.nexusmods.com/runescapedragonwilds/mods/..."}
 ```
 
-**`flags.json`:**
+- `id` is 1 to 40 characters of `a-z`, `0-9`, `-` and `_`, and must match the folder name.
+- `publicKey` is the hex SubjectPublicKeyInfo DER of an uncompressed P-256 key (91 bytes).
+
+**`flags.json`** (at most 1 MiB and 4096 statements):
 
 ```json
 {"flags": [{"statement": "helpy-flag/1\n{...}", "sig": "<hex DER ECDSA>"}]}
 ```
 
-Each statement is the text `helpy-flag/1\n` followed by one line of JSON:
+Each statement is the text `helpy-flag/1\n` followed by one line of JSON (at most 2048 bytes in
+all):
 
 ```json
 {"mod": "grandexchange", "target": "character", "id": "5A3F0C21B6D84E7F9A1C2B3D4E5F6071",
@@ -65,46 +97,61 @@ Each statement is the text `helpy-flag/1\n` followed by one line of JSON:
  "message": "This character trades on the Grand Exchange. Un-enroll it in the Grand Exchange app to use Helpy again."}
 ```
 
-- `target` is `character` or `world`; `id` is that GUID.
+- `target` is `character` or `world`; `id` is that GUID (32 hex digits; dashes and braces are
+  accepted).
 - For each combination of mod, target, id and flag, **the highest `seq` wins**. A statement with
-  `on: false` lifts the flag.
-- `sig` is ECDSA P-256 / SHA-256 over the whole statement text, prefix included. Helpy checks it
-  against the key registered for that mod. A statement whose `mod` doesn't match its folder is
-  ignored.
+  `on: false` lifts the flag. On equal `seq`, a pause wins, so a replayed "off" can't lift a newer
+  pause with the same number.
+- `sig` is a DER ECDSA P-256 / SHA-256 signature over the whole statement text, prefix included,
+  checked against the mod's registered key. Non-minimal DER is rejected.
+- A statement whose `mod` doesn't match its folder is ignored. Flags other than
+  `noPlayerDeliveries` are ignored. `message` is at most 300 characters.
+- Up to 64 mod folders are read.
+
+**`helpy-state.json`** (version 1):
+
+```json
+{"version": 1,
+ "characters": {"ABCDEFABCDEFABCDEFABCDEFABCDEF01": {"playerDeliveries": false, "changedAt": 1800000600, "name": "Alt"}},
+ "mods": {"grandexchange": {"fingerprint": "sha256:...", "pinnedAt": 1800000100, "allowPause": true}},
+ "events": [{"event": "key-pinned", "at": 1800000100, "mod": "grandexchange", "fingerprint": "sha256:..."}]}
+```
+
+- `characters` lists the characters the player turned off.
+- `mods.<id>.allowPause` is `false` when the player chose not to honour that mod.
+- `events` keeps the last 64 changes: `key-pinned`, `key-reset`, `user-deliveries-on/off`,
+  `mod-pause-allowed/declined`.
 
 ## Why signatures and not shared encryption
 
-Any key shipped inside a mod or inside Helpy can be extracted. A key that's shared for encryption
-would therefore let anyone forge or edit flags. With signatures, a mod keeps its **private** key
-(the Grand Exchange's stays on its server), and Helpy only needs the **public** key, which is safe
-to publish. A mod is free to encrypt its own files for privacy, but signatures are what Helpy relies
-on.
+Any key shipped inside a mod or inside Helpy can be extracted, so a shared encryption key would let
+anyone forge or edit flags. With signatures, a mod keeps its **private** key (the Grand Exchange's
+stays on its server) and Helpy needs only the **public** key, which is safe to publish.
 
 **Pinning keys.** A player who wanted deliveries back could replace a mod's `mod.json` with a key of
-their own, so that the real flags fail the check and are ignored. To prevent this:
+their own, so that the real flags fail the check. To prevent this:
 
-- Helpy ships a small registry of known mods and their key fingerprints (`sha256:` followed by the
-  hex SHA-256 of the SPKI DER). For the Grand Exchange, that's the `main` fingerprint in its
-  `assets/network.json`.
-- For a mod that isn't in the registry, Helpy trusts the first key it sees and records it in
-  `helpy-state.json`. After that, a changed key is refused until the player resets it in Settings,
-  and the reset is recorded.
+- Helpy has a small built-in registry of mods and their key fingerprints (`sha256:` followed by the
+  hex SHA-256 of the SPKI DER). A mod in the registry whose `mod.json` key doesn't match is ignored.
+  The Grand Exchange's entry is added once its `main` key is published.
+- For any other mod, Helpy pins the first key it sees in `helpy-state.json`. A changed key is
+  refused until the player chooses *Trust the new key*, and the reset is recorded.
 
 ## What mods do alongside this
 
-The folder is the shared mechanism. A mod that needs stronger guarantees adds its own backstop. The
+The folder is the shared mechanism; a mod that needs stronger guarantees adds its own backstop. The
 Grand Exchange, for example:
 
 - writes the same signed flag into the character's J4SSave section, so deleting the folder doesn't
   lift it;
-- sends its `flags.json` to its server with every deposit. The server refuses deposits from a
-  character whose local flag is missing or older than its own record, and the app then writes the
-  flag again.
-
-Helpy isn't expected to enforce any of that; it only needs to honor the flags it can verify.
+- can send its `flags.json` and `helpy-state.json` to its server with every deposit, so the server
+  refuses deposits from a character whose local flag is missing, older than its own record, or
+  declined in `helpy-state.json`.
 
 ## Limits
 
-- The rule depends on Helpy telling player-driven deliveries apart from server deliveries.
-- Flags are per PC. A mod that cares about other PCs writes the flag wherever its app runs, as the
-  Grand Exchange does on sign-in.
+- Flags are per PC. A mod that cares about other PCs writes the flag wherever its app runs.
+- A player can delete the folder or edit `helpy-state.json`; the mod's own backstops are what make a
+  pause stick.
+- Deliveries made by other mods' own systems (for example cooked item rewards) aren't Helpy
+  deliveries and aren't checked.

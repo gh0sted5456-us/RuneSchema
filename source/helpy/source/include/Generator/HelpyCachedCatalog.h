@@ -41,6 +41,16 @@ inline void StopCheck(const std::string& message){
     }
     LazyCatalog::SaveCache(0);Check.reset();
 }
+inline bool SearchCanStop(){
+    const auto& state=LazyCatalog::For(0);
+    return Check.has_value()||(!state.Stopped&&(state.Pending||(!state.Query.empty()&&state.HasMore
+        &&state.LastError.empty()&&(state.PreparingAlphabetical||state.Refreshing||static_cast<int>(state.Rows.size())<state.FillTarget))));
+}
+inline void StopSearch(){
+    Check.reset();Pending.reset();
+    LazyCatalog::CancelLoading(0);
+    CheckStatus="Search stopped. Results found so far are still available.";
+}
 inline void ResetChecks(){Check.reset();Checked.Clear();Resume.Clear();CheckStatus.clear();}
 inline bool QueueCheck(nlohmann::json request,bool force=false){
     const auto query=request.value("Query",std::string{});if(query.empty()||!Connected())return false;
@@ -64,7 +74,7 @@ inline bool RefreshSearch(const std::string& query){
     if(state.Query!=query)LazyCatalog::Search(0,query);
     ++state.CancelGeneration;LazyCatalog::QueueCancel(0,state.CancelGeneration);Pending.reset();
     if(!QueueCheck({{"Query",query},{"ClientGeneration",state.RuntimeGeneration},{"CancelGeneration",state.CancelGeneration}},true)){state.Pending=false;state.ActiveRequestId=0;state.CheckingChanges=false;return false;}
-    Check->Interactive=true;state.Started=true;state.Pending=true;state.ActiveRequestId=0;state.RequestedAt=std::chrono::steady_clock::now();
+    Check->Interactive=true;state.Stopped=false;state.StartupBrowse=false;state.Started=true;state.Pending=true;state.ActiveRequestId=0;state.RequestedAt=std::chrono::steady_clock::now();
     state.Refreshing=false;state.RefreshRows=nlohmann::json::array();state.RefreshRequired=0;state.PreparingAlphabetical=false;state.LastError.clear();
     state.PopulationStage="searching-live-items";state.PopulationDone=state.PopulationTotal=0;
     if(state.Rows.empty())state.HasMore=false;
@@ -143,7 +153,7 @@ inline void Pump(){
     PumpCheck();
     const auto now=std::chrono::steady_clock::now();
     if(NextPassive==std::chrono::steady_clock::time_point{})NextPassive=now+std::chrono::seconds(60);
-    if(now<NextPassive||!state.Started||state.Pending||!RemoteSubmit||!HelpyRuntimePreferences::PassiveRefresh.load()||!HelpySourceCache::Ready()||(PluginRuntimeServices::ExternalDesktop&&!PluginRuntimeServices::GameProcessId.load()))return;
+    if(now<NextPassive||!state.Started||state.Pending||state.Stopped||!RemoteSubmit||!HelpyRuntimePreferences::PassiveRefresh.load()||!HelpySourceCache::Ready()||(PluginRuntimeServices::ExternalDesktop&&!PluginRuntimeServices::GameProcessId.load()))return;
     NextPassive=now+std::chrono::seconds(60);
     if(Check)return;
     if(!state.Query.empty()&&QueueCheck({{"Query",state.Query},{"ClientGeneration",state.RuntimeGeneration},{"CancelGeneration",state.CancelGeneration}}))return;

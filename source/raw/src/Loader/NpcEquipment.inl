@@ -4,30 +4,7 @@ void DragonWildsNpcLoader::LoadNpcEquipmentWorld(UObject* context) {
     if(!context || !context->GetWorld())throw std::runtime_error("NPC equipment world is unavailable");
     ActorHelper::FunctionCall authority(context,TEXT("/Script/Engine.Actor:HasAuthority"));authority.Invoke();
     if(!authority.Result<bool>())throw std::runtime_error("Only world authority may access NPC equipment progress");
-    auto* instance=SpawnRuntime::CallWorldContextGetter(TEXT("/Script/Engine.GameplayStatics:GetGameInstance"),TEXT("/Script/Engine.Default__GameplayStatics"),context);
-    auto* type=ActorHelper::ResolveClass(TEXT("/Script/Dominion.PersistenceSubsystem"));
-    if(!instance || !type)throw std::runtime_error("NPC equipment persistence subsystem unavailable");
-    TArray<UObject*> candidates;UECustom::UObjectGlobals::GetObjectsOfClass(type,candidates,true);
-    if(candidates.Num()<0 || candidates.Num()>64)throw std::runtime_error("NPC equipment persistence roster is invalid");
-    UObject* subsystem=nullptr;
-    for(auto* candidate:candidates)if(candidate && candidate->GetOuterPrivate()==instance
-        && !candidate->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed))) {
-        if(subsystem)throw std::runtime_error("NPC equipment persistence subsystem is ambiguous");
-        subsystem=candidate;
-    }
-    auto* settings=subsystem?CastField<FStructProperty>(PropertyHelper::GetPropertyByName(type,TEXT("WorldSaveSettings"))):nullptr;
-    auto* schema=settings?settings->GetStruct().Get():nullptr;
-    auto* guid=schema?CastField<FStructProperty>(PropertyHelper::GetPropertyByName(schema,TEXT("WorldSaveGuid"))):nullptr;
-    if(!schema || schema->GetPathName()!=TEXT("/Script/Dominion.DomGameWorldSettings")
-        || !ReflectedContract::Fits(settings,type->GetPropertiesSize()) || settings->GetArrayDim()!=1
-        || settings->GetElementSize()!=schema->GetStructureSize() || !guid || guid->GetArrayDim()!=1
-        || !guid->GetStruct().Get() || guid->GetStruct()->GetPathName()!=TEXT("/Script/CoreUObject.Guid")
-        || guid->GetElementSize()!=16 || !ReflectedContract::Fits(guid,schema->GetStructureSize()))
-        throw std::runtime_error("NPC equipment world-save GUID contract changed");
-    uint32_t words[4]{};
-    std::memcpy(words,guid->ContainerPtrToValuePtr<void>(settings->ContainerPtrToValuePtr<void>(subsystem)),sizeof(words));
-    const auto world=PS::SaveReport::Guid(std::format("{:08X}{:08X}{:08X}{:08X}",words[0],words[1],words[2],words[3]));
-    if(world.empty())throw std::runtime_error("NPC equipment is waiting for the loaded world-save GUID");
+    const auto world=WorldSaveIdentity::Guid(context,"NPC equipment");
     if(world==m_equipmentWorldGuid)return;
     auto data=NpcEquipment::Read(PS::HostServices::ProgressDirectory()/"worlds"/world/"npc-equipment.json",world);
     m_equipmentWorldGuid=world;m_equipmentWorld=std::move(data);

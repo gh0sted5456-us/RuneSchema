@@ -1155,6 +1155,15 @@ void DragonWildsSpawnLoader::PumpSpawnTools(PS::WorkSlice& work) {
         if(!selected&&catalogWorld&&PS::Network::Detect(catalogWorld).Mode==PS::Network::Role::Client
             &&(action=="GiveItems"||action=="Spawn"||action=="MapTeleport"||action=="HelpyRemoteAccess")) {
             if(request->dump().size()>4096)throw std::runtime_error("The server request exceeds the native bridge envelope. Split the cart into smaller deliveries; this request was not sent.");
+            if(action=="GiveItems"){
+                // A client checks this PC's Helpy delivery flags before asking the server; the server checks its own.
+                std::string own;
+                for(auto* controller:controllers){
+                    if(!controller||controller->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed))||controller->GetWorld()!=catalogWorld)continue;
+                    try{ActorHelper::FunctionCall local(controller,TEXT("/Script/Engine.Controller:IsLocalController"));local.Invoke();if(local.Result<bool>()){own=GetPlayerCharacterGuid(controller);break;}}catch(...){}
+                }
+                PS::HelpyDeliveryGate::Require(own,"");
+            }
             if(!ForwardHelpyAuthority||!ForwardHelpyAuthority(action,request->dump()))
                 throw std::runtime_error("The owning-player RuneSchema authority bridge is unavailable");
             if(action=="GiveItems"||action=="MapTeleport"){
@@ -1166,6 +1175,16 @@ void DragonWildsSpawnLoader::PumpSpawnTools(PS::WorkSlice& work) {
         if(!selected)throw std::runtime_error("Selected authoritative player is unavailable; refresh");
         auto* world=selected->GetWorld();
         if(!world||!GetGameMode(world))throw std::runtime_error("Only the authoritative server may run spawn tools");
+        if(action=="GiveItems"||action=="GiveItem"||(action=="CreateClone"&&request->value("Give",true))){
+            // Helpy delivery flags pause deliveries a player makes to their own character, here or
+            // through a server's Helpy. A host delivering to another player is not paused.
+            bool own=request->value("_Source",std::string{})=="HelpyNetwork";
+            if(!own)try{ActorHelper::FunctionCall local(selected,TEXT("/Script/Engine.Controller:IsLocalController"));local.Invoke();own=local.Result<bool>();}catch(...){own=true;}
+            if(own){
+                std::string place;try{place=WorldSaveIdentity::Guid(selected,"Helpy delivery flags");}catch(...){} // World flags need the loaded world save.
+                PS::HelpyDeliveryGate::Require(GetPlayerCharacterGuid(selected),place);
+            }
+        }
         if(action=="RestorePlayerGear"||action=="ChangePlayerGear"){
             if(world!=m_readyWorld||request->value("Generation",uint64_t{})!=PS::SpawnToolRequests::CurrentGeneration()||request->value("PlayerGuid",std::string{}).empty()||request->value("PlayerGuid",std::string{})!=GetPlayerCharacterGuid(selected))throw std::runtime_error("Gear target/world changed; refresh the party member");
             const auto outcome=action=="RestorePlayerGear"?PS::PlayerGearActions::Restore(selected,*request):PS::PlayerGearActions::Change(selected,*request);

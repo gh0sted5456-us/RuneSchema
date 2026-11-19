@@ -161,6 +161,7 @@ json SaveEditorOperation(const std::string& op,const json& args){
     }
     if(op=="SaveEditorAddItem"){
         if(!args.value("Confirm",false))throw std::runtime_error("Confirm the addition before staging");
+        HelpyDeliveryGate::Require(characterEditor.Session.CharacterGuid(),""); // Adding items to a paused character is a delivery too.
         if(args.value("Personal",false))throw std::runtime_error("Personal storage insertion requires a separately verified native capacity; existing storage remains editable and removable.");
         if(characterEditor.Layout.empty())characterEditor.Layout=CharacterPreview::InventoryLayout();
         const auto group=args.value("Group",std::string("Inventory"));int destination=-1;const auto& slots=characterEditor.Session.Draft().at("GameProgress").at("Inventory");
@@ -172,6 +173,7 @@ json SaveEditorOperation(const std::string& op,const json& args){
     }
     if(op=="SaveEditorStack"){
         const auto pointer=args.at("Pointer").get<std::string>();json rows=json::array({{{"PersistenceID",characterEditor.Session.ItemIdentity(pointer)}}});
+        if(const auto& item=characterEditor.Session.Draft().at(json::json_pointer(pointer));item.is_object()&&args.at("Count").get<int64_t>()>item.value("Count",int64_t{}))HelpyDeliveryGate::Require(characterEditor.Session.CharacterGuid(),"");
         try{Resolve(rows,TEXT("/Script/Dominion.ItemData"),true);}catch(...){} // Unknown metadata can never authorize a stack increase.
         characterEditor.Session.SetCount(pointer,args.at("Count").get<int64_t>(),args.at("Revision").get<uint64_t>(),rows[0].value("MaxStackSize",int64_t{}));
     }
