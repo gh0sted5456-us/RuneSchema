@@ -6,6 +6,7 @@ on:
       - experimental
     paths:
       - '.github/workflows/validate-experimental-build.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
