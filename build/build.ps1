@@ -127,6 +127,22 @@ try {
         }
         Write-Host "Build dependencies ready in $DependencyCache" -ForegroundColor Green
     }
+    function Initialize-RustToolchain {
+        # UE4SS checks rustc during configure. rustup installs into CARGO_HOME, which a
+        # double-clicked window may not have on PATH; add the usual locations when needed.
+        if (Get-Command rustc.exe -ErrorAction SilentlyContinue) { return }
+        $candidates = @()
+        if ($env:CARGO_HOME) { $candidates += (Join-Path $env:CARGO_HOME 'bin') }
+        if ($env:USERPROFILE) { $candidates += (Join-Path $env:USERPROFILE '.cargo\bin') }
+        foreach ($candidate in $candidates) {
+            if (Test-Path -LiteralPath (Join-Path $candidate 'rustc.exe') -PathType Leaf) {
+                $env:PATH = $candidate + ';' + $env:PATH
+                Write-Host "Using Rust from $candidate" -ForegroundColor DarkCyan
+                return
+            }
+        }
+        throw 'Rust (rustc) is required by UE4SS but was not found. Install it from https://rustup.rs, then run the build again.'
+    }
     function Initialize-MsvcEnvironment {
         if ($env:VCToolsInstallDir -and $env:WindowsSdkDir -and (Get-Command cl.exe -ErrorAction SilentlyContinue)) { return }
         $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
@@ -744,6 +760,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
     $cmake = Find-Exe 'cmake.exe'; $git = Find-Exe 'git.exe'
     if (-not $cmake -or -not $git) { throw 'CMake and Git are required and must be on PATH.' }
     Initialize-MsvcEnvironment
+    Initialize-RustToolchain
     Initialize-GitHubTransport
     $ue4ssPin = Ensure-UE4SSSource
     Write-Host "RuneSchema will compile against pinned UE4SS $ue4ssPin." -ForegroundColor DarkCyan
