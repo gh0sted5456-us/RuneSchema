@@ -8,6 +8,7 @@
 #include "Unreal/Hooks.hpp"
 #include "Utility/Logging.h"
 #include "SDK/WeakObjectHandle.h"
+#include <atomic>
 #include <mutex>
 #include <optional>
 #include <nlohmann/json.hpp>
@@ -18,11 +19,12 @@ class Commands {
     RC::Unreal::Hook::GlobalCallbackId MenuTick=RC::Unreal::Hook::ERROR_ID;
     struct MenuRequest {WeakObjectHandle Player;Command Target;MenuAction Action;};
     std::mutex PendingGate;std::optional<MenuRequest> PendingMenu;
+    std::atomic<bool> MenuQueued=false; // Lets the per-frame tick skip the lock when nothing is queued.
 public:
     ~Commands(){Shutdown();}
     void Shutdown(){
         if(MenuTick!=RC::Unreal::Hook::ERROR_ID){RC::Unreal::Hook::UnregisterCallback(MenuTick);MenuTick=RC::Unreal::Hook::ERROR_ID;}
-        {std::lock_guard lock(PendingGate);PendingMenu.reset();}
+        {std::lock_guard lock(PendingGate);PendingMenu.reset();MenuQueued=false;}
         if(Callback!=RC::Unreal::Hook::ERROR_ID){
             RC::Unreal::Hook::UnregisterCallback(Callback);Callback=RC::Unreal::Hook::ERROR_ID;
         }
@@ -32,7 +34,8 @@ public:
         RC::Unreal::Hook::FCallbackOptions options{};
         options.OwnerModName=TEXT("RuneSchema");options.HookName=TEXT("RuneSchemaConsole");
         MenuTick=RC::Unreal::Hook::RegisterEngineTickPostCallback([this](auto&,auto*,float,bool){
-            std::optional<MenuRequest> pending;{std::lock_guard lock(PendingGate);pending=std::move(PendingMenu);PendingMenu.reset();}
+            if(!MenuQueued.load(std::memory_order_acquire))return;
+            std::optional<MenuRequest> pending;{std::lock_guard lock(PendingGate);pending=std::move(PendingMenu);PendingMenu.reset();MenuQueued=false;}
             if(!pending)return;
             try{
                 auto* player=pending->Player.Get();if(!player||!player->IsA<RC::Unreal::ULocalPlayer>())throw std::runtime_error("Menu player is no longer available");
@@ -62,7 +65,7 @@ public:
                             {std::lock_guard lock(PendingGate);if(PendingMenu)throw std::runtime_error("A menu request is already queued");}
                             const auto pending=WeakObject(player);if(pending.Get()!=player)throw std::runtime_error("Cannot retain the menu player safely");
                             result=CloseConsole(player);
-                            {std::lock_guard lock(PendingGate);PendingMenu=MenuRequest{pending,command,RequestedMenuAction(std::wstring_view(input,length))};}
+                            {std::lock_guard lock(PendingGate);PendingMenu=MenuRequest{pending,command,RequestedMenuAction(std::wstring_view(input,length))};MenuQueued.store(true,std::memory_order_release);}
                             result["MenuQueued"]=true;result["Status"]="Console closure requested; native menu action queued after command return.";
                         }
                         else if(command==Command::CloseConsole)result=CloseConsole(player);

@@ -993,8 +993,10 @@ void DragonWildsNpcLoader::SanitizeDialogueRpc(UObject* source,UFunction* functi
         || m_gameThreadId.load(std::memory_order_relaxed)!=GetCurrentThreadId())return;
     const auto flags=function->GetFunctionFlags();
     if(!(flags&FUNC_Net) || !(flags&FUNC_NetClient))return;
-    const auto name=RC::to_string(function->GetName());
-    if(name!="ClientUpdateConversation" && name!="ClientExecuteTaskAndSideEffects")return;
+    // Every client RPC passes here while dialogue graphs exist: compare names, not strings.
+    static const FName updateConversation(TEXT("ClientUpdateConversation"),FNAME_Add),executeTask(TEXT("ClientExecuteTaskAndSideEffects"),FNAME_Add);
+    const auto rpc=function->GetFName();
+    if(rpc!=updateConversation && rpc!=executeTask)return;
     const auto network=PS::Network::Detect(source);
     if(!PS::Network::OwnsGameplay(network.Mode))return;
     const auto owned=[&](UObject* value) {
