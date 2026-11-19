@@ -1,6 +1,7 @@
 @echo off
 setlocal EnableExtensions
 cd /d "%~dp0"
+set "LAUNCHER_NAME=%~nx0"
 
 set "RUNESCHEMA_ROOT_LAUNCHER=1"
 
@@ -28,6 +29,13 @@ if not "%BUILD_EXIT%"=="0" (
 ) else (
     echo.
     echo RuneSchema build completed successfully.
+    echo Packages: %~dp0dist
+    call :hold
 )
 
 exit /b %BUILD_EXIT%
+
+:hold
+rem Keep a double-clicked window open; return at once when run from a console or script.
+echo %CMDCMDLINE% | find /i "%LAUNCHER_NAME%" >nul && pause
+exit /b 0
