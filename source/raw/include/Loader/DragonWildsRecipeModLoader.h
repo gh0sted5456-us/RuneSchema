@@ -15,6 +15,7 @@ namespace RC::Unreal { class UFunction; }
 #include "Core/RecipeBatchWork.h"
 #include "SDK/WeakObjectHandle.h"
 #include "Core/RecipeCatalog.h"
+#include "Core/RecipeDefinitionIndex.h"
 
 namespace RC::Unreal {
     class UClass;
@@ -154,6 +155,16 @@ namespace DragonWilds {
         struct RecipeLease { int32_t Index; RC::StringType Path; };
         std::unordered_map<RC::StringType, RecipeLease> m_vendorRecipeLeases;
         std::vector<RC::Unreal::UObject*> m_ownedRuntimeRecipes;
+        std::unordered_set<RC::Unreal::UObject*> m_ownedRuntimeRecipeSet;
+        // Owner/key lookups and DataTable targets over m_recipeDefs, which is
+        // only appended to or edited in place with the same identity.
+        mutable PS::RecipeDefinitionIndex::Definitions<RC::StringType> m_definitionIndex;
+        PS::RecipeDefinitionIndex::PlacementTargets m_placementTargets;
+        const PS::RecipeDefinitionIndex::Definitions<RC::StringType>& DefinitionIndex() const;
+        // Stack-owned during one synchronous pass: repeated ItemData references
+        // resolve once instead of once per recipe.
+        PS::RecipeDefinitionIndex::PassCache<std::string>* m_itemReferenceCache=nullptr;
+        RC::Unreal::UClass* m_packageClass=nullptr;
         std::vector<RC::Unreal::UObject*> m_runtimePackages;
         uint64_t m_recipeRevision=0;
         RC::Unreal::UObject* LiveRecipe(const RC::StringType& key) const;

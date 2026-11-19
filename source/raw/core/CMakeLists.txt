@@ -688,6 +688,10 @@ if(PROJECT_IS_TOP_LEVEL)
     target_include_directories(storefront-lanes PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../include")
     target_compile_features(storefront-lanes PRIVATE cxx_std_23)
     add_test(NAME storefront-lanes COMMAND storefront-lanes)
+    add_executable(recipe-definition-index ../tests/recipe-definition-index.cpp)
+    target_include_directories(recipe-definition-index PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../include")
+    target_compile_features(recipe-definition-index PRIVATE cxx_std_23)
+    add_test(NAME recipe-definition-index COMMAND recipe-definition-index)
     add_executable(state-storage-contract ../tests/state-storage-contract.cpp)
     add_test(NAME state-storage-contract COMMAND state-storage-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Runtime/HostServices.cpp"

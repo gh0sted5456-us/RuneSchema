@@ -11,9 +11,10 @@ int main(int argc,char** argv) {
     const auto require=[](bool value,const char* message){if(!value)throw std::runtime_error(message);};
     require(source.find("static RC::StringType RecipeIdentity")!=std::string::npos,
         "Recipe runtime maps are not namespaced by ModID");
-    require(source.find("if(!match && !qualified)")!=std::string::npos,
+    // The index reproduces the old scans exactly; recipe-definition-index tests that.
+    require(source.find("if(!match.Index && !qualified)match=index.AnyOwner(key);")!=std::string::npos,
         "Unique global authored recipe fallback is missing");
-    require(source.find("if(match)return nullptr;")!=std::string::npos,
+    require(source.find("if(match.Ambiguous)return nullptr;")!=std::string::npos,
         "Ambiguous recipe names are not rejected");
     require(source.find("wide.starts_with(TEXT(\"/\"))")!=std::string::npos,
         "Cooked RecipeData path resolution is missing");
