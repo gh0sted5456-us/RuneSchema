@@ -112,7 +112,7 @@ inline std::optional<Flag> ParseStatement(std::string_view statement,std::string
 }
 
 // Reads every mod folder. record=true lets the caller pin first-seen keys in helpy-state.json.
-inline Snapshot Read(const fs::path& folder,const Signature::Verifier& verify,int64_t now,bool record=true){
+inline Snapshot Read(const fs::path& folder,const Signature::Verifier& verifier,int64_t now,bool record=true){
     Snapshot snapshot;snapshot.State=ReadState(folder);bool changed=false;
     std::error_code error;
     if(!fs::is_directory(folder,error))return snapshot;
@@ -159,7 +159,7 @@ inline Snapshot Read(const fs::path& folder,const Signature::Verifier& verify,in
                 const auto statement=row.value("statement",std::string{});std::vector<uint8_t> signature;
                 try{signature=Signature::FromHex(row.value("sig",std::string{}));}catch(...){++status.Rejected;continue;}
                 auto flag=ParseStatement(statement,status.Id);
-                if(!flag||!verify(key,statement,signature)){++status.Rejected;continue;}
+                if(!flag||!verifier(key,statement,signature)){++status.Rejected;continue;}
                 ++status.Valid;
                 auto& slot=newest[{flag->Mod,flag->Target,flag->Id,flag->Name}];
                 // Highest seq wins; on a tie the pause stands, so a replayed "off" cannot lift it.
