@@ -33,6 +33,7 @@
 #include "Core/XboxCharacterSaves.h"
 #include "Runtime/Storefront.h"
 #include "Runtime/HelpyPlayerAccess.h"
+#include "Loader/WorldSaveIdentity.h"
 #include "Loader/Spawn/GhostMaterials.h"
 #include "Unreal/Engine/UDataTable.hpp"
 #include "Unreal/Hooks.hpp"

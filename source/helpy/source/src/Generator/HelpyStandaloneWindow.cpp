@@ -13,6 +13,7 @@
 #include "Generator/BugReportPanel.h"
 #include "Generator/ItemPreviewPanel.h"
 #include "Generator/RuneSchemaSettingsPanel.h"
+#include "Generator/DeliveryFlagsPanel.h"
 #include "Generator/HudExtensionsPanel.h"
 #include "Generator/HelpyPerformance.h"
 #include "Generator/HelpyCoordinates.h"
@@ -1992,7 +1993,7 @@ void RenderHelpyTopics(){
 void RenderSettingsPage(const HelpyImGuiTheme::Theme& t){
     RuneSchemaSettingsPanel::TopicSettings=RenderHelpyTopics;
     auto& selected=SettingsCategory;
-    constexpr std::array labels{"Helpy","Server access","RuneSchema","Appearance","Diagnostics","Backgrounds","Updates & runtime","Workspaces"};
+    constexpr std::array labels{"Helpy","Server access","RuneSchema","Appearance","Diagnostics","Backgrounds","Updates & runtime","Workspaces","Deliveries"};
 #if defined(HELPY_PREVIEW)
     if(PreviewBackgroundsTab)selected=5;
     if(PreviewUpdatesTab)selected=6;
@@ -2023,6 +2024,7 @@ void RenderSettingsPage(const HelpyImGuiTheme::Theme& t){
             changed|=HelpyImGuiTheme::Toggle("Journal",&options.Journal);
             if(changed)HelpyImGuiTheme::SaveCurrent();HelpyMenu::EndBody();break;
         }
+        case 8:DeliveryFlagsPanel::Render();break;
         }
     }
     PS::HelpyImGuiTheme::EndPanel();ImGui::PopID();ImGui::PopStyleColor();
@@ -5236,7 +5238,7 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                     for(int attempt=0;attempt<5&&(!GImGui->NavWindow||!std::strstr(GImGui->NavWindow->Name,"/utilities_"));++attempt)press(XINPUT_GAMEPAD_LEFT_SHOULDER);
                     if(!GImGui->NavWindow||!std::strstr(GImGui->NavWindow->Name,"/utilities_"))throw std::runtime_error("Controller could not reach the Tools categories with a bumper");
                     const auto oldSettingsCategory=SettingsCategory;
-                    constexpr std::array settingsLabels{"Helpy","Server access","RuneSchema","Appearance","Diagnostics","Backgrounds","Updates & runtime","Workspaces"};
+                    constexpr std::array settingsLabels{"Helpy","Server access","RuneSchema","Appearance","Diagnostics","Backgrounds","Updates & runtime","Workspaces","Deliveries"};
                     CurrentPage=Page::Settings;
                     for(size_t category=0;category<settingsLabels.size();++category){
                         SettingsCategory=int(category);ImGui::ClearActiveID();frame();frame();
