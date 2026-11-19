@@ -22,6 +22,8 @@ FetchContent_MakeAvailable(helpy_sdl)
 find_package(SDL3 3.4.16 EXACT REQUIRED CONFIG PATHS "${helpy_sdl_SOURCE_DIR}/cmake" NO_DEFAULT_PATH)
 get_target_property(HELPY_SDL_RUNTIME SDL3::SDL3-shared IMPORTED_LOCATION)
 configure_file("${HELPY_SDL_RUNTIME}" "${CMAKE_CURRENT_BINARY_DIR}/SDL3.dll" COPYONLY)
+# Helpy.exe and the plugin DLLs are written to CMAKE_BINARY_DIR; in the universal build that is not this folder.
+configure_file("${HELPY_SDL_RUNTIME}" "${CMAKE_BINARY_DIR}/SDL3.dll" COPYONLY)
 set_source_files_properties(source/resources/RSMK.rc PROPERTIES OBJECT_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/../../resources/tools/build-helpy-cache.ps1;${CMAKE_CURRENT_SOURCE_DIR}/../../resources/tools/repair-runeschema.ps1;${CMAKE_CURRENT_SOURCE_DIR}/../../resources/helpy-ui/v1/nexus.png;${CMAKE_CURRENT_SOURCE_DIR}/../../resources/helpy-ui/v1/loading-ring.png;${CMAKE_CURRENT_SOURCE_DIR}/../../licenses/ModMenu-MIT.txt;${CMAKE_CURRENT_SOURCE_DIR}/../../resources/map-atlas/Scorned-Art.png")
 add_library(helpy_imgui STATIC vendor/imgui/imgui.cpp vendor/imgui/imgui_draw.cpp
