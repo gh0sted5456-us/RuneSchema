@@ -49,6 +49,8 @@
 #include "Core/CacheBundleIO.h"
 #include "Core/ItemDelivery.h"
 #include "Generator/HelpyGrantBatch.h"
+#include "Runtime/HelpyDeliveryGate.h"
+#include "Loader/WorldSaveIdentity.h"
 #include "Unreal/Property/FEnumProperty.hpp"
 using namespace DragonWilds::SpawnRuntime;
 #include <algorithm>

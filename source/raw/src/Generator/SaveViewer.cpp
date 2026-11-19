@@ -1,5 +1,6 @@
 #include "Generator/SaveViewer.h"
 #include "Core/RuneSchemaDataRoot.h"
+#include "Runtime/HelpyDeliveryGate.h"
 #include "Generator/AssetSearch.h"
 #include "Generator/SaveReport.h"
 #include "Generator/ItemCatalogMetadata.h"

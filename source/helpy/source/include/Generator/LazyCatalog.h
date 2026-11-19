@@ -23,13 +23,13 @@ using json=nlohmann::json;
 struct CachedWindow {json Rows=json::array();std::string NextCursor;bool HasMore=true;uint64_t Generation=0,LastUsed=0;std::string Coverage;bool CachePreview=false,Stale=false;};
 struct State {
     json Rows=json::array();
-    json RefreshRows=json::array();
+    json RefreshRows=json::array(),BrowsePreview=json::array();
     size_t RefreshRequired=0;
     std::string Query,NextCursor,LastError,Coverage;
     std::string PopulationStage{"checking-cache"};
     uint64_t PopulationDone=0,PopulationTotal=0;
     bool CacheHit=false,CheckingChanges=false,Refreshing=false,CachePreview=false;
-    bool HasMore=true,Pending=false,Started=false,PreparingAlphabetical=false;
+    bool HasMore=true,Pending=false,Started=false,PreparingAlphabetical=false,StartupBrowse=false,Stopped=false;
     uint64_t AppliedRevision=0,CancelGeneration=1,ActiveRequestId=0,RuntimeGeneration=0,LastResponseId=0;
     uint64_t CacheClock=0,RowsRevision=0;
     int FillTarget=0,StalledWindows=0;
@@ -90,6 +90,10 @@ inline void ConfigureRemote(std::function<bool(json)> submit,std::function<void(
 inline void ClearRemote(){DrainCancellations();if(LocalShutdown)LocalShutdown();LocalSubmit={};LocalPoll={};LocalShutdown={};LocalWaiting={};IgnoreResponse={};RemoteSubmit={};RemoteCancel={};}
 
 inline State& For(int category){return Windows[static_cast<size_t>(std::clamp(category,0,2))];}
+inline const json& BrowseRows(){
+    const auto& state=For(0);
+    return state.Query.empty()&&!state.Rows.empty()?state.Rows:state.BrowsePreview;
+}
 inline const char* KeyFor(int category){return category==0?"Items":"Definitions";}
 inline std::string RandomIdentity(const json& row) {
     if(!row.is_object())return {};
@@ -154,7 +158,13 @@ inline bool Request(int category,const char* mode,const std::string& query,bool 
 }
 inline bool Search(int category,const std::string& query) {
     auto& state=For(category);const auto generation=SpawnToolRequests::CurrentGeneration();
+    if(category==0&&state.Query.empty()&&!state.Rows.empty()&&!query.empty()){
+        const auto count=std::min(state.Rows.size(),size_t(InitialRows));
+        state.BrowsePreview=json::array();
+        for(size_t i=0;i<count;++i)state.BrowsePreview.push_back(state.Rows[i]);
+    }
     SaveCache(category);
+    state.Stopped=false;state.StartupBrowse=false;
     ++state.CancelGeneration;QueueCancel(category,state.CancelGeneration);
     state.Pending=false;state.ActiveRequestId=0;
     if(RestoreCache(category,query,generation)){
@@ -165,6 +175,7 @@ inline bool Search(int category,const std::string& query) {
 }
 inline bool Retry(int category) {
     auto& state=For(category);const auto query=state.Query;
+    state.Stopped=false;state.StartupBrowse=false;
     ++state.CancelGeneration;QueueCancel(category,state.CancelGeneration);
     state.Pending=false;state.ActiveRequestId=0;
     return Request(category,BrowseMode(category),query,true,InitialRows,{},1);
@@ -172,7 +183,8 @@ inline bool Retry(int category) {
 inline void CancelLoading(int category){
     auto& state=For(category);++state.CancelGeneration;QueueCancel(category,state.CancelGeneration);
     state.Pending=false;state.ActiveRequestId=0;state.Refreshing=false;state.RefreshRows=json::array();state.RefreshRequired=0;state.PreparingAlphabetical=false;
-    state.LastError="Loading cancelled. Search again or retry this list.";
+    state.Stopped=true;state.StartupBrowse=false;state.CheckingChanges=false;
+    state.PopulationStage="items-ready";state.LastError.clear();
 }
 inline void CheckTimeouts(std::chrono::steady_clock::time_point now=std::chrono::steady_clock::now()) {
     PumpCancellations();
@@ -187,7 +199,7 @@ inline void CheckTimeouts(std::chrono::steady_clock::time_point now=std::chrono:
 }
 inline bool RequestMore(int category) {
     auto& state=For(category);const char* mode=BrowseMode(category);
-    if(!state.Started||!state.HasMore||state.Pending||!state.LastError.empty())return false;
+    if(!state.Started||!state.HasMore||state.Pending||state.Stopped||!state.LastError.empty())return false;
     if(std::chrono::steady_clock::now()<state.ResumeAt)return false;
     return Request(category,mode,state.Query,false,MoreRows,state.NextCursor,3);
 }
@@ -204,6 +216,7 @@ inline void FirstOpen(uint64_t generation) {
     FirstOpenGeneration=generation;FirstOpenPendingGeneration=0;
     auto& state=For(0);if(state.RuntimeGeneration!=generation){SaveCache(0);const auto cancel=state.CancelGeneration;state=State{};state.CancelGeneration=cancel;}state.RuntimeGeneration=generation;
     if(RestoreCache(0,{},generation))return;
+    state.StartupBrowse=true;
     if(!Request(0,BrowseMode(0),{},true,InitialRows,{},2)){FirstOpenPendingGeneration=generation;state.LastError="Waiting for the runtime to accept the initial browse request.";}
 }
 inline void BackendSignal(uint64_t generation){BackendGeneration.store(generation,std::memory_order_release);}
@@ -211,7 +224,8 @@ inline void PumpBackendSignal(){
     const auto generation=BackendGeneration.exchange(0,std::memory_order_acquire);
     if(!generation||FirstOpenPendingGeneration!=generation)return;
     auto& state=For(0);
-    if(state.Pending||state.Started){FirstOpenPendingGeneration=0;return;}
+    if(state.Pending||state.Started||state.Stopped){FirstOpenPendingGeneration=0;return;}
+    state.StartupBrowse=true;
     if(Request(0,BrowseMode(0),{},true,InitialRows,{},2)){FirstOpenPendingGeneration=0;state.LastError.clear();}
 }
 inline void ApplyWindow(const json& window,uint64_t revision) {
@@ -270,12 +284,13 @@ inline void ApplyWindow(const json& window,uint64_t revision) {
     state.StalledWindows=!cacheWait&&!reset&&state.HasMore&&received==before&&state.NextCursor==previousCursor?state.StalledWindows+1:0;
     if(state.StalledWindows>=3&&state.LastError.empty())state.LastError="No additional items returned. Refresh the current list to retry.";
     SaveCache(category);
-    if(state.Started&&state.HasMore&&state.LastError.empty()&&(state.Refreshing||static_cast<int>(state.Rows.size())<state.FillTarget))RequestMore(category);
+    if(!state.Stopped&&state.Started&&state.HasMore&&state.LastError.empty()&&(state.Refreshing||static_cast<int>(state.Rows.size())<state.FillTarget))RequestMore(category);
 }
 inline void Apply(const json& snapshot,uint64_t revision) {
     if(snapshot.contains("_QueryResults")&&snapshot["_QueryResults"].is_array())for(const auto& result:snapshot["_QueryResults"]) {
         if(result.contains("CatalogWindow")&&result["CatalogWindow"].is_object())ApplyWindow(result["CatalogWindow"],revision);
-        else for(auto& state:Windows)if(state.Pending){state.Pending=false;state.ActiveRequestId=0;state.LastError=result.value("Status",std::string("The runtime returned an incomplete item response. Retry loading items."));}
+        else if(const auto id=result.value("RequestId",uint64_t{});id)
+            for(auto& state:Windows)if(state.Pending&&state.ActiveRequestId==id){state.Pending=false;state.ActiveRequestId=0;state.LastError=result.value("Status",std::string("The runtime returned an incomplete catalogue response. Retry loading the list."));}
     }
     if(snapshot.contains("CatalogWindow")&&snapshot["CatalogWindow"].is_object())ApplyWindow(snapshot["CatalogWindow"],revision);
 }
@@ -297,9 +312,9 @@ inline void InvalidateSources(bool removed){
     for(size_t i=0;i<Windows.size();++i){auto& state=Windows[i];
         SaveCache(static_cast<int>(i));for(auto& [query,cache]:state.Cache)cache.Stale=true;
         ++state.CancelGeneration;QueueCancel(static_cast<int>(i),state.CancelGeneration);
-        state.Pending=false;state.ActiveRequestId=0;state.CheckingChanges=true;
+        state.Pending=false;state.ActiveRequestId=0;state.CheckingChanges=!state.Stopped;
         state.RefreshRows=json::array();state.RefreshRequired=0;state.Refreshing=false;
-        if(state.Started||!state.Rows.empty())Request(static_cast<int>(i),BrowseMode(static_cast<int>(i)),state.Query,true,InitialRows,{},3);
+        if(!state.Stopped&&(state.Started||!state.Rows.empty()))Request(static_cast<int>(i),BrowseMode(static_cast<int>(i)),state.Query,true,InitialRows,{},3);
     }
 }
 inline void ClearPending(){for(auto& state:Windows){state.Pending=false;state.ActiveRequestId=0;}}
@@ -318,7 +333,7 @@ inline void RefreshSourceMetadata(const HelpyCacheSources::Plan& plan,const std:
     // only source-restricted result sets need another membership query.
     std::erase_if(state.Cache,[](const auto& pair){return pair.first.starts_with("__helpysource:");});
     ++state.AppliedRevision;state.RowsRevision=++RowsClock;
-    if(state.Query.starts_with("__helpysource:"))Retry(0);
+    if(!state.Stopped&&state.Query.starts_with("__helpysource:"))Retry(0);
 }
 inline void ResetForGeneration(uint64_t generation){for(auto& state:Windows){if(state.RuntimeGeneration!=generation){NativeIcons.clear();const auto cancel=state.CancelGeneration;state=State{};state.CancelGeneration=cancel;state.RuntimeGeneration=generation;state.RowsRevision=++RowsClock;}}}
 }

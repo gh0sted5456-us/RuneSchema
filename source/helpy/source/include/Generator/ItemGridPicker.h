@@ -45,7 +45,7 @@ inline json CachedSlotRows(const std::string& slot,const std::string& query,uint
     json result=json::array();const auto& cache=LazyCatalog::For(0);if(cache.RuntimeGeneration!=generation)return result;
     std::unordered_set<std::string> seen;const ItemCatalogFilter::Query filter(query);
     const auto append=[&](const json& rows){for(const auto& row:rows){const auto path=ItemPresentation::Text(row,"Path");if(result.size()<2048&&!path.empty()&&LoadoutEligibility::Matches(row,slot)&&filter(row)&&seen.insert(path).second)result.push_back(row);}};
-    append(cache.Rows);for(const auto& [key,window]:cache.Cache)if(window.Generation==generation)append(window.Rows);return result;
+    append(LazyCatalog::BrowseRows());return result;
 }
 inline void DrawItemBadges(const json& row,const ImVec2& min,const ImVec2& max,const HelpyImGuiTheme::Theme& theme,float badgeSize=28.0f,bool masterwork=true);
 struct State {
@@ -712,7 +712,7 @@ inline void DrawLoadingSpinner(const HelpyImGuiTheme::Theme& theme,const char* l
     HelpyLoadingIndicator::Draw(center,radius,theme,label,"Stage: "+loading.PopulationStage+"\n"+loading.Coverage+"\nItems received: "+std::to_string(loading.Rows.size())+"\nRecords checked: "+std::to_string(loading.PopulationDone)+(loading.PopulationTotal?" / "+std::to_string(loading.PopulationTotal):" (total not known yet)")+"\nChecking local cache before requesting missing data from the runtime.");
     const auto restore=ImGui::GetCursorScreenPos();ImGui::SetCursorScreenPos({center.x-radius,center.y-radius});ImGui::InvisibleButton("##loading-actions",{radius*2,radius*2},ImGuiButtonFlags_EnableNav);
     if(ImGui::BeginPopupContextItem("##loading-menu")){
-        if(ImGui::MenuItem("Cancel loading"))LazyCatalog::CancelLoading(0);
+        if(ImGui::MenuItem("Stop search"))HelpyCachedCatalog::StopSearch();
         if(ImGui::MenuItem("Retry this search"))LazyCatalog::Retry(0);ImGui::EndPopup();
     }ImGui::SetCursorScreenPos(restore);
 }
@@ -739,21 +739,37 @@ inline void SelectFamily(State& state,std::string family){
     state.ActiveCategory="All";state.FavoritesOnly=false;state.PersonalTag.clear();
     state.PageIndex=0;state.ResetScroll=true;state.CatalogRevision=0;state.Matches.clear();
 }
+inline bool ApplyPendingFamily(State& state,char* filter,bool shared){
+    if(state.PendingFamilyKey.empty())return false;
+    auto provider=std::exchange(state.PendingFamilyProvider,{});
+    SelectFamily(state,std::move(state.PendingFamilyKey));filter[0]=0;
+    auto& theme=HelpyImGuiTheme::Current;
+    if(!provider.empty()){
+        state.SourceFilter=ItemSource::Kind::Modded;state.SourceProvider=provider;
+        if(shared)theme.itemSource=provider;
+    }
+    if(shared)theme.itemCategory="All";
+    return true;
+}
+inline bool ApplySearchPreferences(State& state){
+    if(LazyCatalog::For(0).Stopped)return false;
+    const auto& theme=HelpyImGuiTheme::Current;
+    const auto source=ItemSource::Decode(theme.itemSource);
+    const auto provider=ContentSource::Valid(theme.itemSource)?theme.itemSource:std::string{};
+    if(state.SourceFilter==source&&state.SourceProvider==provider&&state.ActiveCategory==theme.itemCategory)return false;
+    state.SourceFilter=source;state.SourceProvider=provider;state.ActiveCategory=theme.itemCategory;
+    state.Matches.clear();state.CatalogRevision=0;state.PageIndex=0;state.ResetScroll=true;
+    return true;
+}
 inline Result Render(const char* id,const json& catalog,char* filter,size_t filterCapacity,char* selected,size_t selectedCapacity,State& state,uint64_t revision,bool allowMulti=true,bool quickActions=false,bool fillSpace=false,bool uniformCards=false,bool showControls=true,float fixedViewport=0,const LazyCatalog::State* localCatalog=nullptr) {
     ItemDetails::Poll();Result out;std::set<std::string> visibleIcons;ImGui::PushID(id);LoadViewPreference(state);SyncLegacySelection(state,selected);
     if(state.PersonalRevision!=HelpyPersonalization::Revision.load()){state.PersonalRevision=HelpyPersonalization::Revision.load();state.CatalogRevision=0;state.Matches.clear();state.PageIndex=0;state.ResetScroll=true;}
     if(!filter||!filterCapacity||!selected||!selectedCapacity){ImGui::TextDisabled("Item picker buffer unavailable.");ImGui::PopID();return out;}
-    if(!state.PendingFamilyKey.empty()){
-        auto provider=std::move(state.PendingFamilyProvider);state.PendingFamilyProvider.clear();
-        SelectFamily(state,std::move(state.PendingFamilyKey));filter[0]=0;
-        if(!provider.empty()){state.SourceFilter=ItemSource::Kind::Modded;state.SourceProvider=provider;if(!localCatalog)HelpyImGuiTheme::Current.itemSource=provider;}
-        if(!localCatalog)HelpyImGuiTheme::Current.itemCategory="All";
-        if(!localCatalog)LazyCatalog::Search(0,BackendQuery(state));
-    }
-    const auto sourcePreference=ItemSource::Decode(HelpyImGuiTheme::Current.itemSource);
-    const auto providerPreference=ContentSource::Valid(HelpyImGuiTheme::Current.itemSource)?HelpyImGuiTheme::Current.itemSource:std::string{};
-    if(!localCatalog&&(state.SourceFilter!=sourcePreference||state.SourceProvider!=providerPreference)){state.SourceFilter=sourcePreference;state.SourceProvider=providerPreference;state.CatalogRevision=0;state.Matches.clear();state.PageIndex=0;state.ResetScroll=true;LazyCatalog::Search(0,BackendQuery(state));}
-    const auto& theme=HelpyImGuiTheme::Current;if(!localCatalog&&state.ActiveCategory!=theme.itemCategory){state.ActiveCategory=theme.itemCategory;state.Matches.clear();state.CatalogRevision=0;state.PageIndex=0;state.ResetScroll=true;}
+    // Embedded bays already apply and publish search changes through their control strip.
+    const bool familyChanged=(showControls||localCatalog)&&ApplyPendingFamily(state,filter,!localCatalog);
+    const bool preferencesChanged=showControls&&!localCatalog&&ApplySearchPreferences(state);
+    if(!localCatalog&&(familyChanged||preferencesChanged))LazyCatalog::Search(0,BackendQuery(state));
+    const auto& theme=HelpyImGuiTheme::Current;
     if(state.ShowPlaceholders!=theme.itemShowPlaceholders||state.InternalNames!=theme.itemInternalNames){state.ShowPlaceholders=theme.itemShowPlaceholders;state.InternalNames=theme.itemInternalNames;state.PageIndex=0;state.ResetScroll=true;Rebuild(catalog,state,revision);}
     if(state.PageSize!=theme.itemPageSize){state.PageIndex=ItemPaging::Resize(state.PageIndex,state.PageSize,theme.itemPageSize);state.PageSize=ItemPaging::Size(theme.itemPageSize);state.ResetScroll=true;}
     if(state.CatalogRevision!=revision)Rebuild(catalog,state,revision);out.MatchCount=state.Matches.size();
@@ -777,25 +793,31 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
     if(!SearchAsYouType)state.SearchDue=0;
     if(enterSubmitted||searchSubmitted||(state.SearchDue>0&&ImGui::GetTime()>=state.SearchDue)){
         state.SearchDue=0;state.Query=filter;state.PageIndex=0;state.ResetScroll=true;
-        LazyCatalog::Search(0,BackendQuery(state));state.Matches.clear();state.CatalogRevision=0;
+        if(!localCatalog)LazyCatalog::Search(0,BackendQuery(state));
+        state.Matches.clear();state.CatalogRevision=0;
     }
-    const bool refreshing=HelpyCachedCatalog::Check&&HelpyCachedCatalog::Check->Interactive;
+    const bool canStop=!localCatalog&&HelpyCachedCatalog::SearchCanStop();
     const bool cachedUpdate=!localCatalog&&state.Query==filter&&HelpyCachedCatalog::RefreshAvailable()&&BackendQuery(state)==LazyCatalog::For(0).Query;
     if(ImGui::GetItemRectMax().x+spacing+refreshWidth<=ImGui::GetWindowPos().x+ImGui::GetWindowContentRegionMax().x)ImGui::SameLine();
-    ImGui::BeginDisabled(localCatalog||(!cachedUpdate&&(!HelpyCachedCatalog::Connected()||(!*filter&&state.FamilyKey.empty())))||refreshing);
-    if(cachedUpdate){auto green=HelpyImGuiTheme::Current.success;green.w=.3f;ImGui::PushStyleColor(ImGuiCol_Button,green);green.w=.5f;ImGui::PushStyleColor(ImGuiCol_ButtonHovered,green);ImGui::PushStyleColor(ImGuiCol_Border,HelpyImGuiTheme::Current.success);}
-    if(HelpyImGuiTheme::SoftButton(refreshing?"Refreshing...":"Refresh search")){
-        const bool changed=state.Query!=filter;state.SearchDue=0;state.SearchInput=filter;state.Query=filter;
-        if(changed){state.PageIndex=0;state.ResetScroll=true;state.Matches.clear();state.CatalogRevision=0;}
-        if(cachedUpdate){state.PageIndex=0;state.ResetScroll=true;state.Matches.clear();state.CatalogRevision=0;HelpyCachedCatalog::RefreshCached();}else HelpyCachedCatalog::RefreshSearch(BackendQuery(state));
-    }if(cachedUpdate)ImGui::PopStyleColor(3);ImGui::EndDisabled();
-    if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))HelpyImGuiTheme::Tooltip(cachedUpdate?"Updated cached results are ready. Click to apply them to this page. Your current results stay in place until you refresh.":"Check uncached mounted items for the text currently entered, with the selected category, source and family filters. Keeps cached results and saves discoveries for later searches. Requires the mod to be enabled and mounted in a connected game.\n%s",HelpyCachedCatalog::CheckStatus.c_str());
+    ImGui::BeginDisabled(localCatalog||(!canStop&&!cachedUpdate&&(!HelpyCachedCatalog::Connected()||(!*filter&&state.FamilyKey.empty()))));
+    if(cachedUpdate&&!canStop){auto green=HelpyImGuiTheme::Current.success;green.w=.3f;ImGui::PushStyleColor(ImGuiCol_Button,green);green.w=.5f;ImGui::PushStyleColor(ImGuiCol_ButtonHovered,green);ImGui::PushStyleColor(ImGuiCol_Border,HelpyImGuiTheme::Current.success);}
+    if(HelpyImGuiTheme::SoftButton(canStop?"Stop search":"Refresh search")){
+        if(canStop){state.SearchDue=0;HelpyCachedCatalog::StopSearch();}
+        else{
+            const bool changed=state.Query!=filter;state.SearchDue=0;state.SearchInput=filter;state.Query=filter;
+            if(changed){state.PageIndex=0;state.ResetScroll=true;state.Matches.clear();state.CatalogRevision=0;}
+            if(cachedUpdate){state.PageIndex=0;state.ResetScroll=true;state.Matches.clear();state.CatalogRevision=0;HelpyCachedCatalog::RefreshCached();}
+            else HelpyCachedCatalog::RefreshSearch(BackendQuery(state));
+        }
+    }if(cachedUpdate&&!canStop)ImGui::PopStyleColor(3);ImGui::EndDisabled();
+    if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))HelpyImGuiTheme::Tooltip(canStop?"Stop the current search and keep the items already found.":cachedUpdate?"Updated cached results are ready. Click to apply them to this page. Your current results stay in place until you refresh.":"Check uncached mounted items for the text currently entered, with the selected category, source and family filters. Keeps cached results and saves discoveries for later searches. Requires the mod to be enabled and mounted in a connected game.\n%s",HelpyCachedCatalog::CheckStatus.c_str());
 #if defined(HELPY_PREVIEW)
-    HelpyPreviewHooks::RefreshSearch=HelpyPreviewHooks::LastRect();
+    if(canStop)HelpyPreviewHooks::StopSearch=HelpyPreviewHooks::LastRect();
+    else HelpyPreviewHooks::RefreshSearch=HelpyPreviewHooks::LastRect();
 #endif
     const auto inlineControl=[&](float next){if(ImGui::GetItemRectMax().x+spacing+next<=ImGui::GetWindowPos().x+ImGui::GetWindowContentRegionMax().x)ImGui::SameLine();};
     inlineControl(settingsWidth);LayoutControls();state.GridView=theme.itemGridView;
-    const auto filterChanged=[&]{state.PageIndex=0;state.ResetScroll=true;LazyCatalog::Search(0,BackendQuery(state));state.Matches.clear();state.CatalogRevision=0;};
+    const auto filterChanged=[&]{state.PageIndex=0;state.ResetScroll=true;if(!localCatalog)LazyCatalog::Search(0,BackendQuery(state));state.Matches.clear();state.CatalogRevision=0;};
     const float categoryWidth=std::min(theme.X(155),width*.42f);
     ImGui::SetNextItemWidth(categoryWidth);
     if(ImGui::BeginCombo("##item-category",state.ActiveCategory=="All"?"All categories":state.ActiveCategory.c_str())){
@@ -803,7 +825,7 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
             state.ActiveCategory=category;HelpyImGuiTheme::Current.itemCategory=category;HelpyImGuiTheme::SaveCurrent();filterChanged();
         }ImGui::EndCombo();
     }
-    ImGui::SameLine();ImGui::SetNextItemWidth(std::max(1.f,width-categoryWidth-spacing));SourceControl(state,catalog,revision,filterChanged);
+    ImGui::SameLine();ImGui::SetNextItemWidth(std::max(1.f,width-categoryWidth-spacing));SourceControl(state,catalog,revision,filterChanged,!localCatalog);
     if(PersonalizationPanel::Filters(state.FavoritesOnly,state.PersonalTag)){state.CatalogRevision=0;state.Matches.clear();state.PageIndex=0;state.ResetScroll=true;}
     if(state.ActiveCategory!="All"||state.SourceFilter!=ItemSource::Kind::All||!state.SourceProvider.empty()||state.FavoritesOnly||!state.PersonalTag.empty()||!state.FamilyKey.empty()){
         HelpyMenu::NextControl("Clear filters");if(ImGui::SmallButton("Clear filters")){
@@ -826,17 +848,21 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
     }
     PopulationProgress(LazyCatalog::For(0),state.VisibleProgressIcons,true);
     }
-    if(!localCatalog&&LazyCatalog::For(0).Started&&LazyCatalog::For(0).Query!=BackendQuery(state)){LazyCatalog::Search(0,BackendQuery(state));state.Matches.clear();state.CatalogRevision=0;}
     const auto& lazy=localCatalog?*localCatalog:LazyCatalog::For(0);
+    if(!localCatalog&&lazy.Started&&!lazy.Stopped&&lazy.LastError.empty()){
+        const auto query=BackendQuery(state);
+        if(lazy.Query!=query){LazyCatalog::Search(0,query);state.Matches.clear();state.CatalogRevision=0;}
+    }
     if(!lazy.LastError.empty()&&!lazy.Pending){
         ImGui::PushStyleColor(ImGuiCol_Text,theme.warning);ImGui::TextWrapped("%s",lazy.LastError.c_str());ImGui::PopStyleColor();
         if(ImGui::SmallButton("Retry loading items"))LazyCatalog::Retry(0);
     }
-    if(!lazy.HasMore&&!lazy.Pending&&lazy.Started){
+    const bool hasMore=lazy.HasMore&&!lazy.Stopped;
+    if(!hasMore&&!lazy.Pending&&lazy.Started){
         const int last=std::max(0,static_cast<int>((state.Matches.size()+state.PageSize-1)/state.PageSize)-1);
         if(state.PageIndex>last){state.PageIndex=last;state.ResetScroll=true;}
     }
-    const auto page=ItemPaging::Slice(state.Matches.size(),state.PageIndex,state.PageSize,lazy.HasMore);
+    const auto page=ItemPaging::Slice(state.Matches.size(),state.PageIndex,state.PageSize,hasMore);
     const int wanted=(state.PageIndex+1)*state.PageSize;
     if(!localCatalog)LazyCatalog::FillTo(0,static_cast<int>(lazy.Rows.size())+std::max(0,wanted-static_cast<int>(state.Matches.size())));
     if(state.ProgressPage!=state.PageIndex){state.ProgressPage=state.PageIndex;state.VisibleProgressIcons.clear();}
@@ -888,7 +914,7 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
         ImGui::EndDragDropTarget();
     }
 
-    const bool populationWait=lazy.LastError.empty()&&(state.CatalogRevision!=revision||!lazy.Started||lazy.Pending||lazy.PreparingAlphabetical||lazy.HasMore)&&state.Matches.empty();
+    const bool populationWait=!lazy.Stopped&&lazy.LastError.empty()&&(state.CatalogRevision!=revision||!lazy.Started||lazy.Pending||lazy.PreparingAlphabetical||hasMore)&&state.Matches.empty();
     if(populationWait){if(localCatalog)ImGui::TextDisabled("Checking the cached matching items…");else{const auto progress=ItemPopulation::Describe(lazy.PopulationStage,false,lazy.PopulationDone,{},lazy.CheckingChanges,lazy.PopulationTotal);DrawLoadingSpinner(theme,progress.Label.c_str());}}
     else if(catalog.contains("Items")&&catalog["Items"].is_array()) {
         const auto& items=catalog["Items"];const int total=static_cast<int>(page.Count);
@@ -967,9 +993,9 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
     const auto splitMin=ImGui::GetItemRectMin(),splitMax=ImGui::GetItemRectMax();if(splitHover||splitActive)ImGui::GetWindowDrawList()->AddLine(ImVec2(splitMin.x,(splitMin.y+splitMax.y)*0.5f),ImVec2(splitMax.x,(splitMin.y+splitMax.y)*0.5f),ImGui::GetColorU32(theme.accentHover),theme.X(1.5f));
     ImGui::PopID();
     }
-    PageControls(state,state.Matches.size(),lazy.HasMore&&lazy.LastError.empty(),lazy.Pending||populationWait);
+    PageControls(state,state.Matches.size(),hasMore&&lazy.LastError.empty(),lazy.Pending||populationWait);
     if(lazy.LastError.empty()&&state.Matches.empty()&&!populationWait&&lazy.Started){
-        ImGui::TextDisabled("No matching items in the loaded runtime window.");
+        ImGui::TextDisabled(lazy.Stopped?"Search stopped. No items found yet.":"No matching items in the loaded runtime window.");
 #if defined(HELPY_PREVIEW)
         ++HelpyPreviewHooks::ItemEmptyNotices;
 #endif

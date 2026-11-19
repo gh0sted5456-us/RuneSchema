@@ -81,7 +81,7 @@ inline void Refresh(){
     std::set<std::string> seed(wiki.begin(),wiki.end());Labels.clear();
     for(const auto& glyph:PortraitGlyphs::All){const auto icon=std::string("/HelpyGlyph/")+glyph.Id+"."+glyph.Id;seed.insert(icon);Labels[icon]=glyph.Label;}
     const auto add=[&](const nlohmann::json& rows){if(!rows.is_array())return;for(const auto& row:rows){const auto icon=ItemPresentation::Text(row,"Icon");if(PlayerPortraits::Icon(icon)){seed.insert(icon);Labels[icon]=ItemPresentation::Text(row,"Name");}}};
-    add(LazyCatalog::For(0).Rows);add(NativeJournalCache::Entries);add(NativeJournalCache::BundleArt);
+    add(LazyCatalog::BrowseRows());add(NativeJournalCache::Entries);add(NativeJournalCache::BundleArt);
     for(const auto& [icon,texture]:ItemIconCache::detail::State().Textures)if(texture&&PlayerPortraits::Icon(icon))seed.insert(icon);
     Icons.assign(seed.begin(),seed.end());LastFilter="\1";
     Scan=std::async(std::launch::async,[sources,seed]{Listing result;std::set<std::string> icons=seed;size_t inspected=0;
