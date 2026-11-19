@@ -168,10 +168,11 @@ inline void Contents(){
     const bool wide=ImGui::GetContentRegionAvail().x>=t.X(560);
     if(ImGui::BeginTable("##inventory-workbench-panes",wide?2:1,ImGuiTableFlags_SizingStretchSame|ImGuiTableFlags_BordersInnerV)){
         ImGui::TableNextColumn();Inventory(280);if(wide)ImGui::TableNextColumn();ImGui::PushID("live-item-bay-pane");ImGui::SeparatorText("Item Bay");
-        if(!LazyCatalog::For(0).Started&&!LazyCatalog::For(0).Pending)LazyCatalog::Search(0,ItemGridPicker::BackendQuery(Bay));
+        if(!LazyCatalog::For(0).Started&&!LazyCatalog::For(0).Pending)LazyCatalog::FirstOpen(SpawnToolRequests::CurrentGeneration());
         Json catalog=Json::object();LazyCatalog::Overlay(catalog,0);
-        ItemBayBrowser::Controls(Bay,catalog,Revision+LazyCatalog::For(0).AppliedRevision,BaySearch,sizeof(BaySearch));
-        const auto result=ItemGridPicker::Render("live-inventory-item-bay",catalog,BaySearch,sizeof(BaySearch),BaySelected,sizeof(BaySelected),Bay,Revision+LazyCatalog::For(0).AppliedRevision,false,false,true,true,false,280);
+        const auto bayRevision=Revision+LazyCatalog::For(0).RowsRevision;
+        ItemBayBrowser::Controls(Bay,catalog,bayRevision,BaySearch,sizeof(BaySearch));
+        const auto result=ItemGridPicker::Render("live-inventory-item-bay",catalog,BaySearch,sizeof(BaySearch),BaySelected,sizeof(BaySelected),Bay,bayRevision,false,false,true,true,false,280);
         if(result.SelectedRow)SelectedBay=*result.SelectedRow;
         ImGui::BeginDisabled(SelectedBay.empty()||Container||Personal||delivering);if(HelpyImGuiTheme::SoftButton("Stage selected for delivery"))Stage(SelectedBay);ImGui::EndDisabled();ImGui::PopID();ImGui::EndTable();
     }

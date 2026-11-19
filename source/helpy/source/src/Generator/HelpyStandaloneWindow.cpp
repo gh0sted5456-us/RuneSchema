@@ -974,7 +974,8 @@ void RenderHome(const HelpyImGuiTheme::Theme& theme){
         if(HelpyImGuiTheme::SoftButton(("Notifications ("+std::to_string(NotificationsPanel::Inbox.Unread())+")").c_str(),{cacheWidth,0}))CurrentPage=Page::Notifications;
     }
     ImGui::Dummy({0,theme.Y(12)});
-    ItemGridPicker::PopulationProgress(LazyCatalog::For(0),{},false,true);
+    const auto& items=LazyCatalog::For(0);
+    if(items.StartupBrowse&&items.Rows.empty()&&!HelpyCachedCatalog::Check)ItemGridPicker::PopulationProgress(items,{},false,true);
     ImGui::Spacing();
     const float linkSize=theme.Y(40),linkGap=theme.X(16),linkWidth=linkSize*HomeLinks.size()+linkGap*(HomeLinks.size()-1);
     ImGui::SetCursorPosY(ImGui::GetCursorPosY()+std::max(0.f,ImGui::GetContentRegionAvail().y-linkSize-runtimeSize.y-runtimeGap-theme.Y(8)));
@@ -1709,7 +1710,7 @@ void RenderSettings(const HelpyImGuiTheme::Theme& t) {
         ImGui::PopID();
     };
     static std::string previewIconPath,previewItemName="Example item";static bool previewIconChosen=false;
-    if(!previewIconChosen){const auto& rows=LazyCatalog::For(0).Rows;if(rows.is_array()&&!rows.empty()){std::vector<size_t> candidates;for(size_t i=0;i<rows.size();++i)if(!rows[i].value("Icon",std::string{}).empty())candidates.push_back(i);if(!candidates.empty()){static std::mt19937 rng{std::random_device{}()};const auto index=candidates[std::uniform_int_distribution<size_t>(0,candidates.size()-1)(rng)];previewIconPath=rows[index].value("Icon",std::string{});previewItemName=rows[index].value("Name",std::string("Example item"));previewIconChosen=true;}}}
+    if(!previewIconChosen){const auto& rows=LazyCatalog::BrowseRows();if(rows.is_array()&&!rows.empty()){std::vector<size_t> candidates;for(size_t i=0;i<rows.size();++i)if(!rows[i].value("Icon",std::string{}).empty())candidates.push_back(i);if(!candidates.empty()){static std::mt19937 rng{std::random_device{}()};const auto index=candidates[std::uniform_int_distribution<size_t>(0,candidates.size()-1)(rng)];previewIconPath=rows[index].value("Icon",std::string{});previewItemName=rows[index].value("Name",std::string("Example item"));previewIconChosen=true;}}}
     const auto drawPreviewIcon=[&](const ImVec2& a,const ImVec2& b){if(previewIconPath.empty()||!ItemIconCache::Draw(previewIconPath,a,b,true)){const auto c=ImVec2((a.x+b.x)*.5f,(a.y+b.y)*.5f);HelpyImGuiTheme::DrawIcon(HelpyImGuiTheme::Icon::Item,c,std::min(b.x-a.x,b.y-a.y)*0.72f,theme.icon);}};
     const auto sizingPreview=[&](){
         ImGui::PushID("sizing-preview");ImGui::PushStyleColor(ImGuiCol_ChildBg,theme.panel);HelpyImGuiTheme::BeginPanel("##preview",ImVec2(0,t.Y(168.0f)),true);ImGui::TextUnformatted("Sizing preview");ImGui::Separator();
@@ -3306,7 +3307,7 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
             }
             {
                 CurrentPage=Page::Home;RenderFrame();RenderFrame();previewLoading=true;
-                auto& loading=LazyCatalog::For(0);const auto saved=loading;loading.Started=true;loading.Pending=true;loading.RequestedAt=std::chrono::steady_clock::now();loading.Rows=nlohmann::json::array();loading.RowsRevision=++LazyCatalog::RowsClock;loading.HasMore=true;loading.PreparingAlphabetical=true;loading.PopulationStage="discovering-items";loading.PopulationDone=0;
+                auto& loading=LazyCatalog::For(0);const auto saved=loading;loading.Started=true;loading.StartupBrowse=true;loading.Pending=true;loading.RequestedAt=std::chrono::steady_clock::now();loading.Rows=nlohmann::json::array();loading.RowsRevision=++LazyCatalog::RowsClock;loading.HasMore=true;loading.PreparingAlphabetical=true;loading.PopulationStage="discovering-items";loading.PopulationDone=0;
                 const auto homeRings=HelpyPreviewHooks::LoadingRings;
                 CurrentPage=Page::Home;RenderFrame();PreviewCapture=output/"home-loading.png";RenderFrame();PreviewCapture.clear();
                 if(HelpyPreviewHooks::LoadingRings==homeRings)throw std::runtime_error("Home loading fixture failed to draw its centered ring");
@@ -3318,6 +3319,8 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 if(std::abs((homeDetails.x+homeDetails.z-orb.x-orb.z)*.5f)>2)throw std::runtime_error("Home loading tooltip must be anchored to its ring, not previous navigation");
                 PreviewCapture=output/"home-loading-hover.png";RenderFrame();PreviewCapture.clear();HelpyPreviewHooks::MouseEnabled=false;
                 const auto bayRings=HelpyPreviewHooks::LoadingRings;
+                loading.StartupBrowse=false;loading.PopulationStage="searching-live-items";RenderFrame();
+                if(HelpyPreviewHooks::LoadingRings!=bayRings)throw std::runtime_error("Item Bay search drew a loading ring on Home");
                 CurrentPage=Page::Items;RenderFrame();PreviewCapture=output/"item-service-loading.png";RenderFrame();PreviewCapture.clear();
                 if(HelpyPreviewHooks::LoadingRings==bayRings)throw std::runtime_error("Empty Item Bay failed to draw its centered loading ring");
                 if(HelpyPreviewHooks::LoadingRings-bayRings!=2)throw std::runtime_error("Empty Item Bay must show only one loading wheel per frame");
@@ -4245,7 +4248,7 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                 const auto submit=LazyCatalog::RemoteSubmit;const auto poll=LazyCatalog::LocalPoll;const bool external=PluginRuntimeServices::ExternalDesktop;const auto gamePid=PluginRuntimeServices::GameProcessId.load();
                 LazyCatalog::LocalPoll=HelpyCachedCatalog::PumpCheck; // Preview supplies its own catalog; pump only the production manual-check job.
                 std::vector<nlohmann::json> refreshed;LazyCatalog::RemoteSubmit=[&](auto request){refreshed.push_back(std::move(request));return false;};PluginRuntimeServices::ExternalDesktop=false;
-                const auto originalPicker=ItemGridPicker::Bay.Picker;const auto originalFilter=std::string(ItemGridPicker::Bay.Filter);const auto originalQuery=LazyCatalog::For(0).Query;const bool originalMore=LazyCatalog::For(0).HasMore;
+                const auto originalPicker=ItemGridPicker::Bay.Picker;const auto originalFilter=std::string(ItemGridPicker::Bay.Filter);const auto originalQuery=LazyCatalog::For(0).Query;const bool originalMore=LazyCatalog::For(0).HasMore,originalStopped=LazyCatalog::For(0).Stopped;
                 auto& cache=LazyCatalog::For(0);cache.Query="item";cache.Pending=false;cache.HasMore=false;cache.PreparingAlphabetical=false;cache.LastError.clear();
                 ItemGridPicker::Bay.Picker.Query="item";ItemGridPicker::Bay.Picker.SearchInput="item";ItemGridPicker::Bay.Picker.SearchDue=0;ItemGridPicker::Bay.Picker.CatalogRevision=0;ItemGridPicker::Bay.Picker.PageIndex=0;std::snprintf(ItemGridPicker::Bay.Filter,sizeof(ItemGridPicker::Bay.Filter),"item");
                 CurrentPage=Page::Items;for(int i=0;i<3;++i)RenderFrame();
@@ -4256,6 +4259,14 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
                     const auto evidence=nlohmann::json{{"Requests",refreshed},{"Query",activeQuery},{"Before",rows},{"After",LazyCatalog::For(0).Rows},{"Pending",LazyCatalog::For(0).Pending},{"Family",ItemGridPicker::Bay.Picker.FamilyKey},{"Check",HelpyCachedCatalog::CheckStatus},{"Rect",{Hooks::RefreshSearch.x,Hooks::RefreshSearch.y,Hooks::RefreshSearch.z,Hooks::RefreshSearch.w}}}.dump();
                     PreviewCapture=output/"item-refresh-failed.png";RenderFrame();PreviewCapture.clear();throw std::runtime_error("Refresh search did not prioritize the active filtered query and retain cached rows: "+evidence);
                 }
+                LazyCatalog::RemoteSubmit=[&](auto request){refreshed.push_back(std::move(request));return true;};
+                click(Hooks::RefreshSearch);RenderFrame();
+                const auto cartAtStop=ItemGridPicker::SharedCart.Payload();
+                const auto selectedAtStop=ItemGridPicker::Bay.Picker.SelectedPaths;
+                click(Hooks::StopSearch);RenderFrame();
+                if(!cache.Stopped||cache.Pending||cache.Rows!=rows||ItemGridPicker::SharedCart.Payload()!=cartAtStop||ItemGridPicker::Bay.Picker.SelectedPaths!=selectedAtStop)
+                    throw std::runtime_error("Stop search did not preserve the current results, selection and cart");
+                cache.Stopped=originalStopped;
                 PluginRuntimeServices::ExternalDesktop=true;PluginRuntimeServices::GameProcessId=0;const auto requests=refreshed.size();const auto available=SpawnToolRequests::RemoteAvailable;SpawnToolRequests::RemoteAvailable=[]{return false;};
                 const auto cart=ItemGridPicker::SharedCart;const auto picker=ItemGridPicker::Bay.Picker;const auto primary=std::string(ItemGridPicker::Bay.Selected);
                 ItemGridPicker::SharedCart=ItemCart::Model{};auto& selection=ItemGridPicker::Bay.Picker;selection.SelectedPaths.clear();selection.SelectedRows=nlohmann::json::object();selection.SelectedPath.clear();ItemGridPicker::Bay.Selected[0]=0;selection.MultiSelect=true;

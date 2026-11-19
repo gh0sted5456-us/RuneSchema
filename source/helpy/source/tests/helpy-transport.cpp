@@ -545,8 +545,10 @@ int main(){
         const json cape={{"Name","Native cape"},{"Path","/Game/Cape.Cape"},{"SlotStrategy","Cape"},{"NativeSlotVerified",true}};
         auto head=cape;head["Path"]="/Game/Head.Head";head["SlotStrategy"]="Head";
         auto unverified=cape;unverified["Path"]="/Game/Unknown.Unknown";unverified.erase("NativeSlotVerified");
-        cache.Rows=json::array({cape,head,unverified});cache.Cache["duplicate"]={json::array({cape}),"",false,cache.RuntimeGeneration};
-        auto stale=cape;stale["Path"]="/Game/Stale.Stale";cache.Cache["stale"]={json::array({stale}),"",false,cache.RuntimeGeneration+1};
+        cache.BrowsePreview=json::array({cape,head,unverified,cape});
+        auto searchOnly=cape;searchOnly["Path"]="/Game/SearchOnly.SearchOnly";
+        cache.Rows=json::array({searchOnly});
+        cache.Cache["unrelated-global-filter"]={cache.Rows,"",false,cache.RuntimeGeneration};
         P::ChangeGear({{"Name","Player"}},{{"Location","Cape"}});
         assert(P::GearRows==json::array({cape})&&cache.Query=="unrelated-global-filter"&&P::Bay.ActiveCategory=="All");
         P::Open=false;P::ChangingGear=false;P::Refresh=false;cache=saved;}

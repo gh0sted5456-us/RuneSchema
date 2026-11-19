@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 # Framework and bundled Helpy share this release version.
-project(Helpy VERSION 0.9.0.0 LANGUAGES C CXX RC)
+project(Helpy VERSION 0.9.0.1 LANGUAGES C CXX RC)
 if(NOT WIN32 OR NOT MSVC)
   message(FATAL_ERROR "Helpy requires the Windows x64 MSVC toolchain")
 endif()
@@ -379,7 +379,7 @@ target_sources(source-cache PRIVATE source/src/HelpyPaths.cpp)
 target_sources(source-cache-core PRIVATE source/src/HelpyPaths.cpp)
 add_executable(icon-demand source/tests/icon-demand.cpp source/src/Generator/ToolRequestState.cpp source/src/HelpyPaths.cpp source/src/Core/ConfigFiles.cpp)
 target_compile_options(icon-demand PRIVATE /UNDEBUG)
-target_link_libraries(icon-demand PRIVATE helpy_imgui)
+target_link_libraries(icon-demand PRIVATE helpy_ui)
 add_test(NAME icon-demand COMMAND icon-demand)
 set_tests_properties(icon-demand PROPERTIES ENVIRONMENT "LOCALAPPDATA=${CMAKE_CURRENT_BINARY_DIR}/test-icon-demand-user")
 add_test(NAME helpy-source-cache-parity COMMAND "${CMAKE_COMMAND}" -E compare_files

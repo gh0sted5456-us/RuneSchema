@@ -177,11 +177,12 @@ int main(){
     assert(health.Rows.size()==1&&!health.Pending&&!health.PreparingAlphabetical&&health.LastError.empty());
     const auto beforeCachedHealth=accepted;assert(Search(0,"Health")&&accepted==beforeCachedHealth&&!health.Pending);
     assert(Search(0,"uncached"));const auto cancelId=health.CancelGeneration,requestId=health.ActiveRequestId;
-    CancelLoading(0);assert(!health.Pending&&!health.PreparingAlphabetical&&!health.LastError.empty());
+    CancelLoading(0);assert(health.Stopped&&!health.Pending&&!health.PreparingAlphabetical&&health.LastError.empty());
+    assert(!RequestMore(0));
     ApplyWindow({{"Category",0},{"CancelGeneration",cancelId},{"RuntimeGeneration",13},{"RequestId",requestId},
         {"Rows",json::array({{{"Path","/Game/Late"}}})},{"HasMore",false}},141);
-    assert(health.Rows.empty()&&!health.LastError.empty());
-    assert(Search(0,"preview"));
+    assert(health.Rows.empty()&&health.Stopped&&health.LastError.empty());
+    assert(Search(0,"preview")&&!health.Stopped);
     ApplyWindow({{"Category",0},{"CancelGeneration",health.CancelGeneration},{"RuntimeGeneration",13},{"RequestId",health.ActiveRequestId},
         {"Rows",json::array({{{"Path","/Mod/Cached"},{"Name","Cached"},{"SourceName","cached-mod"}}})},{"HasMore",false},{"AlphabeticalReady",true},{"CachePreview",true}},142);
     assert(health.CachePreview&&health.Rows.size()==1);
