@@ -48,8 +48,9 @@ int main(int argc,char** argv){try{
     Check(ui.contains("request[\"TargetLocation\"][\"Z\"]")&&travel.contains("groundHint.value_or(origin.Z())")&&travel.contains("job.GroundProbe.Resolve"),"Measured Z must guide streaming but never bypass runtime ground verification");
     Check(travel.contains("job.TerrainIgnored.push_back")&&travel.contains("LandingProbe::Yield")&&travel.contains("milliseconds(2)")&&travel.contains("job.GroundProbe={}"),"Terrain discovery and footprint checks must yield and discard samples when readiness changes");
     Check(travel.contains("if(groundContractFailed)throw;")&&travel.contains("[HELPY][MAP-TRAVEL]"),"Broken native contracts must stop with evidence");
-    Check(travel.contains("\"bShowLoadingScreen\",job.LongJump")&&travel.contains("job.LongJump=named||PS::MapTravel::LongJump(")
-        &&travel.find("job.LongJump=named")<travel.find("teleport.Invoke()"),"Long jumps (and Dragon Gate travel) use the native loading screen; short hops stay instant");
+    Check(travel.contains("{\"bShowLoadingScreen\",true}")&&!travel.contains("\"bShowLoadingScreen\",false")&&!travel.contains("\"bShowLoadingScreen\",job.")
+        &&travel.contains("job.LongJump=named||PS::MapTravel::LongJump(")&&travel.find("job.LongJump=named")<travel.find("teleport.Invoke()"),
+        "Every journey uses the native loading screen, so region-aware mods settle behind it; LongJump only informs listeners");
     {const auto before=travel.find("TEXT(\"RuneSchemaBeforeTravel\")"),commit=travel.find("job.Gate.Commit(ToolMapTravelTime())"),invoke=travel.find("teleport.Invoke()");
         const auto finish=travel.find("void ToolMapTravelFinish("),after=travel.find("TEXT(\"RuneSchemaAfterTravel\")"),reset=travel.find("ToolMapTravelReset();PS::SpawnToolRequests::Publish");
         Check(before!=std::string::npos&&commit<before&&before<invoke&&finish<after&&after<reset&&travel.contains("bRuneSchemaTravelListener")

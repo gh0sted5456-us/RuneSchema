@@ -298,8 +298,9 @@ namespace {
             if(ToolMapTravelTeleporting(pawn)){ToolMapTravelFinish("Another native journey started while preparing this destination; no additional teleport issued.");return true;}
             auto* service=job.Service.Get();if(!ToolMapTravelAlive(service))throw std::runtime_error("Native teleport service changed before departure");
             const bool named=job.AuthoredFloor.has_value();
-            // Long jumps use the game's loading screen so streaming and region changes (weather,
-            // environment, mod systems) settle behind it. Dragon Gate travel always has one.
+            // Every journey uses the game's loading screen, so streaming and region changes (weather,
+            // environment, mod systems) settle behind it instead of in front of the player. LongJump only
+            // tells travel listeners whether this is a long (300 m or more) or nearby hop.
             const auto origin=ActorHelper::GetActorLocation(pawn);
             job.LongJump=named||PS::MapTravel::LongJump({origin.X(),origin.Y(),origin.Z()},job.Landing);
             ActorHelper::FunctionCall teleport(service,ToolMapTravelContract(service,named));
@@ -314,14 +315,14 @@ namespace {
                 ActorHelper::FunctionCall rotation(pawn,TEXT("/Script/Engine.Actor:K2_GetActorRotation"));rotation.Invoke();
                 const auto facing=rotation.Result<FRotator>();
                 teleport.JsonArg(TEXT("TeleportParams"),{{"LocationName","None"},{"TargetLocation",{{"X",job.Landing.X},{"Y",job.Landing.Y},{"Z",job.Landing.Z}}},
-                    {"TargetRotation",{{"Pitch",facing.GetPitch()},{"Yaw",facing.GetYaw()},{"Roll",facing.GetRoll()}}},{"bShowLoadingScreen",job.LongJump},{"bNoCheck",false},{"bIsATest",false},{"TeleportationType","Teleport"},
+                    {"TargetRotation",{{"Pitch",facing.GetPitch()},{"Yaw",facing.GetYaw()},{"Roll",facing.GetRoll()}}},{"bShowLoadingScreen",true},{"bNoCheck",false},{"bIsATest",false},{"TeleportationType","Teleport"},
                     {"bVFXOnTeleportStart",true},{"bVFXOnTeleportEnd",true},{"bDropAnyLoadoutExclusiveEquipment",false}});
             }
             if(!job.Gate.Commit(ToolMapTravelTime()))throw std::runtime_error("Map travel preparation expired before departure");
             // Opted-in mods hear about the jump before it starts; Finish sends the matching AfterTravel.
             job.Listeners=ToolMapTravelListeners(activeWorld,controller,pawn);
-            PS::ConsolidatedLog<LogLevel::Normal>(STR("[RuneSchema] [HELPY][MAP-TRAVEL] departing long_jump={} loading_screen={} listeners={}\n"),
-                job.LongJump,job.LongJump,job.Listeners.size());
+            PS::ConsolidatedLog<LogLevel::Normal>(STR("[RuneSchema] [HELPY][MAP-TRAVEL] departing long_jump={} loading_screen=true listeners={}\n"),
+                job.LongJump,job.Listeners.size());
             if(!job.Listeners.empty()){
                 job.Notified=true;
                 ToolMapTravelNotify(job.Listeners,activeWorld,TEXT("RuneSchemaBeforeTravel"),TEXT("LongJump"),pawn,job.Landing,job.LongJump);
