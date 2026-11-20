@@ -66,8 +66,11 @@ struct View {
     const std::vector<const DiagnosticCenterModel::Group*>& Update(const DiagnosticCenterModel::Store& store,std::string_view query,
         bool showAll,bool onlyNew,int severityScope,int sortMode){
         const auto& groups=store.Groups();
+        // Unchanged frame: compare in place, without building a key (and a query copy) every frame.
+        if(m_valid&&m_key.Data==groups.data()&&m_key.Size==groups.size()&&m_key.Revision==store.Revision()
+            &&m_key.Query==query&&m_key.ShowAll==showAll&&m_key.OnlyNew==onlyNew&&m_key.Scope==severityScope
+            &&m_key.SortMode==sortMode)return Groups;
         const Key next{groups.data(),groups.size(),store.Revision(),std::string(query),showAll,onlyNew,severityScope,sortMode};
-        if(m_valid&&next==m_key)return Groups;
         Groups.clear();Groups.reserve(groups.size());
         for(const auto& group:groups)if(Matches(group,query,showAll,onlyNew,severityScope))Groups.push_back(&group);
         Sort(Groups,sortMode);

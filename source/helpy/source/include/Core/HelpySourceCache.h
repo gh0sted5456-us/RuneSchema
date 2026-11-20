@@ -203,6 +203,13 @@ inline std::string Error;
 inline std::function<bool(nlohmann::json&)> RemoteSnapshot;
 inline std::mutex PublishedMutex;
 inline nlohmann::json Published={{"Ready",false}};
+// Bumped with every Published write (under PublishedMutex). With the plan state it forms the
+// IconCacheSources stamp: a client that already holds that reply gets a short "Unchanged" answer.
+inline uint64_t PublishedGeneration=0;
+// Differs per process, so a restarted game never matches a stamp from the previous one.
+inline const uint64_t PublishedBoot=static_cast<uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count());
+// Client side (Poll thread only): stamp of the last manifest accepted from the core.
+inline std::string RemoteStamp;
 inline std::shared_ptr<const HelpyCacheSources::Plan::AssetOwnerMap> PublishedAuthoredAssets;
 inline std::shared_ptr<const HelpyCacheSources::Plan::AssetOwnerMap> PublishedContainerAssets,PublishedContainerFiles;
 inline Snapshot OwnershipSnapshot(){
@@ -226,10 +233,17 @@ inline std::string PublishedCatalogKey(){Requested=true;std::lock_guard lock(Pub
 inline uint64_t InspectingRevision=0;
 inline bool RefreshingFiles=true;
 inline bool HexKey(const std::string& key){return key.size()==16&&key.find_first_not_of("0123456789abcdef")==key.npos;}
-inline nlohmann::json ForClient(){Requested=true;std::lock_guard lock(PublishedMutex);auto result=Published;
-    const auto plan=HelpyCacheSources::Snapshot();const bool checking=result.value("Provisional",false)||result.value("PlanRevision",uint64_t{})!=plan.Revision;
-    if(!plan.Complete||(checking&&result.value("ContentRevision",uint64_t{})!=plan.ContentRevision))result["Ready"]=false;
-    result["CheckingChanges"]=checking;return result;}
+inline nlohmann::json ForClient(std::string_view known={}){Requested=true;std::lock_guard lock(PublishedMutex);
+    const auto plan=HelpyCacheSources::Snapshot();
+    // The reply depends only on Published and these plan fields, so an equal stamp means an identical reply.
+    const auto stamp=std::to_string(PublishedBoot)+":"+std::to_string(PublishedGeneration)+":"+std::to_string(plan.Revision)+":"
+        +std::to_string(plan.ContentRevision)+":"+(plan.Complete?"1":"0");
+    const bool checking=Published.value("Provisional",false)||Published.value("PlanRevision",uint64_t{})!=plan.Revision;
+    const bool ready=Published.value("Ready",false)&&plan.Complete&&!(checking&&Published.value("ContentRevision",uint64_t{})!=plan.ContentRevision);
+    if(ready&&!known.empty()&&known==stamp)return {{"Ready",true},{"Unchanged",true},{"Stamp",stamp}};
+    auto result=Published;
+    if(!ready)result["Ready"]=false;
+    result["CheckingChanges"]=checking;result["Stamp"]=stamp;return result;}
 inline nlohmann::json Document(const Snapshot& value){return {{"Version",4},{"Ready",!value.Provisional&&value.Complete&&!value.Key.empty()&&(!value.Authoritative||!value.SourceKeys.empty())},{"Provisional",value.Provisional},
     {"Authoritative",value.Authoritative},{"PlanRevision",value.PlanRevision},{"ContentRevision",value.ContentRevision},{"Key",value.Key},{"CatalogKey",value.CatalogKey},{"Sources",value.SourceKeys},{"Owners",value.Owners},{"DeclaredOwners",value.DeclaredOwners},{"NativePlugins",value.NativePlugins},
     {"Discovery","ContainerDirectoryIndex"},{"Containers",value.Containers},{"ModNames",value.DisplayNames},{"ModVersions",value.Versions},{"UpdateAware",true}};}
@@ -324,7 +338,7 @@ inline bool PollSaved(){
     if(CachedSourcesWorker.valid()&&CachedSourcesWorker.wait_for(std::chrono::seconds(0))==std::future_status::ready){
         try{auto value=CachedSourcesWorker.get();if(Current.Key.empty()&&AcceptRemote(value)){
             Current.Provisional=true;changed=true;
-            if(!RemoteSnapshot){std::lock_guard lock(PublishedMutex);Published=Document(Current);}
+            if(!RemoteSnapshot){std::lock_guard lock(PublishedMutex);Published=Document(Current);++PublishedGeneration;}
         }}catch(...){}
     }
     return changed;
@@ -334,7 +348,11 @@ inline bool Poll(const std::filesystem::path& root){
     if(RemoteSnapshot){
         if(now<Next)return changed;Next=now+std::chrono::seconds(2);try{nlohmann::json value;
         if(!RemoteSnapshot(value)||!value.value("Ready",false))return changed;
-        const bool provisional=Current.Provisional;const bool accepted=AcceptRemote(value);Current.Provisional=Current.PresentationOnly;
+        // "Unchanged" stands for the manifest we accepted last, which AcceptRemote would treat as a no-op.
+        const bool unchanged=value.value("Unchanged",false);
+        if(unchanged&&(RemoteStamp.empty()||value.value("Stamp",std::string{})!=RemoteStamp)){RemoteStamp.clear();Next={};return changed;}
+        const bool provisional=Current.Provisional;const bool accepted=!unchanged&&AcceptRemote(value);Current.Provisional=Current.PresentationOnly;
+        if(!unchanged)RemoteStamp=value.value("Stamp",std::string{});
         const bool promoted=provisional&&!Current.Provisional;if(promoted&&!accepted)++Revision;changed=changed||accepted||promoted;Error.clear();return changed;
     }catch(const std::exception& error){Error=error.what();return false;}}
     // Skip the full plan copy unless a worker finished or a new inspection is due.
@@ -351,7 +369,7 @@ inline bool Poll(const std::filesystem::path& root){
             Current=std::move(result);++Revision;if(removed)RemovalRevision=Revision;if(invalidate)CatalogInvalidationRevision=Revision;changed=true;}
         else Current=std::move(result); // A metadata-only revision still completes live source verification.
         Error.clear();
-        {std::lock_guard lock(PublishedMutex);Published=Document(Current);PublishedAuthoredAssets=Current.AuthoredAssets;PublishedContainerAssets=Current.ContainerAssets;PublishedContainerFiles=Current.ContainerFiles;}
+        {std::lock_guard lock(PublishedMutex);Published=Document(Current);++PublishedGeneration;PublishedAuthoredAssets=Current.AuthoredAssets;PublishedContainerAssets=Current.ContainerAssets;PublishedContainerFiles=Current.ContainerFiles;}
     }catch(const std::exception& error){Error=error.what();}if(RefreshingFiles||!Error.empty())Next=now+std::chrono::seconds(Error.empty()?60:5);}
     if(!Worker.valid()&&(now>=Next||InspectingRevision!=plan.Revision)){
         const bool reuse=Error.empty()&&now<Next&&!Current.FileKey.empty()&&Current.ContentRevision==plan.ContentRevision&&Current.Authoritative==plan.Authoritative&&Current.Versions==plan.Versions;

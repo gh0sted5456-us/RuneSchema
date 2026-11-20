@@ -9,7 +9,7 @@ $ErrorActionPreference = 'Stop'
 if ($ManagedUE4SSHost) {
     throw 'Custom UE4SS hosts are retired. RuneSchema must run on an unmodified UE4SS.dll; build a framework-only package instead.'
 }
-$Version = '0.9.0.2'
+$Version = '0.9.0.3'
 $BuildRoot = [IO.Path]::GetFullPath($PSScriptRoot)
 if (-not (Test-Path -LiteralPath (Join-Path $BuildRoot 'source\raw\CMakeLists.txt') -PathType Leaf)) {
     $BuildRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))

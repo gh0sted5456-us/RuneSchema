@@ -543,6 +543,8 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
     if(query.size()>512)throw std::runtime_error("Catalog query and filter controls exceed 512 characters.");
     if(fieldSet!="BasicRow"&&fieldSet!="Detail")throw std::runtime_error("Unsupported item catalog field projection.");
     scanBudget=std::clamp<std::size_t>(scanBudget,128,8192);timeBudgetMicros=std::clamp<std::uint64_t>(timeBudgetMicros,100,5000);
+    // The game-thread budget covers the whole slice, including roster refreshes below.
+    const auto sliceStart=std::chrono::steady_clock::now();
     json rows=json::array();std::vector<std::string> queryTokens;std::string categoryFilter,searchQuery=query;
     const auto sourceFilter=ItemSource::TakeFilter(searchQuery);
     const auto providerFilter=ItemSource::TakeProvider(searchQuery);
@@ -596,7 +598,15 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
         std::unordered_set<std::string> known;for(const auto& record:mountedItems)known.insert(F2Catalog::Lower(record.path));
         for(const auto& candidate:ContainerItemMetadata())if(known.insert(F2Catalog::Lower(candidate.path)).second)
             mountedItems.push_back({candidate.path,candidate.name,{}});
-        mountedHints.clear();mountedHints.resize(mountedItems.size());
+        // Keep the name/search cache when the refreshed roster is unchanged (the usual 30 s case).
+        static std::vector<std::string> hintedPaths;
+        const bool sameRoster=hintedPaths.size()==mountedItems.size()&&mountedHints.size()==mountedItems.size()
+            &&std::equal(hintedPaths.begin(),hintedPaths.end(),mountedItems.begin(),[](const auto& path,const auto& record){return path==record.path;});
+        if(!sameRoster){
+            mountedHints.clear();mountedHints.resize(mountedItems.size());
+            hintedPaths.clear();hintedPaths.reserve(mountedItems.size());
+            for(const auto& record:mountedItems)hintedPaths.push_back(record.path);
+        }
         if(!mountedReady)nextMetadataRefresh=now+std::chrono::seconds(2);
     }
     const bool mountedFirst=!queryTokens.empty()||!familyFilter.empty()||!providerFilter.empty();
@@ -613,8 +623,24 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
             nextLoadedRefresh=now+std::chrono::seconds(2);
             TArray<UObject*> items;UECustom::UObjectGlobals::GetObjectsOfClass(itemType,items,true);
             if(items.Num()<0||items.Num()>AlphabeticalItemCatalog::Cache::MaxRows)throw std::runtime_error("Native item class index exceeds its safe bound");
-            indexedItems.clear();indexedItems.reserve(items.Num());indexedPaths.clear();
-            for(auto* item:items)if(Usable(item)){indexedItems.emplace_back(item);indexedPaths.emplace(to_string(item->GetPathName()),indexedItems.back());}
+            // Same scope and the same live objects: skip rebuilding a path string for every loaded item.
+            // A weak handle that no longer resolves to the listed object (including a reused address) forces a rebuild.
+            static std::vector<UObject*> indexedRaw;
+            bool unchanged=scope==indexedScope&&static_cast<std::size_t>(items.Num())==indexedRaw.size();
+            for(int32 index=0;unchanged&&index<items.Num();++index)unchanged=items[index]==indexedRaw[static_cast<std::size_t>(index)];
+            if(unchanged){
+                std::size_t usable=0;
+                for(auto* item:items)if(Usable(item)){
+                    if(usable>=indexedItems.size()||indexedItems[usable].Get()!=item){unchanged=false;break;}
+                    ++usable;
+                }
+                unchanged=unchanged&&usable==indexedItems.size();
+            }
+            if(!unchanged){
+                indexedRaw.clear();indexedRaw.reserve(static_cast<std::size_t>(items.Num()));for(auto* item:items)indexedRaw.push_back(item);
+                indexedItems.clear();indexedItems.reserve(items.Num());indexedPaths.clear();
+                for(auto* item:items)if(Usable(item)){indexedItems.emplace_back(item);indexedPaths.emplace(to_string(item->GetPathName()),indexedItems.back());}
+            }
             indexedScope=scope;
         }
     }
@@ -627,7 +653,7 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
         return {{"Rows",std::move(rows)},{"NextOffset",0},{"Start",0},{"HasMore",false},{"Scanned",0},{"MountedMetadataReady",mountedReady}};
     }
     const std::size_t start=randomOrder?static_cast<std::size_t>(startSeed%total):0;
-    std::size_t visited=std::min(offset,total),scanned=0;const auto begin=std::chrono::steady_clock::now();
+    std::size_t visited=std::min(offset,total),scanned=0;const auto begin=sliceStart;
     while(visited<total&&rows.size()<limit&&scanned<scanBudget) {
         if(scanned>0&&std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-begin).count()>=static_cast<long long>(timeBudgetMicros))break;
         const std::size_t index=randomOrder?(start+visited)%total:visited;

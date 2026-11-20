@@ -174,7 +174,10 @@ int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,ui
             result["BypassStatus"]=DragonWilds::CharacterEntryRecovery::StatusText();
         }
         else if(action=="QuestCatalog")result=QuestPresentationCatalog::Read(request);
-        else if(action=="IconCacheSources")result=HelpySourceCache::ForClient();
+        else if(action=="IconCacheSources"){
+            const auto known=request.contains("Known")&&request["Known"].is_string()?request["Known"].get<std::string>():std::string{};
+            result=HelpySourceCache::ForClient(known.size()<=128?known:std::string{});
+        }
         else if(action=="IconCacheOwnership")result=HelpyCacheOwnership::Page(HelpySourceCache::OwnershipSnapshot(),request);
         else if(action=="IconCacheBuildRead")result=IconCacheBuild::Read(request.value("IncludeManifest",false));
         else if(action=="IconCacheBuildStart"||action=="IconCacheRefreshStart"){

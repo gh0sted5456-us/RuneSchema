@@ -90,9 +90,23 @@ int main(int argc, char** argv) {
     Require(header,"m_runtimeWidgetOwnerClasses");
     Require(header,"m_runtimeOwnerClassPaths");
     Require(source,"found->second.Type.Get()==type");
-    Require(source,"m_runtimeOwnerClassPaths.size()>=512");
+    Require(source,"m_runtimeOwnerClassPaths.size()>=8192");
     Require(source,"m_runtimeWidgetPathOwners.contains(ownerClass)");
-    Require(source,"for (const auto& ownerClass : m_runtimeWidgetOwnerClasses)");
+    // One outer walk covers every owner class; the per-event owner list is a fixed buffer.
+    Require(header,"void CollectRuntimeWidgetOwners(RC::Unreal::UObject* source, RuntimeWidgetOwnerList& owners);");
+    Require(source,"CollectRuntimeWidgetOwners(source, ownersToRefresh);");
+    Require(source,"RuntimeWidgetOwnerList ownersToRefresh;");
+    {
+        const auto begin=source.find("void DragonWildsBlueprintModLoader::CollectRuntimeWidgetOwners(");
+        const auto end=source.find("bool DragonWildsBlueprintModLoader::RuntimeWidgetSelectorMatches",begin);
+        const auto walk=source.substr(begin,end-begin);
+        if(begin==source.npos||walk.find("GetPathName()")!=std::string::npos||walk.find("std::vector")!=std::string::npos
+            ||walk.find("std::unordered")!=std::string::npos||walk.find("std::string")!=std::string::npos)
+            throw std::runtime_error("Widget owner collection allocates on the ProcessEvent path");
+        const auto observe=source.find("void DragonWildsBlueprintModLoader::ObserveRuntimeWidgetEvent(");
+        if(source.substr(observe,source.find("ApplyRuntimeWidgetRule(owner, rule)",observe)-observe).find("std::unordered_set")!=std::string::npos)
+            throw std::runtime_error("Runtime widget observer allocates an owner set per event");
+    }
     Require(source,"return RuntimeWidgetRuleMatchesEvent(rule.Data, function)");
     const auto initialize=source.find("bool DragonWildsBlueprintModLoader::OnInitialize()");
     const auto observer=source.find("void DragonWildsBlueprintModLoader::EnsureRuntimeWidgetObserver()");

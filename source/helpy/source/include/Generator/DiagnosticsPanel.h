@@ -907,7 +907,8 @@ inline void DrawIssues(DiagnosticCenterModel::Store& store,const HelpyImGuiTheme
         const auto parent=DiagnosticIssueNavigation::ParentFor(store,filtered,SelectedGroup);
         if(parent&&parent!=SelectedGroup)ExpandedOperations.insert(parent);
     }
-    const auto display=DiagnosticIssuePresentation::Rows(store,filtered,GroupByOperation,ExpandedOperations);
+    static DiagnosticIssuePresentation::RowsView rows;
+    const auto& display=rows.Update(store,issues,GroupByOperation,ExpandedOperations);
     ImGui::TextDisabled("%zu matching groups / %zu visible rows  |  %zu total groups%s",
         filtered.size(),display.size(),store.Groups().size(),OnlyNew?"  |  New only":"");
     const auto previous=DiagnosticIssueNavigation::Adjacent(filtered,SelectedGroup,-1);

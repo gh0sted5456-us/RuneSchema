@@ -51,6 +51,30 @@ inline std::vector<Row> Rows(const Store& store,const std::vector<const Group*>&
     }
     return rows;
 }
+// Memoizes Rows. Clustering walks every stored event and builds string keys, so the
+// rows are rebuilt only when the filtered view, the store, the clustering switch or
+// (while clustering) the expanded set change. Row pointers stay valid because the
+// key includes the store's group buffer and revision.
+struct RowsView {
+    std::vector<Row> Items;
+    std::size_t Rebuilds=0;
+    const std::vector<Row>& Update(const Store& store,const DiagnosticIssueFilters::View& issues,bool cluster,
+                                   const std::unordered_set<std::uint64_t>& expanded){
+        const auto& groups=store.Groups();
+        if(m_valid&&m_view==&issues&&m_viewRebuilds==issues.Rebuilds&&m_revision==store.Revision()
+            &&m_data==groups.data()&&m_size==groups.size()&&m_cluster==cluster&&(!cluster||m_expanded==expanded))return Items;
+        Items=DiagnosticIssuePresentation::Rows(store,issues.Groups,cluster,expanded);
+        m_view=&issues;m_viewRebuilds=issues.Rebuilds;m_revision=store.Revision();
+        m_data=groups.data();m_size=groups.size();m_cluster=cluster;
+        if(cluster)m_expanded=expanded;else m_expanded.clear();
+        m_valid=true;++Rebuilds;return Items;
+    }
+    void Reset(){m_valid=false;Items.clear();}
+private:
+    const DiagnosticIssueFilters::View* m_view=nullptr;std::size_t m_viewRebuilds=0;std::uint64_t m_revision=0;
+    const void* m_data=nullptr;std::size_t m_size=0;bool m_cluster=false,m_valid=false;
+    std::unordered_set<std::uint64_t> m_expanded;
+};
 inline std::vector<std::uint64_t> Related(const Store& store,std::uint64_t selected,std::size_t limit=16){
     const auto keys=LatestOperationKeys(store);
     const auto own=keys.find(selected);
