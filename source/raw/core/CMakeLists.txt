@@ -361,6 +361,16 @@ if(PROJECT_IS_TOP_LEVEL)
         "${CMAKE_CURRENT_SOURCE_DIR}/../include/Loader/DragonWildsBlueprintModLoader.h"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Loader/DragonWildsBlueprintModLoader.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../../../docs/examples/RestoreAppearance/blueprints/10-RestoreAppearance.jsonc")
+    add_executable(process-event-routes ../tests/process-event-routes.cpp)
+    target_include_directories(process-event-routes PRIVATE ../include)
+    find_package(Threads REQUIRED)
+    target_link_libraries(process-event-routes PRIVATE Threads::Threads)
+    target_compile_features(process-event-routes PRIVATE cxx_std_20)
+    add_test(NAME process-event-routes COMMAND process-event-routes)
+    set_tests_properties(process-event-routes PROPERTIES TIMEOUT 60)
+    add_executable(process-event-dispatch-contract ../tests/process-event-dispatch-contract.cpp)
+    target_compile_features(process-event-dispatch-contract PRIVATE cxx_std_20)
+    add_test(NAME process-event-dispatch-contract COMMAND process-event-dispatch-contract "${CMAKE_CURRENT_SOURCE_DIR}/..")
     add_executable(ue4ss-bootstrap-contract ../tests/ue4ss-bootstrap-contract.cpp)
     add_test(NAME ue4ss-bootstrap-contract COMMAND ue4ss-bootstrap-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../../../build/build.ps1"

@@ -399,6 +399,8 @@ public:
             Hook::UnregisterCallback(m_apiExportCallbackId);
         if (m_toolsWorldCallbackId != Hook::ERROR_ID)
             Hook::UnregisterCallback(m_toolsWorldCallbackId);
+        // Shared ProcessEvent callbacks; loaders still remove their own routes when destroyed.
+        PS::ProcessEventDispatch::Shutdown();
         PS::PlayerTrace::Cancel();
         PS::AppearanceTrace::Cancel();
         PS::NiagaraTest::Unbind();
@@ -959,6 +961,7 @@ private:
 };
 
 #include "Core/GameplayEventFeed.h"
+#include "Runtime/ProcessEventDispatch.h"
 #define RuneSchema_API __declspec(dllexport)
 BOOL APIENTRY DllMain(HMODULE,DWORD reason,LPVOID reserved) {
     if(reason==DLL_PROCESS_DETACH&&reserved)PS::ProcessExitInProgress.store(true,std::memory_order_relaxed);

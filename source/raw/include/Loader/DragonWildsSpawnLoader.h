@@ -13,6 +13,7 @@
 #include <functional>
 #include "SDK/WeakObjectHandle.h"
 #include "Unreal/Hooks.hpp"
+#include "Runtime/ProcessEventDispatch.h"
 #include "Unreal/Rotator.hpp"
 #include "Unreal/UnrealCoreStructs.hpp"
 #include "Loader/DragonWildsModLoaderBase.h"
@@ -498,8 +499,8 @@ namespace DragonWilds {
         double m_managedScaleElapsed = 0.0;
         double m_playerScaleSummaryElapsed = 0.0;
         std::uint64_t m_playerScaleCorrections = 0;
-        RC::Unreal::Hook::GlobalCallbackId m_activityObserver = RC::Unreal::Hook::ERROR_ID;
-        RC::Unreal::Hook::GlobalCallbackId m_respawnObserver = RC::Unreal::Hook::ERROR_ID;
+        PS::ProcessEventDispatch::Route m_activityObserver;
+        PS::ProcessEventDispatch::Route m_respawnObserver;
         struct PendingRespawn {
             PS::WeakObjectHandle Pawn;
             PS::WeakObjectHandle PlayerState;

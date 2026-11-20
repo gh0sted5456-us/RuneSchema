@@ -912,11 +912,7 @@ namespace DragonWilds {
 
     DragonWildsAssetModLoader::~DragonWildsAssetModLoader()
     {
-        if (m_characterMenuPatchHook != Hook::ERROR_ID)
-        {
-            Hook::UnregisterCallback(m_characterMenuPatchHook);
-            m_characterMenuPatchHook = Hook::ERROR_ID;
-        }
+        PS::ProcessEventDispatch::Remove(m_characterMenuPatchHook);
         if(AuthoringInstance==this)AuthoringInstance=nullptr;
         std::scoped_lock lock{m_mutex};
         m_pendingAssets.clear();
@@ -1232,16 +1228,13 @@ namespace DragonWilds {
 
     void DragonWildsAssetModLoader::RegisterCharacterMenuPatchReplay()
     {
-        if (m_characterMenuPatchHook != Hook::ERROR_ID) return;
-        Hook::FCallbackOptions options{};
-        options.OwnerModName = TEXT("RuneSchema");
-        options.HookName = TEXT("CharacterMenuAssetPatchReplay");
-        m_characterMenuPatchHook = Hook::RegisterProcessEventPreCallback(
+        if (m_characterMenuPatchHook) return;
+        // Routed by name through the shared ProcessEvent dispatcher: only Construct and BP_OnOpen reach this.
+        m_characterMenuPatchHook = PS::ProcessEventDispatch::Add(PS::ProcessEventDispatch::Phase::Pre,
+            {TEXT("Construct"), TEXT("BP_OnOpen")}, "CharacterMenuAssetPatchReplay",
             [this](Hook::TCallbackIterationData<void>&, UObject* source, UFunction* function, void*)
             {
                 if (!source || !function || !source->GetClassPrivate() || m_replayingCharacterMenuPatches) return;
-                static const FName construct(TEXT("Construct"),FNAME_Add),open(TEXT("BP_OnOpen"),FNAME_Add);
-                const auto name=function->GetFName();if(name!=construct&&name!=open)return;
                 const auto classPath = RC::to_string(source->GetClassPrivate()->GetPathName());
                 if (classPath.find("WBP_CharacterOptionSelect_C") == std::string::npos) return;
                 const auto functionPath = RC::to_string(function->GetPathName());
@@ -1254,8 +1247,8 @@ namespace DragonWilds {
                         PS::ToWideSafe(error.what()));
                 }
                 m_replayingCharacterMenuPatches = false;
-            }, options);
-        if (m_characterMenuPatchHook == Hook::ERROR_ID)
+            });
+        if (!m_characterMenuPatchHook)
             PS::Log<LogLevel::Warning>(TEXT("[LOADER:assets][PARTIAL][CHARACTER-MENU] Pre-open replay is unavailable; other asset edits remain active.\n"));
         else
             PS::Log<LogLevel::Normal>(TEXT("[LOADER:assets][OK][CHARACTER-MENU] Pre-open replay enabled.\n"));
