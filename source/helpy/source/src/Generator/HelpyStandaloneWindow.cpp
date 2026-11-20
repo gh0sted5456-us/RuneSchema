@@ -227,7 +227,7 @@ void SelectUiFontFamily(const std::string& requested){
     if(!UiRegularFont)UiRegularFont=io.Fonts->AddFontDefault();UiBoldFont=UiRegularFont;
 }
 std::filesystem::path FindRuneScapeFontFile() {
-    std::vector<std::filesystem::path> roots{HelpyPaths::PluginRoot()/"assets"/"fonts"};
+    std::vector<std::filesystem::path> roots;try{roots.push_back(HelpyPaths::FontsFolder());}catch(...){}roots.push_back(HelpyPaths::PluginRoot()/"assets"/"fonts");
     std::error_code ec;
     for(const auto& root:roots) {
         if(!std::filesystem::is_directory(root,ec))continue;

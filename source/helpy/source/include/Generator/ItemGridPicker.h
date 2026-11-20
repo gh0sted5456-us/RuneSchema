@@ -430,7 +430,16 @@ inline void LayoutControls() {
         if(HelpyImGuiTheme::Toggle("Show [PH] placeholder items",&theme.itemShowPlaceholders))dirty=true;
         if(HelpyImGuiTheme::SoftButton("Reset to 5 x 4")){theme.itemGridColumns=ItemBayLayout::DefaultColumns;theme.itemGridRows=ItemBayLayout::DefaultRows;theme.itemGridFitRows=true;dirty=true;}}
         if(HelpyImGuiTheme::SoftButton("Reload items / groupings")){HelpyCachedCatalog::Files.Invalidate();LazyCatalog::For(0).Cache.clear();ItemIconCache::RetryFailed();LazyCatalog::Retry(0);}
-        if(HelpyImGuiTheme::SoftButton("Grouping reference...")){const auto directory=RuntimePaths::Helpy(HostServices::ModDirectory())/"settings";const auto active=directory/"item-groupings.json",example=directory/"item-groupings.example.json";const auto file=std::filesystem::is_regular_file(active)?active:std::filesystem::is_regular_file(example)?example:directory;ShellExecuteW(nullptr,L"open",file.c_str(),nullptr,nullptr,SW_SHOWNORMAL);}
+        if(HelpyImGuiTheme::SoftButton("Grouping reference...")){try{const auto active=ItemGroupings::UserFile(HostServices::ModDirectory());auto file=active;
+            if(!std::filesystem::is_regular_file(active)){file=active.parent_path()/"item-groupings.example.json";if(!std::filesystem::is_regular_file(file))ConfigFiles::Write(file,R"({
+  "Format": 1,
+  "Items": {
+    "/Game/Example/ITEM_ExampleBody.ITEM_ExampleBody": {"Category": "Armor", "Family": "my_example_set"},
+    "/Game/Example/ITEM_ExampleLegs.ITEM_ExampleLegs": {"Category": "Armor", "Family": "my_example_set"}
+  }
+}
+)");}
+            ShellExecuteW(nullptr,L"open",file.c_str(),nullptr,nullptr,SW_SHOWNORMAL);}catch(const std::exception& error){HelpyIconPacks::Status=error.what();}}
         ImGui::BeginDisabled(HelpyIconPacks::Busy()||HelpyIconPacks::Building());if(HelpyImGuiTheme::SoftButton("Import taglines..."))HelpyIconPacks::ChooseTaglines(true);if(HelpyImGuiTheme::SoftButton("Export combined taglines..."))HelpyIconPacks::ChooseTaglines(false);ImGui::EndDisabled();
         if(!HelpyIconPacks::Status.empty())ImGui::TextWrapped("%s",HelpyIconPacks::Status.c_str());
         if(!HelpyCachedCatalog::Files.GroupingStatus.empty())ImGui::TextWrapped("%s",HelpyCachedCatalog::Files.GroupingStatus.c_str());ImGui::EndPopup();

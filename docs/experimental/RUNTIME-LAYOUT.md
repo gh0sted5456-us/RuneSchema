@@ -22,27 +22,67 @@ RuneSchema/
     SDL3.dll
     RuneSchema.Helpy.Vulkan.dll
     plugin.json
-    assets/
-    settings/
     plugins/
       RuneSchema.HUD/
         plugin.json
         dll/RuneSchema.HUD.dll
       RuneSchema.ModMenu2/
         plugin.json
-        ModMenu-MIT.txt
+        modmenu2.key
         dll/RuneSchema.ModMenu2.dll
+      RuneSchema.DeveloperTools/
+        plugin.json
+        dll/RuneSchema.DeveloperTools.dll
+      RuneSchema.Achievements/
+        plugin.json
+        dll/RuneSchema.Achievements.dll
   mods/
   settings/
     settings.ini
     plugins.txt
+    licenses/RuneSchema-Licenses.txt
+```
+
+The mod folder holds only what the game and Helpy need to run. Helpy keeps
+everything else in AppData:
+
+```text
+%LOCALAPPDATA%/RSDragonwilds/RuneSchema/
+  core/
+    HELPY/          Helpy settings, theme, window state, groupings, artwork
+      ui-assets/    downloaded UI artwork
+      backgrounds/  your own background pictures
+      fonts/        optional RuneScape font files
+      tools/        scripts Helpy writes out on demand
+    runeschema.profile/
+    health/
+    backups/  cache/  tools/  runtime/
+    licenses/       copy of the licence bundle
+  Win64/            Steam and Epic: runtime state, caches, diagnostics
+  WinGDK/           Game Pass
+  Server/           dedicated server
 ```
 
 UE4SS's enable marker, scripts and minimal Mod Menu definition remain required runtime files. The installed Helpy executable runs with or without the game. Desktop shortcuts point to that executable.
 
 Core services live under `dlls/plugins`. Helpy's bridge and feature bundles live under `Helpy`. Native HUD adapters still load inside the game. Plugin IDs, API version, service names and mod-owned `/ue4ss/hud.json` bindings remain unchanged. Mod Menu 2 is a native Helpy-process plugin (`Host: "helpy"`); its shared renderer and narrow game adapter retain existing controls. Its activation key can live in `Helpy/plugins/RuneSchema.ModMenu2/modmenu2.key`; `Helpy/modmenu2.key` remains supported.
 
-AppData keeps the same runtime identity, caches, profiles, notifications and window state. Installed mod folders remain under `mods`. Helpy's bundled settings and theme live under `Helpy/settings`.
+AppData keeps runtime identity, caches, profiles, notifications and window state. Installed mod folders remain under `mods`.
+
+### Moving to core and Win64 / WinGDK / Server
+
+The first start after updating moves the older folders once: `HELPY`,
+`runeschema.profile` and `health` into `core`, `steam` (or `epic`) to `Win64`,
+`gamepass` to `WinGDK` and `server` to `Server`. Nothing is copied or deleted.
+A folder that is in use, or whose new name already exists, stays where it is and
+is still used there until a later start can move it. If both `steam` and `epic`
+exist, `steam` becomes `Win64` and `epic` is left as it was.
+
+Helpy also adopts files it used to keep in the mod: `Helpy/settings/settings.jsonc`
+and `item-groupings.json`, and your own pictures and fonts in `Helpy/assets`. The
+originals are left in place; the AppData copy wins once it exists. A Game Pass
+logging shortcut saved before the move keeps working; save it again to point it
+at `WinGDK`.
 
 ## Redirected AppData
 

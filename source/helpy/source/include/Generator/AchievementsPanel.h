@@ -34,7 +34,7 @@ inline void Header() {
     if (!points && HelpyAchievements::Definitions.empty()) return;
     ImGui::TextColored(HelpyImGuiTheme::Current.accent, "%d achievement points", points);
     ImGui::SameLine(); ImGui::TextDisabled("\xC2\xB7 %zu unlocked", progress.UnlockedCount());
-    if (ImGui::IsItemHovered()) HelpyImGuiTheme::Tooltip("Earned from RuneSchema mods that include achievements. Shared with players on servers running RuneSchema and Helpy.");
+    if (ImGui::IsItemHovered()) HelpyImGuiTheme::Tooltip("Earned from mods that include achievements, UE4SS or RuneSchema. Shared with players on servers running RuneSchema and Helpy.");
 }
 inline void Bar(float fraction, float width, float height) {
     const auto& t = HelpyImGuiTheme::Current; auto* draw = ImGui::GetWindowDrawList(); const auto a = ImGui::GetCursorScreenPos();
@@ -47,8 +47,8 @@ inline void Render() {
     namespace A = ModAchievements;
     const auto& t = HelpyImGuiTheme::Current; const auto& progress = HelpyAchievements::Progress;
     if (!HelpyAchievements::Status.empty()) ImGui::TextWrapped("%s", HelpyAchievements::Status.c_str());
-    if (HelpyAchievements::Definitions.empty() && HelpyAchievements::Errors.empty()) {
-        ImGui::TextWrapped("None of your enabled mods include achievements yet. Mod authors add them with cache/achievements.json.");
+    if (HelpyAchievements::Available && HelpyAchievements::Definitions.empty() && HelpyAchievements::Errors.empty()) {
+        ImGui::TextWrapped("None of your enabled mods include achievements yet. Mod authors add an achievements.json to their mod folder, UE4SS or RuneSchema.");
     }
     ImGui::Checkbox("Show locked achievements", &ShowLocked);
     std::map<std::string, std::vector<const A::Definition*>> mods;
@@ -264,7 +264,7 @@ inline void RenderModWindow() {
         ModRequest = nullptr;
         try {
             ModRead = std::async(std::launch::async, [rows = std::move(rows)] {
-                return HelpyAchievements::Read(rows, true);
+                return HelpyAchievements::Read(rows, true, false);
             });
         } catch (const std::exception& error) { ModData.Errors[ModOwner] = error.what(); }
     }

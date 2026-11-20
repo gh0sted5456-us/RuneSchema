@@ -8,15 +8,18 @@ each asset rather than assigning the whole mount to one mod.
 
 ## Container-first discovery
 
-Shared state lives under `%LOCALAPPDATA%/RSDragonwilds/RuneSchema/core`;
-`steam`, `gamepass`, `epic` and `server` hold their runtime-specific state and
-mapping caches. Imported Helpy content and thumbnail caches now live in
-`<platform>/cache`, not `core/HELPY/runtime/saved/cache`. Startup creates missing managed directories on demand without
-copying, moving or deleting legacy runtime/cache data. Old install-local
-`runtime/live` directories and older AppData roots are not imported or scanned.
-Existing flat `HELPY`, `runeschema.profile` and `health` folders inside the current
-AppData root remain in use if their `core` counterpart does not exist. If both
-exist, the core folder wins; neither is merged or overwritten.
+Shared state lives under `%LOCALAPPDATA%/RSDragonwilds/RuneSchema/core`.
+`Win64` (Steam and Epic), `WinGDK` (Game Pass) and `Server` (dedicated server)
+hold runtime-specific state and mapping caches, because each store can run a
+different game version. Imported Helpy content and thumbnail caches live in
+`<runtime>/cache`, not `core/HELPY/runtime/saved/cache`. Startup creates missing
+managed directories on demand. Old install-local `runtime/live` directories and
+older AppData roots are not imported or scanned.
+On the first start after updating, flat `HELPY`, `runeschema.profile` and
+`health` folders move into `core`, and `steam`/`epic`, `gamepass` and `server`
+are renamed to `Win64`, `WinGDK` and `Server`. A folder in use, or whose new
+name already exists, stays where it is and is still used there; nothing is
+merged or overwritten.
 Links inside managed data remain forbidden.
 
 To reset generated caches, close all games/Helpys that use them and remove only

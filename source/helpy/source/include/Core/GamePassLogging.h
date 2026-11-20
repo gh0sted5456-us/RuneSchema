@@ -10,7 +10,7 @@ namespace fs=std::filesystem;
 struct Setup{fs::path Executable,Log;};
 inline Setup For(const fs::path& root,const fs::path& local,bool centralized=DiagnosticLogPaths::UseUE4SS){
     auto log=LiveLog::GamePassLog(root,local);if(log.empty()||!root.is_absolute()||!local.is_absolute())throw std::runtime_error("Assign Helpy to a Game Pass WinGDK installation first");
-    log=centralized?DiagnosticLogPaths::UE4SS(root)/"RSDragonwilds.log":local/"RSDragonwilds/RuneSchema/gamepass/diagnostics/RSDragonwilds.log";
+    log=centralized?DiagnosticLogPaths::UE4SS(root)/"RSDragonwilds.log":local/"RSDragonwilds/RuneSchema/WinGDK/diagnostics/RSDragonwilds.log";
     const auto project=root.parent_path().parent_path().parent_path().parent_path().parent_path();
     if(LiveLog::Lower(project.filename().string())!="rsdragonwilds")throw std::runtime_error("Game Pass project directory is unrecognized");
     return {project.parent_path()/"RSDragonwilds.exe",log};

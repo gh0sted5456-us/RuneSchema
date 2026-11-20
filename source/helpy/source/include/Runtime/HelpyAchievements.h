@@ -1,12 +1,14 @@
 #pragma once
-// Runtime glue for mod achievements: loads definitions from enabled mods' cache/achievements.json, reads
-// the core GameplayEvents feed, applies progress, persists it in the RuneSchema profile folder and queues
+// Runtime glue for mod achievements: asks the RuneSchema.Achievements plugin which achievements.json files count
+// (UE4SS mods and RuneSchema mods), reads the core GameplayEvents feed, applies progress, persists it in the RuneSchema profile folder and queues
 // unlock popups for the bottom HUD. Model and validation live in Core/ModAchievements.h.
 #include "Core/ModAchievements.h"
 #include "Core/RuneSchemaProfile.h"
 #include "Core/ConfigFiles.h"
 #include "Core/HelpyCoreLink.h"
 #include "Runtime/PluginRuntimeServices.h"
+#include "Runtime/HostServices.h"
+#include "Core/AchievementSources.h"
 #include "Generator/ToolRequest.h"
 #include <chrono>
 #include <deque>
@@ -21,7 +23,7 @@
 namespace PS::HelpyAchievements {
 using Json = nlohmann::json; using Clock = std::chrono::steady_clock;
 namespace A = ModAchievements;
-struct Loaded { std::vector<A::Definition> Definitions; std::map<std::string, std::string> Errors; std::map<std::string, size_t> Counts; };
+struct Loaded { std::vector<A::Definition> Definitions; std::map<std::string, std::string> Errors; std::map<std::string, size_t> Counts; bool Available = true; };
 
 inline std::vector<A::Definition> Definitions;
 inline std::map<std::string, std::string> Errors;  // owner -> first validation problem, for Profile and Mods.
@@ -29,11 +31,11 @@ inline std::map<std::string, size_t> Counts;        // owner -> achievements def
 inline A::Progress Progress;
 inline std::deque<A::Unlock> Popups;                // Consumed by the bottom HUD overlay.
 inline std::string Status;
-inline bool ProgressLoaded = false, Dirty = false, PollPending = false;
+inline bool ProgressLoaded = false, Dirty = false, PollPending = false, Available = true;
 inline uint64_t SnapshotRevision = ~uint64_t{}, Revision = 0;
 inline std::future<Loaded> Loading;
 inline Json WatchSent;
-inline Clock::time_point NextPoll{}, NextSave{};
+inline Clock::time_point NextPoll{}, NextSave{}, NextScan{};
 struct FeedScope {
     uint64_t Connection, World;
     uint32_t Pid;
@@ -60,22 +62,45 @@ inline std::string Owner(const std::filesystem::path& folder) {
     for (auto& c : text) c = char(std::tolower(static_cast<unsigned char>(c)));
     return "mods/" + text;
 }
-// Reads achievements.json from every enabled, present mod in a ModsRead snapshot. Runs off the UI thread.
-inline Loaded Read(const Json& rows, bool includeDisabled = false) {
-    Loaded result;
-    if (!rows.is_array()) return result;
-    for (const auto& row : rows) try {
-        if (!row.is_object() || (!includeDisabled && !row.value("Enabled", false)) || !row.value("Present", false) || !row.contains("Folder") || !row["Folder"].is_string()) continue;
-        const auto folder = std::filesystem::u8path(row["Folder"].get<std::string>());
-        const auto file = folder / "cache" / "achievements.json";
-        std::error_code error;
-        if (!std::filesystem::is_regular_file(file, error)) continue;
-        const auto owner = Owner(folder);
+inline constexpr const char* PluginMissing = "Achievements are off: the RuneSchema.Achievements plugin is not installed, or it is disabled in RuneSchema/settings/plugins.txt.";
+// Asks the Achievements plugin which files count. False when the plugin is missing or disabled.
+inline bool Discover(const Json& rows, bool includeDisabled, bool ue4ss, Json& sources) {
+    const auto* host = PluginRuntimeServices::Host;
+    if (!host || !host->CallService) return false;
+    Json compact = Json::array();
+    if (rows.is_array()) for (const auto& row : rows) {
+        if (!row.is_object() || !row.contains("Folder") || !row["Folder"].is_string()) continue;
         std::string name = row.value("Name", std::string{});
         if (row.contains("Metadata") && row["Metadata"].is_object() && row["Metadata"].contains("name") && row["Metadata"]["name"].is_string()) name = row["Metadata"]["name"].get<std::string>();
+        compact.push_back({{"Folder", row["Folder"]}, {"Name", name}, {"Enabled", row.value("Enabled", false)}, {"Present", row.value("Present", false)}});
+    }
+    Json request{{"Op", "discover"}, {"RuneSchema", std::move(compact)}, {"UE4SS", ue4ss}, {"IncludeDisabled", includeDisabled}};
+    if (ue4ss) try { request["Mods"] = AchievementSources::Text(HostServices::ModDirectory().parent_path()); } catch (...) { request["UE4SS"] = false; }
+    const auto text = request.dump();
+    std::vector<char> output(64 * 1024); uint32_t size = 0;
+    auto code = host->CallService("RuneSchema.Helpy", "helpy.achievements", text.c_str(), output.data(), uint32_t(output.size()), &size);
+    if (code == RS_PLUGIN_BUFFER_TOO_SMALL && size > output.size() && size <= RUNESCHEMA_PLUGIN_MAX_MESSAGE) {
+        output.resize(size); code = host->CallService("RuneSchema.Helpy", "helpy.achievements", text.c_str(), output.data(), uint32_t(output.size()), &size);
+    }
+    if (code != RS_PLUGIN_OK || !size || size > output.size()) return false;
+    const auto reply = Json::parse(output.data(), output.data() + size - 1);
+    sources = reply.value("Sources", Json::array());
+    return sources.is_array();
+}
+// Reads every achievements.json the plugin reports: UE4SS mods and RuneSchema mods alike. Runs off the UI thread.
+inline Loaded Read(const Json& rows, bool includeDisabled = false, bool ue4ss = true) {
+    Loaded result;
+    Json sources;
+    try { if (!Discover(rows, includeDisabled, ue4ss, sources)) { result.Available = false; return result; } }
+    catch (...) { result.Available = false; return result; }
+    for (const auto& source : sources) try {
+        if (!source.is_object() || !source.contains("File") || !source["File"].is_string()) continue;
+        const auto file = std::filesystem::u8path(source["File"].get<std::string>());
+        const auto owner = source.value("Owner", std::string{});
+        if (owner.empty()) continue;
         try {
             const auto text = ConfigFiles::Read(file, 256 * 1024);
-            auto parsed = A::Parse(Json::parse(text, nullptr, true, true), owner, name);
+            auto parsed = A::Parse(Json::parse(text, nullptr, true, true), owner, source.value("Name", owner));
             result.Counts[owner] = parsed.size();
             for (auto& definition : parsed) result.Definitions.push_back(std::move(definition));
         } catch (const std::exception& problem) { result.Errors[owner] = problem.what(); }
@@ -109,10 +134,14 @@ inline void Observe(const Json& rows, uint64_t revision) {
     if (Loading.valid() && Loading.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
         auto loaded = Loading.get();
         Definitions = std::move(loaded.Definitions); Errors = std::move(loaded.Errors); Counts = std::move(loaded.Counts);
+        if (loaded.Available != Available || !loaded.Available) Status = loaded.Available ? std::string{} : std::string(PluginMissing);
+        Available = loaded.Available;
         WatchSent = nullptr; ++Revision;
     }
-    if (revision == SnapshotRevision || Loading.valid()) return;
-    SnapshotRevision = revision;
+    // UE4SS mods can be added or toggled outside Helpy, so the folders are rescanned now and then as well.
+    const auto now = Clock::now();
+    if ((revision == SnapshotRevision && now < NextScan) || Loading.valid()) return;
+    SnapshotRevision = revision; NextScan = now + std::chrono::seconds(30);
     Loading = std::async(std::launch::async, [rows] { return Read(rows); });
 }
 // Applies one GameplayEvents reply. Runs on the UI thread (from HelpyCoreLink::Drain).
@@ -146,7 +175,7 @@ inline void Poll(HelpyCoreLink::Link& link, const HelpyCoreLink::Remote& remote,
     LoadProgress();
     const auto scope = FeedScope::Current();
     if (LastFeed != scope) { LastFeed = scope; WatchSent = nullptr; NextPoll = {}; }
-    if (!remote || !gameRunning || !scope.Pid || !ProgressLoaded) { Save(true); return; }
+    if (!remote || !gameRunning || !scope.Pid || !ProgressLoaded || !Available) { Save(true); return; }
     const auto now = Clock::now();
     if (now < NextPoll || PollPending) { Save(false); return; }
     NextPoll = now + std::chrono::seconds(1);

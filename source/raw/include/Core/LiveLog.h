@@ -33,7 +33,11 @@ inline std::filesystem::path LogPath(const std::filesystem::path& mod,Stream str
 inline std::filesystem::path GamePassLog(const std::filesystem::path& mod,const std::filesystem::path& local){
     const auto binaries=mod.parent_path().parent_path().parent_path();
     if(local.empty()||Lower(binaries.filename().string())!="wingdk"||Lower(binaries.parent_path().filename().string())!="binaries")return {};
-    return DiagnosticLogPaths::UseUE4SS?DiagnosticLogPaths::UE4SS(mod)/"RSDragonwilds.log":local/"RSDragonwilds"/"RuneSchema"/"gamepass"/"diagnostics"/"RSDragonwilds.log";
+    if(DiagnosticLogPaths::UseUE4SS)return DiagnosticLogPaths::UE4SS(mod)/"RSDragonwilds.log";
+    // Game Pass runtime data lives in AppData WinGDK. A log still written by an older shortcut to the
+    // pre-migration gamepass folder is read from there until the shortcut is saved again.
+    const auto root=local/"RSDragonwilds"/"RuneSchema",current=root/"WinGDK"/"diagnostics"/"RSDragonwilds.log",legacy=root/"gamepass"/"diagnostics"/"RSDragonwilds.log";
+    std::error_code error;return !std::filesystem::is_regular_file(current,error)&&std::filesystem::is_regular_file(legacy,error)?legacy:current;
 }
 inline std::filesystem::path ResolveGameLog(const std::filesystem::path& mod,const std::filesystem::path& local){
     if(DiagnosticLogPaths::UseUE4SS){const auto central=DiagnosticLogPaths::UE4SS(mod)/"RSDragonwilds.log";std::error_code error;if(std::filesystem::is_regular_file(central,error)&&!std::filesystem::is_symlink(central,error))return central;}
@@ -60,7 +64,7 @@ inline bool ProtectedExport(const std::filesystem::path& destination,const std::
     const auto parent=Lower(destination.lexically_normal().parent_path().generic_string()),name=Lower(destination.filename().string());
     if(parent==Lower(DiagnosticLogPaths::UE4SS(mod).lexically_normal().generic_string())
         &&(name.starts_with("runeschema.log")||name.starts_with("rsdiaglog")||name.starts_with("helpy-desktop.log")||(name.starts_with("rsdragonwilds")&&name.ends_with(".log"))))return true;
-    if(parent.ends_with("/rsdragonwilds/runeschema/gamepass/diagnostics")&&name.starts_with("rsdragonwilds")&&name.ends_with(".log"))return true;
+    if((parent.ends_with("/rsdragonwilds/runeschema/wingdk/diagnostics")||parent.ends_with("/rsdragonwilds/runeschema/gamepass/diagnostics"))&&name.starts_with("rsdragonwilds")&&name.ends_with(".log"))return true;
     if(parent==Lower(ArchivePath(mod).lexically_normal().generic_string())&&name.starts_with("runeschema-")&&name.ends_with(".log"))return true;
     for(const auto stream:{Stream::RuneSchema,Stream::UE4SS,Stream::Game})
         if(parent==Lower(LogPath(mod,stream).lexically_normal().parent_path().generic_string())

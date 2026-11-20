@@ -1,3 +1,4 @@
+#include "HelpySettingsFile.h"
 #include "RuntimePaths.h"
 #include "Runtime/RuneSchemaPluginApi.h"
 #include "Core/HelpyBranding.h"
@@ -52,7 +53,8 @@ int Run(int argc,char** argv){
         const auto plugin=fixture.Root/(BridgeStartup?"Helpy":"RuneSchema.Helpy");std::filesystem::create_directories(plugin/"dll");std::filesystem::create_directories(plugin/"settings");
         const auto binary=BridgeStartup?plugin/"Helpy.dll":plugin/"dll/RuneSchema.Helpy.dll";if(BridgeStartup)std::filesystem::copy_file(library,binary);PS::HelpyPaths::Configure(plugin);library=binary;
         std::filesystem::copy_file(std::filesystem::path(HELPY_PLUGIN_PACKAGE_ROOT)/"plugin.json",plugin/"plugin.json");
-        std::ofstream(plugin/"settings/settings.jsonc")<<nlohmann::json{{"enabled",true},{"startWithGame",false},{"standaloneDesktop",false},{"minimizeOnClose",!exitOnClose}}.dump();
+        const auto settingsFile=PS::HelpySettingsFile::Location(plugin);std::filesystem::create_directories(settingsFile.parent_path());
+        std::ofstream(settingsFile)<<nlohmann::json{{"enabled",true},{"startWithGame",false},{"standaloneDesktop",false},{"minimizeOnClose",!exitOnClose}}.dump();
     }
     auto dll=app?GetModuleHandleW(nullptr):LoadLibraryW(library.c_str());Check(dll!=nullptr);
     const auto query=app?RuneSchemaPlugin_Query:reinterpret_cast<RuneSchemaPluginQueryFn>(GetProcAddress(dll,"RuneSchemaPlugin_Query"));

@@ -25,7 +25,7 @@ configure_file("${HELPY_SDL_RUNTIME}" "${CMAKE_CURRENT_BINARY_DIR}/SDL3.dll" COP
 # Helpy.exe and the plugin DLLs are written to CMAKE_BINARY_DIR; in the universal build that is not this folder.
 configure_file("${HELPY_SDL_RUNTIME}" "${CMAKE_BINARY_DIR}/SDL3.dll" COPYONLY)
 set_source_files_properties(source/resources/RSMK.rc PROPERTIES OBJECT_DEPENDS
-  "${CMAKE_CURRENT_SOURCE_DIR}/../../resources/tools/build-helpy-cache.ps1;${CMAKE_CURRENT_SOURCE_DIR}/../../resources/tools/repair-runeschema.ps1;${CMAKE_CURRENT_SOURCE_DIR}/../../resources/helpy-ui/v1/nexus.png;${CMAKE_CURRENT_SOURCE_DIR}/../../resources/helpy-ui/v1/loading-ring.png;${CMAKE_CURRENT_SOURCE_DIR}/../../licenses/ModMenu-MIT.txt;${CMAKE_CURRENT_SOURCE_DIR}/../../resources/map-atlas/Scorned-Art.png")
+  "${CMAKE_CURRENT_SOURCE_DIR}/../plugins/RuneSchema.Helpy/assets/Apply-DedicatedServerSettings.ps1;${CMAKE_CURRENT_SOURCE_DIR}/../../resources/tools/build-helpy-cache.ps1;${CMAKE_CURRENT_SOURCE_DIR}/../../resources/tools/repair-runeschema.ps1;${CMAKE_CURRENT_SOURCE_DIR}/../../resources/helpy-ui/v1/nexus.png;${CMAKE_CURRENT_SOURCE_DIR}/../../resources/helpy-ui/v1/loading-ring.png;${CMAKE_CURRENT_SOURCE_DIR}/../../licenses/ModMenu-MIT.txt;${CMAKE_CURRENT_SOURCE_DIR}/../../resources/map-atlas/Scorned-Art.png")
 add_library(helpy_imgui STATIC vendor/imgui/imgui.cpp vendor/imgui/imgui_draw.cpp
   vendor/imgui/imgui_tables.cpp vendor/imgui/imgui_widgets.cpp
   vendor/imgui/backends/imgui_impl_win32.cpp vendor/imgui/backends/imgui_impl_dx11.cpp)
@@ -115,6 +115,11 @@ target_include_directories(RuneSchemaDeveloperPlugin PRIVATE source/include ../r
 set_target_properties(RuneSchemaDeveloperPlugin PROPERTIES OUTPUT_NAME "RuneSchema.DeveloperTools" RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
 target_link_options(RuneSchemaDeveloperPlugin PRIVATE /OPT:REF /OPT:ICF /INCREMENTAL:NO)
+
+add_library(RuneSchemaAchievementsPlugin SHARED source/plugins/achievements/AchievementsPlugin.cpp)
+target_include_directories(RuneSchemaAchievementsPlugin PRIVATE source/include ../raw/include)
+set_target_properties(RuneSchemaAchievementsPlugin PROPERTIES OUTPUT_NAME "RuneSchema.Achievements" RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+target_link_options(RuneSchemaAchievementsPlugin PRIVATE /OPT:REF /OPT:ICF /INCREMENTAL:NO)
 
 add_library(HelpyVulkanBootstrap SHARED source/plugins/helpy/HelpyVulkanBootstrap.cpp)
 set_target_properties(HelpyVulkanBootstrap PROPERTIES OUTPUT_NAME RuneSchema.Helpy.Vulkan RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
@@ -550,6 +555,10 @@ target_compile_options(developer-plugin-tests PRIVATE /UNDEBUG)
 target_include_directories(developer-plugin-tests PRIVATE ../raw/include)
 target_link_libraries(developer-plugin-tests PRIVATE bcrypt)
 add_test(NAME developer-plugin-tests COMMAND developer-plugin-tests "$<TARGET_FILE:RuneSchemaDeveloperPlugin>" "${CMAKE_CURRENT_SOURCE_DIR}/../../LICENSE")
+add_executable(achievements-plugin-tests source/tests/achievements-plugin.cpp)
+target_compile_options(achievements-plugin-tests PRIVATE /UNDEBUG)
+target_include_directories(achievements-plugin-tests PRIVATE ../raw/include)
+add_test(NAME achievements-plugin-tests COMMAND achievements-plugin-tests "$<TARGET_FILE:RuneSchemaAchievementsPlugin>")
 
 add_executable(mod-menu-templates source/tests/mod-menu-templates.cpp)
 target_compile_options(mod-menu-templates PRIVATE /UNDEBUG)

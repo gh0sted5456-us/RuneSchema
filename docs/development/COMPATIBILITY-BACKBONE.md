@@ -41,9 +41,9 @@ authority and uses mappings for better names, diagnostics and tooling.
 Generated mappings and indexes live in platform-separated AppData caches:
 
 ```text
-%LOCALAPPDATA%/RSDragonwilds/RuneSchema/steam/cache/mappings
-%LOCALAPPDATA%/RSDragonwilds/RuneSchema/gamepass/cache/mappings
-%LOCALAPPDATA%/RSDragonwilds/RuneSchema/epic/cache/mappings
+%LOCALAPPDATA%/RSDragonwilds/RuneSchema/Win64/cache/mappings     (Steam and Epic)
+%LOCALAPPDATA%/RSDragonwilds/RuneSchema/WinGDK/cache/mappings    (Game Pass)
+%LOCALAPPDATA%/RSDragonwilds/RuneSchema/Server/cache/mappings    (dedicated server)
 ```
 
 New runtime packages do not ship `dlls/mappings` or migrate legacy caches.

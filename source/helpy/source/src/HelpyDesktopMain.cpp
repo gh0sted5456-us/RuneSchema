@@ -166,7 +166,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR,int){
         OfflineEnvironment={{"Storefront",platform=="gamepass"?"Game Pass/WinGDK":"Steam/Epic"},{"Platform",platform=="epic"?"Epic Games":"Steam"},{"DedicatedServer",platform=="server"},{"NativeIconCaptureAvailable",false},{"UpdateChecksAvailable",true},{"DesktopStartHidden",startHidden}};
         PS::HelpyGameLifetime game;game.Observe(gamePid);
         Bridge.Connect(root);game.Observe(Bridge.Pid.load());
-        PS::HelpyPaths::Configure(PS::RuntimePaths::Helpy(root));
+        PS::HelpyPaths::Configure(PS::RuntimePaths::Helpy(root));PS::HelpyPaths::CacheLicenses();
         OfflineEnvironment["RuneSchemaVersion"]=RuneSchemaPlugin_Query()->Version;
         shutdown=RuneSchemaPlugin_Shutdown;
         if(RuneSchemaPlugin_Initialize(&Host,&instance)!=RS_PLUGIN_OK)throw std::runtime_error("Helpy application initialization failed");

@@ -30,7 +30,7 @@ function CheckPaths([string]$local,[string]$expected){
  if($result.Code -ne 0){throw $result.Error}
  $actual=@($result.Output -split '\r?\n'|Where-Object {$_})
  $prefix=$expected.Replace('\','/').TrimEnd('/')
- $wanted=@($prefix)+@('steam','gamepass','epic','server'|ForEach-Object {$prefix+'/'+$_+'/cache/mappings'})
+ $wanted=@($prefix)+@('Win64','WinGDK','Win64','Server'|ForEach-Object {$prefix+'/'+$_+'/cache/mappings'})
  if($actual.Count -ne $wanted.Count){throw 'Wrong number of data paths'}
  for($i=0;$i -lt $wanted.Count;$i++){if(![string]::Equals($actual[$i],$wanted[$i],[StringComparison]::OrdinalIgnoreCase)){throw ('Unexpected physical data path: '+$actual[$i]+' expected '+$wanted[$i])}}
 }
@@ -49,7 +49,7 @@ try{
  CheckPaths $local3 $physical3
  if((Hash $marker) -ne $hash){throw 'Existing profile bytes changed'}
  $outside=Join-Path $fixture 'outside';Directory $outside
- $child=Join-Path $physical3 'steam/cache/mappings';Junction $child $outside
+ $child=Join-Path $physical3 'Win64/cache/mappings';Junction $child $outside
  $blocked=RunPaths $local3
  if($blocked.Code -eq 0 -or !$blocked.Error.Contains($child.Replace('\','/'))){throw 'Redirected cache child was not rejected with its exact path'}
  $invalid=RunPaths 'relative-local'
@@ -60,8 +60,8 @@ try{
  Junction (Join-Path $profile 'characters') $characters
  $imports=Join-Path $fixture 'physical-imports';Directory $imports
  $exports=Join-Path $fixture 'physical-exports';Directory $exports
- Junction (Join-Path $physical3 'steam/runtime/jobs/imports/saves') $imports
- Junction (Join-Path $physical3 'steam/runtime/jobs/exports') $exports
+ Junction (Join-Path $physical3 'Win64/runtime/jobs/imports/saves') $imports
+ Junction (Join-Path $physical3 'Win64/runtime/jobs/exports') $exports
  $savePaths=RunPaths $local3 '--save-paths'
  if($savePaths.Code -ne 0){throw $savePaths.Error}
  $actual=@($savePaths.Output -split '\r?\n'|Where-Object {$_})

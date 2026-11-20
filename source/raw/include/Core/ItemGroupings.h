@@ -5,6 +5,7 @@
 #include "Core/HelpyCacheSources.h"
 #include "Core/ContentSource.h"
 #include "Core/ItemFamily.h"
+#include "Core/RuneSchemaDataRoot.h"
 #include <nlohmann/json.hpp>
 #include <map>
 
@@ -39,12 +40,20 @@ inline Plan Generate(const Json& records,const Plan& edits={}){Plan result=edits
     auto row=record.at("Data");const auto owner=record.at("Owner").get<std::string>(),path=record.at("Path").get<std::string>();row["Path"]=path;Apply(row,edits,owner);Rule rule{ItemCategory::Resolve(row),ItemFamily::RowKey(row),owner,path};result[Key(path,owner)]=std::move(rule);
 }return result;}
 inline void Import(const std::filesystem::path& cache,const Plan& incoming){const auto file=cache/"taglines.json";CacheBundleIO::MetadataLock lock(file);CacheBundleIO::Safe(file);auto plan=std::filesystem::is_regular_file(file)?Read(file):Plan{};Merge(plan,incoming);const auto document=Document(plan).dump();if(document.size()>64*1024*1024)throw std::runtime_error("Taglines exceed cache metadata bounds.");CacheBundleIO::Publish(file,document);}
+// The player's own groupings live in AppData core/HELPY. A file still in the mod's Helpy/settings is read until
+// it is saved again from Helpy.
+inline std::filesystem::path UserFile(const std::filesystem::path& root){
+    const auto legacy=RuntimePaths::Helpy(root)/"settings/item-groupings.json";
+    try{const auto current=RuneSchemaData::SharedDirectory("HELPY")/"item-groupings.json";std::error_code error;
+        return !std::filesystem::exists(current,error)&&std::filesystem::is_regular_file(legacy,error)?legacy:current;}
+    catch(...){return legacy;}
+}
 inline std::vector<std::pair<std::filesystem::path,std::string>> Files(const std::filesystem::path& cache,const std::filesystem::path& root){
     std::vector<std::pair<std::filesystem::path,std::string>> result{{cache/"taglines.json",{}}};
     const auto mods=root/"mods";CacheBundleIO::Safe(mods);if(std::filesystem::is_directory(mods))for(const auto& mod:std::filesystem::directory_iterator(mods)){
         CacheBundleIO::Safe(mod.path());if(!mod.is_directory())continue;if(result.size()>2048)throw std::runtime_error("Too many installed grouping sources.");result.emplace_back(mod.path()/"cache/taglines.json","mods/"+HelpyCacheSources::Lower(mod.path().filename().string()));
     }
-    result.emplace_back(RuntimePaths::Helpy(root)/"settings/item-groupings.json",std::string{});return result;
+    result.emplace_back(UserFile(root),std::string{});return result;
 }
 inline Plan Load(const std::filesystem::path& cache,const std::filesystem::path& root){Plan result;for(const auto& [file,owner]:Files(cache,root))if(std::filesystem::is_regular_file(file)){
     const auto incoming=Bound(Read(file),owner);if(file.filename()=="item-groupings.json")for(const auto& [key,rule]:incoming)if(rule.Owner.empty())for(auto& [existingKey,existing]:result)if(HelpyCacheSources::Lower(existing.Path)==HelpyCacheSources::Lower(rule.Path)){existing.Category=rule.Category;existing.Family=rule.Family;}

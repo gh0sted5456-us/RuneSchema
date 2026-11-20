@@ -1,6 +1,6 @@
 # Mod achievements
 
-A RuneSchema mod can define achievements that players earn while they play. When one unlocks, Helpy raises an
+Any mod, UE4SS or RuneSchema, can define achievements that players earn while they play. When one unlocks, Helpy raises an
 award card labeled "RuneSchema Gamer Points" from the bottom of the game. The native HUD presents the card
 while the game keeps focus and input. The RuneSchema mark opens to reveal the achievement and points, then
 reassembles before closing. With Windows animations disabled, the card shows the award directly.
@@ -10,12 +10,24 @@ those points in the Player profile window.
 
 ## Where the file goes
 
-```
-<your mod>/cache/achievements.json
-```
+Your mod does not need to be a RuneSchema mod. The **Helpy Achievements** plugin
+(`Helpy/plugins/RuneSchema.Achievements`, installed with RuneSchema) looks for the file in both kinds of mod:
 
-Put it next to `tips.json` and `taglines.json`. Rebuilding the mod's Helpy cache keeps the file. Mods that
-include it show an **Achievements** badge on the Mods page.
+| Mod type | File |
+| --- | --- |
+| UE4SS mod | `ue4ss/Mods/<your mod>/achievements.json` |
+| RuneSchema mod | `RuneSchema/mods/<your mod>/achievements.json`, or `cache/achievements.json` |
+
+A UE4SS mod counts while it is enabled in `mods.txt` or has an `enabled.txt`. A RuneSchema mod counts while
+it is enabled on the Mods page. Rebuilding a RuneSchema mod's Helpy cache keeps `cache/achievements.json`.
+RuneSchema mods with the file show an **Achievements** badge on the Mods page.
+
+Players earn achievements while RuneSchema and Helpy are installed: the game events come from RuneSchema's
+core, and Helpy tracks progress. If the plugin is removed, or turned off with `RuneSchema.Achievements : 0` in
+`RuneSchema/settings/plugins.txt`, achievements are off and points already earned are kept.
+
+Achievement IDs are scoped to the mod folder (`ue4ss/<folder>` or `mods/<folder>`), so two mods can use the
+same `id` without clashing.
 
 ## Format
 

@@ -22,4 +22,16 @@ foreach($relative in $paths){
     }
     if([IO.File]::Exists($target)){[IO.File]::Delete($target);$removed+=$relative}
 }
-Write-Output ('Optional GitHub artwork excluded from runtime payload: '+$removed.Count+' files')
+# Helpy keeps its own files in AppData core/HELPY: settings, backgrounds, fonts and groupings are created there
+# on first use, the dedicated-server script is built into Helpy.exe, and the window icon is an exe resource.
+$owned=@('assets/Apply-DedicatedServerSettings.ps1','assets/RuneSchema.ico','assets/backgrounds/Backgrounds.txt','settings/ui.jsonc','settings/settings.jsonc','settings/item-groupings.example.json')
+foreach($relative in $owned){
+    $target=[IO.Path]::GetFullPath((Join-Path $payload $relative))
+    if(-not $target.StartsWith($payload+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)){throw 'AppData-owned path escaped payload'}
+    if([IO.File]::Exists($target)){[IO.File]::Delete($target);$removed+=$relative}
+}
+foreach($relative in @('assets/portraits','assets/backgrounds','assets','settings')){
+    $folder=Join-Path $payload $relative
+    if((Test-Path -LiteralPath $folder -PathType Container) -and -not (Get-ChildItem -LiteralPath $folder -Force|Select-Object -First 1)){Remove-Item -LiteralPath $folder -Force}
+}
+Write-Output ('Optional artwork and AppData-owned Helpy files excluded from runtime payload: '+$removed.Count+' files')

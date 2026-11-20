@@ -462,7 +462,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         )
         $configureArgs += '-DRUNESCHEMA_BUILD_MANAGED_UE4SS_HOST=OFF'
         Ensure-CMakeConfigured $RawSource $build $configureArgs 'universal RuneSchema'
-        $targets = if ($OnlyPlugin) { @('RuneSchemaHelpyPlugin','RuneSchemaHudPlugin','HelpyDesktop','HelpyVulkanBootstrap','RuneSchemaModMenuPlugin','RuneSchemaDeveloperPlugin') } else { @('RuneSchema', 'RuneSchemaMultiplayerPlugin','RuneSchemaHelpyPlugin','RuneSchemaHudPlugin','HelpyDesktop','HelpyVulkanBootstrap','RuneSchemaModMenuPlugin','RuneSchemaDeveloperPlugin') }
+        $targets = if ($OnlyPlugin) { @('RuneSchemaHelpyPlugin','RuneSchemaHudPlugin','HelpyDesktop','HelpyVulkanBootstrap','RuneSchemaModMenuPlugin','RuneSchemaDeveloperPlugin','RuneSchemaAchievementsPlugin') } else { @('RuneSchema', 'RuneSchemaMultiplayerPlugin','RuneSchemaHelpyPlugin','RuneSchemaHudPlugin','HelpyDesktop','HelpyVulkanBootstrap','RuneSchemaModMenuPlugin','RuneSchemaDeveloperPlugin','RuneSchemaAchievementsPlugin') }
         Write-Host $(if ($OnlyPlugin) { '=== Compile Helpy plugin only (RuneSchema.dll is untouched) ===' } else { '=== Compile universal RuneSchema ===' }) -ForegroundColor Cyan
         Write-Host 'Ninja auto-regeneration is disabled; build.ps1 owns all CMake reconfiguration.' -ForegroundColor DarkGray
 
@@ -548,7 +548,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         Get-ChildItem -LiteralPath (Join-Path $SourceRoot 'plugins/RuneSchema.Helpy') -Force|ForEach-Object{Copy-Item -LiteralPath $_.FullName -Destination $payload -Recurse -Force}
         Copy-HelpyDlls $HelpyDll (Join-Path $payload 'dll')
         Copy-HudPlugin $HelpyDll (Join-Path $runtime 'plugins/RuneSchema.HUD')
-        foreach($id in @('RuneSchema.ModMenu2','RuneSchema.DeveloperTools')){Copy-HelpyFeaturePlugin $HelpyDll $id (Join-Path $runtime ('plugins/'+$id))}
+        foreach($id in @('RuneSchema.ModMenu2','RuneSchema.DeveloperTools','RuneSchema.Achievements')){Copy-HelpyFeaturePlugin $HelpyDll $id (Join-Path $runtime ('plugins/'+$id))}
         & (Join-Path $BuildRoot 'build/package-optional-art.ps1') -PayloadRoot $payload -StagingRoot $DistRoot -RepositoryRoot $BuildRoot
         . (Join-Path $PSScriptRoot 'runtime-layout.ps1')
         Set-RuneSchemaRuntimeLayout $runtime
@@ -570,7 +570,11 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         New-Item -ItemType Directory -Path (Join-Path $Destination 'dll') -Force|Out-Null
         Get-ChildItem -LiteralPath (Join-Path $SourceRoot ('plugins/'+$Id)) -File|ForEach-Object{Copy-Item -LiteralPath $_.FullName -Destination $Destination -Force}
         Copy-Item -LiteralPath $dll -Destination (Join-Path $Destination ('dll/'+$Id+'.dll')) -Force
-        if($Id -eq 'RuneSchema.ModMenu2'){Write-ModMenu2Key $Destination}
+        if($Id -eq 'RuneSchema.ModMenu2'){
+            Write-ModMenu2Key $Destination
+            # The key carries the full MIT text and the consolidated licence bundle has it too.
+            $copy=Join-Path $Destination 'ModMenu-MIT.txt';if(Test-Path -LiteralPath $copy -PathType Leaf){Remove-Item -LiteralPath $copy -Force}
+        }
     }
     # modmenu2.key = activation hash, a blank line, then the complete original MIT license.
     # Both halves come from the repository, and the license must match the digest the
@@ -737,7 +741,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         Copy-Item -LiteralPath (Join-Path (Split-Path -Parent $CoreDll) 'RuneSchema.UE4SS.Bridge.dll') -Destination $sisterPlugin -Force
         Copy-HelpyDlls $HelpyDll (Join-Path $payload 'plugins\RuneSchema.Helpy\dll')
         Copy-HudPlugin $HelpyDll (Join-Path $payload 'plugins\RuneSchema.HUD')
-        foreach($id in @('RuneSchema.ModMenu2','RuneSchema.DeveloperTools')){Copy-HelpyFeaturePlugin $HelpyDll $id (Join-Path $payload ('plugins/'+$id))}
+        foreach($id in @('RuneSchema.ModMenu2','RuneSchema.DeveloperTools','RuneSchema.Achievements')){Copy-HelpyFeaturePlugin $HelpyDll $id (Join-Path $payload ('plugins/'+$id))}
         . (Join-Path $PSScriptRoot "runtime-layout.ps1")
         Set-RuneSchemaRuntimeLayout $payload
         $report = foreach ($dll in Get-ChildItem -LiteralPath $payload -Filter '*.dll' -File -Recurse) {

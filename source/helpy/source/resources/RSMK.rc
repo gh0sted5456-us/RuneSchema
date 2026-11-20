@@ -8,6 +8,7 @@ IDR_RUNESCHEMA_REPAIR RCDATA "../../../../resources/tools/repair-runeschema.ps1"
 IDR_MOD_MENU_LICENSE RCDATA "../../../../licenses/ModMenu-MIT.txt"
 IDR_LOADING_WHEEL RCDATA "../../../../resources/helpy-ui/v1/loading-ring.png"
 IDR_SCORNED_ART RCDATA "../../../../resources/map-atlas/Scorned-Art.png"
+IDR_DEDICATED_SETTINGS RCDATA "../../../plugins/RuneSchema.Helpy/assets/Apply-DedicatedServerSettings.ps1"
 #endif
 
 VS_VERSION_INFO VERSIONINFO

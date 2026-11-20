@@ -16,6 +16,13 @@ This prerelease packages RuneSchema and Helpy for Dragonwilds CL260223. Install 
 
 ## Changes since 0.8.0.3
 
+### Helpy data in AppData, Achievements plugin · November 19
+
+- Helpy keeps its own files in `%LOCALAPPDATA%/RSDragonwilds/RuneSchema/core`: settings, theme, item groupings, downloaded artwork, your own backgrounds and fonts, and a copy of the licence bundle. The installed mod now holds only runtime files, plugin DLLs and the single licence bundle in `settings/licenses`.
+- Runtime folders are named for the game binaries: `Win64` for Steam and Epic, `WinGDK` for Game Pass, and `Server` for a dedicated server. The first start moves the older `steam`, `epic`, `gamepass`, `server`, `HELPY`, `runeschema.profile` and `health` folders once, without copying or deleting. A folder in use stays where it is until a later start. See [Runtime folders](RUNTIME-LAYOUT.md).
+- The dedicated-server apply script is built into Helpy.exe and written to `core/HELPY/tools` when you copy the apply command.
+- Achievements are a Helpy plugin, `RuneSchema.Achievements`. It finds `achievements.json` in UE4SS mods as well as RuneSchema mods, so any mod can award achievements. Turning the plugin off in `plugins.txt` turns achievements off and keeps earned points. See [Mod achievements](../MOD-ACHIEVEMENTS.md).
+
 ### Item Bay search fixes · November 17
 
 - Added **Stop search** to the Item Bay controls. Stopping keeps the displayed results, selection, and delivery cart available and cancels further search requests.
