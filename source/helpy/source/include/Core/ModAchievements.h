@@ -23,8 +23,8 @@
 
 namespace PS::ModAchievements {
 using Json = nlohmann::json;
-inline constexpr std::array<std::string_view, 10> Events{"kill", "craft", "recipe-unlocked", "building-unlocked", "quest-updated",
-    "skill-xp", "death", "building-placed", "item-used", "custom"};
+inline constexpr std::array<std::string_view, 11> Events{"kill", "craft", "recipe-unlocked", "building-unlocked", "quest-updated",
+    "skill-xp", "death", "building-placed", "item-used", "custom", "report"};
 inline constexpr size_t MaximumPerMod = 256, MaximumConditions = 8, MaximumWhere = 8, MaximumModPoints = 1000;
 inline constexpr int MaximumPoints = 100;
 
@@ -53,9 +53,9 @@ inline bool Owner(std::string_view owner) { return !OwnerPrefix(owner).empty() &
 inline std::string OwnerFolder(const std::string& owner) { return owner.substr(OwnerPrefix(owner).size()); }
 
 struct Condition {
-    std::string Event, Subject; // Subject: exact path, "prefix*", or empty for any.
+    std::string Event, Subject; // Subject: exact path, "prefix*", or empty for any. For "report": the report name.
     double Count = 1;           // Sum of event amounts needed (kills, crafts, XP gained...).
-    double AtLeast = 0;         // skill-xp only: reach this total XP instead of gaining Count.
+    double AtLeast = 0;         // skill-xp and report: reach this reported value instead of adding up Count.
     Json Where = Json::object(); // Dotted parameter paths -> expected scalar.
 };
 struct Definition {
@@ -122,13 +122,20 @@ inline std::vector<Definition> Parse(const Json& document, const std::string& ow
             if (!value.is_object()) throw std::runtime_error("Each condition must be an object" + context);
             Condition condition; condition.Event = value.value("event", std::string{});
             if (std::find(Events.begin(), Events.end(), condition.Event) == Events.end()) throw std::runtime_error("Unknown condition event \"" + condition.Event + "\"" + context);
-            const bool custom = condition.Event == "custom";
-            condition.Subject = value.value(custom ? "function" : "subject", std::string{});
-            if (custom && condition.Subject.empty()) throw std::runtime_error("A custom condition needs \"function\": \"/Game/...:EventName\"" + context);
-            if (!condition.Subject.empty() && !Pattern(condition.Subject, custom)) throw std::runtime_error("Invalid condition path \"" + condition.Subject + "\"" + context);
+            const bool custom = condition.Event == "custom", report = condition.Event == "report";
+            if (report) {
+                // Reported by the mod itself (RuneSchema_ReportModEventV1) and matched only for this owner.
+                if (value.contains("subject") || value.contains("function")) throw std::runtime_error("A report condition uses \"name\", not \"subject\" or \"function\"" + context);
+                condition.Subject = value.contains("name") && value["name"].is_string() ? value["name"].get<std::string>() : std::string{};
+                if (!Identifier(condition.Subject)) throw std::runtime_error("A report condition needs \"name\": 1-64 letters, digits, '-', '_' or '.'" + context);
+            } else {
+                condition.Subject = value.value(custom ? "function" : "subject", std::string{});
+                if (custom && condition.Subject.empty()) throw std::runtime_error("A custom condition needs \"function\": \"/Game/...:EventName\"" + context);
+                if (!condition.Subject.empty() && !Pattern(condition.Subject, custom)) throw std::runtime_error("Invalid condition path \"" + condition.Subject + "\"" + context);
+            }
             condition.Count = Detail::Number(value, "count", 1, 1, 1e9);
             condition.AtLeast = Detail::Number(value, "atLeast", 0, 0, 1e12);
-            if (condition.AtLeast > 0 && condition.Event != "skill-xp") throw std::runtime_error("atLeast applies only to skill-xp" + context);
+            if (condition.AtLeast > 0 && condition.Event != "skill-xp" && !report) throw std::runtime_error("atLeast applies only to skill-xp and report" + context);
             if (value.contains("where")) {
                 const auto& where = value["where"];
                 if (!where.is_object() || where.size() > MaximumWhere) throw std::runtime_error("where must be an object with at most 8 fields" + context);
@@ -144,9 +151,14 @@ inline std::vector<Definition> Parse(const Json& document, const std::string& ow
     return result;
 }
 
-inline bool Matches(const Condition& condition, const Json& event) {
+// `owner` is the definition's owner. A report event counts only for the mod that reported it, so one mod can
+// never complete another's achievements; other kinds carry no owner and are unchanged.
+inline bool Matches(const Condition& condition, const Json& event, std::string_view owner) {
     if (!event.is_object() || event.value("Kind", std::string{}) != condition.Event) return false;
-    if (!Detail::SubjectMatches(condition.Subject, event.value("Subject", std::string{}))) return false;
+    if (condition.Event == "report") {
+        if (owner.empty() || !event.contains("Owner") || !event["Owner"].is_string() || event["Owner"].get_ref<const std::string&>() != owner) return false;
+        if (event.value("Subject", std::string{}) != condition.Subject) return false;
+    } else if (!Detail::SubjectMatches(condition.Subject, event.value("Subject", std::string{}))) return false;
     if (!condition.Where.empty()) {
         const auto parameters = event.contains("Parameters") ? event["Parameters"] : Json::object();
         for (const auto& [path, expected] : condition.Where.items()) {
@@ -180,7 +192,7 @@ public:
             bool touched = false;
             for (size_t index = 0; index < definition.Conditions.size(); ++index) {
                 const auto& condition = definition.Conditions[index];
-                if (!Matches(condition, event)) continue;
+                if (!Matches(condition, event, definition.Owner)) continue;
                 if (found == Entries.end()) found = Entries.emplace(definition.Key(), Entry{}).first;
                 auto& counters = found->second.Counters;
                 counters.resize(definition.Conditions.size(), 0);

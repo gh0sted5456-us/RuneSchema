@@ -105,13 +105,14 @@ inline void OpenAll(const nlohmann::json& rows) {
 }
 inline void Requirements(const ModAchievements::Definition& definition) {
     constexpr std::array labels{"Defeat enemies", "Craft", "Unlock recipes", "Unlock buildings", "Update quests",
-        "Gain skill XP", "Die and respawn", "Place buildings", "Use items", "Trigger a mod event"};
+        "Gain skill XP", "Die and respawn", "Place buildings", "Use items", "Trigger a mod event", "Mod progress"};
     static_assert(labels.size() == ModAchievements::Events.size());
     ImGui::TextUnformatted(definition.Conditions.size() == 1 ? "Unlock requirement"
         : definition.Any ? "Meet any of these requirements" : "Meet all of these requirements");
     for (const auto& condition : definition.Conditions) {
         const auto event = std::find(ModAchievements::Events.begin(), ModAchievements::Events.end(), condition.Event);
-        if (condition.AtLeast > 0) ImGui::BulletText("Reach %.12g total XP", condition.AtLeast);
+        if (condition.AtLeast > 0 && condition.Event == "report") ImGui::BulletText("Reach %.12g", condition.AtLeast);
+        else if (condition.AtLeast > 0) ImGui::BulletText("Reach %.12g total XP", condition.AtLeast);
         else ImGui::BulletText("%s × %.9g", event != ModAchievements::Events.end()
             ? labels[static_cast<size_t>(event - ModAchievements::Events.begin())] : condition.Event.c_str(), condition.Count);
         if (!condition.Subject.empty()) ImGui::TextWrapped("%s", condition.Subject.c_str());

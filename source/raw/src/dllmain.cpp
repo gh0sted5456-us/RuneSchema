@@ -958,6 +958,7 @@ private:
         Hook::GlobalCallbackId m_toolsWorldCallbackId = Hook::ERROR_ID;
 };
 
+#include "Core/GameplayEventFeed.h"
 #define RuneSchema_API __declspec(dllexport)
 BOOL APIENTRY DllMain(HMODULE,DWORD reason,LPVOID reserved) {
     if(reason==DLL_PROCESS_DETACH&&reserved)PS::ProcessExitInProgress.store(true,std::memory_order_relaxed);
@@ -968,6 +969,14 @@ extern "C"
     RuneSchema_API bool RuneSchema_RegisterPakLoaderRootV1(const wchar_t* path) noexcept
     {
         return PS::PakLoader::Register(path);
+    }
+
+    // Append-only, found with GetProcAddress (shared/RuneSchemaModApi.h: RuneSchemaReportModEventV1Fn).
+    // Pushes one local-player "report" event for Helpy mod achievements. Any thread; never throws.
+    RuneSchema_API int32_t RuneSchema_ReportModEventV1(const char* owner, const char* name, double amount, double value,
+                                                       const char* parametersJson) noexcept
+    {
+        return PS::GameplayEventFeed::ReportV1(PS::GameplayEventFeed::Current, owner, name, amount, value, parametersJson);
     }
 
     RuneSchema_API RC::CppUserModBase* start_mod()

@@ -1,5 +1,6 @@
 #include "Core/GameplayEventFeed.h"
 #include <cassert>
+#include <limits>
 #include <iostream>
 // Gameplay events are normalized, bounded and read with a cursor.
 using namespace PS;using Json=nlohmann::json;namespace F=GameplayEventFeed;
@@ -35,5 +36,36 @@ int main(){
     assert(reply["Watched"]==Json::array({"/Game/M/BP.BP_C:OnWin"})&&reply["Watching"]==1&&reply["Events"].empty());
     const auto revision=feed.WatchRevision();F::Service({{"Watch",{"/Game/M/BP.BP_C:OnWin"}}},feed);assert(feed.WatchRevision()==revision);
     bool threw=false;try{F::Service({{"Cursor","x"}},feed);}catch(...){threw=true;}assert(threw);
-    std::cout<<"Gameplay events are normalized, bounded and read with a cursor\n";
+    // Mod-reported events (RuneSchema_ReportModEventV1 -> ReportV1).
+    {F::Feed reports(7);const auto last=[&]{const auto events=reports.Since(0)["Events"];return events.empty()?Json():events.back();};
+        assert(F::ReportV1(reports,"ue4ss/JBM","tattoo-designs",1,31,nullptr)==F::ReportOk);
+        auto event=last();assert(event["Kind"]=="report"&&event["Owner"]=="ue4ss/jbm"&&event["Subject"]=="tattoo-designs"&&event["Amount"]==1&&event["Value"]==31&&!event.contains("Parameters"));
+        assert(F::ReportV1(reports,"Mods/Bigger Inventory","award",2,0,R"({"Id":"Elf","Nested":{"Ok":true}})")==F::ReportOk);
+        event=last();assert(event["Owner"]=="mods/bigger inventory"&&event["Amount"]==2&&event["Parameters"]["Id"]=="Elf"&&event["Parameters"]["Nested"]["Ok"]==true);
+        assert(F::ReportV1(reports,"mods/x","n",1,0,"")==F::ReportOk&&!last().contains("Parameters")); // Empty text means no parameters.
+        const auto count=[&]{return reports.Since(0)["Events"].size();};const auto before=count();
+        const auto rejected=[&](const char* owner,const char* name,double amount,double value,const char* parameters){return F::ReportV1(reports,owner,name,amount,value,parameters)==F::ReportInvalidArgument;};
+        // Owners: only "mods/<folder>" or "ue4ss/<folder>", one folder, visible text, at most 160 characters.
+        for(const auto* owner:{"","jbm","mods/","ue4ss/","plugins/x","mods/a/b","mods/a\\b","mods/..","mods/.","mods/ x","mods/x ","mods/c:x","mods/\x01"})assert(rejected(owner,"n",1,0,nullptr));
+        assert(rejected(("mods/"+std::string(156,'a')).c_str(),"n",1,0,nullptr)&&F::ReportV1(reports,("mods/"+std::string(155,'a')).c_str(),"n",1,0,nullptr)==F::ReportOk);
+        // Names: the achievement id alphabet, 1-64 characters.
+        for(const auto* name:{"","has space","a/b","a:b","a*"})assert(rejected("mods/x",name,1,0,nullptr));
+        assert(rejected("mods/x",std::string(65,'n').c_str(),1,0,nullptr)&&!rejected("mods/x",std::string(64,'n').c_str(),1,0,nullptr));
+        // Amount above 0 and finite (at most 1e9); value finite. Non-finite values are dropped.
+        const double inf=std::numeric_limits<double>::infinity(),nan=std::numeric_limits<double>::quiet_NaN();
+        for(const double amount:{0.0,-1.0,nan,inf,2e9})assert(rejected("mods/x","n",amount,0,nullptr));
+        for(const double value:{nan,inf,-inf})assert(rejected("mods/x","n",1,value,nullptr));
+        assert(!rejected("mods/x","n",1,-5,nullptr)); // A negative value is a valid reading.
+        // Parameters: a JSON object; larger than 1 KiB parsed becomes {"$truncated":true}; more than 4096 bytes of text is refused.
+        for(const auto* parameters:{"[1,2]","\"text\"","{bad json","7","null"})assert(rejected("mods/x","n",1,0,parameters));
+        assert(!rejected("mods/x","n",1,0,("{\"Blob\":\""+std::string(2000,'x')+"\"}").c_str())&&(last()["Parameters"]==Json{{"$truncated",true}}));
+        assert(rejected("mods/x","n",1,0,("{\"Blob\":\""+std::string(F::MaximumReportInput,'x')+"\"}").c_str()));
+        // Null pointers never crash.
+        assert(rejected(nullptr,"n",1,0,nullptr)&&rejected("mods/x",nullptr,1,0,nullptr));
+        assert(count()==before+4); // Exactly the four accepted above were queued.
+        // The service passes Owner through to Helpy.
+        assert(F::Service({{"Cursor",0}},reports)["Events"][0]["Owner"]=="ue4ss/jbm");
+        // Other kinds still carry no owner.
+        F::Feed plain(8);plain.Push(F::Kill("/Game/A.A_C"));assert(!plain.Since(0)["Events"][0].contains("Owner"));}
+    std::cout<<"Gameplay events are normalized, bounded and read with a cursor; mod reports are validated\n";
 }
