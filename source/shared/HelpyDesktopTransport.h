@@ -28,7 +28,17 @@ inline std::wstring PipeName(const std::filesystem::path& root){
     uint64_t hash=14695981039346656037ull;for(const auto c:Identity(root)){hash^=c;hash*=1099511628211ull;}
     return L"\\\\.\\pipe\\RuneSchema.Helpy."+std::to_wstring(hash);
 }
-inline std::wstring WakeName(const std::filesystem::path& root){const auto pipe=PipeName(root);return L"Local\\"+pipe.substr(pipe.find_last_of(L'\\')+1)+L".updates";}
+inline std::wstring WakeFor(const std::wstring& pipe){return L"Local\\"+pipe.substr(pipe.find_last_of(L'\\')+1)+L".updates";}
+inline std::wstring WakeName(const std::filesystem::path& root){return WakeFor(PipeName(root));}
+// Optional local automation channel (e.g. an operator's own MCP tools). Off unless the player
+// creates settings/automation.json with {"enabled":true}. Same user, this PC only, one client;
+// it carries the same runeschema.tools calls as Helpy's desktop bridge.
+inline std::wstring AutomationPipeName(DWORD pid){return L"\\\\.\\pipe\\RuneSchema.Automation."+std::to_wstring(pid);}
+inline bool AutomationEnabled(const std::filesystem::path& root){
+    try{const auto file=root/"settings/automation.json";if(!std::filesystem::is_regular_file(file))return false;
+        std::ifstream input(file);const auto value=Json::parse(input,nullptr,true,true);return value.is_object()&&value.value("enabled",false);
+    }catch(...){return false;}
+}
 inline bool Enabled(const std::filesystem::path& root){
     try{const auto file=RuntimePaths::Helpy(root)/"settings/settings.jsonc";
         if(!std::filesystem::exists(file))return true;
@@ -69,11 +79,14 @@ public:
     using Handler=std::function<Json(const Json&)>;
     ~Server(){Stop();}
     bool Start(const std::filesystem::path& root,Handler handler,std::function<void()> disconnected){
+        return StartNamed(PipeName(root),std::move(handler),std::move(disconnected));
+    }
+    bool StartNamed(const std::wstring& name,Handler handler,std::function<void()> disconnected){
         if(Thread.joinable())return false;PSECURITY_DESCRIPTOR descriptor{};if(!SameUserPipeSecurity(descriptor))return false;
         SECURITY_ATTRIBUTES attributes{sizeof(attributes),descriptor,FALSE};
-        Pipe=CreateNamedPipeW(PipeName(root).c_str(),PIPE_ACCESS_DUPLEX|FILE_FLAG_FIRST_PIPE_INSTANCE,
+        Pipe=CreateNamedPipeW(name.c_str(),PIPE_ACCESS_DUPLEX|FILE_FLAG_FIRST_PIPE_INSTANCE,
             PIPE_TYPE_BYTE|PIPE_READMODE_BYTE|PIPE_WAIT|PIPE_REJECT_REMOTE_CLIENTS,1,65536,65536,0,&attributes);
-        Updates=CreateEventW(&attributes,TRUE,FALSE,WakeName(root).c_str());LocalFree(descriptor);
+        Updates=CreateEventW(&attributes,TRUE,FALSE,WakeFor(name).c_str());LocalFree(descriptor);
         if(Pipe==INVALID_HANDLE_VALUE){if(Updates)CloseHandle(Updates);Updates=nullptr;return false;}Stopping=false;
         Thread=std::thread([this,handler=std::move(handler),disconnected=std::move(disconnected)]{
             while(!Stopping){

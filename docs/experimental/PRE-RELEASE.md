@@ -16,6 +16,10 @@ This prerelease packages RuneSchema and Helpy for Dragonwilds CL260223. Install 
 
 ## Changes since 0.8.0.3
 
+### Local automation channel · November 20
+
+- Added an optional [automation channel](AUTOMATION-CHANNEL.md) for your own tools on the same PC, such as an MCP server for your dedicated server. It is off unless `settings/automation.json` turns it on. It accepts only same-user local connections and carries the same requests as Helpy's desktop window.
+
 ### Item Bay search fixes · November 17
 
 - Added **Stop search** to the Item Bay controls. Stopping keeps the displayed results, selection, and delivery cart available and cancels further search requests.

@@ -142,6 +142,9 @@
       },
       {
         "Mod-local services (in development)": "experimental/MOD-LOCAL-SERVICES.md"
+      },
+      {
+        "Local automation channel": "experimental/AUTOMATION-CHANNEL.md"
       }
     ]
   },

@@ -348,7 +348,7 @@ void CompatibilityNotice(const std::string& message) {
     else Log<RC::LogLevel::Verbose>(TEXT("Plugin compatibility: {}\n"),ToWideSafe(message.c_str()));
 }
 }
-struct PluginHost::State { std::vector<Loaded> LoadedPlugins;std::vector<std::string> Messages;std::unordered_set<std::string> SelectedIds;HelpyDesktop::Server Desktop;std::atomic<bool> UnrealReady=false;RC::Unreal::Hook::GlobalCallbackId OwnedInit=RC::Unreal::Hook::ERROR_ID; };
+struct PluginHost::State { std::vector<Loaded> LoadedPlugins;std::vector<std::string> Messages;std::unordered_set<std::string> SelectedIds;HelpyDesktop::Server Desktop,Automation;std::atomic<bool> UnrealReady=false;RC::Unreal::Hook::GlobalCallbackId OwnedInit=RC::Unreal::Hook::ERROR_ID; };
 PluginHost::PluginHost():m_state(std::make_unique<State>()){}
 PluginHost::~PluginHost(){Shutdown();}
 void PluginHost::Load(const std::filesystem::path& root) {
@@ -466,20 +466,30 @@ void PluginHost::OnUiInit(){for(auto& plugin:m_state->LoadedPlugins)if(plugin.Ui
         PS::CodedLog<RC::LogLevel::Error>(PS::Diagnostics::Id::PluginUiFailed,TEXT("Plugin {}: UI initialization rejected.\n"),PS::ToWideSafe(plugin.Manifest.Id));}
 }catch(...){m_state->Messages.push_back(plugin.Manifest.Id+": UI initialization threw an exception");
     PS::CodedLog<RC::LogLevel::Error>(PS::Diagnostics::Id::PluginUiFailed,TEXT("Plugin {}: UI initialization threw an exception.\n"),PS::ToWideSafe(plugin.Manifest.Id));}}
+namespace {
+// One runeschema.tools call from Helpy's desktop window, or from the optional automation channel.
+nlohmann::json DesktopCall(const nlohmann::json& request){
+    if(request.value("Op",std::string{})=="Poll")return nlohmann::json{{"Code",RS_PLUGIN_OK}};
+    if(request.value("Op",std::string{})!="Call"||!request.contains("Request")||!request["Request"].is_object())return nlohmann::json{{"Code",RS_PLUGIN_INVALID_ARGUMENT}};
+    const auto capacity=request.value("Capacity",uint32_t{});if(capacity>RUNESCHEMA_PLUGIN_MAX_MESSAGE)return nlohmann::json{{"Code",RS_PLUGIN_INVALID_ARGUMENT}};
+    const auto input=request["Request"].dump();if(input.size()>RUNESCHEMA_PLUGIN_MAX_MESSAGE)return nlohmann::json{{"Code",RS_PLUGIN_INVALID_ARGUMENT}};
+    thread_local std::vector<char> output;if(output.size()<capacity)output.resize(capacity);uint32_t size=0;
+    const auto code=CoreTools(nullptr,input.c_str(),capacity?output.data():nullptr,capacity,&size);
+    nlohmann::json reply={{"Code",code},{"Size",size}};
+    if(code==RS_PLUGIN_OK&&size&&size<=output.size()){if(output[size-1]=='\0')--size;reply["Body"]=nlohmann::json::parse(output.data(),output.data()+size);}
+    return reply;
+}
+std::atomic<bool> AutomationReady=false;
+}
 void PluginHost::StartDesktop(){
     const auto root=HostServices::ModDirectory();
+    // Opt-in only (settings/automation.json): a same-user local pipe for the player's own automation.
+    if(!AutomationReady&&HelpyDesktop::AutomationEnabled(root)){
+        try{AutomationReady=m_state->Automation.StartNamed(HelpyDesktop::AutomationPipeName(GetCurrentProcessId()),DesktopCall,{});}catch(...){m_state->Automation.Stop();AutomationReady=false;}
+        HostLog(AutomationReady?RS_LOG_INFO:RS_LOG_WARNING,"RuneSchema.Core",AutomationReady?"Automation channel ready (settings/automation.json); this PC and user only.":"Automation channel could not start.");
+    }
     if(HelpyDesktop::Enabled(root)&&std::any_of(m_state->LoadedPlugins.begin(),m_state->LoadedPlugins.end(),[](const auto& plugin){return plugin.Manifest.Id=="RuneSchema.Helpy";})){
-        try{if(!DesktopBridgeReady)DesktopBridgeReady=m_state->Desktop.Start(root,[](const nlohmann::json& request){
-            if(request.value("Op",std::string{})=="Poll")return nlohmann::json{{"Code",RS_PLUGIN_OK}};
-            if(request.value("Op",std::string{})!="Call"||!request.contains("Request")||!request["Request"].is_object())return nlohmann::json{{"Code",RS_PLUGIN_INVALID_ARGUMENT}};
-            const auto capacity=request.value("Capacity",uint32_t{});if(capacity>RUNESCHEMA_PLUGIN_MAX_MESSAGE)return nlohmann::json{{"Code",RS_PLUGIN_INVALID_ARGUMENT}};
-            const auto input=request["Request"].dump();if(input.size()>RUNESCHEMA_PLUGIN_MAX_MESSAGE)return nlohmann::json{{"Code",RS_PLUGIN_INVALID_ARGUMENT}};
-            thread_local std::vector<char> output;if(output.size()<capacity)output.resize(capacity);uint32_t size=0;
-            const auto code=CoreTools(nullptr,input.c_str(),capacity?output.data():nullptr,capacity,&size);
-            nlohmann::json reply={{"Code",code},{"Size",size}};
-            if(code==RS_PLUGIN_OK&&size&&size<=output.size()){if(output[size-1]=='\0')--size;reply["Body"]=nlohmann::json::parse(output.data(),output.data()+size);}
-            return reply;
-        },[]{HelpyActivity::Visible=false;HelpyActivity::CaptureInput=false;});}catch(...){m_state->Desktop.Stop();DesktopBridgeReady=false;}
+        try{if(!DesktopBridgeReady)DesktopBridgeReady=m_state->Desktop.Start(root,DesktopCall,[]{HelpyActivity::Visible=false;HelpyActivity::CaptureInput=false;});}catch(...){m_state->Desktop.Stop();DesktopBridgeReady=false;}
         if(!DesktopBridgeReady)HostLog(RS_LOG_WARNING,"RuneSchema.Helpy","[RS-UI-002] Helpy game bridge unavailable; the application can still browse its cache offline.");
         else try{(void)Call("RuneSchema.Core","helpy.desktop.launch","{}");}catch(...){} // Older bridges launch at their normal Unreal-init phase.
     }
@@ -522,7 +532,7 @@ void PluginHost::Shutdown() noexcept {
     if(m_state)m_state->UnrealReady.store(false,std::memory_order_release);
     if(m_state&&m_state->OwnedInit!=RC::Unreal::Hook::ERROR_ID){RC::Unreal::Hook::UnregisterCallback(m_state->OwnedInit);m_state->OwnedInit=RC::Unreal::Hook::ERROR_ID;}
     ModLocalServices::Stop();
-    if(m_state)m_state->Desktop.Stop();DesktopBridgeReady=false;
+    if(m_state){m_state->Desktop.Stop();m_state->Automation.Stop();}DesktopBridgeReady=false;AutomationReady=false;
     HelpyActivity::Visible=false;HelpyActivity::CaptureInput=false;HelpyActivity::HudCaptureInput=false;HelpySourceCache::Requested=false;HelpySourceCache::Shutdown();
     AssetSearch::ShutdownItemCatalog();
     HelpyQueryService::Clear();

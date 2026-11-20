@@ -32,6 +32,19 @@ int main(int argc,char** argv)try{
     assert(Call("RuneSchema.Helpy","runeschema.tools",input.c_str(),output.data(),static_cast<uint32_t>(output.size()),&size)!=RS_PLUGIN_OK);
     assert(attempted==1&&PS::RuneSchemaSettingsEditor::Read(root/"settings").at("ExpectedContents")==before.at("ExpectedContents"));
     Bridge.Disconnect();server.Stop();
+    {   // The automation channel: off without settings/automation.json, one same-user client, the same framing.
+        assert(!PS::HelpyDesktop::AutomationEnabled(root));
+        PS::ConfigFiles::Write(root/"settings/automation.json","{\"enabled\":false}");assert(!PS::HelpyDesktop::AutomationEnabled(root));
+        PS::ConfigFiles::Write(root/"settings/automation.json","// opt in\n{\"enabled\":true}");assert(PS::HelpyDesktop::AutomationEnabled(root));
+        PS::HelpyDesktop::Server automation;const auto name=PS::HelpyDesktop::AutomationPipeName(GetCurrentProcessId());
+        assert(automation.StartNamed(name,[](const Json& request){return Json{{"Code",0},{"Echo",request.at("Request").at("Action")}};},{}));
+        PS::HelpyDesktop::Server second;assert(!second.StartNamed(name,[](const Json&){return Json{};},{}));   // no squatting
+        const auto pipe=CreateFileW(name.c_str(),GENERIC_READ|GENERIC_WRITE,0,nullptr,OPEN_EXISTING,0,nullptr);assert(pipe!=INVALID_HANDLE_VALUE);
+        ULONG pid=0;assert(GetNamedPipeServerProcessId(pipe,&pid)&&pid==GetCurrentProcessId());
+        Json reply;assert(PS::HelpyDesktop::Send(pipe,Json{{"Op","Call"},{"Request",{{"Action","Environment"}}},{"Capacity",65536}})&&PS::HelpyDesktop::Receive(pipe,reply));
+        assert(reply.at("Echo")=="Environment"&&reply.at("Version")==PS::HelpyDesktop::Version);
+        CloseHandle(pipe);automation.Stop();
+    }
     {
         struct Child {PROCESS_INFORMATION Process{};~Child(){if(Process.hThread)CloseHandle(Process.hThread);if(Process.hProcess){if(WaitForSingleObject(Process.hProcess,0)==WAIT_TIMEOUT){TerminateProcess(Process.hProcess,0);WaitForSingleObject(Process.hProcess,1000);}CloseHandle(Process.hProcess);}}} child;
         STARTUPINFOW startup{sizeof(startup)};auto arguments=std::wstring(L"\"")+image+L"\" --lifetime-child";
