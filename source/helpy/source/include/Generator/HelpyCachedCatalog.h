@@ -54,7 +54,7 @@ inline void StopSearch(){
 inline void ResetChecks(){Check.reset();Checked.Clear();Resume.Clear();CheckStatus.clear();}
 inline bool QueueCheck(nlohmann::json request,bool force=false){
     const auto query=request.value("Query",std::string{});if(query.empty()||!Connected())return false;
-    const ItemCatalogFilter::Query filter(query);if(!force&&filter.Words.empty()&&filter.Family.empty())return false;
+    const ItemCatalogFilter::Query filter(query);if(!force&&!filter.HasText()&&filter.Family.empty())return false;
     const auto now=std::chrono::steady_clock::now();
     const auto key=nlohmann::json::array({HelpySourceCache::Current.CatalogKey,HelpySourceCache::Current.Versions,HelpySourceCache::Current.Authoritative,HelpySourceCache::Current.Provisional,request.value("ClientGeneration",uint64_t{}),PluginRuntimeServices::GameProcessId.load(),query}).dump();
     if(!force)if(const auto* previous=Checked.Find(key);previous&&now-*previous<std::chrono::seconds(60))return false;
@@ -69,7 +69,7 @@ inline bool RefreshSource(const std::string& provider){
 }
 inline bool RefreshSearch(const std::string& query){
     if(!Connected()||query.empty())return false;
-    const ItemCatalogFilter::Query filter(query);if(filter.Words.empty()&&filter.Family.empty())return false;
+    const ItemCatalogFilter::Query filter(query);if(!filter.HasText()&&filter.Family.empty())return false;
     auto& state=LazyCatalog::For(0);
     if(state.Query!=query)LazyCatalog::Search(0,query);
     ++state.CancelGeneration;LazyCatalog::QueueCancel(0,state.CancelGeneration);Pending.reset();

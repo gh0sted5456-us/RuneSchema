@@ -11,14 +11,16 @@
 #include "Generator/PlayerPortraitPicker.h"
 #include "Generator/SpawnBrowserSettings.h"
 namespace PS::SpawnStudioPanel {
-struct State {std::string Selected,Query,Player;char Search[257]{},Name[129]{};float Scale=1,Radius=500,Yaw=0,Height=0;int Count=1,Mode=0,Power=1;bool Permanent=false,Confirmed=false,OverridePower=false,ShowHidden=false,Rebuild=true;uint64_t Revision=0,Generation=0,PreferencesRevision=0,RowsRevision=0,FilterRevision=0;size_t RowCount=0;std::vector<size_t> Matches;};
+struct State {std::string Selected,Query,Player;char Search[257]{},Name[129]{};float Scale=1,Radius=500,Yaw=0,Height=0;int Count=1,Mode=0,Power=1;bool Permanent=false,Confirmed=false,OverridePower=false,ShowHidden=false,Rebuild=true;uint64_t Revision=0,Generation=0,PreferencesRevision=0,RowsRevision=0,FilterRevision=0;size_t RowCount=0,HiddenMatches=0;std::vector<size_t> Matches;};
 inline State Resources,Npcs,Enemies;
 inline void RefreshMatches(State& s,const nlohmann::json& rows,uint64_t revision,uint64_t rowsRevision,bool resource,bool npc){
     if(!s.Rebuild&&s.Revision==revision&&s.RowsRevision==rowsRevision&&s.RowCount==rows.size()&&s.PreferencesRevision==SpawnBrowserSettings::Revision)return;
     s.Rebuild=false;s.Revision=revision;s.RowsRevision=rowsRevision;s.RowCount=rows.size();s.PreferencesRevision=SpawnBrowserSettings::Revision;s.Matches.clear();
+    const SpawnCatalogSearch::Query match(s.Query);s.HiddenMatches=0;
     for(size_t i=0;i<rows.size();++i){const auto& row=rows[i];if(!row.is_object())continue;const auto type=SpawnCatalogSearch::Text(row,"Type");
         if(resource){if(SpawnPresentation::ResourceTab(row)!=s.Mode)continue;}else if(npc?type!="NPC":!SpawnPresentation::Enemy(row))continue;
-        if(SpawnCatalogSearch::Matches(row,s.Query)&&SpawnBrowserSettings::Choices.Visible(row,s.ShowHidden))s.Matches.push_back(i);
+        if(!match(row))continue;
+        if(SpawnBrowserSettings::Choices.Visible(row,s.ShowHidden))s.Matches.push_back(i);else ++s.HiddenMatches;
     }
 }
 inline uint64_t JournalRevision=0;
@@ -92,7 +94,9 @@ inline void Render(const nlohmann::json& snapshot,uint64_t revision,bool resourc
     if(table){ImGui::TableSetupColumn("Browse",ImGuiTableColumnFlags_WidthStretch,1.15f);ImGui::TableSetupColumn("Placement",ImGuiTableColumnFlags_WidthStretch,1);ImGui::TableNextColumn();}
     ImGui::SeparatorText("Choose spawn");
     if(resource){int mode=0;for(const auto* label:{"Trees","Ore / stone","Other resources"}){if(mode&&ImGui::GetContentRegionAvail().x>t.X(125))ImGui::SameLine();if(ImGui::RadioButton(label,s.Mode==mode)){s.Mode=mode;s.Selected.clear();s.Confirmed=false;s.Rebuild=true;}++mode;}}
-    ImGui::SetNextItemWidth(std::max(t.X(120),ImGui::GetContentRegionAvail().x-t.X(80)));const bool search=HelpyTextInput::InputTextWithHint("##spawn-search","Search name or source...",s.Search,sizeof(s.Search),ImGuiInputTextFlags_EnterReturnsTrue);ImGui::SameLine();
+    ImGui::SetNextItemWidth(std::max(t.X(120),ImGui::GetContentRegionAvail().x-t.X(80)));const bool search=HelpyTextInput::InputTextWithHint("##spawn-search","Search name or source...",s.Search,sizeof(s.Search),ImGuiInputTextFlags_EnterReturnsTrue);
+    if(ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)&&!ImGui::IsItemActive())PS::HelpyImGuiTheme::Tooltip(SpawnCatalogSearch::SyntaxHelp);
+    ImGui::SameLine();
     if(HelpyImGuiTheme::SoftButton("Search")||search){s.Query=s.Search;s.Confirmed=false;s.Rebuild=true;LazyCatalog::Search(category,s.Query);}
     if(HelpyImGuiTheme::Toggle("Show hidden",&s.ShowHidden)){s.Rebuild=true;s.Confirmed=false;}
     if(ImGui::IsItemHovered())PS::HelpyImGuiTheme::Tooltip("Include hidden results. Right-click an entry or select it to restore it.\nOnly your local Helpy browser preferences change; no cache entry is deleted.");
@@ -116,7 +120,12 @@ inline void Render(const nlohmann::json& snapshot,uint64_t revision,bool resourc
             ImGui::EndPopup();
         }
         ImGui::PopID();}
-    if(s.Matches.empty())ImGui::TextWrapped("%s",lazy.Pending||lazy.HasMore?"Searching mounted and loaded definitions…":resource?"No matching resource candidates.":npc?"No matching NPCs.":"No matching enemy candidates. Attack/effect actors are excluded.");
+    if(s.Matches.empty()){
+        if(lazy.Pending||lazy.HasMore)ImGui::TextWrapped("Searching mounted and loaded definitions…");
+        else if(s.HiddenMatches)ImGui::TextWrapped("%zu matching result%s hidden. Turn on Show hidden to see %s.",s.HiddenMatches,s.HiddenMatches==1?" is":"s are",s.HiddenMatches==1?"it":"them");
+        else if(!s.Query.empty())ImGui::TextWrapped("Nothing matches \"%s\".%s",s.Query.c_str(),resource?"":npc?"":" Attack/effect actors are excluded.");
+        else ImGui::TextWrapped("%s",resource?"No matching resource candidates.":npc?"No matching NPCs.":"No matching enemy candidates. Attack/effect actors are excluded.");
+    }
     PS::HelpyImGuiTheme::EndPanel();
     if(lazy.HasMore&&!lazy.Pending&&s.Matches.size()<24)LazyCatalog::More(category);
     if(lazy.HasMore&&!lazy.Pending&&HelpyImGuiTheme::SoftButton("More results"))LazyCatalog::More(category);

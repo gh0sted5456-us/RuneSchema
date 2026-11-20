@@ -45,7 +45,7 @@ inline json CachedSlotRows(const std::string& slot,const std::string& query,uint
     json result=json::array();const auto& cache=LazyCatalog::For(0);if(cache.RuntimeGeneration!=generation)return result;
     std::unordered_set<std::string> seen;const ItemCatalogFilter::Query filter(query);
     const auto append=[&](const json& rows){for(const auto& row:rows){const auto path=ItemPresentation::Text(row,"Path");if(result.size()<2048&&!path.empty()&&LoadoutEligibility::Matches(row,slot)&&filter(row)&&seen.insert(path).second)result.push_back(row);}};
-    append(LazyCatalog::BrowseRows());return result;
+    LazyCatalog::ForEachKnownItem(generation,append);return result;
 }
 inline void DrawItemBadges(const json& row,const ImVec2& min,const ImVec2& max,const HelpyImGuiTheme::Theme& theme,float badgeSize=28.0f,bool masterwork=true);
 struct State {
@@ -176,6 +176,7 @@ struct Result {
     json ActionRow;
 };
 inline std::string Lower(std::string value){for(auto& c:value)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));return value;}
+inline void SearchSyntaxTooltip(){if(ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)&&!ImGui::IsItemActive())HelpyImGuiTheme::Tooltip("Words must all match. OR (or |) matches either side, -word or NOT excludes, ( ) groups, \"quotes\" match an exact phrase.\nExample: (sword OR axe) -rusty");}
 inline std::string BackendQuery(const State& state){const auto query=HelpyPersonalization::QueryUsesLabels(state.Query)?std::string{}:state.Query;return ItemSource::Query(state.SourceFilter,state.ActiveCategory,
     state.FamilyKey.empty()?query:"__helpyfamily:"+state.FamilyKey+(query.empty()?std::string{}:" "+query),state.SourceProvider);}
 inline std::string ProviderLabel(const std::string& provider){
@@ -809,7 +810,7 @@ inline Result Render(const char* id,const json& catalog,char* filter,size_t filt
     const float settingsWidth=ImGui::GetFrameHeight();const bool oneRow=width>=theme.X(360);
     ImGui::SetNextItemWidth(std::max(1.f,width-searchButtonWidth-spacing-(oneRow?refreshWidth+settingsWidth+spacing*2:0.f)));
     if(quickActions&&ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)&&ImGui::IsKeyPressed(ImGuiKey_GamepadFaceUp,false))ImGui::SetKeyboardFocusHere();
-    const bool enterSubmitted=HelpyTextInput::InputTextWithHint("##Search items","Search items...",filter,filterCapacity,ImGuiInputTextFlags_EnterReturnsTrue);
+    const bool enterSubmitted=HelpyTextInput::InputTextWithHint("##Search items","Search items...",filter,filterCapacity,ImGuiInputTextFlags_EnterReturnsTrue);SearchSyntaxTooltip();
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::BaySearchFocus={ImGui::GetItemID(),ImGui::GetCurrentWindow()->ID};
 #endif

@@ -110,8 +110,8 @@ namespace {
     std::string ToolWindowFold(std::string value) {
         std::ranges::transform(value,value.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});return value;
     }
-    bool ToolWindowMatches(const nlohmann::json& row,const std::string& query) {
-        return PS::SpawnCatalogSearch::Matches(row,query);
+    bool ToolWindowMatches(const nlohmann::json& row,const PS::SpawnCatalogSearch::Query& query) {
+        return query(row);
     }
     std::uint64_t ToolStableId(const std::string& value) {
         std::uint64_t hash=1469598103934665603ull;for(const unsigned char c:value){hash^=c;hash*=1099511628211ull;}return hash;
@@ -122,6 +122,7 @@ namespace {
         if(limit<1||limit>128)throw std::runtime_error("Catalog window limit must be 1..128 rows.");
         if(query.size()>256)throw std::runtime_error("Catalog search text exceeds 256 characters.");
         if(fieldSet!="BasicRow"&&fieldSet!="Detail")throw std::runtime_error("Unsupported definition catalog field projection.");
+        const PS::SpawnCatalogSearch::Query match(query); // Parsed once per window, not per row.
         scanBudget=std::clamp<std::size_t>(scanBudget,128,8192);timeBudgetMicros=std::clamp<std::uint64_t>(timeBudgetMicros,100,5000);
         nlohmann::json rows=nlohmann::json::array();std::set<std::string> authoredIdentities;
         for(const auto& row:authored)if(row.is_object())authoredIdentities.insert(row.value("Type",std::string{})+row.value("Class",std::string{}));
@@ -130,7 +131,7 @@ namespace {
         for(const auto& original:authored) {
             const auto current=raw++;if(current<offset)continue;if(exhausted())return {{"Rows",std::move(rows)},{"NextOffset",current},{"HasMore",true},{"Scanned",scanned},{"BudgetExhausted",true}};++scanned;
             if(!original.is_object())continue;auto row=original;const auto type=row.value("Type",std::string{});
-            const bool allowed=category==1?(type=="AI"||type=="NPC"):type=="Resource";if(!allowed||!ToolWindowMatches(row,query))continue;
+            const bool allowed=category==1?(type=="AI"||type=="NPC"):type=="Resource";if(!allowed||!ToolWindowMatches(row,match))continue;
             if(type=="AI"){
                 auto* native=ActorHelper::ResolveClass(TEXT("/Script/Dominion.DominionAICharacter"));
                 auto* loaded=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,RC::to_generic_string(row.value("Class",std::string{})).c_str(),false);
@@ -165,7 +166,7 @@ namespace {
             const auto path=RC::to_string(type->GetPathName()),kind=std::string(npc?"NPC":ai?"AI":"Resource");
             if(path.empty()||authoredIdentities.contains(kind+path))continue;
             nlohmann::json light={{"Key",std::string(npc?"@loaded-npc:":ai?"@loaded-ai:":"@loaded-resource:")+path},{"Name",ToolReadableName(path)},{"Class",path},{"Type",kind},{"StableId",ToolStableId(kind+":"+path)}};
-            if(!ToolWindowMatches(light,query))continue;
+            if(!ToolWindowMatches(light,match))continue;
             if(fieldSet=="Detail") {
                 auto detailed=ToolDefinitionRow(type,light["Key"].get<std::string>(),ai,npc?"NPC":"");detailed["StableId"]=light["StableId"];
                 rows.push_back(std::move(detailed));

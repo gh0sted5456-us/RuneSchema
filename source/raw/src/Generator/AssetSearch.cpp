@@ -545,7 +545,7 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
     scanBudget=std::clamp<std::size_t>(scanBudget,128,8192);timeBudgetMicros=std::clamp<std::uint64_t>(timeBudgetMicros,100,5000);
     // The game-thread budget covers the whole slice, including roster refreshes below.
     const auto sliceStart=std::chrono::steady_clock::now();
-    json rows=json::array();std::vector<std::string> queryTokens;std::string categoryFilter,searchQuery=query;
+    json rows=json::array();ItemSearchExpression::Expression queryTokens;std::string categoryFilter,searchQuery=query;
     const auto sourceFilter=ItemSource::TakeFilter(searchQuery);
     const auto providerFilter=ItemSource::TakeProvider(searchQuery);
     const auto sourcePlan=HelpySourceCache::ItemPlan();const auto nativePlugins=HelpySourceCache::NativePluginRoots();
@@ -553,11 +553,10 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
     if(searchQuery.starts_with(categoryPrefix)){const auto split=searchQuery.find(' ');categoryFilter=AssetTemplate::Fold(searchQuery.substr(categoryPrefix.size(),split==std::string::npos?std::string::npos:split-categoryPrefix.size()));searchQuery=split==std::string::npos?std::string{}:searchQuery.substr(split+1);}
     const auto familyFilter=ItemFamily::TakeFilter(searchQuery);
     if(searchQuery.size()>256)throw std::runtime_error("Catalog search text exceeds 256 characters.");
-    if(!searchQuery.empty()){std::istringstream words(searchQuery);std::string word;while(words>>word){word=AssetTemplate::Fold(std::move(word));if(!word.empty())queryTokens.push_back(std::move(word));}}
-    const auto matchesFolded=[&](std::string_view text){
-        return std::all_of(queryTokens.begin(),queryTokens.end(),[&](const auto& token){return text.find(token)!=text.npos;});
-    };
-    const auto matchesTokens=[&](std::string candidate){return queryTokens.empty()||matchesFolded(AssetTemplate::Fold(std::move(candidate)));};
+    // Same boolean syntax as Helpy (OR, NOT/-, parentheses, "phrases"); terms fold exactly like the candidate text.
+    queryTokens=ItemSearchExpression::Expression::Parse(searchQuery,[](std::string word){return AssetTemplate::Fold(std::move(word));});
+    const auto matchesFolded=[&](std::string_view text){return queryTokens.Matches(text);};
+    const auto matchesTokens=[&](std::string candidate){return queryTokens.Empty()||matchesFolded(AssetTemplate::Fold(std::move(candidate)));};
     auto* itemType=Class("assets");if(!itemType)throw std::runtime_error("ItemData class is not ready.");
     const auto objectCount=FUObjectArray::GetNumElements();
     if(objectCount<0||objectCount>4'000'000)throw std::runtime_error("Global object roster exceeds the safe catalog bound.");
@@ -609,7 +608,7 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
         }
         if(!mountedReady)nextMetadataRefresh=now+std::chrono::seconds(2);
     }
-    const bool mountedFirst=!queryTokens.empty()||!familyFilter.empty()||!providerFilter.empty();
+    const bool mountedFirst=!queryTokens.Empty()||!familyFilter.empty()||!providerFilter.empty();
     static const std::vector<std::string> noPriority;
     const auto& priorityPaths=mountedFirst?noPriority:PriorityItemPaths();
     const std::unordered_set<std::string> prioritySet(priorityPaths.begin(),priorityPaths.end());
@@ -697,7 +696,7 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
         if(segment==1&&prioritySet.contains(path))continue;
         const auto internal=CheapText(object,"InternalName");const auto name=CachedItemName(object);const auto tags=ItemTags(object);const auto broadCategory=HelpyBroadItemCategory(object,path,name,internal,tags);
         if(!categoryFilter.empty()&&AssetTemplate::Fold(broadCategory)!=categoryFilter)continue;
-        if(!queryTokens.empty()&&!matchesTokens(path+" "+internal+" "+name+" "+tags+" "+broadCategory+" "+to_string(object->GetClassPrivate()->GetName())))continue;
+        if(!queryTokens.Empty()&&!matchesTokens(path+" "+internal+" "+name+" "+tags+" "+broadCategory+" "+to_string(object->GetClassPrivate()->GetName())))continue;
         const auto provenance=AssetProvenance::Lookup(object);const auto declared=AssetMetadata::Lookup(object);
         const bool runtimeClone=provenance.is_object()&&provenance.value("Confirmed",false);
         auto source=ItemSource::Describe(path,sourcePlan,nativePlugins,

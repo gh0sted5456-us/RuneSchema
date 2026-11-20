@@ -549,8 +549,11 @@ int main(){
         auto searchOnly=cape;searchOnly["Path"]="/Game/SearchOnly.SearchOnly";
         cache.Rows=json::array({searchOnly});
         cache.Cache["unrelated-global-filter"]={cache.Rows,"",false,cache.RuntimeGeneration};
+        auto stale=cape;stale["Path"]="/Game/Stale.Stale";cache.Cache["other-world"]={json::array({stale}),"",false,cache.RuntimeGeneration+1};
         P::ChangeGear({{"Name","Player"}},{{"Location","Cape"}});
-        assert(P::GearRows==json::array({cape})&&cache.Query=="unrelated-global-filter"&&P::Bay.ActiveCategory=="All");
+        // Every known item for this world fills the slot list, not just the browse preview an
+        // Item Bay search leaves; the search itself is left alone and other worlds stay out.
+        assert(P::GearRows==json::array({cape,searchOnly})&&cache.Query=="unrelated-global-filter"&&P::Bay.ActiveCategory=="All");
         P::Open=false;P::ChangingGear=false;P::Refresh=false;cache=saved;}
     {namespace P=PS::PlayerInventoryPanel;
         ThrowHost=false;state.ToolsAvailable=true;state.ToolsWaiting=false;P::Open=false;P::Detached=false;P::Refresh=false;P::Target={{"Name","Keep inspector target"}};

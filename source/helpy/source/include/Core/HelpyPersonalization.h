@@ -1,5 +1,6 @@
 #pragma once
 #include "Core/ConfigFiles.h"
+#include "Core/ItemSearchExpression.h"
 #include <nlohmann/json.hpp>
 #include <filesystem>
 #include <shared_mutex>
@@ -51,7 +52,9 @@ inline bool Locked(const Json& row){return Effective(row).value("Locked",false);
 inline bool Tagged(const Json& row,const std::string& tag){const auto data=Effective(row);if(!data.contains("Tags"))return false;const auto folded=Fold(tag);for(const auto& value:data["Tags"])if(Fold(value.get<std::string>())==folded)return true;return false;}
 inline bool BulkEligible(const Json& row,bool junk){return !row.value("Equipped",false)&&!ItemKey(row).empty()&&!Locked(row)&&!Favorite(row)&&(!junk||Tagged(row,"junk"));}
 inline std::string SearchText(const Json& row){const auto data=Get(ItemKey(row));std::string text=data.value("Nickname",std::string{});if(data.contains("Tags"))for(const auto& value:data["Tags"])text+=" "+value.get<std::string>();return text;}
-inline bool QueryUsesLabels(const std::string& text){std::istringstream input(Fold(text));std::vector<std::string> words;std::string word;while(input>>word)words.push_back(word);if(words.empty())return false;
+inline bool QueryUsesLabels(const std::string& text){
+    // Search terms only: OR, NOT, "-" and quotes are syntax, not label text ("OR" would otherwise match "armor").
+    const auto words=ItemSearchExpression::Expression::Parse(text,[](std::string word){return Fold(std::move(word));}).Terms();if(words.empty())return false;
     std::shared_lock lock(Gate);for(const auto& [key,row]:Entries.items())if(key.starts_with("item:")){std::string labels=row.value("Nickname",std::string{});if(row.contains("Tags"))for(const auto& tag:row["Tags"])labels+=" "+tag.get<std::string>();labels=Fold(labels);for(const auto& value:words)if(labels.find(value)!=labels.npos)return true;}return false;}
 inline Json Validate(const Json& document){
     if(!document.is_object()||document.value("Format",0)!=1||!document.contains("Entries")||!document["Entries"].is_object()||document["Entries"].size()>16384)throw std::runtime_error("Invalid Helpy personalization file.");

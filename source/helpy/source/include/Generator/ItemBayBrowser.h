@@ -40,7 +40,7 @@ inline void Controls(ItemGridPicker::State& state,const nlohmann::json& catalog,
     const auto& style=ImGui::GetStyle();
     const float actions=ImGui::CalcTextSize("Search").x+ImGui::CalcTextSize(refreshLabel).x+4*style.FramePadding.x+2*style.ItemSpacing.x;
     ImGui::SetNextItemWidth(std::max(1.f,ImGui::GetContentRegionAvail().x-actions));
-    const bool enter=HelpyTextInput::InputTextWithHint("##item-bay-search","Search items…",filter,capacity,ImGuiInputTextFlags_EnterReturnsTrue);
+    const bool enter=HelpyTextInput::InputTextWithHint("##item-bay-search","Search items…",filter,capacity,ImGuiInputTextFlags_EnterReturnsTrue);ItemGridPicker::SearchSyntaxTooltip();
     ImGui::SameLine();const bool search=HelpyImGuiTheme::SoftButton("Search");ImGui::SameLine();
     if(HelpyImGuiTheme::SoftButton(refreshLabel)){
         if(canStop){shared.Picker.SearchDue=0;HelpyCachedCatalog::StopSearch();}

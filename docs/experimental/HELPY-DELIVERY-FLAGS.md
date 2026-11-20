@@ -45,6 +45,25 @@ If a pause exists for any character on this PC and Helpy can't identify the char
 is for (for example while the character is still loading), the delivery is refused rather than
 guessed.
 
+## In the Item Bay
+
+The Item Bay checks the same flags before anything is queued, so a paused delivery is explained
+where you choose the recipient instead of arriving later as an error:
+
+- Under the cart recipient and in *Send to player*, your own character shows *Helpy deliveries are
+  off for {name}* with a **Turn deliveries on** button, or *{mod name} has paused Helpy deliveries
+  to {name}* with the mod's message. Only the mod can lift its pause, or you can stop honouring it
+  in Settings > Deliveries.
+- A mod with a world pause in force shows *{mod name} may pause deliveries in some worlds*. The
+  Item Bay doesn't know which world save is loaded, so the game makes that check when you give.
+- Give, Send item and Deliver re-read the flags first and refuse with the same reason, before
+  anything is sent. A cart with several recipients is refused whole while your paused character
+  is one of them; remove that recipient to give to the others.
+- Other players are never gated by your flags.
+
+The character sheet's *Inventory & loadout* tab shows the same status in its *Helpy deliveries*
+header, with the per-character switch inside.
+
 ## Settings > Deliveries
 
 - **Your characters.** Your current character, and any character you turned off, each with an

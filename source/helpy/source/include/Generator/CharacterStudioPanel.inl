@@ -1,7 +1,8 @@
-// Character sheet: one saved character copy, organised as Inventory, Appearance, Loadout,
-// Skills, Deliveries, Save sections and Transfer. Edits stage on an isolated copy and are
-// exported after review; the live character and native save slots are never written here.
-enum class StudioPage{Inventory,Appearance,Loadout,Skills,Deliveries,Sections,Transfer};
+// Character sheet: one saved character copy, organised as Inventory & loadout, Appearance,
+// Skills and Save data. Edits stage on an isolated copy; one draft bar above the pages shows
+// whether the draft has changes and runs Review & export. The live character and native save
+// slots are never written here.
+enum class StudioPage{Inventory,Appearance,Skills,SaveData};
 inline StudioPage StudioTab=StudioPage::Inventory,StudioShown=StudioPage::Inventory;
 inline Json StudioAppearance=Json::object(),StudioSelected=Json::object(),StudioAddition=Json::object();
 inline Json StudioSkills=Json::object(),StudioSavedLoadout=Json::array(),StudioSections=Json::object(),StudioTransferResult=Json::object();
@@ -10,7 +11,7 @@ inline std::map<std::string,int> StudioSkillDrafts;
 inline std::set<std::string> StudioSectionPicks;
 inline std::string StudioBackupPick,StudioTransferTarget;
 inline bool StudioSectionStore=false,StudioCleanConfirm=false,StudioTransferReplace=false;
-inline uint64_t StudioReceipt=0,StudioGeneration=0;
+inline uint64_t StudioReceipt=0,StudioGeneration=0,StudioExportedRevision=0;
 inline char StudioName[129]{},StudioFilter[257]{},StudioSelectedPath[2049]{};
 inline ItemGridPicker::State StudioPicker;
 inline std::string StudioPaletteField="HairColor";
@@ -44,6 +45,22 @@ inline void StudioForget(){
     StudioSavedLoadout=Json::array();StudioSections=Json::object();StudioSectionsRequested=false;StudioSectionPicks.clear();StudioBackupPick.clear();StudioCleanConfirm=false;
     StudioTransferResult=Json::object();StudioTransferReplace=false;StudioAddition=Json::object();StudioSelected=Json::object();
 }
+// The draft's revision rises with every staged edit (the core counts them). The newest
+// revision any save-editor reply reported, against the one the copy opened at, tells whether
+// the draft has changes; replies from an earlier copy are always older than its open.
+inline uint64_t StudioDraftRevision(){
+    uint64_t latest=0;
+    for(const auto* op:{"SaveEditorOpen","SaveEditorBrowse","SaveEditorSet","SaveEditorAppearance","SaveEditorAppearanceSet","SaveEditorRename",
+        "SaveEditorInventory","SaveEditorStack","SaveEditorRemoveItems","SaveEditorAddItem","SaveEditorSkills","SaveEditorSkillSet",
+        "SaveEditorSections","SaveEditorSectionRestore","SaveEditorSectionClean"}){
+        const auto& result=AuthoringClient::Result(op);const auto found=result.find("Revision");
+        if(found!=result.end()&&found->is_number_unsigned())latest=std::max(latest,found->get<uint64_t>());
+    }return latest;
+}
+inline uint64_t StudioOpenRevision(){
+    const auto& opened=AuthoringClient::Result("SaveEditorOpen");const auto found=opened.find("Revision");
+    return found!=opened.end()&&found->is_number_unsigned()?found->get<uint64_t>():0;
+}
 inline void StudioApply(){
     const auto generation=AuthoringClient::Snapshot.value("Generation",uint64_t{});
     if(generation!=StudioGeneration){StudioGeneration=generation;StudioReceipt=0;StudioForget();StudioListRequested=false;StudioLiveSeen.clear();StudioLiveAttempt.clear();StudioOpenPending=StudioSwitchSave=false;}
@@ -64,6 +81,7 @@ inline void StudioApply(){
         if(op=="SaveEditorSectionRestore"||op=="SaveEditorSectionClean"){ResetInventory();Invalidate();StudioCleanConfirm=false;StudioSectionPicks.clear();}
     }
     if(op=="SaveEditorTransfer"){StudioTransferResult=result;if(!result.value("NeedsConfirm",false))StudioTransferReplace=false;}
+    if(op=="SaveEditorExport"&&result.contains("File"))StudioExportedRevision=StudioDraftRevision();
 }
 inline void StudioHeader(){
     const auto live=FollowCurrentCharacter?LiveCharacterGuid:std::string{};
@@ -117,8 +135,29 @@ inline void StudioHeader(){
     if(Opened&&!StudioAppearanceRequested&&!AuthoringClient::Busy())StudioAppearanceRequested=AuthoringClient::Submit("SaveEditorAppearance");
     if(Opened&&StudioAppearance.empty()&&StudioAppearanceRequested&&HelpyImGuiTheme::SoftButton("Retry native appearance choices"))StudioAppearanceRequested=false;
 }
+// One draft bar for every page: whether the draft has changes, Review & export, and Discard
+// (which reopens the saved copy). The review appears under the bar until the draft changes.
+inline void StudioReview();
+inline void StudioDraftBar(){
+    const auto& theme=HelpyImGuiTheme::Current;const auto latest=StudioDraftRevision();
+    const bool changed=latest>StudioOpenRevision(),exported=changed&&StudioExportedRevision==latest;
+    if(HelpyImGuiTheme::BeginPanel("##character-draft-bar",ImVec2(0,ImGui::GetFrameHeightWithSpacing()+ImGui::GetStyle().WindowPadding.y*2),true,ImGuiWindowFlags_AlwaysUseWindowPadding)){
+        ImGui::AlignTextToFramePadding();
+        if(!changed)ImGui::TextDisabled("No changes in this draft yet");
+        else if(exported)ImGui::TextColored(theme.success,"Draft exported · further edits need another export");
+        else ImGui::TextColored(theme.warning,"This draft has changes that are not exported yet");
+        const float buttons=ImGui::CalcTextSize("Review & exportDiscard changes").x+ImGui::GetStyle().FramePadding.x*4+ImGui::GetStyle().ItemSpacing.x;
+        ImGui::SameLine(std::max(ImGui::GetCursorPosX()+ImGui::GetStyle().ItemSpacing.x,ImGui::GetWindowContentRegionMax().x-buttons));
+        ImGui::BeginDisabled(!changed||AuthoringClient::Busy());
+        if(Button("Review & export","SaveEditorPreview"))Invalidate();
+        ImGui::SameLine();
+        // Discard closes the draft and reopens the same saved copy; the original never changed.
+        if(Button("Discard changes","SaveEditorClose")){StudioPendingGuid=Browser.value("CharacterGuid",std::string{});StudioOpenPending=true;Invalidate();}
+        ImGui::EndDisabled();
+    }HelpyImGuiTheme::EndPanel();
+    if(!Token.empty())StudioReview();
+}
 inline void StudioReview(){
-    ImGui::Separator();const float width=ImGui::CalcTextSize("Review save changesDiscard save draft").x+ImGui::GetStyle().FramePadding.x*4+ImGui::GetStyle().ItemSpacing.x;ImGui::SetCursorPosX(ImGui::GetCursorPosX()+std::max(0.f,(ImGui::GetContentRegionAvail().x-width)*.5f));Button("Review save changes","SaveEditorPreview");ImGui::SameLine();Button("Discard save draft","SaveEditorClose");
     if(!Token.empty()){
         ImGui::SeparatorText("Review edited copy");if(Review.contains("Summary"))for(const auto& row:Review["Summary"]){ImGui::TextWrapped("%s",row.at("Label").get_ref<const std::string&>().c_str());ImGui::TextDisabled("%s",row.at("Field").get_ref<const std::string&>().c_str());if(row.contains("Before")||row.contains("After"))ImGui::TextWrapped("%s → %s",row.value("Before",Json{}).dump().c_str(),row.value("After",Json{}).dump().c_str());}
         ImGui::Checkbox("I reviewed these changes; export a new copy",&Confirmed);ImGui::BeginDisabled(!Confirmed);Button("Export edited character copy","SaveEditorExport",{{"Token",Token},{"Confirm",Confirmed}});ImGui::EndDisabled();
@@ -177,9 +216,13 @@ inline void StudioSkillControls(){
     }ImGui::TextDisabled("Levels use native XP thresholds · save draft only");
 }
 // Saved loadout, read-only: equipment changes belong to the live player's gear menu.
-inline void StudioGear(){
-    ImGui::SeparatorText("Saved loadout");
-    const auto& theme=HelpyImGuiTheme::Current;const int columns=ImGui::GetContentRegionAvail().x>theme.X(450)?3:2;
+// Compact: a short strip above the inventory, read with the inventory page.
+inline void StudioGear(bool compact=false){
+    const auto& theme=HelpyImGuiTheme::Current;const float avail=ImGui::GetContentRegionAvail().x;
+    if(compact&&!ImGui::CollapsingHeader("Saved loadout · read-only",ImGuiTreeNodeFlags_DefaultOpen))return;
+    if(!compact)ImGui::SeparatorText("Saved loadout");
+    const int columns=compact?(avail>theme.X(900)?6:avail>theme.X(450)?4:3):(avail>theme.X(450)?3:2);
+    const float placard=theme.Y(compact?72:108),glyphOffset=theme.Y(compact?40:48),glyphSize=theme.Y(compact?22:28);
     if(ImGui::BeginTable("##saved-loadout-slots",columns,ImGuiTableFlags_SizingStretchSame)){
     for(const auto* slot:{"Head","Body","Legs","Cape","Trinket","Trinket2","Ammo","MagicAmmo1","HeldRight","HeldLeft","CrossbowBolts","FishingBait"}){
         ImGui::TableNextColumn();
@@ -187,38 +230,57 @@ inline void StudioGear(){
         const auto title=location=="Trinket2"?"Trinket 2":location=="MagicAmmo1"?"Runes":location=="HeldRight"?"Main hand":location=="HeldLeft"?"Off hand":location=="CrossbowBolts"?"Bolts":location=="FishingBait"?"Bait":slot;
         ImGui::PushID(slot);Json item=Json::object();for(const auto& row:StudioSavedLoadout)if(row.value("Location",std::string{})==slot)item=SavedPlacard(row);
         const auto path=item.value("Path",std::string{});
-        const auto a=ImGui::GetCursorScreenPos();const ImVec2 b(a.x+ImGui::GetContentRegionAvail().x,a.y+theme.Y(108));ImGui::Dummy({b.x-a.x,b.y-a.y});const bool hovered=ImGui::IsItemHovered();
+        const auto a=ImGui::GetCursorScreenPos();const ImVec2 b(a.x+ImGui::GetContentRegionAvail().x,a.y+placard);ImGui::Dummy({b.x-a.x,b.y-a.y});const bool hovered=ImGui::IsItemHovered();
         if(!path.empty())ItemGridPicker::DrawPlacard(item,a,b,false,hovered);
-        else{auto* draw=ImGui::GetWindowDrawList();draw->AddRectFilled(a,b,ImGui::GetColorU32(theme.panelAlt),4);draw->AddRect(a,b,ImGui::GetColorU32(theme.border),4);MapLayerIcons::Draw(glyph,{(a.x+b.x)*.5f,a.y+theme.Y(48)},theme.Y(28));}
+        else{auto* draw=ImGui::GetWindowDrawList();draw->AddRectFilled(a,b,ImGui::GetColorU32(theme.panelAlt),4);draw->AddRect(a,b,ImGui::GetColorU32(theme.border),4);MapLayerIcons::Draw(glyph,{(a.x+b.x)*.5f,a.y+glyphOffset},glyphSize);}
         auto* draw=ImGui::GetWindowDrawList();const auto extent=ImGui::CalcTextSize(title);draw->AddRectFilled(a,{b.x,a.y+theme.Y(18)},ImGui::GetColorU32(theme.panelAlt),3);MapLayerIcons::Draw(glyph,{a.x+theme.X(10),a.y+theme.Y(9)},theme.Y(13));draw->AddText({std::max(a.x+theme.X(20),(a.x+b.x-extent.x)*.5f),a.y+theme.Y(2)},ImGui::GetColorU32(theme.accent),title);
         if(hovered&&HelpyImGuiTheme::TooltipReady(std::string("loadout:")+slot,hovered)){HelpyImGuiTheme::BeginDetailsTooltip();ImGui::TextUnformatted(title);ImGui::TextWrapped("%s",path.empty()?"Empty saved slot":ItemPresentation::Name(item).c_str());HelpyImGuiTheme::EndDetailsTooltip();}
         ImGui::PopID();
     }ImGui::EndTable();}
-    if(StudioSavedLoadout.empty())ImGui::TextDisabled("Open the Inventory page once to read the saved loadout.");
+    if(StudioSavedLoadout.empty())ImGui::TextDisabled("Reading the saved loadout with the inventory…");
 }
 inline void StudioInventory(const Json& catalog,uint64_t revision){
     const bool wide=ImGui::GetContentRegionAvail().x>HelpyImGuiTheme::Current.X(640);const int columns=wide?2:1;
     if(ImGui::BeginTable("##native-inventory-workbench",columns,ImGuiTableFlags_Resizable|ImGuiTableFlags_SizingStretchSame)){
         ImGui::TableNextRow();ImGui::TableNextColumn();ImGui::PushID("saved-inventory-pane");ImGui::SeparatorText("Saved inventory");Inventory(true);
         if(!DroppedInventoryItem.empty()){StudioStageAddition(DroppedInventoryItem);DroppedInventoryItem=Json::object();}
-        HelpyImGuiTheme::SoftButton("Drop Item Bay item here to stage an addition");if(ImGui::BeginDragDropTarget()){if(auto item=ItemGridPicker::AcceptItemDrop(Error))StudioStageAddition(*item);ImGui::EndDragDropTarget();}
+        HelpyImGuiTheme::SoftButton("Drop an Item Bay item here to add it");if(ImGui::BeginDragDropTarget()){if(auto item=ItemGridPicker::AcceptItemDrop(Error))StudioStageAddition(*item);ImGui::EndDragDropTarget();}
         ImGui::PopID();if(wide)ImGui::TableNextColumn();ImGui::PushID("studio-item-bay-pane");ImGui::SeparatorText("Item Bay");Json bay=catalog;LazyCatalog::Overlay(bay,0);
         const auto bayRevision=revision+LazyCatalog::For(0).RowsRevision;
         StudioBayControls(bay,bayRevision);
         {
             const auto result=ItemGridPicker::Render("character-studio-bay",bay,StudioFilter,sizeof(StudioFilter),StudioSelectedPath,sizeof(StudioSelectedPath),StudioPicker,bayRevision,false,false,true,true,false,420);
-            if(result.SelectedRow)StudioSelected=*result.SelectedRow;
+            // Picking an item makes it the one to add; the row below adds it in one click.
+            if(result.SelectedRow&&*result.SelectedRow!=StudioSelected){StudioSelected=*result.SelectedRow;StudioStageAddition(StudioSelected);}
         }
-        ImGui::BeginDisabled(StudioSelected.empty());if(HelpyImGuiTheme::SoftButton("Add selected to save draft"))StudioStageAddition(StudioSelected);ImGui::EndDisabled();ImGui::PopID();ImGui::EndTable();
+        ImGui::PopID();ImGui::EndTable();
     }
+    // Add an item in one step: pick it (or drop it), set the quantity, Add. It lands in the draft;
+    // Review & export is where the whole draft is confirmed.
     if(!StudioAddition.empty()){
-        ImGui::SeparatorText("Review inventory addition");ImGui::TextWrapped("%s",ItemPresentation::Name(StudioAddition).c_str());ImGui::SetNextItemWidth(110);ImGui::InputInt("Quantity",&StudioQuantity,0,0);ImGui::TextWrapped("Destination: Inventory · first empty verified native slot");ImGui::TextWrapped("Special-tab insertion needs verified native eligibility. Personal storage: existing records remain editable; new-slot capacity is not verified.");ImGui::Checkbox("I confirm this addition to the save draft",&StudioConfirm);
-        ImGui::BeginDisabled(!StudioConfirm||AuthoringClient::Busy());if(Button("Stage native item record","SaveEditorAddItem",{{"Path",StudioAddition.at("Path")},{"Count",StudioQuantity},{"Group","Inventory"},{"Personal",false},{"Confirm",true},{"Revision",StudioAppearance.value("Revision",uint64_t{})}})){StudioAddition=Json::object();Invalidate();}ImGui::EndDisabled();ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Cancel addition"))StudioAddition=Json::object();
+        ImGui::Separator();ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(("Add "+ItemPresentation::Name(StudioAddition)).c_str());ImGui::SameLine();
+        StudioQuantity=std::clamp(StudioQuantity,1,9999);ImGui::SetNextItemWidth(HelpyImGuiTheme::Current.X(110));ImGui::InputInt("##add-quantity",&StudioQuantity,1,10);StudioQuantity=std::clamp(StudioQuantity,1,9999);
+        ImGui::SameLine();ImGui::BeginDisabled(AuthoringClient::Busy()||!StudioAppearance.contains("Revision"));
+        if(Button("Add to draft","SaveEditorAddItem",{{"Path",StudioAddition.at("Path")},{"Count",StudioQuantity},{"Group","Inventory"},{"Personal",false},{"Confirm",true},{"Revision",StudioAppearance.value("Revision",uint64_t{})}})){StudioAddition=Json::object();StudioSelected=Json::object();Invalidate();}
+        ImGui::EndDisabled();ImGui::SameLine();if(HelpyImGuiTheme::SoftButton("Cancel"))StudioAddition=Json::object();
+        ImGui::TextDisabled("Goes to the first empty inventory slot. Personal storage and special tabs keep their existing records.");
     }
 }
 inline void StudioAppearancePage(){
-    ImGui::TextUnformatted("Character name");ImGui::SetNextItemWidth(-1);HelpyTextInput::InputTextWithHint("##character-name","Character name",StudioName,sizeof(StudioName));
-    if(StudioAppearance.contains("Revision"))if(Button("Stage character name","SaveEditorRename",{{"Name",StudioName},{"Revision",StudioAppearance.at("Revision")}}))Invalidate();
+    // The name stages like every other appearance choice: when you finish editing it (Enter,
+    // clicking away, or the controller keyboard's OK), not through a separate button.
+    static bool editingName=false;
+    ImGui::TextUnformatted("Character name");ImGui::SetNextItemWidth(-1);
+    const ImGuiID nameId=ImGui::GetID("##character-name");
+    HelpyTextInput::InputTextWithHint("##character-name","Character name",StudioName,sizeof(StudioName));
+    const bool editing=ImGui::GetCurrentContext()->ActiveId==nameId||HelpyTextInput::Owner==nameId;
+    const auto savedName=StudioAppearance.value("Name",std::string{});
+    if(editingName&&!editing&&StudioName[0]&&savedName!=StudioName&&StudioAppearance.contains("Revision")&&!AuthoringClient::Busy())
+        if(AuthoringClient::Submit("SaveEditorRename",{{"Name",StudioName},{"Revision",StudioAppearance.at("Revision")}}))Invalidate();
+    editingName=editing;
+    if(!editing&&StudioName[0]&&savedName!=StudioName&&!savedName.empty())ImGui::TextDisabled("Not staged yet: click the name and press Enter.");
+    else ImGui::TextDisabled("Edit the name and press Enter to stage it.");
     if(StudioAppearance.empty()){ImGui::TextDisabled("Reading native appearance choices…");return;}
     StudioAppearanceControls();
 }
@@ -247,6 +309,21 @@ inline void StudioDeliveries(){
     if(!shown)ImGui::TextDisabled("No mod pauses deliveries to this character.");
     ImGui::TextDisabled("Manage which mods may pause deliveries in Settings › Deliveries.");
     if(!DeliveryFlagsPanel::Status.empty())ImGui::TextWrapped("%s",DeliveryFlagsPanel::Status.c_str());
+}
+// Deliveries, folded into the inventory page: the header says whether Helpy can deliver to
+// this character; opening it shows the switch and any mod pauses.
+inline void StudioDeliverySummary(){
+    namespace F=DeliveryFlagsPanel::F;DeliveryFlagsPanel::Refresh();const auto guid=StudioGuid();if(guid.empty())return;
+    const auto block=F::Check(DeliveryFlagsPanel::Snapshot,guid,{});
+    const bool worldPauses=std::any_of(DeliveryFlagsPanel::Snapshot.Active.begin(),DeliveryFlagsPanel::Snapshot.Active.end(),[](const F::Flag& flag){return flag.Target=="world";});
+    std::string label="Helpy deliveries: ";
+    if(block)label+=block->User?"off for this character":"paused by "+block->ModName;
+    else label+=worldPauses?"on (paused in some worlds)":"on";
+    label+="###studio-deliveries";
+    if(block)ImGui::PushStyleColor(ImGuiCol_Text,HelpyImGuiTheme::Current.warning);
+    const bool open=ImGui::CollapsingHeader(label.c_str());
+    if(block)ImGui::PopStyleColor();
+    if(open){ImGui::Indent();StudioDeliveries();ImGui::Unindent();}
 }
 inline std::string StudioBytes(uint64_t bytes){char text[32]{};if(bytes<1024)std::snprintf(text,sizeof(text),"%llu B",static_cast<unsigned long long>(bytes));else std::snprintf(text,sizeof(text),"%.1f KiB",bytes/1024.0);return text;}
 inline Json StudioPickedOwners(){Json owners=Json::array();for(const auto& owner:StudioSectionPicks)owners.push_back(owner);return owners;}
@@ -323,8 +400,7 @@ inline void StudioTransfer(){
         ImGui::BeginDisabled(AuthoringClient::Busy());if(HelpyImGuiTheme::SoftButton("Replace the Steam save"))submit("Steam",true);ImGui::EndDisabled();
     }else if(StudioTransferResult.contains("Error"))ImGui::TextWrapped("%s",StudioTransferResult.at("Error").get_ref<const std::string&>().c_str());
     else if(StudioTransferResult.contains("Status"))ImGui::TextWrapped("%s",StudioTransferResult.value("Status",std::string{}).c_str());
-    ImGui::SeparatorText("Export an edited copy");
-    if(Opened)StudioReview();else ImGui::TextDisabled("Open a character copy first.");
+    ImGui::TextDisabled("Use Review & export above to save edits as a new copy before transferring it.");
 }
 inline bool StudioTabItem(const char* label,StudioPage page){
     const bool pending=StudioTab!=StudioShown;
@@ -335,14 +411,16 @@ inline bool StudioTabItem(const char* label,StudioPage page){
 // The sheet itself. Pages that stage edits end with the shared review row.
 inline void Studio(const Json& catalog,uint64_t revision){
     if(!Opened){ImGui::TextWrapped("Choose a saved character above.");return;}
+    StudioDraftBar();
     if(ImGui::BeginTabBar("##character-sheet")){
-        if(StudioTabItem("Inventory",StudioPage::Inventory)){StudioInventory(catalog,revision);StudioReview();ImGui::EndTabItem();}
-        if(StudioTabItem("Appearance",StudioPage::Appearance)){StudioAppearancePage();StudioReview();ImGui::EndTabItem();}
-        if(StudioTabItem("Loadout",StudioPage::Loadout)){StudioGear();ImGui::EndTabItem();}
-        if(StudioTabItem("Skills",StudioPage::Skills)){StudioSkillControls();StudioReview();ImGui::EndTabItem();}
-        if(StudioTabItem("Deliveries",StudioPage::Deliveries)){StudioDeliveries();ImGui::EndTabItem();}
-        if(StudioTabItem("Save sections",StudioPage::Sections)){StudioSectionsPage();StudioReview();ImGui::EndTabItem();}
-        if(StudioTabItem("Transfer & export",StudioPage::Transfer)){StudioTransfer();ImGui::EndTabItem();}
+        if(StudioTabItem("Inventory & loadout",StudioPage::Inventory)){StudioDeliverySummary();StudioGear(true);StudioInventory(catalog,revision);ImGui::EndTabItem();}
+        if(StudioTabItem("Appearance",StudioPage::Appearance)){StudioAppearancePage();ImGui::EndTabItem();}
+        if(StudioTabItem("Skills",StudioPage::Skills)){StudioSkillControls();ImGui::EndTabItem();}
+        if(StudioTabItem("Save data",StudioPage::SaveData)){
+            ImGui::SeparatorText("Mod save sections");StudioSectionsPage();
+            StudioTransfer();
+            ImGui::EndTabItem();
+        }
         ImGui::EndTabBar();
     }
 }

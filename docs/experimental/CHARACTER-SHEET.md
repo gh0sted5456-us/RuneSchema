@@ -15,21 +15,29 @@ leave **Follow current character** on. Edits stage on an isolated copy and are
 exported after review. The live character and the game's save slots are not
 changed.
 
+The **draft bar** above the pages is the one place to finish: it says whether
+the copy has changes that are not exported yet. **Review & export** lists every
+staged change and saves the edited copy as a new file. **Discard changes**
+reopens the same save without them.
+
 | Page | What it does |
 | --- | --- |
-| **Inventory** | The saved inventory beside the Item Bay. Drag an item across to stage an addition. |
+| **Inventory & loadout** | Helpy delivery status, the saved equipment (read only) and the saved inventory beside the Item Bay. |
 | **Appearance** | Name, appearance options and the game's colour palettes. |
-| **Loadout** | The saved equipment, read only. Change gear on the live character from its gear menu. |
 | **Skills** | Saved skill levels, using the game's experience thresholds. |
-| **Deliveries** | This character's Helpy delivery switch, and any mod that pauses deliveries to it or its world. |
-| **Save sections** | Mod data that J4SSaves keeps with the character: back up, restore or clean. |
-| **Transfer & export** | Send the character to Steam/Epic or Game Pass, or export an edited copy. |
+| **Save data** | Mod save sections (J4SSaves), and transfer to Steam/Epic or Game Pass. |
+
+To add an item, select it in the Item Bay, or drag it onto the inventory. Set
+the quantity and choose **Add to draft**. To rename the character, edit the
+name and press Enter. Change gear on the live character from its gear menu.
 
 The character and item previews are retired.
 
 ## Deliveries
 
-The switch here is the same one as in **Settings → Deliveries**. With it off,
+The **Helpy deliveries** header on *Inventory & loadout* shows whether
+deliveries to this character are on, off, or paused by a mod. Open it for the
+switch, which is the same one as in **Settings → Deliveries**. With it off,
 Helpy refuses deliveries you make to this character. A server host can still
 give you items. The page also lists each mod pause that applies to this
 character or its world, and whether you still honour that mod. Manage mods in
@@ -62,8 +70,9 @@ tombstone in J4SSaves, so an older copy in another save is not imported again.
 
 ## Steam/Epic and Game Pass
 
-Both versions store the same character data. Game Pass keeps it in its own save
-container. Transfer the saved copy; export or discard staged edits first. Use the
+These are on the **Save data** page. Both versions store the same character
+data. Game Pass keeps it in its own save container. Transfer the saved copy;
+export or discard staged edits first, from the draft bar. Use the
 same gameplay mods on both installs.
 
 - **Send to Steam / Epic** writes a save file to
@@ -89,3 +98,22 @@ source as the **Source** list, and the rest of the text is searched as usual.
 `source:vanilla`, `source:plugins`, `source:mods` and `source:all` pick the
 groups. A partial name works when only one source matches. Choosing in the
 **Source** list updates a typed prefix to match.
+
+## Search syntax
+
+Item searches (the Item Bay, the save editor's bay and live inventory) and the
+spawn tools' creature and resource searches share one syntax. Hover a search
+box for a reminder.
+
+| Query | Finds |
+| --- | --- |
+| `sword shield` | Items matching every word, as before. |
+| `sword OR axe`, `sword \| axe` | Either word. |
+| `-rusty`, `NOT rusty`, `!rusty` | Leaves out a word. |
+| `(sword OR axe) -rusty` | Groups with parentheses. NOT applies first, then AND, then OR. |
+| `"iron sword"` | The exact phrase. |
+
+Operators are upper case, so a lower-case `or` or `not` is an ordinary word.
+An unfinished query, such as a missing `)`, still searches what it can. In live
+inventory, plain words now match anywhere in an item's name and details; use
+quotes for the old exact match.

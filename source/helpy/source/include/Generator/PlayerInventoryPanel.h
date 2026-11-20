@@ -1,6 +1,7 @@
 #pragma once
 #include "Generator/HelpyTextInput.h"
 #include "Core/RuneSchemaProfile.h"
+#include "Core/ItemSearchExpression.h"
 #include "Generator/ToolRequest.h"
 #include "Generator/HelpyWindowChrome.h"
 #include "Generator/ItemBayBrowser.h"
@@ -13,6 +14,7 @@ using Json=nlohmann::json;
 inline bool Open=false,Detached=false,Refresh=false,AddWanted=false,Personal=false,Container=false,WasDelivering=false,FocusCart=false;
 inline Json Target,Snapshot;
 inline std::string Status,Group="Inventory",SearchQuery,SelectedSlot;
+inline ItemSearchExpression::Expression SearchFilter; // Same boolean syntax as the Item Bay.
 inline char Search[257]{},BaySearch[257]{},BaySelected[4097]{};
 inline ItemGridPicker::State Bay;
 inline Json SelectedBay;
@@ -104,8 +106,8 @@ inline void Inventory(float height){
         }ImGui::EndTabBar();
     }
     ImGui::SetNextItemWidth(std::max(60.f,ImGui::GetContentRegionAvail().x-t.X(135)));
-    const bool enter=HelpyTextInput::InputTextWithHint("##live-inventory-search","Search inventory…",Search,sizeof(Search),ImGuiInputTextFlags_EnterReturnsTrue);ImGui::SameLine();
-    if(HelpyImGuiTheme::SoftButton("Search")||enter)SearchQuery=ItemGridPicker::Lower(Search);
+    const bool enter=HelpyTextInput::InputTextWithHint("##live-inventory-search","Search inventory…",Search,sizeof(Search),ImGuiInputTextFlags_EnterReturnsTrue);ItemGridPicker::SearchSyntaxTooltip();ImGui::SameLine();
+    if(HelpyImGuiTheme::SoftButton("Search")||enter){SearchQuery=Search;SearchFilter=ItemSearchExpression::Expression::Parse(SearchQuery,[](std::string word){return ItemGridPicker::Lower(std::move(word));});}
     ImGui::SameLine();ImGui::BeginDisabled(Pending!=0);if(HelpyImGuiTheme::SoftButton("Refresh"))Reload();ImGui::EndDisabled();
     ImGui::SetNextItemWidth(-1);if(ImGui::BeginCombo("##inventory-source",ItemSource::Label(Source))){
         for(const auto value:{ItemSource::Kind::All,ItemSource::Kind::Vanilla,ItemSource::Kind::Expansion,ItemSource::Kind::Modded,ItemSource::Kind::Unknown})if(ImGui::Selectable(ItemSource::Label(value),Source==value))Source=value;ImGui::EndCombo();
@@ -117,7 +119,7 @@ inline void Inventory(float height){
         if(ChangingGear&&(Group=="Equipped"||Personal||!LoadoutEligibility::Matches(row,GearLocation)))continue;
         if(Source!=ItemSource::Kind::All&&ItemSource::Row(row).Group!=Source)continue;
         if(!PersonalizationPanel::Matches(row,FavoritesOnly,PersonalTag))continue;
-        if(!SearchQuery.empty()&&ItemGridPicker::Lower(ItemPresentation::OriginalName(row)+" "+ItemPresentation::Name(row)+" "+HelpyPersonalization::SearchText(row)+" "+ItemPresentation::Text(row,"Path")+" "+ItemPresentation::Text(row,"SourceName")).find(SearchQuery)==std::string::npos)continue;
+        if(!SearchFilter.Empty()&&!SearchFilter.Matches(ItemGridPicker::Lower(ItemPresentation::OriginalName(row)+" "+ItemPresentation::Name(row)+" "+HelpyPersonalization::SearchText(row)+" "+ItemPresentation::Text(row,"Path")+" "+ItemPresentation::Text(row,"SourceName"))))continue;
         matches.push_back(i);
     }
     ImGui::TextDisabled("%zu items%s",matches.size(),Pending||Refresh?" · reading…":"");

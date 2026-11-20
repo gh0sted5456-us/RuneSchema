@@ -4458,7 +4458,7 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
             if(SaveEditorPanel::InventoryRecordTable||!SaveEditorPanel::SavedPlacardsDrawn)throw std::runtime_error("Saved inventory did not use the shared Item Bay placards");
             if(!HelpyPreviewHooks::InventorySearchId||HelpyPreviewHooks::InventorySearchId==HelpyPreviewHooks::BaySearchId||HelpyPreviewHooks::InventoryRefreshId==HelpyPreviewHooks::BayRefreshId)throw std::runtime_error("Inventory and Item Bay share Search/Refresh IDs");
             if(std::abs((HelpyPreviewHooks::InventoryViewport.w-HelpyPreviewHooks::InventoryViewport.y)-(HelpyPreviewHooks::Browser.w-HelpyPreviewHooks::Browser.y))>1.f)throw std::runtime_error("Inventory and Item Bay grid heights differ");
-            for(const auto page:{SaveEditorPanel::StudioPage::Sections,SaveEditorPanel::StudioPage::Deliveries,SaveEditorPanel::StudioPage::Loadout}){SaveEditorPanel::StudioTab=page;for(int i=0;i<4;++i){AuthoringClient::Poll(true);RenderFrame();}}
+            for(const auto page:{SaveEditorPanel::StudioPage::SaveData,SaveEditorPanel::StudioPage::Appearance,SaveEditorPanel::StudioPage::Skills}){SaveEditorPanel::StudioTab=page;for(int i=0;i<4;++i){AuthoringClient::Poll(true);RenderFrame();}}
             if(SaveEditorPanel::StudioSections.value("Sections",nlohmann::json::array()).empty())throw std::runtime_error("Character sheet did not list the save sections");
             SaveEditorPanel::StudioTab=SaveEditorPanel::StudioPage::Inventory;RenderFrame();
             if(!AuthoringClient::Submit("SaveEditorBrowse",{{"Pointer","/GameProgress"}}))throw std::runtime_error("Save editor browse admission failed");AuthoringClient::Poll(true);RenderFrame();
