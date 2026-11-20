@@ -20,8 +20,11 @@ the landing footprint against blocking ground over the native map's full height
 range. Unavailable ground, cliffs and invalid capsules prevent departure.
 
 After preparation, RuneSchema invokes the game's reflected
-`TeleportationSubsystem.TeleportWithParams` service without a second loading overlay,
-normal checks enabled (`bNoCheck=false`, `bIsATest=false`), and the verified target.
+`TeleportationSubsystem.TeleportWithParams` service with normal checks enabled
+(`bNoCheck=false`, `bIsATest=false`) and the verified target. Jumps of 300 m or more
+(horizontal distance) use the game's own loading screen, so destination streaming
+and region changes such as weather and environment settle behind it rather than in
+front of the player. Shorter hops stay instant. Dragon Gate travel always uses it.
 This uses native travel rather than a raw `K2_TeleportTo` position jump or a fake
 permanent lodestone. No named lodestone, unlock, cost item or world-save record is
 created. Arrival requires both a nearby verified target position and the native
@@ -62,6 +65,36 @@ lookup, including repeated clicks on lodestones. The travel job still performs
 its own activated-cell and capsule-footprint checks before moving the player.
 An already-running runtime request must finish before another mutation can start.
 
+## Travel notices for mods
+
+A mod whose systems follow the player's region (weather, ambience, spawners) can
+hear about a Helpy map journey and pause or resync around it. Opt in by giving one
+of these objects a Boolean variable `bRuneSchemaTravelListener` set to true:
+
+- the GameState, or a component added to it;
+- the travelling player's character, or one of its components;
+- that player's controller, or one of its components.
+
+Then add either or both of these Blueprint functions (or C++ `UFUNCTION`s), with
+exactly these inputs and no return value:
+
+| Function | Inputs | Called |
+| --- | --- | --- |
+| `RuneSchemaBeforeTravel` | `Player` (Actor), `Destination` (Vector), `LongJump` (Boolean) | On the game thread, after the landing is verified and immediately before the native teleport starts. `LongJump` is true when the game's loading screen will show. |
+| `RuneSchemaAfterTravel` | `Player` (Actor), `Destination` (Vector), `Arrived` (Boolean) | When the journey ends: `Arrived` is true on confirmed arrival, false if native travel was rejected or not confirmed. |
+
+Every `RuneSchemaBeforeTravel` is followed by one `RuneSchemaAfterTravel`, except
+when the world unloads or RuneSchema's tools reload mid-journey; a new world starts
+fresh. `Player` can be None if the character is gone by then. At most 64 listeners
+are notified, on the host (where travel runs). A function with any other inputs or
+a return value is skipped with a `[HELPY][MAP-TRAVEL]` warning, and so is one that
+fails while running; neither stops the journey. If a listener changes the player
+during `RuneSchemaBeforeTravel` (removes, re-possesses or starts another teleport),
+no teleport is issued and `RuneSchemaAfterTravel` reports `Arrived` false.
+
+Each departure logs `[HELPY][MAP-TRAVEL] departing long_jump=... loading_screen=...
+listeners=...`.
+
 ## Wide map and ground height
 
 The map fills the available rectangular workspace while preserving native map
@@ -89,7 +122,7 @@ current mapping. Use a disposable in-game test to check travel on your build
 as well; automated tests cover the implementation rather than every live journey.
 
 Before release, test Steam and Game Pass in a disposable world: loaded nearby point,
-distant never-visited point, high/low terrain, roof/bridge, cliff/water rejection,
+distant never-visited point (with its loading screen), a jump across a weather region, high/low terrain, roof/bridge, cliff/water rejection,
 travel already in progress, world exit while preparing, then host-selected remote
 player on a dedicated server. Confirm client loading-screen behavior and that no
 streaming-helper actor persists after saving/reloading. Map bounds do not mean

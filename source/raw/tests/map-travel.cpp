@@ -64,4 +64,9 @@ int main(){
     Check(!PS::MapTravel::Arrived({100,200,300},{151,200,300},90));
     Check(!PS::MapTravel::Arrived({100,200,300},{100,200,391},90));
     Check(!PS::MapTravel::Arrived({100,200,300},{100,200,std::numeric_limits<double>::quiet_NaN()},90));
+    using PS::MapTravel::LongJump;using PS::MapTravel::LongJumpCm;
+    Check(!LongJump({0,0,0},{LongJumpCm-1,0,0})&&LongJump({0,0,0},{LongJumpCm,0,0}));
+    Check(!LongJump({0,0,0},{0,0,500000})); // Height alone is not a long jump.
+    Check(LongJump({0,0,0},{-705216,770593,13144})); // The 9 km jump that crashed with a region-aware weather mod.
+    Check(LongJump({std::numeric_limits<double>::quiet_NaN(),0,0},{1,1,0}));
 }

@@ -1,5 +1,6 @@
 #pragma once
 #include "Core/MapLanding.h"
+#include <cmath>
 #include <cstdint>
 #include <optional>
 namespace PS::MapTravel {
@@ -38,6 +39,14 @@ struct Gate {
     }
     bool Commit(std::int64_t now){if(Stopped||Committed||now<Began||now-Began>=30000||ReadySamples<2)return false;Committed=true;CommittedAt=now;return true;}
 };
+// Jumps farther than this (horizontal centimetres) use the game's own loading screen, so destination
+// streaming and region changes (weather, environment, mod systems) settle behind it instead of in
+// front of the player. Shorter hops stay instant. An unreadable position counts as long.
+constexpr double LongJumpCm=30000;
+inline bool LongJump(MapLanding::Position from,MapLanding::Position to){
+    if(!std::isfinite(from.X)||!std::isfinite(from.Y)||!std::isfinite(to.X)||!std::isfinite(to.Y))return true;
+    return std::hypot(to.X-from.X,to.Y-from.Y)>=LongJumpCm;
+}
 inline bool Arrived(MapLanding::Position target,MapLanding::Position actual,double halfHeight){
     return std::isfinite(actual.X)&&std::isfinite(actual.Y)&&std::isfinite(actual.Z)
         &&std::isfinite(halfHeight)&&halfHeight>=1&&halfHeight<=1000
