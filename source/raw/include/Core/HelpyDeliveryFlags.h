@@ -4,6 +4,7 @@
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <cctype>
+#include <climits>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -18,6 +19,8 @@
 // Player-driven Helpy deliveries are on by default. They stop for a character when:
 //   - the player turns them off for that character in Helpy (the user opt-out), or
 //   - a registered mod has a valid, signed noPlayerDeliveries flag on the character or world.
+// A mod lifts its pause with a newer "on": false statement. With "until" (unix seconds) the lift is
+// temporary: after that moment, by this PC's clock, the pause is back without another statement.
 // Deliveries a server makes through Helpy to another player are never blocked here.
 // Folder: <Helpy shared folder>/flags/<mod id>/{mod.json,flags.json}, plus helpy-state.json,
 // which Helpy owns and mods may read (user opt-outs, per-mod choices, pinned keys).
@@ -53,7 +56,9 @@ inline bool ValidModId(std::string_view id){
     return std::all_of(id.begin(),id.end(),[](unsigned char c){return (c>='a'&&c<='z')||(c>='0'&&c<='9')||c=='-'||c=='_';});
 }
 
-struct Flag{std::string Mod,Target,Id,Name,Message;bool On=false;uint64_t Seq=0;int64_t At=0;};
+// Until: end of a temporary lift (an "on": false statement only), 0 when the lift has no end.
+// Lapsed: a temporary lift that has ended, so the flag pauses again.
+struct Flag{std::string Mod,Target,Id,Name,Message;bool On=false,Lapsed=false;uint64_t Seq=0;int64_t At=0,Until=0;};
 struct ModStatus{
     std::string Id,Name,Url,Fingerprint;
     enum class Trust{Registry,FirstSeen,Pinned,Mismatch,Invalid} Key=Trust::Invalid;
@@ -64,6 +69,7 @@ struct Snapshot{
     std::vector<ModStatus> Mods;
     std::vector<Flag> Active;       // Newest valid flags that pause deliveries, from trusted mods the player allows.
     std::vector<Flag> Declined;     // Same, from mods the player chose not to honour.
+    std::vector<Flag> Lifted;       // Temporary lifts still in force ("on": false with a future "until").
     Json State=Json::object();
     std::vector<std::string> Problems;
 };
@@ -106,6 +112,14 @@ inline std::optional<Flag> ParseStatement(std::string_view statement,std::string
         flag.Id=NormalizeGuid(value.at("id").get<std::string>());flag.Name=value.at("flag").get<std::string>();
         flag.On=value.at("on").get<bool>();flag.Seq=value.at("seq").get<uint64_t>();
         flag.At=value.value("at",int64_t{});flag.Message=value.value("message",std::string{});
+        if(const auto until=value.find("until");until!=value.end()){
+            // A positive whole number of unix seconds. Anything else makes the statement invalid, so
+            // a malformed lift can never stand in for an unlimited one.
+            if(!until->is_number_unsigned())return std::nullopt;
+            const auto seconds=until->get<uint64_t>();
+            if(seconds==0||seconds>static_cast<uint64_t>(INT64_MAX))return std::nullopt;
+            if(!flag.On)flag.Until=static_cast<int64_t>(seconds); // Meaningless on a pause; ignored there.
+        }
         if(flag.Mod!=mod||(flag.Target!="character"&&flag.Target!="world")||flag.Id.empty()||flag.Name.empty()||flag.Message.size()>300)return std::nullopt;
         return flag;
     }catch(...){return std::nullopt;}
@@ -123,7 +137,7 @@ inline Snapshot Read(const fs::path& folder,const Signature::Verifier& verifier,
         mods.push_back(it->path());
     }
     std::sort(mods.begin(),mods.end());
-    std::map<std::tuple<std::string,std::string,std::string,std::string>,Flag> newest;
+    std::map<std::tuple<std::string,std::string,std::string,std::string>,Flag> newest,pauses; // pauses: newest "on": true, for its message.
     for(const auto& path:mods){
         ModStatus status;status.Id=path.filename().string();status.Name=status.Id;
         auto& saved=snapshot.State["mods"][status.Id];if(!saved.is_object())saved=Json::object();
@@ -161,6 +175,7 @@ inline Snapshot Read(const fs::path& folder,const Signature::Verifier& verifier,
                 auto flag=ParseStatement(statement,status.Id);
                 if(!flag||!verifier(key,statement,signature)){++status.Rejected;continue;}
                 ++status.Valid;
+                if(flag->On){auto& pause=pauses[{flag->Mod,flag->Target,flag->Id,flag->Name}];if(pause.Mod.empty()||flag->Seq>=pause.Seq)pause=*flag;}
                 auto& slot=newest[{flag->Mod,flag->Target,flag->Id,flag->Name}];
                 // Highest seq wins; on a tie the pause stands, so a replayed "off" cannot lift it.
                 if(slot.Mod.empty()||flag->Seq>slot.Seq||(flag->Seq==slot.Seq&&flag->On&&!slot.On))slot=std::move(*flag);
@@ -172,7 +187,14 @@ inline Snapshot Read(const fs::path& folder,const Signature::Verifier& verifier,
         finish();
     }
     for(auto& [key,flag]:newest){
-        if(!flag.On||flag.Name!=PauseFlag)continue;
+        if(flag.Name!=PauseFlag)continue;
+        if(!flag.On&&flag.Until){
+            if(now<flag.Until){snapshot.Lifted.push_back(flag);continue;}
+            // The temporary lift has ended: the pause is back, with the mod's own words if it gave any.
+            const auto pause=pauses.find(key);
+            flag.On=true;flag.Lapsed=true;flag.Message=pause!=pauses.end()?pause->second.Message:std::string{};
+        }
+        if(!flag.On)continue;
         const auto mod=std::find_if(snapshot.Mods.begin(),snapshot.Mods.end(),[&](const ModStatus& status){return status.Id==flag.Mod;});
         (mod!=snapshot.Mods.end()&&mod->AllowPause?snapshot.Active:snapshot.Declined).push_back(flag);
     }

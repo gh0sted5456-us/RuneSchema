@@ -37,5 +37,8 @@ int main(int argc,char** argv){
         Check(gateHeader.contains("SharedDirectory(\"HELPY\")/\"flags\"")&&gateHeader.contains("AnyCharacterPause"),"The gate reads Helpy's shared flags folder and refuses unknown characters only when a pause exists");
         const auto panel=Read(root/"helpy/source/include/Generator/DeliveryFlagsPanel.h");
         Check(panel.contains("SharedDirectory(\"HELPY\")/\"flags\""),"Helpy's Deliveries settings read the same folder as the core");
+        Check(panel.contains("\"Allowed until \"")&&panel.contains("Snapshot.Lifted"),"Settings > Deliveries shows temporary lifts as Allowed until {date} by {mod}");
+        // Temporary lifts end by the clock, so the gate must read flags at the moment of each delivery.
+        Check(gateHeader.contains("system_clock::now()")&&gateHeader.contains("HelpyDeliveryFlags::Read(Folder(),HelpyDeliveryFlags::Signature::DefaultVerifier(),Now())"),"The gate evaluates temporary lifts against the current time on every delivery");
     }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}
 }
