@@ -79,9 +79,9 @@ void CacheLicenses(){
     try{
         const auto source=HostServices::ModDirectory()/"settings"/"licenses"/"RuneSchema-Licenses.txt";
         std::error_code error;if(!std::filesystem::is_regular_file(source,error))return;
-        const auto text=ConfigFiles::Read(source,16*1024*1024);
+        const auto text=ConfigFiles::Read(source,8*1024*1024);
         const auto folder=RuneSchemaData::Directory()/"core"/"licenses";RuneSchemaData::Safe(folder);std::filesystem::create_directories(folder,error);
-        const auto copy=folder/"RuneSchema-Licenses.txt";std::string current;try{current=ConfigFiles::Read(copy,16*1024*1024);}catch(...){}
+        const auto copy=folder/"RuneSchema-Licenses.txt";std::string current;try{current=ConfigFiles::Read(copy,8*1024*1024);}catch(...){}
         if(current!=text)ConfigFiles::Write(copy,text);
     }catch(...){}
 }
