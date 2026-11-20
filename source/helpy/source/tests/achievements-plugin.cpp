@@ -42,8 +42,9 @@ int main(int argc, char** argv) {
 
     // UE4SS Mods folder with a RuneSchema install inside it.
     const auto mods = root / "Mods";
-    Write(mods / "mods.txt", "; comment\nListedOn : 1\nListedOff : 0\nRuneSchema : 1\n");
-    Write(mods / "ListedOn/achievements.json", "{}");
+    Write(mods / "mods.txt", "; comment\nListedOn : 1\nListedOff : 0\nRuneSchema : 1\nCacheOnly : 1\n");
+    Write(mods / "ListedOn/achievements.json", "{}"); Write(mods / "ListedOn/cache/achievements.json", "{}");
+    Write(mods / "CacheOnly/cache/achievements.json", "{}"); // A UE4SS mod shipping cache/achievements.json, as JBM does.
     Write(mods / "ListedOff/achievements.json", "{}");
     Write(mods / "Toggle/enabled.txt", ""); Write(mods / "Toggle/achievements.json", "{}");
     Write(mods / "NoFile/Scripts/main.lua", "");
@@ -61,14 +62,16 @@ int main(int argc, char** argv) {
         {{"Folder", text(rs / "Missing")}, {"Name", "Missing"}, {"Enabled", true}, {"Present", false}}});
 
     auto found = ByOwner(Exchange({{"Op", "discover"}, {"Mods", text(mods)}, {"RuneSchema", rows}}));
-    assert(found.size() == 4);
+    assert(found.size() == 5);
     assert(found.at("ue4ss/listedon").at("Kind") == "ue4ss" && found.at("ue4ss/toggle").at("Enabled") == true);
+    assert(found.at("ue4ss/listedon").at("File") == text(mods / "ListedOn/achievements.json"));          // The root file wins.
+    assert(found.at("ue4ss/cacheonly").at("File") == text(mods / "CacheOnly/cache/achievements.json"));
     assert(found.at("mods/rootfile").at("File") == text(rs / "RootFile/achievements.json"));
     assert(found.at("mods/cachefile").at("File") == text(rs / "CacheFile/cache/achievements.json") && found.at("mods/cachefile").at("Name") == "Cache File");
     assert(!found.contains("ue4ss/runeschema") && !found.contains("ue4ss/shared") && !found.contains("ue4ss/listedoff") && !found.contains("mods/off"));
 
     found = ByOwner(Exchange({{"Op", "discover"}, {"Mods", text(mods)}, {"RuneSchema", rows}, {"IncludeDisabled", true}}));
-    assert(found.size() == 6 && found.at("ue4ss/listedoff").at("Enabled") == false && found.at("mods/off").at("Enabled") == false);
+    assert(found.size() == 7 && found.at("ue4ss/listedoff").at("Enabled") == false && found.at("mods/off").at("Enabled") == false);
 
     found = ByOwner(Exchange({{"Op", "discover"}, {"Mods", text(mods)}, {"RuneSchema", rows}, {"UE4SS", false}}));
     assert(found.size() == 2 && found.contains("mods/rootfile"));
@@ -82,5 +85,5 @@ int main(int argc, char** argv) {
     assert(Service(Context, R"({"Op":"discover","Mods":"relative\\path"})", nullptr, 0, &size) == RS_PLUGIN_INVALID_ARGUMENT);
     assert(Service(Context, R"({"Op":"delete"})", nullptr, 0, &size) == RS_PLUGIN_INVALID_ARGUMENT);
     assert(Exchange({{"Op", "read"}}).at("Loaded") == true);
-    std::cout << "Achievements plugin: Helpy-only host, UE4SS mods.txt and enabled.txt, RuneSchema root and cache files, disabled filter, RuneSchema/shared skipped and links refused passed.\n";
+    std::cout << "Achievements plugin: Helpy-only host, UE4SS mods.txt and enabled.txt, root and cache files for UE4SS and RuneSchema mods, disabled filter, RuneSchema/shared skipped and links refused passed.\n";
 }

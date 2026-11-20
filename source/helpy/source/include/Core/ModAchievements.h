@@ -42,7 +42,15 @@ inline bool Pattern(std::string_view text, bool function) {
     if (function && (text.find(':') == text.npos || text.find('*') != text.npos)) return false;
     return std::all_of(text.begin(), text.end(), [](unsigned char c) { return std::isalnum(c) || c == '/' || c == '_' || c == '.' || c == ':' || c == '-'; });
 }
-inline bool Owner(std::string_view owner) { return owner.starts_with("mods/") && owner.size() > 5 && owner.size() <= 160 && Visible(owner, 160); }
+// "mods/<folder>" for RuneSchema mods, "ue4ss/<folder>" for UE4SS mods (see Core/AchievementSources.h).
+inline std::string_view OwnerPrefix(std::string_view owner) {
+    for (const std::string_view prefix : {std::string_view("mods/"), std::string_view("ue4ss/")})
+        if (owner.starts_with(prefix) && owner.size() > prefix.size()) return prefix;
+    return {};
+}
+inline bool Owner(std::string_view owner) { return !OwnerPrefix(owner).empty() && owner.size() <= 160 && Visible(owner, 160); }
+// The folder part of a valid owner, shown when a file gives no usable mod name.
+inline std::string OwnerFolder(const std::string& owner) { return owner.substr(OwnerPrefix(owner).size()); }
 
 struct Condition {
     std::string Event, Subject; // Subject: exact path, "prefix*", or empty for any.
@@ -94,7 +102,7 @@ inline std::vector<Definition> Parse(const Json& document, const std::string& ow
     std::vector<Definition> result; std::set<std::string> ids; int total = 0;
     for (const auto& row : rows) {
         if (!row.is_object()) throw std::runtime_error("Each achievement must be an object");
-        Definition definition; definition.Owner = owner; definition.ModName = Visible(modName, 96) ? modName : owner.substr(5);
+        Definition definition; definition.Owner = owner; definition.ModName = Visible(modName, 96) ? modName : OwnerFolder(owner);
         definition.Id = row.value("id", std::string{});
         if (!Identifier(definition.Id) || !ids.insert(definition.Id).second) throw std::runtime_error("Achievement id must be unique, 1-64 letters, digits, '-', '_' or '.': " + definition.Id);
         const auto context = " (" + definition.Id + ")";
@@ -244,7 +252,7 @@ public:
                 entry.Points = std::clamp(row.value("Points", 0), 0, MaximumPoints);
                 entry.Title = row.value("Title", std::string{}); if (!Visible(entry.Title, 64)) entry.Title = key.substr(bar + 1);
                 entry.Owner = key.substr(0, bar);
-                entry.ModName = row.value("ModName", std::string{}); if (!Visible(entry.ModName, 96)) entry.ModName = entry.Owner.substr(5);
+                entry.ModName = row.value("ModName", std::string{}); if (!Visible(entry.ModName, 96)) entry.ModName = OwnerFolder(entry.Owner);
             }
             result.Entries.emplace(key, std::move(entry));
         }

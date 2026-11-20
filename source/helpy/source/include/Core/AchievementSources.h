@@ -1,6 +1,7 @@
 #pragma once
 // Finds achievements.json files for the Achievements plugin. Any mod can award Helpy achievements:
-//   - UE4SS mods:      ue4ss/Mods/<Mod>/achievements.json (enabled in mods.txt or by enabled.txt)
+//   - UE4SS mods:      ue4ss/Mods/<Mod>/achievements.json, or cache/achievements.json
+//                      (enabled in mods.txt or by enabled.txt)
 //   - RuneSchema mods: RuneSchema/mods/<Mod>/achievements.json, or cache/achievements.json
 // Parsing and progress stay in Helpy (Core/ModAchievements.h); this only decides which files count.
 #include <nlohmann/json.hpp>
@@ -49,9 +50,10 @@ inline std::map<std::string, bool> ModsList(const fs::path& mods) {
     }
     return result;
 }
-inline fs::path FirstFile(const fs::path& folder, bool cacheCopy) {
+// The root file wins over cache/achievements.json; the cache folder itself must be a real folder.
+inline fs::path FirstFile(const fs::path& folder) {
     if (Plain(folder / "achievements.json", false)) return folder / "achievements.json";
-    if (cacheCopy && Plain(folder / "cache" / "achievements.json", false)) return folder / "cache" / "achievements.json";
+    if (Plain(folder / "cache", true) && Plain(folder / "cache" / "achievements.json", false)) return folder / "cache" / "achievements.json";
     return {};
 }
 inline Json Source(const std::string& owner, const std::string& name, const fs::path& file, bool enabled, const char* kind) {
@@ -67,7 +69,7 @@ inline Json Discover(const fs::path& mods, const Json& runeschema, bool includeU
         if (!enabled && !includeDisabled) continue;
         const auto folder = fs::u8path(row["Folder"].get<std::string>());
         if (!Plain(folder, true)) continue;
-        const auto file = FirstFile(folder, true);
+        const auto file = FirstFile(folder);
         if (file.empty()) continue;
         auto name = row.value("Name", std::string{});
         if (name.empty()) name = Text(folder.filename());
@@ -86,7 +88,7 @@ inline Json Discover(const fs::path& mods, const Json& runeschema, bool includeU
             const auto found = listed.find(key);
             const bool enabled = (found != listed.end() && found->second) || Plain(folder / "enabled.txt", false);
             if (!enabled && !includeDisabled) continue;
-            const auto file = FirstFile(folder, false);
+            const auto file = FirstFile(folder);
             if (file.empty()) continue;
             sources.push_back(Source("ue4ss/" + key, name, file, enabled, "ue4ss"));
             if (sources.size() >= 2048) return {{"Sources", sources}, {"Truncated", true}};

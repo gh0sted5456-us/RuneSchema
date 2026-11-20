@@ -72,5 +72,13 @@ int main(){
     // Many mods stay under the size cap.
     A::Progress wide;for(int i=0;i<40;++i){A::Progress::Entry entry;entry.Unlocked=uint64_t(i+1);entry.Points=100;entry.Title=std::string(64,'T');entry.Owner="mods/m"+std::to_string(i);entry.ModName=std::string(96,'M');wide.Entries["mods/m"+std::to_string(i)+"|a"]=entry;}
     const auto big=A::Summary(wide);assert(big.dump().size()<=A::SummaryBytes&&!A::ValidateSummary(big).is_null()&&big["Points"]==4000);
-    std::cout<<"Mod achievements parse, progress, persist and summarize\n";
+    // UE4SS mods own achievements as "ue4ss/<folder>", alongside RuneSchema's "mods/<folder>".
+    {const Json one=Json::parse(R"({"format":1,"achievements":[{"id":"Elf","title":"Pointed Ears","points":2,
+        "conditions":[{"event":"custom","function":"/Game/JBM/Runtime/BPC_JBMEditorController.BPC_JBMEditorController_C:HelpyAchievement","where":{"Id":"Elf"}}]}]})");
+        const auto ue4ss=A::Parse(one,"ue4ss/jbm","JBM");assert(ue4ss.size()==1&&ue4ss[0].Owner=="ue4ss/jbm"&&ue4ss[0].Key()=="ue4ss/jbm|Elf"&&ue4ss[0].ModName=="JBM");
+        assert(A::Parse(one,"ue4ss/jbm","").front().ModName=="jbm"&&A::Parse(one,"mods/goblins","").front().ModName=="goblins");
+        for(const auto* bad:{"ue4ss/","mods/","other/jbm","jbm","ue4ssjbm"}){bool threw=false;try{(void)A::Parse(one,bad,"X");}catch(const std::exception&){threw=true;}assert(threw);}
+        A::Progress kept;A::Progress::Entry entry;entry.Unlocked=7;entry.Points=2;entry.Title="Pointed Ears";entry.Owner="ue4ss/jbm";entry.ModName="JBM";kept.Entries["ue4ss/jbm|Elf"]=entry;
+        const auto back=A::Progress::Parse(Json::parse(kept.Document().dump()));assert(back.Points()==2&&back.Entries.at("ue4ss/jbm|Elf").Owner=="ue4ss/jbm");}
+    std::cout<<"Mod achievements parse, progress, persist and summarize (RuneSchema and UE4SS owners)\n";
 }

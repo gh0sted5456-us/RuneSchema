@@ -15,11 +15,12 @@ Your mod does not need to be a RuneSchema mod. The **Helpy Achievements** plugin
 
 | Mod type | File |
 | --- | --- |
-| UE4SS mod | `ue4ss/Mods/<your mod>/achievements.json` |
+| UE4SS mod | `ue4ss/Mods/<your mod>/achievements.json`, or `cache/achievements.json` |
 | RuneSchema mod | `RuneSchema/mods/<your mod>/achievements.json`, or `cache/achievements.json` |
 
 A UE4SS mod counts while it is enabled in `mods.txt` or has an `enabled.txt`. A RuneSchema mod counts while
 it is enabled on the Mods page. Rebuilding a RuneSchema mod's Helpy cache keeps `cache/achievements.json`.
+If a mod has both files, the one in its own folder is used.
 RuneSchema mods with the file show an **Achievements** badge on the Mods page.
 
 Players earn achievements while RuneSchema and Helpy are installed: the game events come from RuneSchema's
