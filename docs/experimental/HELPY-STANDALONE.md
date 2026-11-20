@@ -35,7 +35,7 @@ In **World → Map**, click a world map zone for its close-up, or choose a zone 
 
 ## Search and refresh Item Bay icons
 
-Search uses cached items first and can also look up items in the running game. Verified live discoveries are saved for later searches. Right-click an item to recapture its icon or refresh the item icons for its mod. Mod-wide refresh requires **Keep icons between launches**.
+Search uses cached items first and can also look up items in the running game. Type `source:` and a mod name, such as `source:JBM helmet`, to search one source; see [Search by source](CHARACTER-SHEET.md#search-by-source). Verified live discoveries are saved for later searches. Right-click an item to recapture its icon or refresh the item icons for its mod. Mod-wide refresh requires **Keep icons between launches**.
 
 ## Cache updates and notifications
 
@@ -45,12 +45,20 @@ Search uses cached items first and can also look up items in the running game. V
 | Pause, resume or stop a build | The Tools progress view |
 | Review cache changes and job results | **Notifications**, below Report a bug |
 | Resync vanilla files after a game update | The **i Game cache update** action on Items |
+| Rebuild every cache: game files, then each enabled mod, with pictures | **Home → Full resync**, or **Full resync** in the game cache update dialog |
 | Switch display/internal item names immediately | Item Bay's settings cog |
 
 The read-only PAK builder works with the assigned game open or closed. Existing
 cached items and pictures remain available while it builds; completed results
 are imported into platform AppData. Disabled or removed sources are excluded.
 ID.txt versions and local tracking fingerprints can prompt cache updates.
+
+**Settings → Cache** decides which source Helpy shows first. With **Cache first**,
+saved items appear at once and the running game checks them in the background;
+live results replace them in place. With **Game first**, Helpy shows the
+game's live pages and uses the cache only when a live page is unavailable.
+Gameplay actions are always checked against the running game. After a full
+resync, the item list reloads from the new caches.
 
 Cached searches run separately from the interface. New live results are learned
 for later searches. A readable name replaces an internal key; unresolved metadata
@@ -128,8 +136,8 @@ filters and carts work offline. Settings, next-launch mod order, imports and
 cache tools remain available. Use **Mods → Refresh** after changing files elsewhere.
 
 Missing-folder rows can be removed from the load-order list without deleting
-installed folders. Item delivery, teleportation, uncached native discovery and
-live character previews require a connected game. Cached data does not install
+installed folders. Item delivery, teleportation and uncached native discovery
+require a connected game. Cached data does not install
 missing mods or establish that an item can be spawned.
 
 ## Player coordinates in game

@@ -11,7 +11,6 @@
 #include "Generator/SaveEditorPanel.h"
 #include "Generator/ProfilePanel.h"
 #include "Generator/BugReportPanel.h"
-#include "Generator/ItemPreviewPanel.h"
 #include "Generator/RuneSchemaSettingsPanel.h"
 #include "Generator/DeliveryFlagsPanel.h"
 #include "Generator/HudExtensionsPanel.h"
@@ -969,6 +968,11 @@ void RenderHome(const HelpyImGuiTheme::Theme& theme){
 #endif
     ImGui::EndDisabled();
     if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)||ImGui::IsItemFocused())HelpyImGuiTheme::Tooltip("Read enabled mods one at a time with the game open or closed. Uses a separate PAK worker, keeps previous caches in AppData, and supports Pause / Stop in Tools.");
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX()+std::max(0.f,(width-cacheWidth)*.5f));
+    ImGui::BeginDisabled(NotificationsPanel::Busy()||ModsPanel::Dirty||ModsPanel::SnapshotGeneration!=SpawnToolRequests::CurrentGeneration()||!ModsPanel::Snapshot.contains("Root"));
+    if(HelpyImGuiTheme::SoftButton("Full resync",{cacheWidth,0}))NotificationsPanel::FullResync();
+    ImGui::EndDisabled();
+    if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)||ImGui::IsItemFocused())HelpyImGuiTheme::Tooltip("Rebuild every cache: the game's own files first, then each enabled mod, with their pictures. Current caches stay in use until each new one is ready; the item list reloads at the end.");
     if(NotificationsPanel::Inbox.Unread()){
         ImGui::SetCursorPosX(ImGui::GetCursorPosX()+std::max(0.f,(width-cacheWidth)*.5f));
         if(HelpyImGuiTheme::SoftButton(("Notifications ("+std::to_string(NotificationsPanel::Inbox.Unread())+")").c_str(),{cacheWidth,0}))CurrentPage=Page::Notifications;
@@ -2396,11 +2400,11 @@ void HelpyStandaloneWindow::ClosePopup(){
     ++HelpyPreviewHooks::HideRequests;
 #endif
     HudExtensionsPanel::PanelId.clear();HudExtensionsPanel::OpenRequested=false;HudExtensionsPanel::CloseRequested=true;
-    ModMenu2Panel::Visibility(false);ModMenu2Panel::ClosePreview();
+    ModMenu2Panel::Visibility(false);
     m_nativeOverlay.Hide();
     HelpyControllerInput::Suspend();
     HelpyTextInput::Clear();
-    if(auto* ui=ImGui::GetCurrentContext()){ImGui::GetIO().ClearInputKeys();ImGui::GetIO().ClearInputMouse();if(!ui->OpenPopupStack.empty())ImGui::ClosePopupToLevel(0,true);}
+    if(auto* ui=ImGui::GetCurrentContext()){ImGui::GetIO().ClearInputKeys();ImGui::GetIO().ClearInputMouse();HelpyImGuiTheme::CloseTransientUi();}
     // Closing Helpy must not steal focus back from an unrelated application.
     const auto foreground=GetForegroundWindow();const bool returnToGame=HelpyPopupInput::ReturnToGame(OwnsWindow(foreground),GameWindow(m_gameWindow));
     m_visible=false;ShowWindow(m_hwnd,PluginRuntimeServices::ExternalDesktop&&m_tray.Ready()?SW_HIDE:HelpyEnvironment::Server()||PluginRuntimeServices::ExternalDesktop?SW_MINIMIZE:SW_HIDE);
@@ -2472,12 +2476,10 @@ void HelpyStandaloneWindow::ThreadMain() {
         DiagnosticOverlay.Close();CoordinatesOverlay.Close();StartupOverlay.Close();HelpyCoordinates::Shutdown();HelpyStartupProgress::Shutdown();StructuredLogFeed::Shutdown();DiagnosticsPanel::Shutdown();
         LiveLogPanel::OnEntry={};LiveLogPanel::OnBackfillEntry={};LiveLogPanel::OnUE4SSEntry={};
         if(ImGui::GetCurrentContext()){
-            CharacterPreviewPanel::Shutdown();
             ItemIconCache::Shutdown();
             HelpyWikiIcons::Cancel();
             if(ImGui::GetIO().BackendRendererUserData)ImGui_ImplDX11_Shutdown();
             ItemIconCache::ReleaseTextures();
-            CharacterPreviewPanel::ReleaseTexture();
             MapPanel::Shutdown();
             HelpyMiniMap::Shutdown();
             HelpyWikiIcons::Shutdown();
@@ -2577,7 +2579,7 @@ void HelpyStandaloneWindow::ThreadMain() {
             if(!RuneSchemaSettingsPanel::Loaded&&!RuneSchemaSettingsPanel::Dirty)RuneSchemaSettingsPanel::Load();
             HelpySourceCache::Next={};
             LazyCatalog::ResetForGeneration(0);LazyCatalog::ClearPending();SpawnToolsPanel::UiSnapshot=nlohmann::json::object();
-            CharacterPreviewPanel::Close();if(m_visible.load())LazyCatalog::FirstOpen(SpawnToolRequests::CurrentGeneration());
+            if(m_visible.load())LazyCatalog::FirstOpen(SpawnToolRequests::CurrentGeneration());
         }
         // Hotkeys belong to Helpy's window thread. No engine tick callback,
         // viewport input hook, or UE4SS C++ ABI is needed by this plugin.
@@ -4452,24 +4454,13 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
             for(int i=0;i<8;++i){AuthoringClient::Poll(true);RenderFrame();} // Drain automatic studio startup reads before the next user action.
             if(!AuthoringClient::Submit("SaveEditorOpen",{{"Path","preview-character.json"},{"Offline",true}}))throw std::runtime_error("Save editor open admission failed");AuthoringClient::Poll(true);RenderFrame();
             for(int i=0;i<8;++i){AuthoringClient::Poll(true);RenderFrame();} // Appearance tables, inventory and one bounded preview request.
-            SaveEditorPanel::StudioShowPreview=false;SaveEditorPanel::FocusInventoryGrid=true;for(int i=0;i<3;++i)RenderFrame();
+            SaveEditorPanel::StudioTab=SaveEditorPanel::StudioPage::Inventory;SaveEditorPanel::FocusInventoryGrid=true;for(int i=0;i<3;++i)RenderFrame();
             if(SaveEditorPanel::InventoryRecordTable||!SaveEditorPanel::SavedPlacardsDrawn)throw std::runtime_error("Saved inventory did not use the shared Item Bay placards");
             if(!HelpyPreviewHooks::InventorySearchId||HelpyPreviewHooks::InventorySearchId==HelpyPreviewHooks::BaySearchId||HelpyPreviewHooks::InventoryRefreshId==HelpyPreviewHooks::BayRefreshId)throw std::runtime_error("Inventory and Item Bay share Search/Refresh IDs");
             if(std::abs((HelpyPreviewHooks::InventoryViewport.w-HelpyPreviewHooks::InventoryViewport.y)-(HelpyPreviewHooks::Browser.w-HelpyPreviewHooks::Browser.y))>1.f)throw std::runtime_error("Inventory and Item Bay grid heights differ");
-            for(const auto slot:LoadoutEligibility::Slots){
-                SaveEditorPanel::StudioSlot=std::string(slot);SaveEditorPanel::StudioSlotQuery.clear();SaveEditorPanel::StudioSlotRows=nlohmann::json::array();SaveEditorPanel::StudioSlotOffset=0;SaveEditorPanel::StudioSlotMore=SaveEditorPanel::StudioSlotOpen=true;
-                for(int i=0;i<5;++i){AuthoringClient::Poll(true);RenderFrame();}
-                if(SaveEditorPanel::StudioSlotRows.empty()||!LoadoutEligibility::Matches(SaveEditorPanel::StudioSlotRows[0],slot))throw std::runtime_error("Native loadout picker failed its slot filter");
-                SaveEditorPanel::StudioResetSlot();
-            }
-            SaveEditorPanel::StudioShowPreview=true;RenderFrame();
-            {
-                CharacterPreviewFrame::Channel testPixels;const auto name="Local\\RuneSchema.CharacterPreview."+std::to_string(GetCurrentProcessId())+".UITest";testPixels.Open(name,true);
-                if(!testPixels.Lock())throw std::runtime_error("Native preview transport test lock failed");auto* frame=testPixels.Get();std::memset(frame->Pixels,160,CharacterPreviewFrame::Bytes);frame->Serial=1;std::snprintf(frame->Status,sizeof(frame->Status),"Synthetic transport check · no Unreal rendering in this fixture");testPixels.Unlock();
-                CharacterPreviewPanel::Attach(name);RenderFrame();RenderFrame();
-                if(CharacterPreviewPanel::Serial!=1||!CharacterPreviewPanel::Texture||CharacterPreviewPanel::Texture->GetTexID()==ImTextureID_Invalid)throw std::runtime_error("Native preview pixels did not reach the D3D texture");
-                CharacterPreviewPanel::Close();
-            }
+            for(const auto page:{SaveEditorPanel::StudioPage::Sections,SaveEditorPanel::StudioPage::Deliveries,SaveEditorPanel::StudioPage::Loadout}){SaveEditorPanel::StudioTab=page;for(int i=0;i<4;++i){AuthoringClient::Poll(true);RenderFrame();}}
+            if(SaveEditorPanel::StudioSections.value("Sections",nlohmann::json::array()).empty())throw std::runtime_error("Character sheet did not list the save sections");
+            SaveEditorPanel::StudioTab=SaveEditorPanel::StudioPage::Inventory;RenderFrame();
             if(!AuthoringClient::Submit("SaveEditorBrowse",{{"Pointer","/GameProgress"}}))throw std::runtime_error("Save editor browse admission failed");AuthoringClient::Poll(true);RenderFrame();
             if(!AuthoringClient::Submit("SaveEditorSet",{{"Pointer","/GameProgress/Health"},{"Value",75},{"Revision",SaveEditorPanel::Browser.at("Revision")}}))throw std::runtime_error("Save editor edit admission failed");AuthoringClient::Poll(true);RenderFrame();
             for(int i=0;i<8;++i){AuthoringClient::Poll(true);RenderFrame();}
@@ -5446,7 +5437,7 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
         }
     }catch(const std::exception& error){std::filesystem::create_directories(output);std::ofstream(output/"render-error.txt")<<error.what();result=4;}
     RuneSchemaSettingsPanel::Remote={};ItemIconCache::ClearRemote();LazyCatalog::ClearRemote();SpawnToolRequests::ClearRemote();
-    RuneSchemaProfile::Shutdown();JournalPanel::Shutdown();SpawnBrowserSettings::Shutdown();PlayerPortraitPicker::Shutdown();CharacterPreviewPanel::Shutdown();ItemIconCache::Shutdown();HelpyWikiIcons::Cancel();DestroyItemBay();DestroyIconCache();for(size_t i=0;i<m_workspaces.size();++i)DestroyWorkspacePanel(i);ImGui_ImplDX11_Shutdown();ItemIconCache::ReleaseTextures();CharacterPreviewPanel::ReleaseTexture();MapPanel::Shutdown();HelpyWikiIcons::Shutdown();
+    RuneSchemaProfile::Shutdown();JournalPanel::Shutdown();SpawnBrowserSettings::Shutdown();PlayerPortraitPicker::Shutdown();ItemIconCache::Shutdown();HelpyWikiIcons::Cancel();DestroyItemBay();DestroyIconCache();for(size_t i=0;i<m_workspaces.size();++i)DestroyWorkspacePanel(i);ImGui_ImplDX11_Shutdown();ItemIconCache::ReleaseTextures();MapPanel::Shutdown();HelpyWikiIcons::Shutdown();
     if(MapPanel::Data.Texture||!MapPanel::Data.Retired.empty()||!HelpyWikiIcons::Names().empty()||MapPanel::MapCacheWriter.valid())result=4;
     ImGui_ImplWin32_Shutdown();ImGui::DestroyContext();ReleaseBrandTextures();DestroyDevice();
     DestroyWindow(m_hwnd);m_hwnd=nullptr;UnregisterClassW(wc.lpszClassName,m_module);if(SUCCEEDED(com))CoUninitialize();return result;
@@ -5623,6 +5614,8 @@ void HelpyStandaloneWindow::RenderFrame() {
     ItemGridPicker::DetailsSurfaceMin=MainSurfacePosition;ItemGridPicker::DetailsSurfaceSize=MainSurfaceSize;
     LazyCatalog::FirstOpen(SpawnToolRequests::CurrentGeneration());
     HelpyWindowChrome::Bounds(MainSurfacePosition,MainSurfaceSize);
+    // Dialogs, hover cards and drags live on Helpy's own surface and end with their page.
+    HelpyImGuiTheme::SetCanvas(MainSurfacePosition,MainSurfaceSize);HelpyImGuiTheme::CloseOrphanedPopups();
     ImGui::SetNextWindowPos(framePosition);ImGui::SetNextWindowSize(frameSize);
     ImGui::SetNextWindowScroll({0,0}); // Only inner page panels scroll; native caption and splash stay fixed.
     auto backing=t.window;if(transparentOverlay)backing.w=HelpyBackgrounds::Opaque()?0.f:std::clamp(t.overlayOpacity,.6f,1.f);
@@ -5698,7 +5691,6 @@ void HelpyStandaloneWindow::RenderFrame() {
     ImGui::End();ImGui::PopStyleVar(2);ImGui::PopStyleColor();HudExtensionsPanel::RenderActive(activeAtFrameStart,popupDepthAtFrameStart>1);{HelpyImGuiTheme::Scope skin(t);SpawnToolsPanel::RenderQuickSend();}if(UiRegularFont)ImGui::PushFont(UiRegularFont);RenderToasts(t);RenderDiagnosticToasts(t);if(UiRegularFont)ImGui::PopFont();
     {const bool show=m_visible.load()&&CurrentPage==Page::ModMenu2&&SplashEntered;const auto* page=m_nativeOverlay.Page();const auto rect=page?"view:"+std::to_string(page->Left)+","+std::to_string(page->Top)+","+std::to_string(page->Width)+","+std::to_string(page->Height):std::string{};ModMenu2Panel::Visibility(show,rect);}
     RuntimeDetailsPanel::RenderDocked(t,MainSurfacePosition,MainSurfaceSize);
-    ItemPreviewPanel::Render();
     PartyMemberView::RenderInspector();
     PersonalizationPanel::Render();
     if(bayVisible){

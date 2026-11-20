@@ -692,6 +692,12 @@ if(PROJECT_IS_TOP_LEVEL)
     target_include_directories(recipe-definition-index PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../include")
     target_compile_features(recipe-definition-index PRIVATE cxx_std_23)
     add_test(NAME recipe-definition-index COMMAND recipe-definition-index)
+    add_executable(j4s-sections ../tests/j4s-sections.cpp)
+    target_include_directories(j4s-sections PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../include")
+    target_compile_features(j4s-sections PRIVATE cxx_std_23)
+    target_compile_options(j4s-sections PRIVATE /UNDEBUG)
+    target_link_libraries(j4s-sections PRIVATE RuneSchemaJsonCore)
+    add_test(NAME j4s-sections COMMAND j4s-sections)
     add_executable(state-storage-contract ../tests/state-storage-contract.cpp)
     add_test(NAME state-storage-contract COMMAND state-storage-contract
         "${CMAKE_CURRENT_SOURCE_DIR}/../src/Runtime/HostServices.cpp"

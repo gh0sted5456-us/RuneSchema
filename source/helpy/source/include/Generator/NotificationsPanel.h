@@ -67,6 +67,13 @@ inline bool BuildEnabled(){
     const bool ok=HelpyModCacheBuilder::StartEnabled(fs::u8path(ModsPanel::Snapshot.at("Root").get<std::string>()),ModsPanel::Snapshot.at("Rows"),HelpyImGuiTheme::Current.autoInstallAuthoringDotNet);
     if(ok)CacheBuilderPanel::FocusInstalled(ModsPanel::Snapshot,Json::object());return ok;
 }
+// Rebuilds every cache Helpy reads items and pictures from: the game's files, then each
+// enabled mod. When the batch ends, the item catalog is reloaded from the new caches.
+inline bool FullResync(){
+    if(Busy()||ModsPanel::Dirty||ModsPanel::SnapshotGeneration!=SpawnToolRequests::CurrentGeneration()||!ModsPanel::Snapshot.contains("Root"))return false;
+    const bool ok=HelpyModCacheBuilder::StartFullResync(HostServices::ModDirectory(),HostServices::CacheDirectory(),GameStamp(),ModsPanel::Snapshot.at("Rows"),HelpyImGuiTheme::Current.autoInstallAuthoringDotNet);
+    if(ok)CacheBuilderPanel::Requested=true;return ok;
+}
 inline void Act(const HelpyNotifications::Notice& notice){
     if(notice.Action=="hotfix"){
         const auto release=HelpyHotfixInfo::Select(Json::array({HelpyUpdates::Current().Hotfix}),HelpyEnvironment::RuneSchemaVersion);
@@ -84,6 +91,7 @@ inline void Act(const HelpyNotifications::Notice& notice){
 inline void Jobs(){
     // Keep explicit jobs moving in the tray; no idle engine indexing is started here.
     HelpyIconPacks::Poll();
+    if(!HelpyIconPacks::Busy()&&!HelpyIconPacks::Building()&&ImportJob.empty()&&HelpyModCacheBuilder::TakeFinishedBatch()){auto& list=LazyCatalog::For(0);list.Cache.clear();if(list.Started)LazyCatalog::Retry(0);}
     if(!ImportJob.empty()&&!HelpyIconPacks::Busy()){
         const bool success=HelpyIconPacks::LastOperationOK;
         if(success){Inbox.Built(ImportSource,ImportVersion,ImportVanilla);if(!ImportFingerprint.empty())Inbox.Built(ImportSource,"files:"+ImportFingerprint,false);}
@@ -140,7 +148,10 @@ inline void Prompt(){
         ImGui::BeginDisabled(Busy());if(HelpyImGuiTheme::SoftButton("Resync vanilla files")){
             if(HelpyModCacheBuilder::StartVanilla(HostServices::ModDirectory(),HostServices::CacheDirectory(),GameStamp(),HelpyImGuiTheme::Current.autoInstallAuthoringDotNet)){CacheBuilderPanel::Requested=true;ImGui::CloseCurrentPopup();}
             else Status=HelpyModCacheBuilder::Current().Stage;
-        }ImGui::EndDisabled();HelpyMenu::NextControl("Later");if(HelpyImGuiTheme::SoftButton("Later"))ImGui::CloseCurrentPopup();ImGui::EndPopup();
+        }ImGui::EndDisabled();
+        ImGui::BeginDisabled(Busy()||ModsPanel::Dirty||!ModsPanel::Snapshot.contains("Root"));HelpyMenu::NextControl("Full resync");
+        if(HelpyImGuiTheme::SoftButton("Full resync: game and all enabled mods")){if(FullResync())ImGui::CloseCurrentPopup();else Status=HelpyModCacheBuilder::Current().Stage;}ImGui::EndDisabled();
+        HelpyMenu::NextControl("Later");if(HelpyImGuiTheme::SoftButton("Later"))ImGui::CloseCurrentPopup();ImGui::EndPopup();
     }
 }
 inline void Render(){

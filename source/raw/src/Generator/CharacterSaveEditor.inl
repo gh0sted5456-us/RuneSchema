@@ -47,7 +47,154 @@ json EditorItemRecord(const std::string& path,int count){
     return record;
 }
 }
-void ResetCharacterEditor(){CharacterPreview::Reset();characterEditor.Session.Reset();characterEditor.Choices=json::object();characterEditor.Layout=json::array();}
+namespace {
+// J4SSaves sections. The save copy is edited through the session like any other change;
+// the J4SSaves store is only touched when the player asks for it and the J4SSaves DLL the
+// game loaded offers list/delete (1.1+). Backups live with the character's profile files.
+fs::path SectionBackupFolder(const std::string& guid){return RuneSchemaData::CharacterCopiesDirectory()/guid/"sections";}
+std::string UtcStamp(){
+    SYSTEMTIME now{};GetSystemTime(&now);char text[32]{};
+    std::snprintf(text,sizeof(text),"%04u-%02u-%02uT%02u:%02u:%02uZ",now.wYear,now.wMonth,now.wDay,now.wHour,now.wMinute,now.wSecond);return text;
+}
+std::vector<std::string> SectionOwners(const json& args){
+    std::vector<std::string> owners;const auto& list=args.at("Owners");
+    if(!list.is_array()||list.empty()||list.size()>J4SSections::MaxSections)throw std::runtime_error("Choose at least one save section");
+    for(const auto& owner:list){if(!owner.is_string()||!J4SSections::ValidOwner(owner.get<std::string>()))throw std::runtime_error("Invalid save section owner");owners.push_back(owner);}
+    return owners;
+}
+json SectionBackups(const std::string& guid){
+    json rows=json::array();const auto folder=SectionBackupFolder(guid);std::error_code ec;
+    if(!fs::is_directory(folder,ec))return rows;
+    std::vector<fs::path> files;size_t seen=0;
+    for(const auto& entry:fs::directory_iterator(folder,ec)){if(++seen>512)break;if(entry.is_regular_file()&&entry.path().extension()==L".json")files.push_back(entry.path());}
+    std::sort(files.begin(),files.end(),std::greater<>());
+    for(const auto& file:files){if(rows.size()>=64)break;
+        try{std::error_code sizeError;if(fs::file_size(file,sizeError)>16*1024*1024)continue;const auto backup=Read(file);const auto sections=J4SSections::ReadBackup(backup,guid);
+            json owners=json::array();for(const auto& [owner,entry]:sections.items())owners.push_back({{"Owner",owner},{"Schema",entry[0]},{"Revision",entry[1]},{"Bytes",entry[2].get_ref<const std::string&>().size()/2}});
+            rows.push_back({{"File",file.filename().string()},{"CreatedAt",backup.value("createdAt",std::string{})},{"Sections",owners}});
+        }catch(...){rows.push_back({{"File",file.filename().string()},{"Damaged",true}});}
+    }
+    return rows;
+}
+json EditorSections(const std::string& op,const json& args){
+    if(!characterEditor.Session.Ready())throw std::runtime_error("Open a character copy first");
+    const auto guid=characterEditor.Session.CharacterGuid();if(guid.empty())throw std::runtime_error("Character identity is unavailable");
+    const auto& draft=characterEditor.Session.Draft();
+    const auto api=J4SSavesBridge::Find(HostServices::WorkingDirectory()/"Mods");
+    std::vector<J4SSavesBridge::Stored> stored;int storeStatus=J4SSavesBridge::Unavailable;
+    if(api.Complete())try{storeStatus=J4SSavesBridge::List(api,guid,stored);}catch(...){storeStatus=J4SSavesBridge::StorageError;}
+    const auto storedRevision=[&](const std::string& owner){for(const auto& row:stored)if(row.Owner==owner)return row.Revision;return int64_t{};};
+    const bool useStore=args.value("Store",false);
+    if(useStore&&storeStatus!=J4SSavesBridge::Ok)throw std::runtime_error(std::string("The J4SSaves store is ")+J4SSavesBridge::Name(storeStatus)+"; only the save copy can change");
+    json done=json::array();std::string status;
+    if(op=="SaveEditorSectionBackup"){
+        const auto owners=SectionOwners(args);auto source=draft;
+        // Sections kept only in the store (companion mode) are backed up from the store.
+        for(const auto& owner:owners)if(!J4SSections::Entry(source,owner)&&storeStatus==J4SSavesBridge::Ok){json entry;if(J4SSavesBridge::Read(api,guid,owner,entry)==J4SSavesBridge::Ok)source=J4SSections::WithSection(std::move(source),owner,entry);}
+        const auto name=draft.contains("meta_data")&&draft["meta_data"].is_object()?draft["meta_data"].value("char_name",std::string{}):std::string{};
+        const auto stamp=UtcStamp();const auto backup=J4SSections::Backup(source,guid,name,owners,stamp);
+        const auto folder=SectionBackupFolder(guid);RuneSchemaData::Safe(folder);fs::create_directories(folder);
+        auto file=folder/J4SSections::BackupName(stamp,owners.size());for(int i=2;fs::exists(file)&&i<100;++i)file=folder/(file.stem().string()+"-"+std::to_string(i)+".json");
+        const auto written=WriteSaveCopy(folder,file.stem().string(),backup);
+        status="Backed up "+std::to_string(owners.size())+" section(s) to "+written.filename().string()+".";
+    }
+    if(op=="SaveEditorSectionRestore"){
+        const auto fileName=args.at("File").get<std::string>();
+        if(fileName.empty()||fileName.find_first_of("/\\:")!=std::string::npos||!fileName.ends_with(".json"))throw std::runtime_error("Choose a listed backup");
+        const auto path=SectionBackupFolder(guid)/fs::path(std::u8string(fileName.begin(),fileName.end()));RuneSchemaData::Safe(path);
+        const auto sections=J4SSections::ReadBackup(Read(path),guid);const auto owners=SectionOwners(args);
+        json changes=json::object();
+        for(const auto& owner:owners){
+            if(!sections.contains(owner))throw std::runtime_error("The backup does not contain "+owner);
+            auto entry=sections.at(owner);
+            // The restored copy must outrank both the copy in this save and the store's copy,
+            // or J4SSaves would keep the newer one on the next load.
+            int64_t floor=entry[1];if(const auto current=J4SSections::Entry(draft,owner))floor=(std::max)(floor,(*current)[1].get<int64_t>());floor=(std::max)(floor,storedRevision(owner));
+            entry[1]=floor+1;
+            if(useStore){int64_t revision=0;const auto result=J4SSavesBridge::Write(api,guid,owner,storedRevision(owner),entry,revision);
+                if(result!=J4SSavesBridge::Ok)throw std::runtime_error("J4SSaves did not accept "+owner+": "+J4SSavesBridge::Name(result));entry[1]=revision;}
+            changes[owner]=entry;done.push_back(owner);
+        }
+        characterEditor.Session.SetSections(changes,args.at("Revision").get<uint64_t>());
+        status="Restored "+std::to_string(owners.size())+" section(s) into the save copy"+(useStore?" and the J4SSaves store.":". Export the copy to keep it.");
+    }
+    if(op=="SaveEditorSectionClean"){
+        const auto owners=SectionOwners(args);json changes=json::object();
+        for(const auto& owner:owners){
+            int64_t newest=storedRevision(owner);if(const auto current=J4SSections::Entry(draft,owner))newest=(std::max)(newest,(*current)[1].get<int64_t>());
+            if(useStore&&newest>0){const auto result=api.Delete(guid.c_str(),owner.c_str(),newest);
+                if(result!=J4SSavesBridge::Ok&&result!=J4SSavesBridge::Missing)throw std::runtime_error("J4SSaves did not remove "+owner+": "+J4SSavesBridge::Name(result));}
+            changes[owner]=nullptr;done.push_back(owner);
+        }
+        characterEditor.Session.SetSections(changes,args.at("Revision").get<uint64_t>());
+        status="Removed "+std::to_string(owners.size())+" section(s) from the save copy"+(useStore?" and the J4SSaves store.":". The J4SSaves store still has its copy until you clean it there too.");
+    }
+    const auto& current=characterEditor.Session.Draft();json rows=json::array();
+    for(const auto& row:J4SSections::List(current))rows.push_back({{"Owner",row.Owner},{"Schema",row.Schema},{"Revision",row.Revision},{"Bytes",row.Bytes},{"Valid",row.Valid},{"InSave",true},{"StoredRevision",storedRevision(row.Owner)}});
+    for(const auto& row:stored)if(!J4SSections::Entry(current,row.Owner)&&std::none_of(rows.begin(),rows.end(),[&](const json& r){return r.value("Owner",std::string{})==row.Owner;}))
+        rows.push_back({{"Owner",row.Owner},{"Schema",row.Schema},{"Revision",row.Revision},{"Bytes",row.Size},{"Valid",true},{"InSave",false},{"StoredRevision",row.Revision}});
+    std::sort(rows.begin(),rows.end(),[](const json& a,const json& b){return a.value("Owner",std::string{})<b.value("Owner",std::string{});});
+    const auto envelope=current.contains(J4SSections::Envelope)&&current[std::string(J4SSections::Envelope)].is_object()?current[std::string(J4SSections::Envelope)]:json::object();
+    return {{"Sections",rows},{"Backups",SectionBackups(guid)},{"Store",J4SSavesBridge::Name(storeStatus)},{"StoreAvailable",storeStatus==J4SSavesBridge::Ok},
+        {"Mods",envelope.value("mods",json::object())},{"CharacterGuid",guid},{"Revision",characterEditor.Session.Revision()},{"Changed",done},{"Status",status}};
+}
+// Steam/Epic and Game Pass keep the same character JSON; Game Pass stores it as a provider
+// blob. Steam gets a plain file in SaveCharacters. Game Pass is never written here: the copy
+// is queued for the J4SSaves importer, which creates the slot through the Xbox provider.
+std::wstring LocalAppData(){
+    wchar_t local[32768]{};const auto count=GetEnvironmentVariableW(L"LOCALAPPDATA",local,_countof(local));
+    if(!count||count>=_countof(local))throw std::runtime_error("LOCALAPPDATA is unavailable");return local;
+}
+std::string TransferFileName(const json& save){
+    std::string name=save.contains("meta_data")&&save["meta_data"].is_object()?save["meta_data"].value("char_name",std::string{}):std::string{};
+    std::string safe;for(const unsigned char c:name)if(c>=0x20&&c!='/'&&c!='\\'&&c!=':'&&c!='*'&&c!='?'&&c!='"'&&c!='<'&&c!='>'&&c!='|')safe+=static_cast<char>(c);
+    while(!safe.empty()&&(safe.back()==' '||safe.back()=='.'))safe.pop_back();
+    if(safe.empty())safe="Character";if(safe.size()>64)safe.resize(64);return safe;
+}
+json EditorTransfer(const json& args){
+    if(!characterEditor.Session.Ready())throw std::runtime_error("Open a character copy first");
+    const auto target=args.at("Target").get<std::string>();const auto guid=characterEditor.Session.CharacterGuid();
+    // Transfers use the opened snapshot; staged edits go through review and export first.
+    if(characterEditor.Session.Draft()!=characterEditor.Session.Original())throw std::runtime_error("Export or discard the staged edits before transferring this character");
+    const auto source=EditorSource();
+    if(!source.contains("Version")||!source["Version"].is_number_integer())throw std::runtime_error("This save has no native version; it cannot be transferred");
+    const auto local=fs::path(LocalAppData());
+    if(target=="Steam"){
+        const auto folder=local/"RSDragonwilds/Saved/SaveCharacters";
+        if(!fs::is_directory(folder))throw std::runtime_error("No Steam/Epic character folder was found on this PC");
+        const auto live=CharacterSaveEditor::Guid(args.value("LiveCharacterGuid",std::string{}));
+        fs::path existing;size_t seen=0;
+        for(const auto& entry:fs::directory_iterator(folder)){if(++seen>1024)break;if(!entry.is_regular_file()||entry.path().extension()!=L".json")continue;
+            std::error_code ec;if(fs::file_size(entry.path(),ec)>8*1024*1024)continue;
+            try{if(CharacterSaveEditor::Identity(Read(entry.path()))==guid){existing=entry.path();break;}}catch(...){}}
+        if(!existing.empty()){
+            if(!args.value("Replace",false))return {{"NeedsConfirm",true},{"Existing",existing.filename().string()},{"Status","Steam already has this character as "+existing.filename().string()+". Confirm to replace it; the current file is backed up first."}};
+            if(Storefront::Current()==Storefront::Kind::SteamEpic&&live==guid)throw std::runtime_error("This character is loaded in the running Steam game. Return to the main menu and close the game before replacing it");
+            WriteSaveCopy(RuneSchemaData::CharacterCopiesDirectory()/guid/"backups","steam-before-transfer",Read(existing),existing);
+        }
+        auto output=existing;
+        if(output.empty()){const auto base=TransferFileName(source);output=folder/(base+".json");for(int i=2;fs::exists(output)&&i<100;++i)output=folder/(base+" "+std::to_string(i)+".json");if(fs::exists(output))throw std::runtime_error("No free Steam save name");}
+        const auto staged=WriteSaveCopy(RuneSchemaData::CharacterCopiesDirectory()/guid/"exports","steam-transfer",source);
+        if(!CopyFileW(staged.c_str(),output.c_str(),existing.empty()))throw std::runtime_error("Could not write the Steam save; nothing was replaced");
+        if(Read(output)!=source)throw std::runtime_error("The Steam save did not read back intact; restore it from the profile backups");
+        return {{"File",SavePathText(output)},{"Status","Saved for Steam/Epic as "+output.filename().string()+". Steam Cloud uploads it the next time Steam syncs."}};
+    }
+    if(target=="Xbox"){
+        const auto folder=local/"J4SSaves";
+        if(!fs::is_directory(folder))throw std::runtime_error("J4SSaves is not set up on this PC. Install J4SSaves on Game Pass and start the game once");
+        const auto request=folder/"import-character.json";
+        if(fs::exists(request))throw std::runtime_error("A Game Pass import is already queued. Open character selection on Game Pass, or delete import-character.json with the game closed to cancel it");
+        const auto identity=[](const fs::path& file){try{return CharacterSaveEditor::Identity(Read(file));}catch(...){return std::string{};}};
+        for(const auto& file:XboxCharacterSaves::Candidates(HostServices::XboxSaveRoot()))
+            if(identity(file)==guid)throw std::runtime_error("Game Pass already has this character. J4SSaves imports into a new slot only; delete that slot first");
+        const auto staged=WriteSaveCopy(RuneSchemaData::CharacterCopiesDirectory()/guid/"exports","xbox-transfer",source);
+        if(!CopyFileW(staged.c_str(),request.c_str(),TRUE))throw std::runtime_error("Could not queue the Game Pass import");
+        return {{"File",SavePathText(request)},{"Status","Queued for Game Pass. Start the Game Pass game with J4SSaves, open character selection and wait for the import to confirm. Use the same gameplay mods on both."}};
+    }
+    throw std::runtime_error("Choose Steam or Xbox");
+}
+}
+void ResetCharacterEditor(){characterEditor.Session.Reset();characterEditor.Choices=json::object();characterEditor.Layout=json::array();}
 json SaveEditorOperation(const std::string& op,const json& args){
     if(op=="SaveEditorList"){
         json files=json::array(),warnings=json::array();
@@ -122,7 +269,6 @@ json SaveEditorOperation(const std::string& op,const json& args){
         auto result=characterEditor.Session.Browse();result["Path"]=SavePathText(path);result["OriginalPath"]=originalPath;result["CopyOnly"]=xbox||copyOnly;result["Format"]="Native character JSON";result["Status"]="Saved snapshot opened. Edits export a separate copy, not the live character.";return result;
     }
     if(op=="SaveEditorClose"){ResetCharacterEditor();return {{"Status","Draft discarded. Original unchanged."}};}
-    if(op=="SaveEditorRenderStop"){CharacterPreview::Reset();return {{"Status","Native preview stopped; transient scene released."}};}
     if(op=="SaveEditorSlotItems"){
         if(args.value("CacheFirst",false)){
             const auto slot=args.at("Slot").get<std::string>();auto page=AssetSearch::AlphabeticalItemWindow("__helpyslot:"+slot+" "+args.value("Query",std::string{}),args.value("Cursor",std::string{}),48,"BasicRow");
@@ -131,10 +277,9 @@ json SaveEditorOperation(const std::string& op,const json& args){
         const auto slot=args.at("Slot").get<std::string>();auto page=AssetSearch::LoadoutWindow(slot,args.value("Query",std::string{}),args.value("Offset",size_t{}));page["Slot"]=slot;page["Coverage"]="Mounted and loaded native ItemData; slot metadata verified before inclusion.";return page;
     }
     // Item inspection is independent of an offline character draft.
-    if(op=="SaveEditorRender"&&args.value("View",std::string{})=="Item")return CharacterPreview::Render(json::object(),args);
     const auto source=EditorSource();
     if(op=="SaveEditorAppearance"||op=="SaveEditorAppearanceSet"||op=="SaveEditorRename"){
-        if(characterEditor.Choices.empty())characterEditor.Choices=CharacterPreview::Choices();
+        if(characterEditor.Choices.empty())characterEditor.Choices=CharacterNativeData::Choices();
         if(op=="SaveEditorAppearanceSet"){
             const auto field=args.at("Field").get<std::string>(),selected=args.at("Row").get<std::string>();std::map<std::string,std::set<std::string>> verified;
             for(const auto& choices:characterEditor.Choices.at("Fields"))for(const auto& row:choices.at("Rows"))verified[choices.at("Key").get<std::string>()].insert(row.get<std::string>());
@@ -150,20 +295,19 @@ json SaveEditorOperation(const std::string& op,const json& args){
         if(op=="SaveEditorRename")characterEditor.Session.Rename(args.at("Name").get<std::string>(),args.at("Revision").get<uint64_t>());
         auto result=characterEditor.Session.Appearance();result["Choices"]=characterEditor.Choices;result["Status"]="Appearance/name changes affect the draft only; review and export a copy.";return result;
     }
-    if(op=="SaveEditorRender")return CharacterPreview::Render(CharacterWorkbench::Appearance(characterEditor.Session.Draft()),args);
     if(op=="SaveEditorSkills"||op=="SaveEditorSkillSet"){
-        auto result=CharacterPreview::Skills(characterEditor.Session.Draft());
+        auto result=CharacterNativeData::Skills(characterEditor.Session.Draft());
         if(op=="SaveEditorSkillSet"){
             const auto id=args.at("Id").get<std::string>();const int level=args.at("Level").get<int>();const json* selected=nullptr;for(const auto& row:result.at("Items"))if(row.at("Id")==id){if(selected)throw std::runtime_error("Duplicate saved skill identity");selected=&row;}
             if(!selected||!selected->value("Resolved",false)||level<1||level>selected->at("MaxLevel").get<int>())throw std::runtime_error("Choose a resolved skill and a level within its native maximum");
-            characterEditor.Session.SetSkillLevel(id,level,args.at("Revision").get<uint64_t>(),result.at("Thresholds"),selected->at("MaxLevel"));result=CharacterPreview::Skills(characterEditor.Session.Draft());
+            characterEditor.Session.SetSkillLevel(id,level,args.at("Revision").get<uint64_t>(),result.at("Thresholds"),selected->at("MaxLevel"));result=CharacterNativeData::Skills(characterEditor.Session.Draft());
         }result["Revision"]=characterEditor.Session.Revision();return result;
     }
     if(op=="SaveEditorAddItem"){
         if(!args.value("Confirm",false))throw std::runtime_error("Confirm the addition before staging");
         HelpyDeliveryGate::Require(characterEditor.Session.CharacterGuid(),""); // Adding items to a paused character is a delivery too.
         if(args.value("Personal",false))throw std::runtime_error("Personal storage insertion requires a separately verified native capacity; existing storage remains editable and removable.");
-        if(characterEditor.Layout.empty())characterEditor.Layout=CharacterPreview::InventoryLayout();
+        if(characterEditor.Layout.empty())characterEditor.Layout=CharacterNativeData::InventoryLayout();
         const auto group=args.value("Group",std::string("Inventory"));int destination=-1;const auto& slots=characterEditor.Session.Draft().at("GameProgress").at("Inventory");
         if(group!="Inventory")throw std::runtime_error("New records currently require the general Inventory tab. Special-tab native item eligibility is not verified; existing records remain editable.");
         for(const auto& page:characterEditor.Layout)if(page.at("Group")==group){const int start=page.at("Start"),count=page.at("Count");for(int i=start;i<start+count;++i)if(!slots.contains(std::to_string(i))){destination=i;break;}if(destination>=0)break;}
@@ -181,10 +325,10 @@ json SaveEditorOperation(const std::string& op,const json& args){
     if(op=="SaveEditorInventory"||op=="SaveEditorStack"||op=="SaveEditorRemoveItems"||op=="SaveEditorAddItem"){
         auto result=characterEditor.Session.Inventory(args.value("Offset",size_t{}));
         try{Resolve(result["Items"],TEXT("/Script/Dominion.ItemData"),true);}catch(const std::exception& error){result["MetadataWarning"]=error.what();}
-        try{if(characterEditor.Layout.empty())characterEditor.Layout=CharacterPreview::InventoryLayout();result["NativeLayout"]=characterEditor.Layout;
+        try{if(characterEditor.Layout.empty())characterEditor.Layout=CharacterNativeData::InventoryLayout();result["NativeLayout"]=characterEditor.Layout;
             for(auto& row:result["Items"]){const auto slot=std::stoi(row.at("Slot").get<std::string>());row["Group"]=row.at("Container")=="PersonalInventory"?"Personal storage":slot<8?"Quick slots":CharacterWorkbench::InventoryGroup(row);}
         }catch(const std::exception& error){result["LayoutWarning"]=error.what();}
-        auto loadout=characterEditor.Session.Loadout();try{Resolve(loadout,TEXT("/Script/Dominion.ItemData"),true);}catch(...){}for(auto& row:loadout)try{row["Location"]=CharacterPreview::LoadoutSlot(row.at("LoadoutSlot"));}catch(...){row["Location"]="Unknown slot";}result["Loadout"]=loadout;
+        auto loadout=characterEditor.Session.Loadout();try{Resolve(loadout,TEXT("/Script/Dominion.ItemData"),true);}catch(...){}for(auto& row:loadout)try{row["Location"]=CharacterNativeData::LoadoutSlot(row.at("LoadoutSlot"));}catch(...){row["Location"]="Unknown slot";}result["Loadout"]=loadout;
         result["Coverage"]="Saved inventory, not live items. Names/icons/source resolve only against currently loaded native ItemData; missing or ambiguous IDs remain explicit.";
         return result;
     }
@@ -195,6 +339,8 @@ json SaveEditorOperation(const std::string& op,const json& args){
         const auto parent=pointer.substr(0,pointer.find_last_of('/'));auto result=characterEditor.Session.Browse(parent);result["Status"]="Edit staged in memory. Review and export to keep it.";return result;
     }
     if(op=="SaveEditorPreview")return characterEditor.Session.Preview(source);
+    if(op=="SaveEditorSections"||op=="SaveEditorSectionBackup"||op=="SaveEditorSectionRestore"||op=="SaveEditorSectionClean")return EditorSections(op,args);
+    if(op=="SaveEditorTransfer")return EditorTransfer(args);
     if(op=="SaveEditorExport"){
         const auto document=characterEditor.Session.Consume(source,args.at("Token").get<std::string>(),args.value("Confirm",false));
         return {{"File",SavePathText(WriteSaveCopy(RuneSchemaData::CharacterCopiesDirectory()/characterEditor.Session.CharacterGuid()/"exports","edited",document,characterEditor.Path))},

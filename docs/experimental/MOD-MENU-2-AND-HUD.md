@@ -52,9 +52,10 @@ code while retaining its copyright and permission notice; see the
 
 1. Disable or remove the separate Maxxfilth Mod Menu through UE4SS, then close
    Dragonwilds. A mod already loaded in the current process needs a restart.
-2. Place the maintainer-provided `modmenu2.key` in
-   `RuneSchema/Helpy/plugins/RuneSchema.ModMenu2/`. `RuneSchema/Helpy/` and
-   the legacy `plugins/RuneSchema.Helpy/` location are also recognized. The key contains the activation hash, a blank line and the
+2. Builds include `modmenu2.key` in
+   `RuneSchema/Helpy/plugins/RuneSchema.ModMenu2/`. A key placed in
+   `RuneSchema/Helpy/` or the legacy `plugins/RuneSchema.Helpy/` location is
+   also recognized. The key contains the activation hash, a blank line and the
    complete original MIT license. Preserve its text.
 3. Start Dragonwilds with the matching candidate and open Helpy. **Mod Menu 2**
    appears under **Mods** after the key is recognized.
@@ -91,7 +92,7 @@ unless another diagnostic has measured it. Mod Menu 2 messages go to
 ## Optional character-editor presentation
 
 Existing schemas work without any new fields. A mod can add a `"--Helpy"` object to
-group controls into tabs and request a character-preview column:
+group controls into tabs:
 
 ```json
 {
@@ -103,8 +104,7 @@ group controls into tabs and request a character-preview column:
     "tabs": [
       { "name": "Appearance", "keys": ["Height", "Build"] },
       { "name": "Style", "keys": ["Hair", "Color"] }
-    ],
-    "preview": { "channelVariable": "ExampleCharacterEditor.preview" }
+    ]
   },
   "settings": [
     { "key": "Height", "type": "slider", "min": 0, "max": 1, "default": 0.5 },
@@ -115,24 +115,12 @@ group controls into tabs and request a character-preview column:
 }
 ```
 
-Tabs contain setting keys. Up to 16 tabs and 1,024 keys per tab are accepted. A
-narrow window stacks the preview below the controls. Without a provider, the
-settings still work and the preview area explains what is missing.
+Tabs contain setting keys. Up to 16 tabs and 1,024 keys per tab are accepted.
 
-The mod supplies the preview; Helpy does not capture an arbitrary character
-automatically. A native provider uses RuneSchema's existing
-`CharacterPreviewFrame::Channel` in `source/helpy/source/include/Core/CharacterPreviewFrame.h`.
-It creates a game-process-owned channel named
-`Local\RuneSchema.CharacterPreview.<game-pid>.<identifier>` and publishes that
-name through the shared variable above. The fixed transport contains a 512×512
-RGBA frame, serial counter, status and camera controls. Use the declared struct,
-mutex and validation; never send engine pointers. Read camera requests and
-publish pixels under the channel lock. Helpy uses nonblocking reads and returns
-the existing yaw, pitch, zoom and stop requests. Close the provider when stopped
-or its consumer heartbeat expires. Another active character preview is preserved.
-
-This is the extension point for JBBB or another character editor. It does not
-change that mod's models, sliders or persistence implementation by itself.
+Helpy no longer shows character or item previews. A `"preview"` entry in
+`"--Helpy"` is ignored, and the settings work as before. This is the extension
+point for JBBB or another character editor. It does not change that mod's
+models, sliders or persistence implementation by itself.
 
 ## Helpy-only controls and shared templates
 
@@ -205,7 +193,7 @@ callbacks. A queued action is not reported as applied until the adapter responds
 A character editor should publish a nonempty, stable token for its selected
 character through `contextVariable`, and clear it while switching targets.
 Helpy checks that token and the page revision again when applying. The mod owns
-selection, preview, save handling and networking. No character GUID or target
+selection, save handling and networking. No character GUID or target
 token is exported in a shared template.
 
 The portable format is `RuneSchema.ModMenu2.Template`, version `1`, with
@@ -286,5 +274,4 @@ Open **Mods → Mod Menu 2** in the desktop app. Helpy reads modmenu.json
 or modmenu.txt pages from external UE4SS mods and enabled RuneSchema Lua
 packages. Supported settings are saved to each mod's declared config file for
 its next launch. JSON files can be reformatted. Lua settings are edited as
-plain values in the file. Live actions and character-specific previews need
-a connected game. The key and Enable Mod Menu 2 setting still control access.
+plain values in the file. Live actions need a connected game. The key and Enable Mod Menu 2 setting still control access.

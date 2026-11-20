@@ -170,8 +170,16 @@ int main(){
     const auto skillRevision=session.Revision();session.SetSkillLevel("native-skill",3,skillRevision,Json::array({0,14,31}),3);assert(session.Draft()["GameProgress"]["Skills"]["Skills"][0]["Xp"]==31);assert(session.Draft()["GameProgress"]["Skills"]["Skills"][0]["Unknown"]==42);
     Reject([&]{session.SetSkillLevel("native-skill",2,skillRevision,Json::array({0,14,31}),3);});Reject([&]{session.SetSkillLevel("native-skill",2,session.Revision(),Json::array({0,0,31}),3);});Reject([&]{session.SetSkillLevel("missing",2,session.Revision(),Json::array({0,14,31}),3);});
     assert(skillSave["GameProgress"]["Skills"]["Skills"][0]["Xp"]==14);
-    Reject([&]{PS::HelpyAuthoring::Validate(request("SaveEditorRender",{{"View","LivePawn"}}));});
-    Reject([&]{PS::HelpyAuthoring::Validate(request("SaveEditorRender",{{"View","Item"}}));});
-    Reject([&]{PS::HelpyAuthoring::Validate(request("SaveEditorRender",{{"View","Body"},{"Equipment",{{"InjectedSlot","/Example/A.A"}}}}));});
+    {Json restore=Json::object();restore["example.dyes"]=Json::array({1,4,"0A0B"});session.SetSections(restore,session.Revision());
+     assert(PS::J4SSections::Entry(session.Draft(),"example.dyes")==Json::array({1,4,"0A0B"})&&session.Draft()["J4SSaves"]["format"]==1);
+     Json clean=Json::object();clean["example.dyes"]=nullptr;const auto before=session.Revision();session.SetSections(clean,before);assert(!PS::J4SSections::Entry(session.Draft(),"example.dyes"));
+     Reject([&]{session.SetSections(clean,before);});Reject([&]{session.SetSections(Json::object(),session.Revision());});}
+    // The character preview is retired: its operations are no longer accepted.
+    Reject([&]{PS::HelpyAuthoring::Validate(request("SaveEditorRender",{{"View","Body"}}));});
+    Reject([&]{PS::HelpyAuthoring::Validate(request("SaveEditorSectionClean",{{"Owners",Json::array()},{"Revision",uint64_t(1)}}));});
+    Reject([&]{PS::HelpyAuthoring::Validate(request("SaveEditorSectionRestore",{{"Owners",{"a.b"}},{"Revision",uint64_t(1)}}));});
+    Reject([&]{PS::HelpyAuthoring::Validate(request("SaveEditorTransfer",{{"Target","Switch"}}));});
+    (void)PS::HelpyAuthoring::Validate(request("SaveEditorSectionRestore",{{"Owners",{"a.b"}},{"File","20261119T170000Z-1-section.json"},{"Revision",uint64_t(1)},{"Store",true}}));
+    (void)PS::HelpyAuthoring::Validate(request("SaveEditorTransfer",{{"Target","Steam"},{"Replace",true}}));
     Reject([&]{PS::HelpyAuthoring::Validate(request("SaveEditorAddItem",{{"Path","/Example/A.A"},{"Count",1},{"Revision",uint64_t(1)},{"Confirm",false}}));});
 }

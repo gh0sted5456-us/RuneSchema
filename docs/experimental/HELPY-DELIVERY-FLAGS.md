@@ -12,7 +12,8 @@ promote_to: HELPY-DELIVERY-FLAGS.md
 Helpy deliveries you make to your own character are **on by default**. They can be turned off
 for a character in two ways:
 
-- **By you.** In **Settings > Deliveries**, turn off *Allow Helpy deliveries to* a character.
+- **By you.** In **Settings > Deliveries**, or on the **Deliveries** page of the
+  [character sheet](CHARACTER-SHEET.md), turn off *Allow Helpy deliveries to* a character.
 - **By a mod.** A mod writes a signed **flag** into a folder Helpy maintains, pausing deliveries
   to a character or a world it manages. The first user is the Grand Exchange, a trading app for
   Dragonwilds: while a character trades there, Helpy deliveries to it would let players spawn

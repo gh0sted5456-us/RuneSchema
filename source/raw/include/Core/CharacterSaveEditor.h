@@ -11,6 +11,7 @@
 #include <map>
 #include "Core/CharacterWorkbench.h"
 #include "Core/SavedLoadout.h"
+#include "Core/J4SSections.h"
 
 // Independent, copy-only character editing. No file I/O or provider writes.
 namespace PS::CharacterSaveEditor {
@@ -105,6 +106,12 @@ public:
         if(!Ready()||expected!=revision||changes.empty()||changes.size()>CharacterWorkbench::Fields.size())throw std::runtime_error("Refresh the native appearance choices and editor revision");
         auto next=draft;
         for(const auto& [key,row]:changes){const auto choices=verifiedRows.find(key);if(choices==verifiedRows.end()||!choices->second.contains(row))throw std::runtime_error("Appearance row is not in the verified native table");const auto& field=CharacterWorkbench::Find(key);(void)CharacterWorkbench::Row(CharacterWorkbench::Appearance(draft),field);next["Customization"]["CustomizationData"][key]["rowName"]=row;}
+        Commit(std::move(next),expected);
+    }
+    // Stages J4SSaves section restores (a value) or cleans (null) as one batch.
+    void SetSections(const Json& changes,uint64_t expected){
+        if(!changes.is_object()||changes.empty()||changes.size()>J4SSections::MaxSections)throw std::runtime_error("Choose at least one save section");
+        auto next=draft;for(const auto& [owner,entry]:changes.items())next=J4SSections::WithSection(std::move(next),owner,entry.is_null()?std::nullopt:std::optional<Json>(entry));
         Commit(std::move(next),expected);
     }
     void Rename(const std::string& name,uint64_t expected){

@@ -1,6 +1,6 @@
 #pragma once
 #include "SDK/Helper/EquipmentDelivery.h"
-#include "Generator/CharacterPreview.h"
+#include "Generator/CharacterNativeData.h"
 #include "SDK/WeakObjectHandle.h"
 #include <Unreal/World.hpp>
 namespace PS::PlayerGearActions {
@@ -28,7 +28,7 @@ inline Json Change(UObject* controller,const Json& request){
     WeakObjectHandle owner(controller);auto* world=controller->GetWorld();WeakObjectHandle worldHandle(world);auto* pawn=E::AH::GetObjectRef(controller,TEXT("Pawn"));WeakObjectHandle pawnHandle(pawn);
     auto* bag=E::Owned(controller,TEXT("InventoryComponent"),TEXT("/Script/Dominion.InventoryComponent"));auto* loadout=E::Owned(controller,TEXT("LoadoutComponent"),TEXT("/Script/Dominion.LoadoutComponent"));auto* mover=E::Owned(controller,TEXT("InventoryController"),TEXT("/Script/Dominion.InventoryController"));
     const int source=request.at("SourceSlot"),target=request.at("Slot");const auto id=request.at("Instance");const auto path=request.at("Path").get<std::string>();auto* chosen=Exact(bag,source,id,path);
-    if(CharacterPreview::LoadoutSlot(target)!=request.at("Location").get<std::string>())throw std::runtime_error("Native loadout location changed");
+    if(CharacterNativeData::LoadoutSlot(target)!=request.at("Location").get<std::string>())throw std::runtime_error("Native loadout location changed");
     E::Call candidates(loadout,TEXT("/Script/Dominion.LoadoutComponent:GetSlotIndexesForItem"),2);candidates.Object(TEXT("Item"),chosen).Invoke();const auto indexes=candidates.Array<int32_t>();if(std::find(indexes.begin(),indexes.end(),target)==indexes.end())throw std::runtime_error("Native loadout rejected this item's slot");
     const auto previous=E::Slots(loadout);if(target<0||size_t(target)>=previous.size())throw std::runtime_error("Loadout slot is unavailable");auto* old=previous[target];const auto oldId=old?E::Identity(old):E::Guid{};
     if(oldId!=request.at("ExpectedTarget").get<E::Guid>())throw std::runtime_error("Equipped item changed; refresh before swapping");

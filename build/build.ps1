@@ -570,6 +570,21 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         New-Item -ItemType Directory -Path (Join-Path $Destination 'dll') -Force|Out-Null
         Get-ChildItem -LiteralPath (Join-Path $SourceRoot ('plugins/'+$Id)) -File|ForEach-Object{Copy-Item -LiteralPath $_.FullName -Destination $Destination -Force}
         Copy-Item -LiteralPath $dll -Destination (Join-Path $Destination ('dll/'+$Id+'.dll')) -Force
+        if($Id -eq 'RuneSchema.ModMenu2'){Write-ModMenu2Key $Destination}
+    }
+    # modmenu2.key = activation hash, a blank line, then the complete original MIT license.
+    # Both halves come from the repository, and the license must match the digest the
+    # runtime checks, so a changed notice fails the build instead of shipping a dead key.
+    function Write-ModMenu2Key([string]$Destination) {
+        $header=[IO.File]::ReadAllText((Join-Path $SourceRoot 'shared/ModMenu2Key.h'))
+        $hash=[regex]::Match($header,'Hash\[\]="([0-9a-f]{64})"').Groups[1].Value
+        $digest=[regex]::Match($header,'LicenseDigest\[\]="([0-9a-f]{64})"').Groups[1].Value
+        if(-not $hash -or -not $digest){throw 'ModMenu2Key.h no longer declares the activation hash and license digest'}
+        $license=[IO.File]::ReadAllText((Join-Path $BuildRoot 'licenses/ModMenu-MIT.txt')).Replace("`r",'').TrimStart([char]0xFEFF).TrimEnd("`n")
+        $sha=[Security.Cryptography.SHA256]::Create()
+        try{$actual=-join($sha.ComputeHash([Text.UTF8Encoding]::new($false).GetBytes($license))|ForEach-Object{$_.ToString('x2')})}finally{$sha.Dispose()}
+        if($actual -ne $digest){throw "licenses/ModMenu-MIT.txt does not match the Mod Menu 2 key digest ($actual)"}
+        [IO.File]::WriteAllText((Join-Path $Destination 'modmenu2.key'),$hash+"`n`n"+$license+"`n",[Text.UTF8Encoding]::new($false))
     }
     function Copy-HudPlugin([string]$HelpyDll,[string]$Destination) {
         $hud=Join-Path (Split-Path -Parent $HelpyDll) 'RuneSchema.HUD.dll'

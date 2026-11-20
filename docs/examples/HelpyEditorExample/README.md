@@ -24,7 +24,7 @@ Replace `api.OnSettingsChanged` with your own mod's callback. The mod owns actor
 changes, saving and networking. Call `api.SelectTarget` when changing the selected
 character; use an empty token while switching. A template never contains that
 token, and Mod Menu 2 rejects stale-target imports. The provided token identifies
-only the synthetic demonstration. No character preview provider is bundled.
+only the synthetic demonstration.
 
 `api.Stop` cancels its one mod-owned 250 ms loop. It does not use legacy async
 timers. Stock UE4SS also cancels mod-owned delayed actions when the mod stops.

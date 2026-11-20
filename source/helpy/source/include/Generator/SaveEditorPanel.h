@@ -7,10 +7,11 @@
 #include "Generator/QuickMenuDecorations.h"
 #include "Generator/ItemGridPicker.h"
 #include "Generator/ItemBayBrowser.h"
-#include "Generator/CharacterPreviewPanel.h"
 #include "Core/CharacterWorkbench.h"
 #include "Core/PlayerStatus.h"
 #include "Core/LoadoutEligibility.h"
+#include "Generator/DeliveryFlagsPanel.h"
+#include <set>
 #include <commdlg.h>
 #pragma comment(lib,"comdlg32.lib")
 namespace PS::SaveEditorPanel {
@@ -123,7 +124,7 @@ inline void InventoryPlacards(const std::vector<const Json*>& visible,bool compa
             draw->AddRectFilled({quantity.x-theme.X(2),quantity.y},{b.x-theme.X(4),quantity.y+extent.y},ImGui::GetColorU32(theme.panelAlt),theme.X(2));draw->AddText(quantity,ImGui::GetColorU32(theme.text),count.c_str());
             if(saved.value("Equipped",false))draw->AddText({a.x+theme.X(25),b.y-footer-theme.Y(5)-ImGui::GetTextLineHeight()},ImGui::GetColorU32(theme.accent),"Equipped");
             if(!saved.value("ReadOnly",false)&&ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceNoPreviewTooltip)){ImGui::SetDragDropPayload("RS_SAVE_ITEM",pointer.c_str(),pointer.size()+1);ItemGridPicker::HeldItem(row,"Saved item");ImGui::EndDragDropSource();}
-            if(ImGui::BeginPopupContextItem("##saved-item-actions")){PersonalizationPanel::Menu(row);ImGui::TextWrapped("%s",name.c_str());if(ImGui::MenuItem("Preview",nullptr,false,ItemPreviewRequest::Valid(row)))ItemPreviewRequest::Show(row);if(ImGui::MenuItem("Select / edit this saved instance",nullptr,false,!saved.value("ReadOnly",false))){FocusedSavedItem=pointer;ItemSelection={pointer};ConfirmRemoval=false;}if(ImGui::MenuItem("Show item details",nullptr,false,!path.empty()))ItemGridPicker::PinDetails(row);ImGui::TextDisabled(saved.value("ReadOnly",false)?"Equipped save record: inspection only.":"Removal requires review below.");ImGui::EndPopup();}
+            if(ImGui::BeginPopupContextItem("##saved-item-actions")){PersonalizationPanel::Menu(row);ImGui::TextWrapped("%s",name.c_str());if(ImGui::MenuItem("Select / edit this saved instance",nullptr,false,!saved.value("ReadOnly",false))){FocusedSavedItem=pointer;ItemSelection={pointer};ConfirmRemoval=false;}if(ImGui::MenuItem("Show item details",nullptr,false,!path.empty()))ItemGridPicker::PinDetails(row);ImGui::TextDisabled(saved.value("ReadOnly",false)?"Equipped save record: inspection only.":"Removal requires review below.");ImGui::EndPopup();}
             if(HelpyImGuiTheme::TooltipReady("saved-item:"+pointer,hovered))ItemGridPicker::VerboseTooltip(row,name,path,false,true);
             ImGui::PopID();if(column+1<columns&&index+1<visible.size())ImGui::SameLine();
         }
@@ -236,7 +237,7 @@ inline void Edit(){
         if(HelpyImGuiTheme::SoftButton("Stage field edit")){try{auto value=Json::parse(Value);if(AuthoringClient::Submit("SaveEditorSet",{{"Pointer",Selected},{"Value",value},{"Revision",Browser.at("Revision")}})){Invalidate();Error.clear();}}catch(const std::exception& e){Error=e.what();}}
     }
     }
-    if(Button("Preview edited copy","SaveEditorPreview"))Invalidate();ImGui::SameLine();Button("Discard draft","SaveEditorClose");
+    if(Button("Review edited copy","SaveEditorPreview"))Invalidate();ImGui::SameLine();Button("Discard draft","SaveEditorClose");
     if(!Token.empty()){
         ImGui::SeparatorText("Review changes");
         if(Review.contains("Summary"))for(const auto& row:Review["Summary"]){ImGui::TextWrapped("%s",row.at("Label").get_ref<const std::string&>().c_str());
@@ -272,25 +273,23 @@ inline void Render(const Json& catalog=Json::object(),uint64_t catalogRevision=0
     }
     if(local&&FollowCurrentCharacter&&!active)AuthoringClient::EnsureActive();
     if(active)StudioHeader();
-    if(ImGui::BeginTabBar("Save editor workflows",ImGuiTabBarFlags_Reorderable)){
-        if(ImGui::BeginTabItem("Appearance",nullptr,selectCharacter?ImGuiTabItemFlags_SetSelected:0)){if(active){Studio(catalog,catalogRevision);}else activate();ImGui::EndTabItem();}
-        if(ImGui::BeginTabItem("Inventory")){if(active){Studio(catalog,catalogRevision,true);}else activate();ImGui::EndTabItem();}
-        if(active&&ImGui::BeginTabItem("Export copy")){
-            ImGui::SeparatorText("1  Choose source");ImGui::TextWrapped("%s",File[0]?File:"Choose a character save above.");
-            ImGui::SeparatorText("2  Choose destination");
-            ImGui::TextUnformatted("Steam / Epic · verified character JSON copy");
-            ImGui::BeginDisabled();ImGui::Button("Xbox / Game Pass · provider adapter unavailable");ImGui::EndDisabled();
-            ImGui::TextWrapped("A JSON export is not a WGS conversion. Game Pass attachment is unavailable until its save-provider adapter is verified. Never place JSON directly into WGS storage.");
-            ImGui::SeparatorText("3  Review and export");if(Opened)StudioReview();else ImGui::TextDisabled("Open an offline character copy first.");ImGui::EndTabItem();}
-        if(active&&HelpyImGuiTheme::Current.advancedMode&&ImGui::BeginTabItem("Advanced / export")){Edit();ImGui::EndTabItem();}
-        if(active&&HelpyImGuiTheme::Current.advancedMode&&ImGui::BeginTabItem("Clean copy")){AuthoringPanel::ApplyResult();AuthoringPanel::Cleanup();ImGui::EndTabItem();}
-        if(active&&HelpyImGuiTheme::Current.advancedMode&&ImGui::BeginTabItem("Mod roots / compatibility")){
-            Button("Refresh roots and runtime","SaveEditorList");const auto& list=AuthoringClient::Result("SaveEditorList");
-            ImGui::TextWrapped("Runtime: %s",list.value("Runtime",std::string("Waiting for host")).c_str());
-            ImGui::TextWrapped("Imported Steam/Epic character JSON remains editable on Game Pass. Attaching/converting requires the runtime's verified native save-provider adapter; it is not enabled in this build. Never copy JSON directly into WGS storage.");
-            if(list.contains("Mods"))for(const auto& row:list["Mods"]){ImGui::Separator();ImGui::TextWrapped("%s — /%s",row.at("Mod").get_ref<const std::string&>().c_str(),row.at("Source").get_ref<const std::string&>().c_str());ImGui::TextWrapped("%s",row.at("Root").get_ref<const std::string&>().c_str());ImGui::TextDisabled("%s",row.value("Registered",false)?"Registered source":"Declared source; not yet registered");}
-            ImGui::EndTabItem();
-        }ImGui::EndTabBar();
+    if(selectCharacter)StudioTab=StudioPage::Inventory;
+    if(!active)activate();
+    else{
+        Studio(catalog,catalogRevision);
+        if(HelpyImGuiTheme::Current.advancedMode&&ImGui::CollapsingHeader("Advanced save tools")){
+            if(ImGui::BeginTabBar("Save editor advanced")){
+                if(ImGui::BeginTabItem("Raw JSON / export")){Edit();ImGui::EndTabItem();}
+                if(ImGui::BeginTabItem("Clean copy")){AuthoringPanel::ApplyResult();AuthoringPanel::Cleanup();ImGui::EndTabItem();}
+                if(ImGui::BeginTabItem("Mod roots / compatibility")){
+                    Button("Refresh roots and runtime","SaveEditorList");const auto& list=AuthoringClient::Result("SaveEditorList");
+                    ImGui::TextWrapped("Runtime: %s",list.value("Runtime",std::string("Waiting for host")).c_str());
+                    if(list.contains("Mods"))for(const auto& row:list["Mods"]){ImGui::Separator();ImGui::TextWrapped("%s — /%s",row.at("Mod").get_ref<const std::string&>().c_str(),row.at("Source").get_ref<const std::string&>().c_str());ImGui::TextWrapped("%s",row.at("Root").get_ref<const std::string&>().c_str());ImGui::TextDisabled("%s",row.value("Registered",false)?"Registered source":"Declared source; shared roots can have multiple providers");}
+                    ImGui::EndTabItem();
+                }
+                ImGui::EndTabBar();
+            }
+        }
     }
     if(!Error.empty())ImGui::TextWrapped("%s",Error.c_str());
     ImGui::TextWrapped("%s",AuthoringClient::Error.empty()?snap.value("Status",std::string{}).c_str():AuthoringClient::Error.c_str());

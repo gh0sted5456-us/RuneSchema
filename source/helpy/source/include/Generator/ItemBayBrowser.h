@@ -16,13 +16,14 @@ inline void Controls(ItemGridPicker::State& state,const nlohmann::json& catalog,
     const bool sync=!refreshOverride&&(state.Query!=shared.Picker.Query||state.SourceFilter!=shared.Picker.SourceFilter
         ||state.SourceProvider!=shared.Picker.SourceProvider||state.ActiveCategory!=shared.Picker.ActiveCategory||state.FamilyKey!=shared.Picker.FamilyKey);
     if(sync){
-        syncQuery(state,shared.Picker);std::snprintf(filter,capacity,"%s",state.Query.c_str());
+        // The shared text keeps any typed source: prefix; the query itself is the rest.
+        syncQuery(state,shared.Picker);std::snprintf(filter,capacity,"%s",ItemSourcePrefix::Parse(shared.Filter).Text==state.Query?shared.Filter:state.Query.c_str());
     }
     const auto refresh=[&]{
         state.CatalogRevision=0;state.Matches.clear();state.PageIndex=0;state.ResetScroll=true;
         if(refreshOverride){refreshOverride();return;}
         syncQuery(shared.Picker,state);shared.Picker.SearchInput=state.Query;shared.Picker.SearchDue=0;
-        std::snprintf(shared.Filter,sizeof(shared.Filter),"%s",state.Query.c_str());
+        std::snprintf(shared.Filter,sizeof(shared.Filter),"%s",ItemSourcePrefix::Parse(filter).Text==state.Query?filter:state.Query.c_str());
         LazyCatalog::Search(0,ItemGridPicker::BackendQuery(state));
     };
     const bool familyChanged=!refreshOverride&&ItemGridPicker::ApplyPendingFamily(state,filter,true);
@@ -46,8 +47,9 @@ inline void Controls(ItemGridPicker::State& state,const nlohmann::json& catalog,
         else if(refreshOverride)refresh();
         else{LazyCatalog::Retry(0);state.CatalogRevision=0;}
     }
-    if(search||enter){state.Query=filter;refresh();}
-    ImGui::SetNextItemWidth(-1);ItemGridPicker::SourceControl(state,catalog,revision,refresh,categories);
+    if(search||enter){state.Query=ItemGridPicker::ApplyTypedSource(state,catalog,revision,filter,categories);refresh();}
+    if(!state.SourceNotice.empty())ImGui::TextDisabled("%s",state.SourceNotice.c_str());
+    ImGui::SetNextItemWidth(-1);ItemGridPicker::SourceControl(state,catalog,revision,refresh,categories,filter,capacity);
     if(PersonalizationPanel::Filters(state.FavoritesOnly,state.PersonalTag)){state.CatalogRevision=0;state.Matches.clear();state.PageIndex=0;state.ResetScroll=true;}
     ImGui::TextDisabled("Item library");if(!state.FamilyKey.empty()){ImGui::SameLine();if(ImGui::SmallButton("Clear family")){state.FamilyKey.clear();refresh();}}
 }

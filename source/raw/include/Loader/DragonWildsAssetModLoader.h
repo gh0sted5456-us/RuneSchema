@@ -5,6 +5,7 @@
 #include <set>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include "Loader/DragonWildsModLoaderBase.h"
 #include "nlohmann/json.hpp"
@@ -73,6 +74,7 @@ namespace DragonWilds {
         RC::Unreal::Hook::GlobalCallbackId m_characterMenuPatchHook = RC::Unreal::Hook::ERROR_ID;
         bool m_replayingCharacterMenuPatches = false;
         std::vector<RC::Unreal::UObject*> m_createdAssets;
+        std::unordered_set<RC::Unreal::UObject*> m_createdAssetSet; // same objects, for membership checks
         std::unordered_map<RC::StringType, RC::Unreal::UObject*> m_createdAssetsByTarget;
         RC::Unreal::UClass* m_dataAssetClass = nullptr;
         RC::Unreal::UClass* m_itemDataClass = nullptr;

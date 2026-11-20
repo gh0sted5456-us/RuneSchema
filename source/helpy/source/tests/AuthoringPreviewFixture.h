@@ -78,7 +78,7 @@ struct AuthoringPreviewFixture {
                         const auto slot=args.at("Slot").get<std::string>();data={{"Slot",slot},{"HasMore",false},{"NextOffset",1},
                             {"Rows",Json::array({{{"Name","Compatible native fixture"},{"Path","/Preview/Fit.Item"},{"SlotStrategy",slot},{"NativeSlotVerified",true}}})}};
                     }
-                    else if(op=="SaveEditorRender")throw std::runtime_error("Synthetic UI fixture: native game rendering is tested separately in the private game copy.");
+                    else if(op=="SaveEditorSections")data={{"Sections",Json::array({{{"Owner","example.dyes"},{"Schema",1},{"Revision",3},{"Bytes",24},{"Valid",true},{"InSave",true},{"StoredRevision",3}}})},{"Backups",Json::array()},{"Store","ok"},{"StoreAvailable",true},{"CharacterGuid",Editor.CharacterGuid()},{"Revision",Editor.Revision()},{"Status",""}};
                     else if(op=="SaveEditorBrowse")data=Editor.Browse(args.value("Pointer",std::string{}),args.value("Offset",size_t{}));
                     else if(op=="SaveEditorSet"){Editor.Set(args.at("Pointer"),args.at("Value"),args.at("Revision"));data=Editor.Browse("/GameProgress");}
                     else if(op=="SaveEditorInventory"||op=="SaveEditorStack"||op=="SaveEditorRemoveItems"){
