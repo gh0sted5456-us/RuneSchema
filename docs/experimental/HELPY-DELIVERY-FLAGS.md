@@ -51,6 +51,9 @@ guessed.
 - **Pauses set by mods.** Each registered mod, whether its key is verified, the flags currently in
   force (character or world, and the mod's message), and how many flags failed their signature
   check.
+- **Temporary lifts.** A lift with `until` shows as *Allowed until {date} by {mod name}* under the
+  mod, and under the character when your own switch is on. After it lapses, the pause is listed
+  again with *Its temporary lift ended {date}*. Dates are in this PC's local time.
 - **Let this mod pause deliveries.** On by default, per mod. Turning it off is recorded in
   `helpy-state.json`, so the mod can see it; the Grand Exchange treats such a character as not
   enrolled. Only the mod can lift its own flags.
@@ -107,8 +110,8 @@ all):
 - A statement whose `mod` doesn't match its folder is ignored. Flags other than
   `noPlayerDeliveries` are ignored. `message` is at most 300 characters.
 - Up to 64 mod folders are read.
-- *Requested, not built yet:* `until` (unix seconds) on an `on: false` statement, a lift that
-  lapses by itself. See [Requested: temporary lifts](#requested-temporary-lifts).
+- `until` (optional, unix seconds) on an `on: false` statement makes the lift temporary: it lapses
+  by itself. See [Temporary lifts](#temporary-lifts).
 
 **`helpy-state.json`** (version 1):
 
@@ -124,11 +127,7 @@ all):
 - `events` keeps the last 64 changes: `key-pinned`, `key-reset`, `user-deliveries-on/off`,
   `mod-pause-allowed/declined`.
 
-## Requested: temporary lifts
-
-!!! note "Requested by the Grand Exchange, 2026-11-19"
-    Not in 0.9.0.2. The reader ignores `until` today, so a lift sent with it stays lifted until a
-    newer statement.
+## Temporary lifts
 
 A mod can lift its own pause for a while and have it come back by itself. The first use is the
 Grand Exchange's **tester passes**. Its operator gives a trusted tester a pass, which the Bazaar
@@ -142,18 +141,21 @@ The Bazaar signs the lift with the pass's expiry:
  "message": "Tester pass: Helpy can deliver to this character until 2027-02-15."}
 ```
 
-What's needed:
+How the reader treats it:
 
-1. Parse `until` (optional, a positive integer, unix seconds) on `Flag`. It only means something on
-   an `on: false` statement; ignore it on `on: true`.
-2. When the winning statement (highest `seq`, pause wins ties) is `on: false` with an `until` in the
-   past, treat it as a pause. The message is the mod's message from its newest `on: true` statement
-   for that target, or the default *"{mod name} has paused Helpy deliveries to this {target}."*
-3. Use the PC's clock. Winding it back only stretches a pass the server already chose to give, and
-   the Bazaar marks every deposit from that character as a tester's.
-4. In **Settings > Deliveries**, show a temporary lift as *"Allowed until {date} by {mod name}"*.
-5. A contract test: a lift with `until` in the future allows; the same lift after `until` blocks; a
-   newer `on: true` (revocation) blocks before `until`.
+1. `until` is optional. When present it must be a positive whole number of unix seconds; any other
+   value (0, negative, a string, a fraction) makes the whole statement invalid and it counts as
+   rejected, so a malformed lift never stands in for an unlimited one. On an `on: true` statement a
+   valid `until` is ignored.
+2. The winner is chosen as before (highest `seq`, pause wins ties). If it is an `on: false` with an
+   `until` and the PC's clock has reached `until`, it is treated as a pause. Its message is the
+   mod's message from its newest `on: true` statement for that target, or the default *"{mod name}
+   has paused Helpy deliveries to this {target}."*
+3. The gate reads the flags folder on every delivery, so a lift ends at `until` without Helpy
+   restarting.
+4. The PC's clock is used. Winding it back only stretches a pass the server already chose to give,
+   and the Bazaar marks every deposit from that character as a tester's.
+5. A player who declined the mod's pauses is still not blocked when a lift lapses.
 
 Revoking a pass early is an ordinary newer `on: true` statement with a higher `seq`, which the
 Grand Exchange app writes on its next sync.

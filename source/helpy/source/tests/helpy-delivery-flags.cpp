@@ -3,7 +3,7 @@
 #include <chrono>
 #include <fstream>
 // Helpy delivery flags: signature checks, newest-seq rule, key pinning, the player's own
-// opt-out and per-mod choices, and the limits on what a flags folder can do.
+// opt-out and per-mod choices, temporary lifts (until), and the limits on what a flags folder can do.
 namespace {
 namespace fs=std::filesystem;using namespace PS::HelpyDeliveryFlags;
 struct Row{std::string Statement,Sig;};
@@ -16,6 +16,13 @@ const Row otherOn{"helpy-flag/1\n{\"mod\":\"grandexchange\",\"target\":\"charact
 const Row otherOff{"helpy-flag/1\n{\"mod\":\"grandexchange\",\"target\":\"character\",\"id\":\"ABCDEFABCDEFABCDEFABCDEFABCDEF01\",\"flag\":\"noPlayerDeliveries\",\"on\":false,\"seq\":2,\"at\":1800000000}","3045022100cbae98bb55ea330d84c231552cce93ad15a1d89f80d1af614d24474ef90051ba02204e79d6598c0b1a37909017032b9a9762c25705938ba9329d7f09d399d506e3a3"};
 const Row wrongMod{"helpy-flag/1\n{\"mod\":\"othermod\",\"target\":\"character\",\"id\":\"ABCDEFABCDEFABCDEFABCDEFABCDEF01\",\"flag\":\"noPlayerDeliveries\",\"on\":true,\"seq\":9,\"at\":1800000000}","304502200ad9470f3fdddd3aed6e6a6604ba1e95ebe23872e34d5cd67b799e21c48f4b6b02210082e30d154222c2c89a950c0cbe12cc0053125b14dc931557451e93afcf48ed5e"};
 const Row signedByB{"helpy-flag/1\n{\"mod\":\"grandexchange\",\"target\":\"character\",\"id\":\"ABCDEFABCDEFABCDEFABCDEFABCDEF01\",\"flag\":\"noPlayerDeliveries\",\"on\":true,\"seq\":9,\"at\":1800000000}","3045022100aeeeb9df20eed66e1c7cb0e8712ec7610d5310ca1b5380f3b341625d6969b50e022016bd77d1394662fe825810953ad7681ae5e7d1b5e5402a887cfedd86c4b0fa90"};
+// Tester-pass vectors (until): same key A and one-off script; regenerate rather than hand-edit.
+const Row passPause{"helpy-flag/1\n{\"mod\":\"grandexchange\",\"target\":\"character\",\"id\":\"11112222333344445555666677778888\",\"flag\":\"noPlayerDeliveries\",\"on\":true,\"seq\":3,\"at\":1800000000,\"message\":\"This character trades on the Grand Exchange.\"}","30440220074171fbf2e7a7a813faaadc8e6c310e278db19615dd6ef64b3ca217919dbd91022040b15b42c3c4619f70a4c766619cbedeeb525e16754691c2fe9145303c9327b5"};
+const Row passLift{"helpy-flag/1\n{\"mod\":\"grandexchange\",\"target\":\"character\",\"id\":\"11112222333344445555666677778888\",\"flag\":\"noPlayerDeliveries\",\"on\":false,\"until\":1800000500,\"seq\":4,\"at\":1800000000,\"message\":\"Tester pass: Helpy can deliver to this character until 2027-02-15.\"}","304402202306113d7a703929ff3c71d792b2d1d73f36fb482a08cf3a7440de6b3fbfa8da02200f14d4298205bde18457269cc24c3f732d904b8ea8fc21b284451168290ae3fc"};
+const Row passRevoke{"helpy-flag/1\n{\"mod\":\"grandexchange\",\"target\":\"character\",\"id\":\"11112222333344445555666677778888\",\"flag\":\"noPlayerDeliveries\",\"on\":true,\"seq\":5,\"at\":1800000000,\"message\":\"Tester pass revoked.\"}","3045022032c46c332e4fb460b28121f6e2f07c7f249507de92a5aced260f932f05c357bb022100ea71f93a6ae192fb1ebe27d65a5597036a2a22a3e59d96c2a0ff23d8cf5e7036"};
+const Row passBadUntil{"helpy-flag/1\n{\"mod\":\"grandexchange\",\"target\":\"character\",\"id\":\"11112222333344445555666677778888\",\"flag\":\"noPlayerDeliveries\",\"on\":false,\"until\":0,\"seq\":6,\"at\":1800000000}","3045022100ca74a55b29636e29303772a4c4ed9845a4b35a9b1a2e3b99170946283ffef03402201e5baaa77307832c07299375db71ede22baef2695df77aef1bee7c0bac1226f2"};
+const Row passPauseUntil{"helpy-flag/1\n{\"mod\":\"grandexchange\",\"target\":\"character\",\"id\":\"11112222333344445555666677778888\",\"flag\":\"noPlayerDeliveries\",\"on\":true,\"until\":1800000500,\"seq\":7,\"at\":1800000000}","304502205c763151c1e29b9281736544265c018e00991b23bbcb361706824efcc78f5fcf0221008fe1a2bd90b3a1216a079a1b0e02f7c4ee3ff3b78b7d08a7eeddadacbdb9825f"};
+const std::string T="11112222333344445555666677778888";
 const std::string C="5A3F0C21B6D84E7F9A1C2B3D4E5F6071",W="00112233445566778899AABBCCDDEEFF",D="ABCDEFABCDEFABCDEFABCDEFABCDEF01";
 void Put(const fs::path& path,const std::string& text){fs::create_directories(path.parent_path());std::ofstream(path,std::ios::binary)<<text;}
 void Register(const fs::path& folder,const std::string& id,const std::string& key){Put(folder/id/"mod.json",Json{{"id",id},{"name","Grand Exchange"},{"publicKey",key}}.dump());}
@@ -81,5 +88,31 @@ int main(){
     {const auto crowded=root/"crowded";for(int i=0;i<70;++i)Register(crowded,"mod"+std::to_string(100+i),KeyA);
         const auto snapshot=Read(crowded,Signature::DefaultVerifier(),0,false);assert(snapshot.Mods.size()==MaxMods&&!snapshot.Problems.empty());
         assert(!fs::exists(crowded/"helpy-state.json"));} // record=false never writes.
+    // Temporary lifts (until): a Grand Exchange tester pass lifts the pause until a moment, by this PC's clock.
+    {const auto passes=root/"passes";Register(passes,"grandexchange",KeyA);
+        const auto at=[&](int64_t now){return Read(passes,Signature::DefaultVerifier(),now);};
+        assert(ParseStatement(passLift.Statement,"grandexchange")->Until==1800000500);
+        assert(!ParseStatement(passBadUntil.Statement,"grandexchange"));                       // until must be a positive whole number.
+        assert(ParseStatement(passPauseUntil.Statement,"grandexchange")->Until==0);            // until means nothing on a pause.
+        Flags(passes,"grandexchange",{passPause,passLift});
+        // Allowed before until, and shown as a lift.
+        {const auto before=at(1800000499);assert(!Check(before,T,"")&&before.Active.empty());
+            assert(before.Lifted.size()==1&&before.Lifted[0].Until==1800000500&&before.Lifted[0].Seq==4);}
+        // Blocked once until has passed, with the mod's newest pause message.
+        for(const int64_t now:{int64_t{1800000500},int64_t{1800009999}}){const auto after=at(now);const auto block=Check(after,T,"");
+            assert(block&&!block->User&&block->Mod=="grandexchange"&&block->Message=="This character trades on the Grand Exchange.");
+            assert(after.Lifted.empty()&&after.Active.size()==1&&after.Active[0].Lapsed&&AnyCharacterPause(after));}
+        // A lapsed lift with no earlier pause falls back to the default message.
+        Flags(passes,"grandexchange",{passLift});
+        {const auto block=Check(at(1800000600),T,"");assert(block&&block->Message=="Grand Exchange has paused Helpy deliveries to this character.");}
+        // Revocation: a newer "on": true blocks before until.
+        Flags(passes,"grandexchange",{passPause,passLift,passRevoke});
+        {const auto revoked=at(1800000100);const auto block=Check(revoked,T,"");assert(block&&block->Message=="Tester pass revoked."&&revoked.Lifted.empty());}
+        // A malformed until is rejected, so the pause it tried to lift still stands.
+        Flags(passes,"grandexchange",{passPause,passBadUntil});
+        {const auto bad=at(1800000100);assert(Check(bad,T,"")&&bad.Mods[0].Rejected==1);}
+        // A player who declined the mod's pauses is not blocked when a lift lapses.
+        Flags(passes,"grandexchange",{passPause,passLift});SetModAllowed(passes,"grandexchange",false,1800000600);
+        {const auto declined=at(1800000600);assert(!Check(declined,T,"")&&declined.Declined.size()==1&&declined.Declined[0].Lapsed);}}
     std::error_code error;fs::remove_all(root,error);
 }
