@@ -36,8 +36,10 @@ inline constexpr size_t MaxEvents=64;
 // Fingerprint = "sha256:" + lower-case hex SHA-256 of the SPKI DER public key.
 struct KnownMod{std::string_view Id,Name,Fingerprint;};
 inline const std::vector<KnownMod>& Registry(){
-    // Add the Grand Exchange's main key fingerprint here once it is published.
-    static const std::vector<KnownMod> known{};
+    static const std::vector<KnownMod> known{
+        // The main Bazaar's key (Grand Exchange assets/network.json, "main.fingerprint").
+        {"grandexchange","Grand Exchange","sha256:ca226cec0400bbb4e78143e16031dbdb9383863960a5b7aee01abcd97735cb07"},
+    };
     return known;
 }
 
