@@ -4,8 +4,16 @@
 #include <set>
 #include <span>
 #include <stdexcept>
+#include <string>
 
 namespace PS::Buildings {
+// Lower-case hex of at most `limit` bytes, for reporting a native shape the analyzer refused.
+inline std::string NativeBytesHex(std::span<const unsigned char> bytes,size_t limit=384){
+    constexpr char digits[]="0123456789abcdef";std::string out;const auto count=bytes.size()<limit?bytes.size():limit;out.reserve(count*2+8);
+    for(size_t i=0;i<count;++i){out+=digits[bytes[i]>>4];out+=digits[bytes[i]&15];}
+    if(count<bytes.size())out+="...";
+    return out;
+}
 inline uintptr_t NativeExecTarget(uintptr_t start,std::span<const unsigned char> bytes,unsigned resultBytes){
     if(bytes.empty()||bytes.size()>2048||(resultBytes!=0&&resultBytes!=1&&resultBytes!=4))throw std::runtime_error("Native exec bounds or result size changed");
     std::set<ZydisRegister> results{ZYDIS_REGISTER_R8};uintptr_t lastCall=0,found=0;bool live=false,ended=false;

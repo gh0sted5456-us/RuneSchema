@@ -4,6 +4,7 @@
 #include "NativeExecTarget.h"
 #include <Windows.h>
 #include <cstring>
+#include <format>
 
 namespace PS::Buildings {
 // Resolve the implementation that feeds the exec thunk's result, before array cleanup calls.
@@ -40,7 +41,13 @@ inline uintptr_t NativeMethod(UFunction* function,unsigned resultBytes){
     }
     else if(resultBytes)throw std::runtime_error("Native result exec has no unwind boundary");
     if(limit>2048||!code(start,limit))throw std::runtime_error("Native exec bounds are unavailable");
-    const auto found=NativeExecTarget(start,{reinterpret_cast<const unsigned char*>(start),limit},resultBytes);
+    const std::span<const unsigned char> thunk{reinterpret_cast<const unsigned char*>(start),limit};
+    uintptr_t found=0;
+    // Report the function and its exec bytes, so a new build's shape can be supported precisely
+    // instead of guessed. Nothing is hooked when this throws.
+    try{found=NativeExecTarget(start,thunk,resultBytes);}
+    catch(const std::exception& error){throw std::runtime_error(std::string(error.what())+" in "+RC::to_string(function->GetPathName())
+        +" (exec rva=0x"+std::format("{:x}",start-image)+" bytes="+std::to_string(limit)+" code="+NativeBytesHex(thunk)+")");}
     DWORD64 targetOwner=0;const auto* implementation=found?RtlLookupFunctionEntry(found,&targetOwner,nullptr):nullptr;
     if(!code(found,16)||!implementation||targetOwner!=image||image+implementation->BeginAddress!=found)throw std::runtime_error("Native implementation return contract changed");
     return found;

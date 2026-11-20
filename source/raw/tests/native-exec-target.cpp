@@ -19,4 +19,6 @@ int main(){
     const std::vector<unsigned char> tail{0xff,0xd0,0xe9,0x20,0,0,0};
     assert(NativeExecTarget(0x1000,tail,0)==0x1027);
     rejected({0xff,0xe0},0); // An unknown tail target must never be detoured.
+    const std::vector<unsigned char> hex{0x00,0x0f,0xa0,0xff};
+    assert(NativeBytesHex(hex)=="000fa0ff"&&NativeBytesHex(hex,2)=="000f..."&&NativeBytesHex({})=="");
 }
