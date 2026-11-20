@@ -54,6 +54,8 @@ int main(int argc, char** argv) {
     Write(rs / "RootFile/achievements.json", "{}");
     Write(rs / "CacheFile/cache/achievements.json", "{}");
     Write(rs / "Off/achievements.json", "{}");
+    // Build expected paths one component at a time: on Windows "a" / "b/c" keeps the '/' while the
+    // plugin joins with '\\', so string comparisons would differ only by separator.
     const auto text = [](const fs::path& path) { return PS::AchievementSources::Text(path); };
     const Json rows = Json::array({
         {{"Folder", text(rs / "RootFile")}, {"Name", "Root File"}, {"Enabled", true}, {"Present", true}},
@@ -64,10 +66,10 @@ int main(int argc, char** argv) {
     auto found = ByOwner(Exchange({{"Op", "discover"}, {"Mods", text(mods)}, {"RuneSchema", rows}}));
     assert(found.size() == 5);
     assert(found.at("ue4ss/listedon").at("Kind") == "ue4ss" && found.at("ue4ss/toggle").at("Enabled") == true);
-    assert(found.at("ue4ss/listedon").at("File") == text(mods / "ListedOn/achievements.json"));          // The root file wins.
-    assert(found.at("ue4ss/cacheonly").at("File") == text(mods / "CacheOnly/cache/achievements.json"));
-    assert(found.at("mods/rootfile").at("File") == text(rs / "RootFile/achievements.json"));
-    assert(found.at("mods/cachefile").at("File") == text(rs / "CacheFile/cache/achievements.json") && found.at("mods/cachefile").at("Name") == "Cache File");
+    assert(found.at("ue4ss/listedon").at("File") == text(mods / "ListedOn" / "achievements.json"));          // The root file wins.
+    assert(found.at("ue4ss/cacheonly").at("File") == text(mods / "CacheOnly" / "cache" / "achievements.json"));
+    assert(found.at("mods/rootfile").at("File") == text(rs / "RootFile" / "achievements.json"));
+    assert(found.at("mods/cachefile").at("File") == text(rs / "CacheFile" / "cache" / "achievements.json") && found.at("mods/cachefile").at("Name") == "Cache File");
     assert(!found.contains("ue4ss/runeschema") && !found.contains("ue4ss/shared") && !found.contains("ue4ss/listedoff") && !found.contains("mods/off"));
 
     found = ByOwner(Exchange({{"Op", "discover"}, {"Mods", text(mods)}, {"RuneSchema", rows}, {"IncludeDisabled", true}}));
