@@ -107,6 +107,8 @@ all):
 - A statement whose `mod` doesn't match its folder is ignored. Flags other than
   `noPlayerDeliveries` are ignored. `message` is at most 300 characters.
 - Up to 64 mod folders are read.
+- *Requested, not built yet:* `until` (unix seconds) on an `on: false` statement, a lift that
+  lapses by itself. See [Requested: temporary lifts](#requested-temporary-lifts).
 
 **`helpy-state.json`** (version 1):
 
@@ -121,6 +123,44 @@ all):
 - `mods.<id>.allowPause` is `false` when the player chose not to honour that mod.
 - `events` keeps the last 64 changes: `key-pinned`, `key-reset`, `user-deliveries-on/off`,
   `mod-pause-allowed/declined`.
+
+## Requested: temporary lifts
+
+!!! note "Requested by the Grand Exchange, 2026-11-19"
+    Not in 0.9.0.2. The reader ignores `until` today, so a lift sent with it stays lifted until a
+    newer statement.
+
+A mod can lift its own pause for a while and have it come back by itself. The first use is the
+Grand Exchange's **tester passes**. Its operator gives a trusted tester a pass, which the Bazaar
+checks against its own signature, the tester's account, an expiry and a revocation list. While the
+pass lasts, that tester's characters may take Helpy deliveries, so the operator can test freely.
+The Bazaar signs the lift with the pass's expiry:
+
+```json
+{"mod": "grandexchange", "target": "character", "id": "5A3F0C21B6D84E7F9A1C2B3D4E5F6071",
+ "flag": "noPlayerDeliveries", "on": false, "until": 1802592000, "seq": 4, "at": 1800000000,
+ "message": "Tester pass: Helpy can deliver to this character until 2027-02-15."}
+```
+
+What's needed:
+
+1. Parse `until` (optional, a positive integer, unix seconds) on `Flag`. It only means something on
+   an `on: false` statement; ignore it on `on: true`.
+2. When the winning statement (highest `seq`, pause wins ties) is `on: false` with an `until` in the
+   past, treat it as a pause. The message is the mod's message from its newest `on: true` statement
+   for that target, or the default *"{mod name} has paused Helpy deliveries to this {target}."*
+3. Use the PC's clock. Winding it back only stretches a pass the server already chose to give, and
+   the Bazaar marks every deposit from that character as a tester's.
+4. In **Settings > Deliveries**, show a temporary lift as *"Allowed until {date} by {mod name}"*.
+5. A contract test: a lift with `until` in the future allows; the same lift after `until` blocks; a
+   newer `on: true` (revocation) blocks before `until`.
+
+Revoking a pass early is an ordinary newer `on: true` statement with a higher `seq`, which the
+Grand Exchange app writes on its next sync.
+
+The Grand Exchange already signs the same values in its enrollment tokens (`helpyPlayerDeliveries:
+"allowed"`, `helpyAllowedUntil`, `tester: true`; its `docs/handoff/HELPY-ENROLLMENT.md`). When its
+app writes flags, they go into the statement above.
 
 ## Why signatures and not shared encryption
 
