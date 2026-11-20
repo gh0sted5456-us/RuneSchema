@@ -1,10 +1,14 @@
 #include "Generator/CharacterNativeData.h"
 #include "Core/CharacterWorkbench.h"
+#include "SDK/WeakObjectHandle.h"
+#include "SDK/Structs/FSoftObjectPtr.h"
 #include "SDK/Helper/PropertyHelper.h"
 #include "Unreal/Property/FEnumProperty.hpp"
 #include "Unreal/UEnum.hpp"
+#include "SDK/Helper/ActorHelper.h"
 #include "SDK/Classes/Custom/UObjectGlobals.h"
 #include "SDK/Structs/Custom/FScriptMapHelper.h"
+#include "Generator/AssetSearch.h"
 #include <Unreal/Property/FMapProperty.hpp>
 #include <Unreal/FText.hpp>
 #include <Unreal/Property/FTextProperty.hpp>

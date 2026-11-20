@@ -55,6 +55,7 @@ void QueueEnabled(const fs::path& root,const nlohmann::json& rows){
         }Queue.push_back({root,fs::u8path(row.at("Folder").get<std::string>()),owner});
     }
 }
+}
 const View& Current(){return State;}
 const BatchView& CurrentBatch(){return Batch;}
 std::filesystem::path InstalledFolder(const fs::path& root,const fs::path& folder,const std::string& owner){
@@ -97,7 +98,6 @@ bool StartEnabled(const fs::path& root,const nlohmann::json& rows,bool installNe
         QueueEnabled(root,rows);
         Batch.Active=!Queue.empty();State.Stage=Batch.Active?"Enabled mods queued; one cache build at a time.":"No enabled cooked inputs to build.";return true;
     }catch(const std::exception& error){Queue.clear();Batch.Active=false;State.State="Failed";State.Stage=error.what();return false;}
-}
 }
 bool StartFullResync(const fs::path& root,const fs::path& cache,const std::string& version,const nlohmann::json& rows,bool installNet){
     if(Process||Batch.Active)return false;
