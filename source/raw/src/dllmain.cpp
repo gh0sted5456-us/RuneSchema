@@ -54,6 +54,7 @@
 #include "Utility/Logging.h"
 #include "Utility/StructuredDiagnostics.h"
 #include "Utility/StartupTrace.h"
+#include "Runtime/PluginActivation.h"
 #include "SDK/DragonWildsSignatures.h"
 #include "SDK/UnrealOffsets.h"
 
@@ -331,6 +332,9 @@ public:
         }
         {
             const auto pluginRoot=std::filesystem::path(PS::HostServices::WorkingDirectory())/"Mods"/"RuneSchema";
+            // Finish or roll back an interrupted whole-plugin activation before any plugin scan.
+            for(const auto& note:PS::PluginActivation::RecoverGuarded(pluginRoot))
+                PS::Log<LogLevel::Warning>(STR("[PLUGIN-ACTIVATION] {}.\n"),PS::ToWideSafe(note));
             m_pluginHost.Load(pluginRoot);
             m_pluginHost.StartDesktop();
             for(const auto& message:m_pluginHost.Diagnostics())

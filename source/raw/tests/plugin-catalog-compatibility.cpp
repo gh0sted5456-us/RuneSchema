@@ -1,4 +1,5 @@
 #include "Runtime/PluginCatalog.h"
+#include "Runtime/PluginActivation.h"
 
 #include <algorithm>
 #include <chrono>
@@ -237,5 +238,32 @@ int main() try
     Check(!PS::PluginCatalog::OwnedServiceAllowed("Exchange","other.service","Other"),"a frontend plugin cannot reach another plugin's service");
     Check(!PS::PluginCatalog::OwnedServiceAllowed("RuneSchema.Helpy","runeschema.tools","RuneSchema.Helpy")&&!PS::PluginCatalog::OwnedServiceAllowed("RuneSchema.Core","x","RuneSchema.Core"),"core and Helpy never use the owned-service route");
     Check(!PS::PluginCatalog::OwnedServiceAllowed("bad id","exchange.vault","bad id"),"caller identity must be a token");
+    // Interrupted whole-plugin activation: recover before discovery, never delete.
+    const auto act=root/"Activation";
+    const auto updates=act/"Helpy/plugin-updates/Exchange";
+    const auto manifest=[](const std::string& version){return std::string(R"({"Id":"Exchange","Version":")")+version+R"(","Host":"helpy","EntryPoint":"E.dll"})";};
+    const auto record=[&](const std::string& state){Write(updates/"activation.json",std::string(R"({"Schema":"runeschema.plugin-activation/1","Id":"Exchange","State":")")+state+R"(","Staged":"staging","Previous":"previous","Version":"2.0.0","PreviousVersion":"1.0.0"})");};
+    const auto stateOf=[&]{std::ifstream stream(updates/"activation.json");nlohmann::json data;stream>>data;return data.value("State",std::string{});};
+    fs::create_directories(act/"Helpy/plugins");
+    Write(updates/"staging/plugin.json",manifest("2.0.0"));Write(updates/"previous/plugin.json",manifest("1.0.0"));record("Swapping");
+    auto notes=PS::PluginActivation::Recover(act);
+    Check(notes.size()==1&&fs::is_regular_file(act/"Helpy/plugins/Exchange/plugin.json")&&!fs::exists(updates/"staging")&&fs::exists(updates/"previous")&&stateOf()=="RecoveredForward",
+        "power loss between renames rolls forward to the verified staged generation");
+    Check(PS::PluginActivation::Recover(act).empty()&&stateOf()=="RecoveredForward","recovery is idempotent");
+    fs::remove_all(act/"Helpy/plugins/Exchange");Write(updates/"staging/plugin.json",manifest("1.9.9"));record("Swapping");
+    notes=PS::PluginActivation::Recover(act);
+    Check(notes.size()==1&&fs::exists(act/"Helpy/plugins/Exchange/plugin.json")&&fs::exists(updates/"staging")&&!fs::exists(updates/"previous")&&stateOf()=="RecoveredBack",
+        "a staged folder that does not match the record rolls back to the previous generation");
+    fs::remove_all(act/"Helpy/plugins/Exchange");Write(updates/"previous/plugin.json",manifest("0.1"));record("Swapping");
+    notes=PS::PluginActivation::Recover(act);
+    Check(notes.size()==1&&!fs::exists(act/"Helpy/plugins/Exchange")&&fs::exists(updates/"staging")&&fs::exists(updates/"previous")&&stateOf()=="Swapping",
+        "with no matching generation nothing moves and the plugin stays absent");
+    Write(act/"Helpy/plugins/Exchange/plugin.json",manifest("1.0.0"));Write(updates/"staging/plugin.json",manifest("2.0.0"));
+    Check(PS::PluginActivation::Recover(act).empty()&&fs::exists(updates/"staging")&&stateOf()=="Swapping","a present live folder is left for the activator");
+    fs::remove_all(act/"Helpy/plugins/Exchange");record("Activated");
+    Check(PS::PluginActivation::Recover(act).empty()&&!fs::exists(act/"Helpy/plugins/Exchange"),"only a Swapping record is acted on");
+    Write(updates/"activation.json",R"({"Schema":"runeschema.plugin-activation/1","Id":"Exchange","State":"Swapping","Staged":"../x","Previous":"previous","Version":"2.0.0","PreviousVersion":"1.0.0"})");
+    notes=PS::PluginActivation::Recover(act);
+    Check(notes.size()==1&&!fs::exists(act/"Helpy/plugins/Exchange"),"path-like folder names in the record are refused");
     std::cout << "Plugin catalog compatibility contract passed.\n";
 }catch(const std::exception& error){std::cerr<<"FAIL: "<<error.what()<<'\n';return 1;}

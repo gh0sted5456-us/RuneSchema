@@ -103,6 +103,34 @@ registered that service; otherwise the result is `RS_PLUGIN_NOT_FOUND`. Nothing
 is queued or replayed while the game is offline. Service callbacks run on the
 pipe thread: return quickly and queue engine work to the game thread.
 
+#### Interrupted plugin activation
+
+An external updater that replaces `Helpy/plugins/<Id>` as a whole folder keeps its
+staging and previous copies in `Helpy/plugin-updates/<Id>/`, which is never
+scanned for plugins. Before any plugin scan, RuneSchema core and Helpy.exe read
+`Helpy/plugin-updates/<Id>/activation.json`:
+
+```json
+{
+  "Schema": "runeschema.plugin-activation/1",
+  "Id": "<Id>",
+  "State": "Swapping",
+  "Staged": "staging",
+  "Previous": "previous",
+  "Version": "<staged plugin.json Version>",
+  "PreviousVersion": "<previous plugin.json Version>"
+}
+```
+
+They act only when `State` is `Swapping` and `Helpy/plugins/<Id>` is definitely
+absent. If the staged folder's `plugin.json` has the same `Id` and `Version`, it
+is renamed into place (`RecoveredForward`). Otherwise a matching previous folder
+is renamed back (`RecoveredBack`). Otherwise nothing moves and the plugin stays
+absent. `Staged` and `Previous` are plain folder names inside the record's
+folder. Recovery never deletes files, holds a session lock shared by both
+processes, logs `[PLUGIN-ACTIVATION]`, and is safe to repeat. It does not verify
+file hashes: write `Swapping` only after the staged tree is fully verified.
+
 Required DLL exports:
 
 ```cpp
