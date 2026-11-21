@@ -16,6 +16,7 @@
 #include <system_error>
 #include <vector>
 #include <nlohmann/json.hpp>
+#include "Runtime/PluginCatalog.h"
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -88,16 +89,33 @@ inline std::vector<std::string> Recover(const fs::path& runtime) {
     return notes;
 }
 #ifdef _WIN32
-// The game and Helpy.exe may start together; only one recovers at a time.
-inline std::vector<std::string> RecoverGuarded(const fs::path& runtime) {
-    const auto gate = CreateMutexW(nullptr, FALSE, L"Local\\RuneSchema.PluginActivation");
-    if (!gate) return {"activation recovery skipped: lock unavailable"};
-    const auto wait = WaitForSingleObject(gate, 5000);
-    if (wait != WAIT_OBJECT_0 && wait != WAIT_ABANDONED) { CloseHandle(gate); return {"activation recovery skipped: another process holds the lock"}; }
-    std::vector<std::string> notes;
-    try { notes = Recover(runtime); } catch (const std::exception& error) { notes.push_back(std::string("activation recovery failed: ") + error.what()); }
-    ReleaseMutex(gate); CloseHandle(gate);
-    return notes;
-}
+inline constexpr wchar_t LockName[] = L"Local\\RuneSchema.PluginActivation";
+// Startup lease shared with the external activator. Hold it from recovery through
+// the plugin scan/load. If it cannot be taken in time the process fails closed:
+// Helpy/plugins (the externally updated folders) are not scanned this session.
+class StartupLease {
+public:
+    explicit StartupLease(const fs::path& runtime, DWORD timeout = 15000, const wchar_t* name = LockName) {
+        gate_ = CreateMutexW(nullptr, FALSE, name);
+        if (gate_) { const auto wait = WaitForSingleObject(gate_, timeout); held_ = wait == WAIT_OBJECT_0 || wait == WAIT_ABANDONED; }
+        if (!held_) {
+            PluginCatalog::UpdatablePluginsBlocked().store(true);
+            notes_.push_back(gate_ ? "plugin update lock is held by another process; Helpy/plugins will not load this session"
+                                   : "plugin update lock is unavailable; Helpy/plugins will not load this session");
+            return;
+        }
+        try { notes_ = Recover(runtime); }
+        catch (const std::exception& error) { notes_.push_back(std::string("activation recovery failed: ") + error.what()); }
+    }
+    ~StartupLease() { if (held_) ReleaseMutex(gate_); if (gate_) CloseHandle(gate_); }
+    StartupLease(const StartupLease&) = delete;
+    StartupLease& operator=(const StartupLease&) = delete;
+    bool Held() const { return held_; }
+    const std::vector<std::string>& Notes() const { return notes_; }
+private:
+    HANDLE gate_ = nullptr;
+    bool held_ = false;
+    std::vector<std::string> notes_;
+};
 #endif
 }

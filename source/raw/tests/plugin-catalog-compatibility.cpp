@@ -8,6 +8,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <thread>
 
 namespace fs = std::filesystem;
 
@@ -265,5 +266,51 @@ int main() try
     Write(updates/"activation.json",R"({"Schema":"runeschema.plugin-activation/1","Id":"Exchange","State":"Swapping","Staged":"../x","Previous":"previous","Version":"2.0.0","PreviousVersion":"1.0.0"})");
     notes=PS::PluginActivation::Recover(act);
     Check(notes.size()==1&&!fs::exists(act/"Helpy/plugins/Exchange"),"path-like folder names in the record are refused");
+    // Fail closed: when the update lock was unavailable, Helpy/plugins is never scanned.
+    PS::PluginCatalog::UpdatablePluginsBlocked().store(true);
+    std::vector<std::string> blockedNotes;
+    const auto blocked=PS::PluginCatalog::DiscoverRuntime(modern,&blockedNotes);
+    PS::PluginCatalog::UpdatablePluginsBlocked().store(false);
+    Check(std::none_of(blocked.begin(),blocked.end(),[](const auto& p){return p.Id=="GrandExchange"||p.Id=="RuneSchema.ModMenu2";})
+        &&std::any_of(blocked.begin(),blocked.end(),[](const auto& p){return p.Id=="RuneSchema.Helpy";})
+        &&std::any_of(blocked.begin(),blocked.end(),[](const auto& p){return p.Id=="RSNetworking";})
+        &&std::any_of(blocked.begin(),blocked.end(),[](const auto& p){return p.Id=="ThirdParty";})
+        &&std::any_of(blockedNotes.begin(),blockedNotes.end(),[](const auto& note){return note.starts_with("Helpy/plugins: skipped");}),
+        "a blocked startup skips only the externally updated Helpy/plugins folders");
+#ifdef _WIN32
+    {
+        // Activator vs host concurrent start, with a private lock name.
+        const std::wstring lockName=L"Local\\RuneSchema.PluginActivation.Test."+std::to_wstring(GetCurrentProcessId());
+        const auto race=root/"Race";
+        const auto raceUpdates=race/"Helpy/plugin-updates/Exchange";
+        fs::create_directories(race/"Helpy/plugins");
+        Write(raceUpdates/"2.0.0/plugin.json",R"({"Id":"Exchange","Version":"2.0.0","Host":"helpy","EntryPoint":"E.dll"})");
+        HANDLE ready=CreateEventW(nullptr,TRUE,FALSE,nullptr),release=CreateEventW(nullptr,TRUE,FALSE,nullptr);
+        std::thread activator([&]{
+            const auto gate=CreateMutexW(nullptr,FALSE,lockName.c_str());
+            WaitForSingleObject(gate,INFINITE);SetEvent(ready);
+            WaitForSingleObject(release,INFINITE);
+            fs::rename(raceUpdates/"2.0.0",race/"Helpy/plugins/Exchange"); // the swap finishes while guarded
+            ReleaseMutex(gate);CloseHandle(gate);
+        });
+        WaitForSingleObject(ready,INFINITE);
+        {
+            PS::PluginActivation::StartupLease early(race,200,lockName.c_str());
+            Check(!early.Held()&&PS::PluginCatalog::UpdatablePluginsBlocked().load()&&!early.Notes().empty(),"a host that cannot take the lock fails closed");
+        }
+        PS::PluginCatalog::UpdatablePluginsBlocked().store(false);
+        std::thread finish([&]{Sleep(300);SetEvent(release);});
+        {
+            PS::PluginActivation::StartupLease late(race,10000,lockName.c_str());
+            Check(late.Held()&&!PS::PluginCatalog::UpdatablePluginsBlocked().load()&&fs::is_regular_file(race/"Helpy/plugins/Exchange/plugin.json"),
+                "a host that waits starts only after the guarded swap completed");
+            bool activatorExcluded=false;
+            std::thread second([&]{const auto gate=CreateMutexW(nullptr,FALSE,lockName.c_str());activatorExcluded=WaitForSingleObject(gate,100)==WAIT_TIMEOUT;CloseHandle(gate);});
+            second.join();
+            Check(activatorExcluded,"an activator cannot take the lock while a host scans and loads plugins");
+        }
+        finish.join();activator.join();CloseHandle(ready);CloseHandle(release);
+    }
+#endif
     std::cout << "Plugin catalog compatibility contract passed.\n";
 }catch(const std::exception& error){std::cerr<<"FAIL: "<<error.what()<<'\n';return 1;}

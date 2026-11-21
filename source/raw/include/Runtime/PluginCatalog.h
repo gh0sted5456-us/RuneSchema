@@ -2,6 +2,7 @@
 #include "Core/CacheBundleIO.h"
 #pragma once
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <cwctype>
 #include <filesystem>
@@ -29,6 +30,9 @@ struct Plugin {
     std::vector<std::pair<std::string,std::string>> Dependencies;
 };
 struct OrderEntry { std::string Id;bool Enabled=true;size_t Position=0; };
+// Set for the whole process when the plugin-update lock could not be taken at startup:
+// Helpy/plugins children (the externally updated folders) are then never scanned.
+inline std::atomic<bool>& UpdatablePluginsBlocked(){static std::atomic<bool> value{false};return value;}
 inline std::vector<fs::path> PakDirectories(const Plugin& plugin) {
     std::vector<fs::path> result;if(!plugin.MountPaks)return result;std::error_code error;
     if(!fs::exists(plugin.PaksRoot,error))return result;
@@ -103,7 +107,10 @@ inline std::vector<Plugin> Discover(const fs::path& root,std::vector<std::string
     std::vector<Plugin> result;if(!fs::is_directory(root))return result;
     std::vector<fs::path> folders;
     const auto append=[&](const fs::path& base){if(!fs::is_directory(base)||fs::is_symlink(fs::symlink_status(base)))return;for(const auto& folder:fs::directory_iterator(base))if(folder.is_directory()&&!folder.is_symlink())folders.push_back(folder.path());};
-    if(runtime){append(root/"dlls/plugins");if(fs::is_directory(root/"Helpy")&&!fs::is_symlink(fs::symlink_status(root/"Helpy")))folders.push_back(root/"Helpy");append(root/"Helpy/plugins");append(root/"plugins");}else append(root);
+    if(runtime){append(root/"dlls/plugins");if(fs::is_directory(root/"Helpy")&&!fs::is_symlink(fs::symlink_status(root/"Helpy")))folders.push_back(root/"Helpy");
+        if(!UpdatablePluginsBlocked().load())append(root/"Helpy/plugins");
+        else if(diagnostics)diagnostics->push_back("Helpy/plugins: skipped for this session; the plugin update lock was unavailable at startup");
+        append(root/"plugins");}else append(root);
     std::unordered_set<std::string> ids;
     for(const auto& folder:folders) {
         const auto manifest=folder/"plugin.json";if(!fs::is_regular_file(manifest)||fs::is_symlink(fs::symlink_status(manifest)))continue;

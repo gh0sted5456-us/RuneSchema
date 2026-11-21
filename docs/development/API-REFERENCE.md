@@ -127,9 +127,17 @@ absent. If the staged folder's `plugin.json` has the same `Id` and `Version`, it
 is renamed into place (`RecoveredForward`). Otherwise a matching previous folder
 is renamed back (`RecoveredBack`). Otherwise nothing moves and the plugin stays
 absent. `Staged` and `Previous` are plain folder names inside the record's
-folder. Recovery never deletes files, holds a session lock shared by both
-processes, logs `[PLUGIN-ACTIVATION]`, and is safe to repeat. It does not verify
-file hashes: write `Swapping` only after the staged tree is fully verified.
+folder. Recovery never deletes files, logs `[PLUGIN-ACTIVATION]`, and is safe to
+repeat. It does not verify file hashes: write `Swapping` only after the staged
+tree is fully verified.
+
+Both processes hold the session mutex `Local\RuneSchema.PluginActivation`
+from recovery through their plugin scan and load. The game releases it before
+it starts Helpy.exe. An activator holds the same mutex while it rechecks host
+processes and swaps folders. If a host cannot take the mutex within 15 seconds
+it fails closed: `Helpy/plugins` is not scanned in that process for the rest of
+the session (no DLLs, PAKs or content from it), while core plugins and Helpy
+itself still start.
 
 Required DLL exports:
 

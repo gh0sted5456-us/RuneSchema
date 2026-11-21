@@ -190,8 +190,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR,int){
         OfflineEnvironment["RuneSchemaVersion"]=RuneSchemaPlugin_Query()->Version;
         shutdown=RuneSchemaPlugin_Shutdown;
         if(RuneSchemaPlugin_Initialize(&Host,&instance)!=RS_PLUGIN_OK)throw std::runtime_error("Helpy application initialization failed");
-        for(const auto& note:PS::PluginActivation::RecoverGuarded(root))Log(RS_LOG_WARNING,"RuneSchema.Helpy",("[PLUGIN-ACTIVATION] "+note).c_str());
-        FrontendPlugins.Load(root,&Host,[](const std::string& id){std::lock_guard lock(ServicesMutex);std::erase_if(Services,[&](const auto& item){return item.second.Owner==id;});});
+        {PS::PluginActivation::StartupLease lease(root);for(const auto& note:lease.Notes())Log(RS_LOG_WARNING,"RuneSchema.Helpy",("[PLUGIN-ACTIVATION] "+note).c_str());
+        FrontendPlugins.Load(root,&Host,[](const std::string& id){std::lock_guard lock(ServicesMutex);std::erase_if(Services,[&](const auto& item){return item.second.Owner==id;});});}
         const auto unreal=RuneSchemaPlugin_OnUnrealInit;
         if(unreal(instance)!=RS_PLUGIN_OK||!Ready())throw std::runtime_error("Helpy desktop window could not start; check its plugin settings");
         worker=std::jthread([root](std::stop_token stop){

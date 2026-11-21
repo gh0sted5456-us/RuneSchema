@@ -332,10 +332,14 @@ public:
         }
         {
             const auto pluginRoot=std::filesystem::path(PS::HostServices::WorkingDirectory())/"Mods"/"RuneSchema";
-            // Finish or roll back an interrupted whole-plugin activation before any plugin scan.
-            for(const auto& note:PS::PluginActivation::RecoverGuarded(pluginRoot))
-                PS::Log<LogLevel::Warning>(STR("[PLUGIN-ACTIVATION] {}.\n"),PS::ToWideSafe(note));
-            m_pluginHost.Load(pluginRoot);
+            {
+                // Hold the update lock through recovery and the plugin scan/load. Without it,
+                // Helpy/plugins is skipped for this session (fail closed); core plugins still load.
+                PS::PluginActivation::StartupLease lease(pluginRoot);
+                for(const auto& note:lease.Notes())
+                    PS::Log<LogLevel::Warning>(STR("[PLUGIN-ACTIVATION] {}.\n"),PS::ToWideSafe(note));
+                m_pluginHost.Load(pluginRoot);
+            }
             m_pluginHost.StartDesktop();
             for(const auto& message:m_pluginHost.Diagnostics())
                 PS::Log<LogLevel::Normal>(TEXT("Plugin host: {}\n"),PS::ToWideSafe(message.c_str()));
