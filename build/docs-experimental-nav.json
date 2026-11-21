@@ -9,6 +9,9 @@
     "Runtime folder layout": "experimental/RUNTIME-LAYOUT.md"
   },
   {
+    "Grand Exchange integration": "experimental/GRAND-EXCHANGE.md"
+  },
+  {
     "Install & compatibility": [
       {
         "Install or update": "experimental/INSTALLATION.md"

@@ -7,6 +7,7 @@ function Check-Layout([bool]$value,[string]$reason){if(!$value){throw $reason}}
 try{
  $root=Join-Path $test 'RuneSchema'
  $files=@{
+  'plugins/GrandExchange/plugin.json'='{"Id":"GrandExchange","Version":"0.2.6","Host":"helpy","EntryPoint":"GrandExchange.Helpy.dll"}';'plugins/GrandExchange/dll/GrandExchange.Helpy.dll'='exchange';'plugins/GrandExchange/license-jonesing4space.txt'='notice';'plugins/GrandExchange/items/grandexchange.items.schema.json'='{}';
   'dlls/main.dll'='core';'plugins/RuneSchema.Helpy/dll/RuneSchema.Helpy.dll'='bridge';'plugins/RuneSchema.Helpy/dll/Helpy.exe'='app';'plugins/RuneSchema.Helpy/dll/SDL3.dll'='controller';
   'plugins/RuneSchema.ModMenu2/plugin.json'='{"Id":"RuneSchema.ModMenu2","Version":"0.8.1.0","Host":"helpy","EntryPoint":"RuneSchema.ModMenu2.dll"}';'plugins/RuneSchema.ModMenu2/dll/RuneSchema.ModMenu2.dll'='menu';'plugins/RuneSchema.ModMenu2/ModMenu-MIT.txt'='notice';
   'plugins/RuneSchema.DeveloperTools/plugin.json'='{"Id":"RuneSchema.DeveloperTools","Version":"0.8.1.0","Host":"helpy","EntryPoint":"RuneSchema.DeveloperTools.dll"}';'plugins/RuneSchema.DeveloperTools/dll/RuneSchema.DeveloperTools.dll'='developer';
@@ -19,7 +20,7 @@ try{
  Set-RuneSchemaRuntimeLayout $root
  foreach($pair in $files.GetEnumerator()){
   if($pair.Key -eq 'plugins/RuneSchema.Helpy/plugin.json'){continue}
-  $relative=$pair.Key.Replace('plugins/RuneSchema.Helpy/dll/RuneSchema.Helpy.dll','Helpy/Helpy.dll').Replace('plugins/RuneSchema.Helpy/dll/','Helpy/').Replace('plugins/RuneSchema.Helpy/','Helpy/').Replace('plugins/RuneSchema.HUD/','Helpy/plugins/RuneSchema.HUD/').Replace('plugins/RuneSchema.ModMenu2/','Helpy/plugins/RuneSchema.ModMenu2/').Replace('plugins/RuneSchema.DeveloperTools/','Helpy/plugins/RuneSchema.DeveloperTools/')
+  $relative=$pair.Key.Replace('plugins/RuneSchema.Helpy/dll/RuneSchema.Helpy.dll','Helpy/Helpy.dll').Replace('plugins/RuneSchema.Helpy/dll/','Helpy/').Replace('plugins/RuneSchema.Helpy/','Helpy/').Replace('plugins/RuneSchema.HUD/','Helpy/plugins/RuneSchema.HUD/').Replace('plugins/RuneSchema.ModMenu2/','Helpy/plugins/RuneSchema.ModMenu2/').Replace('plugins/RuneSchema.DeveloperTools/','Helpy/plugins/RuneSchema.DeveloperTools/').Replace('plugins/GrandExchange/','Helpy/plugins/GrandExchange/')
   if($relative -eq 'plugins/plugins.txt'){$relative='settings/plugins.txt'}elseif($relative.StartsWith('plugins/')){$relative='dlls/'+$relative}
   Check-Layout ([IO.File]::ReadAllText((Join-Path $root $relative)) -eq $pair.Value) ('Changed staged bytes: '+$relative)
  }
@@ -30,7 +31,7 @@ try{
  $zip=Join-Path $test 'new.zip';[IO.Compression.ZipFile]::CreateFromDirectory($root,$zip)
  $script:Job=Join-Path $test 'repair-job';New-Item -ItemType Directory -Path $script:Job|Out-Null
  $entries=Get-RepairEntries $zip 'Win64' (Join-Path $script:Job 'stage')
- foreach($required in @('dlls/main.dll','Helpy/Helpy.dll','Helpy/Helpy.exe','Helpy/plugins/RuneSchema.HUD/dll/RuneSchema.HUD.dll','Helpy/plugins/RuneSchema.ModMenu2/dll/RuneSchema.ModMenu2.dll','Helpy/plugins/RuneSchema.ModMenu2/ModMenu-MIT.txt','Helpy/plugins/RuneSchema.DeveloperTools/dll/RuneSchema.DeveloperTools.dll','dlls/plugins/RSNetworking/plugin.json')){Check-Layout ($required -in $entries.Relative) ('Repair omitted '+$required)}
+ foreach($required in @('Helpy/plugins/GrandExchange/dll/GrandExchange.Helpy.dll','Helpy/plugins/GrandExchange/license-jonesing4space.txt','Helpy/plugins/GrandExchange/items/grandexchange.items.schema.json','dlls/main.dll','Helpy/Helpy.dll','Helpy/Helpy.exe','Helpy/plugins/RuneSchema.HUD/dll/RuneSchema.HUD.dll','Helpy/plugins/RuneSchema.ModMenu2/dll/RuneSchema.ModMenu2.dll','Helpy/plugins/RuneSchema.ModMenu2/ModMenu-MIT.txt','Helpy/plugins/RuneSchema.DeveloperTools/dll/RuneSchema.DeveloperTools.dll','dlls/plugins/RSNetworking/plugin.json')){Check-Layout ($required -in $entries.Relative) ('Repair omitted '+$required)}
  Check-Layout (-not @($entries|Where-Object {$_.Relative -match '(^|/)(settings|mods)/'}).Count) 'Repair included user data'
  'Runtime staging/repair layout checks passed.'
 }finally{

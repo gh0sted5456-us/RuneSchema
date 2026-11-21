@@ -82,7 +82,7 @@ inline void Migrate(const fs::path& root){
 }
 inline const fs::path& Directory(){static const fs::path directory=[]{auto root=Resolve(LocalDirectory());try{Migrate(root);}catch(...){}return root;}();return directory;}
 inline fs::path SharedDirectoryLocation(const fs::path& root,const std::string& name){
-    if(name!="HELPY"&&name!="runeschema.profile"&&name!="health")throw std::runtime_error("Unknown RuneSchema shared folder");
+    if(name!="HELPY"&&name!="runeschema.profile"&&name!="health"&&name!="grandexchange")throw std::runtime_error("Unknown RuneSchema shared folder");
     const auto destination=root/"core"/name,existing=root/name;
     // Reuse established AppData profiles/settings in place, without moving them.
     return !fs::exists(destination)&&fs::is_directory(existing)?existing:destination;

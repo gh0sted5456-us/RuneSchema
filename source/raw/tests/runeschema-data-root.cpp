@@ -1,6 +1,7 @@
 #include "Core/RuneSchemaDataRoot.h"
 #include "Core/ConfigFiles.h"
 #include <iostream>
+#undef NDEBUG
 #include <cassert>
 #include <chrono>
 #include <fstream>
@@ -38,6 +39,7 @@ int main(int argc,char** argv)try{
     assert(R::SharedDirectory(next,"runeschema.profile")==next/"core/runeschema.profile");
     assert(PS::ConfigFiles::Read(next/"runeschema.profile/profile.json")=="current profile");
     assert(R::SharedDirectory(next,"health")==next/"core/health"&&!fs::exists(next/"core/health"));
+    assert(R::SharedDirectory(next,"grandexchange")==next/"core/grandexchange"&&!fs::exists(next/"core/grandexchange"));
     for(const auto* platform:{"STEAM","GAMEPASS","EPIC","SERVER"}){
         const auto legacy=next/"cache"/platform/"mappings/keep.usmap";write(legacy,platform);
         const auto destination=R::PlatformDirectory(next,platform)/"cache/mappings";

@@ -3,6 +3,7 @@
 #include "Runtime/RuneSchemaPluginApi.h"
 #include "Core/RuneSchemaDataRoot.h"
 #include "DeveloperToolsKey.h"
+#include "Core/HelpyPluginNavigation.h"
 #include <windows.h>
 #include <mutex>
 #include <unordered_set>
@@ -47,6 +48,7 @@ public:
     loaded.push_back({manifest.Id,module,instance,stop});module=nullptr;instance=nullptr;
     api->Log(RS_LOG_INFO,manifest.Id.c_str(),"Native Helpy plugin loaded");
    }catch(const std::exception& error){
+    HelpyPluginNavigation::Remove(manifest.Id);
     if(instance&&stop)stop(instance);
     if(cleanup)cleanup(manifest.Id);
     {std::lock_guard lock(gate);owners.erase(manifest.Id);registering.clear();registrationThread=0;}
@@ -55,7 +57,7 @@ public:
   }
  }
  void Shutdown()noexcept{
-  for(auto it=loaded.rbegin();it!=loaded.rend();++it){try{it->Shutdown(it->Instance);}catch(...){}
+  for(auto it=loaded.rbegin();it!=loaded.rend();++it){HelpyPluginNavigation::Remove(it->Id);try{it->Shutdown(it->Instance);}catch(...){}
    if(cleanup)try{cleanup(it->Id);}catch(...){}
    {std::lock_guard lock(gate);owners.erase(it->Id);}FreeLibrary(it->Module);
   }loaded.clear();

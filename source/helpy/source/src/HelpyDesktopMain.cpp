@@ -102,7 +102,15 @@ int32_t RS_PLUGIN_CALL Call(const char* caller,const char* service,const char* i
         return code;
     }catch(...){*size=0;return RS_PLUGIN_FAILED;}
 }
-RuneSchemaHostApi Host{sizeof(RuneSchemaHostApi),RUNESCHEMA_PLUGIN_API_VERSION,Log,Capability,Register,Call};
+int32_t RS_PLUGIN_CALL RegisterNavTab(const char* owner,const RuneSchemaNavTabV1* tab) {
+    if(!FrontendPlugins.CanRegister(owner))return RS_PLUGIN_INVALID_ARGUMENT;
+    return PS::HelpyPluginNavigation::Register(owner,tab);
+}
+RuneSchemaHostApi MakeHost() {
+    RuneSchemaHostApi host{sizeof(RuneSchemaHostApi),RUNESCHEMA_PLUGIN_API_VERSION,Log,Capability,Register,Call};
+    host.RegisterNavTab=RegisterNavTab;return host;
+}
+RuneSchemaHostApi Host=MakeHost();
 Json DesktopStatus(){
     Service target;{std::lock_guard lock(ServicesMutex);const auto found=Services.find("helpy.desktop.status");if(found==Services.end())return {{"Ready",false}};target=found->second;}
     char output[256]{};uint32_t size=0;if(target.Callback(target.Context,"{}",output,sizeof(output),&size)!=RS_PLUGIN_OK)return {{"Ready",false}};return Json::parse(output);

@@ -37,6 +37,8 @@
 #include "Core/HelpyNativeFrame.h"
 #include "Generator/HelpySurfaceDraw.h"
 #include "Core/HelpyNavigation.h"
+#include "Core/HelpyPluginNavigation.h"
+#include "Generator/HelpyCompanionSurface.h"
 #include "Generator/NavigationOrder.h"
 #include "Core/HelpyEnvironment.h"
 #include "Core/RuneSchemaDataRoot.h"
@@ -135,6 +137,7 @@ bool GameWindow(HWND hwnd) {
 }
 using Page=HelpyNavigation::Page;
 Page CurrentPage=Page::Home;
+std::string CurrentPluginRoute;
 Page LastPlayersPage=Page::Items,LastWorldPage=Page::Map,LastToolsPage=Page::Tools;
 std::array<bool,2> DetachedWorkspaces{}; // Map, Recipes; presentation state only.
 bool& WorkspaceDetached(size_t index){return index==4?PlayerInventoryPanel::Detached:index==3?MapPanel::Data.PartyDetached:index==2?RuntimeDetailsPanel::Detached:DetachedWorkspaces.at(index);}
@@ -471,12 +474,13 @@ static_assert([]{
     }return true;
 }(),"Every navigation destination must have a distinct icon");
 void OpenSidebarPage(Page page,const HelpyImGuiTheme::Theme& t) {
+    CurrentPluginRoute.clear();
     Sidebar.Navigate();
     const auto target=page==Page::Items?LastPlayersPage:page==Page::Map?LastWorldPage:page==Page::Tools?LastToolsPage:page;
     CurrentPage=HelpyNavigation::Available(target,t.workspaces,HelpyEnvironment::Server())?target:page;
 }
 bool NavItem(Page page,const HelpyImGuiTheme::Theme& t,const std::vector<int>& sidebarDefaults,bool reveal) {
-    const bool active=HelpyNavigation::Parent(CurrentPage)==page;ImGui::PushID(static_cast<int>(page));
+    const bool active=CurrentPluginRoute.empty()&&HelpyNavigation::Parent(CurrentPage)==page;ImGui::PushID(static_cast<int>(page));
     const float w=ImGui::GetContentRegionAvail().x;const bool compact=w<t.X(120.0f);
     const float textWidth=std::max(1.0f,w-t.X(46.0f));
     const auto textSize=compact?ImVec2{}:ImGui::CalcTextSize(PageTitle(page),nullptr,false,textWidth);
@@ -839,6 +843,11 @@ ImVec2 RuntimeBadgeSize(const HelpyImGuiTheme::Theme& t,float logicalSize=HelpyB
     return { (HelpyEnvironment::SharedStoreBadge()?size*1.8f+t.X(3):size)+(RuntimeConnectionPanel::Read().Host?t.X(16):0),size };
 }
 void RenderHome(const HelpyImGuiTheme::Theme& theme){
+    for(const auto& tab:HelpyPluginNavigation::Read()) {
+        ImGui::PushID(tab.Route.c_str());
+        if(HelpyImGuiTheme::SoftButton(tab.Title.c_str(),{-1,theme.Y(48)})) {CurrentPluginRoute=tab.Route;CurrentPage=Page::Home;}
+        ImGui::PopID();
+    }
     static int lastFrame=-2;static bool focusPending=false;if(lastFrame+1!=ImGui::GetFrameCount())focusPending=true;lastFrame=ImGui::GetFrameCount();
     const BOOL animate=ClientAreaAnimations;
     if(HomeExit.Active&&HomeExit.At(ImGui::GetTime(),animate!=FALSE,HelpyUiMotion::HomeExitSeconds).Finished){CurrentPage=HomeExitTarget;HomeExit={};HomeLinkDetails=-1;return;}
@@ -2035,6 +2044,9 @@ void RenderSettingsPage(const HelpyImGuiTheme::Theme& t){
     PS::HelpyImGuiTheme::EndPanel();ImGui::PopID();ImGui::PopStyleColor();
 }
 void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
+    if(CurrentPage!=Page::Home)CurrentPluginRoute.clear();
+    const auto pluginTabs=HelpyPluginNavigation::Read();
+    if(!CurrentPluginRoute.empty()&&std::none_of(pluginTabs.begin(),pluginTabs.end(),[](const auto& tab){return tab.Route==CurrentPluginRoute;}))CurrentPluginRoute.clear();
     if(CacheBuilderPanel::Requested){CacheBuilderPanel::Requested=false;if(CurrentPage!=Page::Tools)CacheReturnPage=CurrentPage;CurrentPage=Page::Tools;CurrentTool=HelpyNavigation::ToolSection::CacheBuilder;FocusAuthoringTools=true;}
     if(!HelpyNavigation::Available(CurrentPage,t.workspaces,HelpyEnvironment::Server())){
         const auto parent=HelpyNavigation::Parent(CurrentPage);
@@ -2068,6 +2080,19 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
 #endif
         RenderSplash(t);return;
     }
+    if(!CurrentPluginRoute.empty()) {
+        HelpyCompanionSurface::ActiveRoute=CurrentPluginRoute;
+        const RuneSchemaNavUiV1 ui{sizeof(RuneSchemaNavUiV1),nullptr,
+            [](void*,const char* text){if(text&&strnlen_s(text,16385)<=16384)ImGui::TextWrapped("%s",text);},
+            [](void*,const char* label)->int32_t{return HelpyPluginNavigation::Label(label,256)&&HelpyImGuiTheme::SoftButton(label);},
+            [](void*){ImGui::Separator();},HelpyCompanionSurface::Draw,HelpyCompanionSurface::Return};
+        const auto result=HelpyPluginNavigation::Draw(CurrentPluginRoute,ui);
+        if(result!=RS_PLUGIN_OK)ImGui::TextWrapped("This plugin workspace could not finish loading.");
+        if(result!=RS_PLUGIN_OK&&HelpyImGuiTheme::SoftButton("Return to Helpy"))HelpyCompanionSurface::Return(nullptr);
+        if(HelpyCompanionSurface::Current.ReturnHome){HelpyCompanionSurface::Current.ReturnHome=false;CurrentPluginRoute.clear();HelpyCompanionSurface::ActiveRoute.clear();}
+        return;
+    }
+    HelpyCompanionSurface::ActiveRoute.clear();
     ItemGridPicker::ItemAction=[](const ItemGridPicker::Result& action){
         SpawnToolsPanel::RefreshSnapshot(SpawnToolsPanel::UiCategory);
         if(action.RequestedAction==ItemGridPicker::ContextAction::SendToPlayer){SpawnToolsPanel::OpenQuickSend(action.ActionRow);return;}
@@ -2144,12 +2169,22 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
         const auto text=ImGui::CalcTextSize(PageTitle(page),nullptr,false,std::max(1.f,ImGui::GetContentRegionAvail().x-t.X(46)));
         return std::max(t.Y(t.navigationItemHeight),text.y+t.Y(18))+spacing;
     };
-    float routeHeight=0,lowerHeight=0;for(auto page:routes)routeHeight+=rowHeight(page);for(auto page:lowerRoutes)lowerHeight+=rowHeight(page);
+    float routeHeight=pluginTabs.size()*(t.Y(t.navigationItemHeight)+spacing),lowerHeight=0;for(auto page:routes)routeHeight+=rowHeight(page);for(auto page:lowerRoutes)lowerHeight+=rowHeight(page);
     const float budget=std::max(1.f,ImGui::GetContentRegionAvail().y-t.Y(84)-t.Y(8)-spacing*3);
     lowerHeight=std::min(lowerHeight,budget*(routes.empty()?1.f:.5f));
     const float routeLimit=std::max(1.f,budget-lowerHeight);
-    if(HelpyImGuiTheme::BeginPanel("##helpy-destinations",ImVec2(0,std::max(1.f,std::min(routeHeight,routeLimit))),false))
+    if(HelpyImGuiTheme::BeginPanel("##helpy-destinations",ImVec2(0,std::max(1.f,std::min(routeHeight,routeLimit))),false)) {
         for(auto page:routes)NavItem(page,t,sidebarDefaults,reveal);
+        for(const auto& tab:pluginTabs) {
+            ImGui::PushID(tab.Route.c_str());
+            const auto label=collapsed?(tab.Icon.empty()?tab.Title.substr(0,1):tab.Icon):tab.Title;
+            if(ImGui::Selectable(label.c_str(),CurrentPluginRoute==tab.Route,0,{0,t.Y(t.navigationItemHeight)})) {
+                Sidebar.Navigate();CurrentPage=Page::Home;CurrentPluginRoute=tab.Route;
+            }
+            if(collapsed&&ImGui::IsItemHovered())ImGui::SetTooltip("%s",tab.Title.c_str());
+            ImGui::PopID();
+        }
+    }
     PS::HelpyImGuiTheme::EndPanel();
     const auto divider=ImGui::GetCursorScreenPos();const float dividerWidth=std::max(1.f,ImGui::GetContentRegionAvail().x),dividerHeight=t.Y(8);
     ImGui::InvisibleButton("##sidebar-divider",{dividerWidth,dividerHeight});
@@ -5445,6 +5480,7 @@ int HelpyStandaloneWindow::Preview(const std::filesystem::path& output,bool capt
 #endif
 
 void HelpyStandaloneWindow::RenderFrame() {
+    HelpyCompanionSurface::Current.Window=m_hwnd;HelpyCompanionSurface::Current.Device=m_device;HelpyCompanionSurface::Current.Context=m_context;
 #if defined(HELPY_PREVIEW)
     const bool helpBrowser=std::getenv("RUNESCHEMA_HELPY_WEB_PREVIEW")!=nullptr;
 #else
@@ -5602,7 +5638,8 @@ void HelpyStandaloneWindow::RenderFrame() {
     const bool popupAtFrameStart=ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId);
     const int popupDepthAtFrameStart=ImGui::GetCurrentContext()->OpenPopupStack.Size;HelpyMenu::PopupDepthAtFrameStart=popupDepthAtFrameStart;
     const bool activeAtFrameStart=ImGui::IsAnyItemActive();HelpyMenu::WidgetActiveAtFrameStart=activeAtFrameStart;
-    ImGui::NewFrame();HelpyControllerInput::Observe(t.inputMode);HelpyWikiIcons::Poll();
+    if(HelpyCompanionSurface::CapturesInput())frameIo.ConfigFlags&=~ImGuiConfigFlags_NavEnableGamepad;
+    ImGui::NewFrame();if(!HelpyCompanionSurface::CapturesInput())HelpyControllerInput::Observe(t.inputMode);HelpyWikiIcons::Poll();
     if(!RuneSchemaProfile::Initialized)RuneSchemaProfile::Load(HostServices::StateDirectory());
     if(!HelpyPersonalization::Initialized)HelpyPersonalization::Load(RuneSchemaProfile::Ready?RuneSchemaProfile::Data("labels.json"):HostServices::StateDirectory()/"personalization.json");
     if(!HelpyNavigationOrder::Initialized)HelpyNavigationOrder::Load(HostServices::StateDirectory()/"navigation-order.json");
@@ -5680,7 +5717,7 @@ void HelpyStandaloneWindow::RenderFrame() {
         }
         PS::HelpyImGuiTheme::EndPanel();
         HelpyControllerInput::Hints(t.controllerGlyphs,hints);
-        if(controller){
+        if(controller&&!HelpyCompanionSurface::CapturesInput()){
             if(SplashEntered&&!popupAtFrameStart&&!activeAtFrameStart&&!ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId)&&!frameIo.WantTextInput&&!ImGui::GetDragDropPayload()){
                 const int direction=ImGui::IsAnyItemActive()?0:ImGui::IsKeyPressed(ImGuiKey_GamepadR2,false)?1:ImGui::IsKeyPressed(ImGuiKey_GamepadL2,false)?-1:0;
                 if(direction){const auto pages=HelpyNavigationOrder::WorkspacePages(t.workspaces,HelpyEnvironment::Server());if(!pages.empty()){auto found=std::find(pages.begin(),pages.end(),HelpyNavigation::Parent(CurrentPage));const auto at=found==pages.end()?(direction>0?-1:0):int(found-pages.begin());OpenSidebarPage(pages[(at+direction+int(pages.size()))%int(pages.size())],t);}}
