@@ -37,6 +37,7 @@
 #include "Core/HelpyActivity.h"
 #include "Core/HelpyRemoteAccess.h"
 #include "Core/IconCacheBuild.h"
+#include "Core/GrandExchangeItems.h"
 #include "Generator/AssetSearch.h"
 #include "Generator/HelpyRuntimePreferences.h"
 #include "Utility/NativeFunctionHook.h"
