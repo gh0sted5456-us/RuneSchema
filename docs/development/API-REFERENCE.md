@@ -139,6 +139,36 @@ it fails closed: `Helpy/plugins` is not scanned in that process for the rest of
 the session (no DLLs, PAKs or content from it), while core plugins and Helpy
 itself still start.
 
+### Owned plugin events
+
+A loaded in-game half of a `Host: "helpy"` plugin can notify its own Helpy-side
+half without polling:
+
+```cpp
+host->CallService("GrandExchange", "helpy.plugin.event",
+    R"({"Event":"VaultOpened","Payload":{"CharacterGuid":"...","Revision":42},"Open":"GrandExchange.exchange"})",
+    nullptr, 0, &size);
+```
+
+- `Event` is a token of at most 64 characters. `Payload` is an optional JSON
+  object of at most 16 KiB. `Open` is optional and must be one of the caller's
+  own routes (`<Id>.<route>`).
+- Core tags the event with the caller and a per-owner `Sequence` and queues it
+  on Helpy's existing desktop push channel. Results: `RS_PLUGIN_OK` queued;
+  `RS_PLUGIN_NOT_FOUND` when the caller is not a loaded `Host: "helpy"` game half
+  or Helpy is not attached; `RS_PLUGIN_FAILED` over the per-owner rate (bursts
+  of 16, refilling 8 per second: coalesce and send the latest state);
+  `RS_PLUGIN_INVALID_ARGUMENT` for a malformed event. The call never blocks.
+- Helpy.exe calls only the owner's own `<Id>.events` service, registered by the
+  Helpy-side DLL. That name is reserved for its owner. The callback receives
+  `{"Owner","Event","Sequence","Payload"[,"Open"]}` on Helpy's bridge worker
+  thread; return quickly.
+- `Open` selects that route only if the same owner registered it, and brings
+  the Helpy window forward. It never authorizes or performs an action.
+- If Helpy's push queue was reset, every `<Id>.events` service receives
+  `{"Event":"EventsLost"}`: resynchronize from the in-game half (for example by
+  `Revision`). `helpy.plugin.event` cannot be registered by a plugin.
+
 Required DLL exports:
 
 ```cpp

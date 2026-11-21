@@ -2044,6 +2044,7 @@ void RenderSettingsPage(const HelpyImGuiTheme::Theme& t){
     PS::HelpyImGuiTheme::EndPanel();ImGui::PopID();ImGui::PopStyleColor();
 }
 void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
+    if(auto requested=HelpyPluginNavigation::TakePendingRoute();!requested.empty()){CurrentPage=Page::Home;CurrentPluginRoute=std::move(requested);}
     if(CurrentPage!=Page::Home)CurrentPluginRoute.clear();
     const auto pluginTabs=HelpyPluginNavigation::Read();
     if(!CurrentPluginRoute.empty()&&std::none_of(pluginTabs.begin(),pluginTabs.end(),[](const auto& tab){return tab.Route==CurrentPluginRoute;}))CurrentPluginRoute.clear();

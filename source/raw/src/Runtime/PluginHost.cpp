@@ -28,6 +28,7 @@
 #include "Runtime/NetworkStatus.h"
 #include "Runtime/MultiplayerPolicy.h"
 #include "Runtime/MultiplayerRuntime.h"
+#include "Runtime/PluginEvents.h"
 #include "Runtime/GameFrameRate.h"
 #include "Core/HelpySourceCache.h"
 #include "Core/HelpyCacheOwnership.h"
@@ -58,6 +59,9 @@ struct Service { std::string Owner;RuneSchemaServiceFn Callback{};void* Context{
 struct Loaded { PluginCatalog::Plugin Manifest;HMODULE Module{};void* Instance{};RuneSchemaPluginShutdownFn Shutdown{};RuneSchemaPluginPhaseFn UiInit{};RuneSchemaPluginPhaseFn UnrealInit{};bool UnrealReady=false; };
 std::mutex Gate;std::unordered_map<std::string,Service> Services;std::unordered_map<std::string,std::string> Capabilities;
 std::unordered_map<std::string,std::string> ActiveConnections;
+// Owned plugin events: loaded Host=helpy game halves (guarded by Gate) and the push target.
+std::unordered_set<std::string> HelpyGameHalves;
+std::mutex EventGate;HelpyDesktop::Server* EventDesktop=nullptr;std::unordered_map<std::string,PluginEvents::Bucket> EventBuckets;
 thread_local const char* ActiveOwner=nullptr;
 std::atomic<bool> DesktopBridgeReady=false;
 bool Token(const char* value){return value&&PluginCatalog::Token(value);}
@@ -288,12 +292,28 @@ int32_t RS_PLUGIN_CALL RegisterCapability(const char* plugin,const char* capabil
     return inserted||it->second==plugin?RS_PLUGIN_OK:RS_PLUGIN_DUPLICATE;
 }
 int32_t RS_PLUGIN_CALL RegisterService(const char* plugin,const char* name,RuneSchemaServiceFn callback,void* context) {
-    if(!Token(plugin)||!Token(name)||!callback||!ActiveOwner||std::string_view(plugin)!=ActiveOwner)return RS_PLUGIN_INVALID_ARGUMENT;
+    if(!Token(plugin)||!Token(name)||!callback||!ActiveOwner||std::string_view(plugin)!=ActiveOwner||std::string_view(name)==PluginEvents::Service)return RS_PLUGIN_INVALID_ARGUMENT;
     std::scoped_lock lock(Gate);return Services.emplace(name,Service{plugin,callback,context}).second?RS_PLUGIN_OK:RS_PLUGIN_DUPLICATE;
+}
+// helpy.plugin.event: queue an owner-tagged event for the caller's own Helpy-side half.
+// Nonblocking: OK = queued; NOT_FOUND = not a Host=helpy game half or Helpy is not attached;
+// FAILED = over the per-owner rate (coalesce and retry later); INVALID_ARGUMENT = bad request.
+static int32_t PluginEvent(const char* caller,const char* request,uint32_t* size) {
+    *size=0;
+    {std::scoped_lock lock(Gate);if(!HelpyGameHalves.contains(caller))return RS_PLUGIN_NOT_FOUND;}
+    try{
+        std::scoped_lock lock(EventGate);if(!EventDesktop)return RS_PLUGIN_NOT_FOUND;
+        auto& bucket=EventBuckets[caller];auto probe=bucket;
+        if(!PluginEvents::Take(probe,GetTickCount64()))return RS_PLUGIN_FAILED;
+        const auto event=PluginEvents::Build(caller,request,probe.Sequence).dump();
+        if(!EventDesktop->TryPush(event))return RS_PLUGIN_NOT_FOUND;
+        bucket=probe;return RS_PLUGIN_OK;
+    }catch(const std::exception&){return RS_PLUGIN_INVALID_ARGUMENT;}
 }
 int32_t RS_PLUGIN_CALL CallService(const char* caller,const char* name,const char* request,char* response,uint32_t capacity,uint32_t* size) {
     if(!Token(caller)||!Token(name)||!request||!size||capacity>RUNESCHEMA_PLUGIN_MAX_MESSAGE
         ||(!response&&capacity)||strnlen_s(request,RUNESCHEMA_PLUGIN_MAX_MESSAGE+1)>RUNESCHEMA_PLUGIN_MAX_MESSAGE)return RS_PLUGIN_INVALID_ARGUMENT;
+    if(std::string_view(name)==PluginEvents::Service)return PluginEvent(caller,request,size);
     std::unique_lock policyLock(MultiplayerPolicyLifetime,std::defer_lock);
     if(std::string_view(name)==MultiplayerPolicy::Service){
         if(std::string_view(caller)!="RuneSchema.Core")return RS_PLUGIN_INVALID_ARGUMENT;
@@ -485,6 +505,7 @@ void PluginHost::LoadCatalog(const std::vector<PluginCatalog::Plugin>& catalog){
         const auto uiInit=reinterpret_cast<RuneSchemaPluginPhaseFn>(GetProcAddress(module,"RuneSchemaPlugin_OnUiInit"));
         const auto unrealInit=reinterpret_cast<RuneSchemaPluginPhaseFn>(GetProcAddress(module,"RuneSchemaPlugin_OnUnrealInit"));
         m_state->LoadedPlugins.push_back({manifest,module,instance,shutdown,uiInit,unrealInit});
+        if(!manifest.GameEntryPoint.empty()){std::scoped_lock lock(Gate);HelpyGameHalves.insert(manifest.Id);}
         m_state->Messages.push_back(manifest.Id+": loaded API 1");
     }
 }
@@ -508,6 +529,7 @@ void PluginHost::StartDesktop(){
             if(code==RS_PLUGIN_OK&&size&&size<=output.size()){if(output[size-1]=='\0')--size;reply["Body"]=nlohmann::json::parse(output.data(),output.data()+size);}
             return reply;
         },[]{HelpyActivity::Visible=false;HelpyActivity::CaptureInput=false;});}catch(...){m_state->Desktop.Stop();DesktopBridgeReady=false;}
+        if(DesktopBridgeReady){std::scoped_lock lock(EventGate);EventDesktop=&m_state->Desktop;}
         if(!DesktopBridgeReady)HostLog(RS_LOG_WARNING,"RuneSchema.Helpy","[RS-UI-002] Helpy game bridge unavailable; the application can still browse its cache offline.");
         else try{(void)Call("RuneSchema.Core","helpy.desktop.launch","{}");}catch(...){} // Older bridges launch at their normal Unreal-init phase.
     }
@@ -550,6 +572,8 @@ void PluginHost::Shutdown() noexcept {
     if(m_state)m_state->UnrealReady.store(false,std::memory_order_release);
     if(m_state&&m_state->OwnedInit!=RC::Unreal::Hook::ERROR_ID){RC::Unreal::Hook::UnregisterCallback(m_state->OwnedInit);m_state->OwnedInit=RC::Unreal::Hook::ERROR_ID;}
     ModLocalServices::Stop();
+    {std::scoped_lock lock(EventGate);EventDesktop=nullptr;EventBuckets.clear();}
+    {std::scoped_lock lock(Gate);HelpyGameHalves.clear();}
     if(m_state)m_state->Desktop.Stop();DesktopBridgeReady=false;
     HelpyActivity::Visible=false;HelpyActivity::CaptureInput=false;HelpyActivity::HudCaptureInput=false;HelpySourceCache::Requested=false;HelpySourceCache::Shutdown();
     AssetSearch::ShutdownItemCatalog();

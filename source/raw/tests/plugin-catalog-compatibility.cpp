@@ -1,5 +1,6 @@
 #include "Runtime/PluginCatalog.h"
 #include "Runtime/PluginActivation.h"
+#include "Runtime/PluginEvents.h"
 
 #include <algorithm>
 #include <chrono>
@@ -266,6 +267,25 @@ int main() try
     Write(updates/"activation.json",R"({"Schema":"runeschema.plugin-activation/1","Id":"Exchange","State":"Swapping","Staged":"../x","Previous":"previous","Version":"2.0.0","PreviousVersion":"1.0.0"})");
     notes=PS::PluginActivation::Recover(act);
     Check(notes.size()==1&&!fs::exists(act/"Helpy/plugins/Exchange"),"path-like folder names in the record are refused");
+    // E8 owned plugin events: shape, owner-only Open, bounded payload, reserved service, rate.
+    namespace E=PS::PluginEvents;
+    auto built=E::Build("GrandExchange",R"({"Event":"VaultOpened","Payload":{"CharacterGuid":"g","Revision":7},"Open":"GrandExchange.exchange"})",3);
+    Check(built["Kind"]=="plugin-event"&&built["Owner"]=="GrandExchange"&&built["Event"]=="VaultOpened"&&built["Sequence"]==3
+        &&built["Payload"]["Revision"]==7&&built["Open"]=="GrandExchange.exchange"&&E::Deliverable(built),"a valid event is tagged with its caller");
+    Check(E::Build("GrandExchange",R"({"Event":"InventoryChanged"})",4)["Payload"].is_object(),"Payload defaults to an empty object");
+    const auto refused=[&](const std::string& request){try{(void)E::Build("GrandExchange",request,1);return false;}catch(const std::exception&){return true;}};
+    Check(refused(R"({"Event":"VaultOpened","Open":"OtherMod.page"})")&&refused(R"({"Event":"VaultOpened","Open":"GrandExchange."})")
+        &&refused(R"({"Event":"VaultOpened","Open":"GrandExchange.../x"})"),"Open must name one of the caller's own routes");
+    Check(refused(R"({"Payload":{}})")&&refused(R"({"Event":"bad event"})")&&refused(R"([])")&&refused(R"({"Event":"X","Payload":[1]})"),"malformed events are refused");
+    Check(refused(std::string(R"({"Event":"X","Payload":{"Blob":")")+std::string(17*1024,'a')+R"("}})"),"payloads over 16 KiB are refused");
+    auto spoof=built;spoof["Owner"]="RuneSchema.Helpy";
+    auto foreign=built;foreign["Open"]="OtherMod.page";
+    Check(!E::Deliverable(spoof)&&!E::Deliverable(foreign)&&!E::Deliverable(nlohmann::json{{"Kind","other"}}),"Helpy refuses spoofed owners and foreign routes");
+    Check(E::ServiceNameAllowed("GrandExchange","GrandExchange.events")&&!E::ServiceNameAllowed("OtherMod","GrandExchange.events")&&E::ServiceNameAllowed("OtherMod","OtherMod.vault"),
+        "<Id>.events is reserved for its owner");
+    E::Bucket bucket;int accepted=0;for(int i=0;i<40;++i)accepted+=E::Take(bucket,1000)?1:0;
+    Check(accepted==16&&bucket.Sequence==16,"a burst is capped per owner and refused without blocking");
+    Check(!E::Take(bucket,1050)&&E::Take(bucket,1200)&&bucket.Sequence==17,"tokens refill at the documented rate");
     // Fail closed: when the update lock was unavailable, Helpy/plugins is never scanned.
     PS::PluginCatalog::UpdatablePluginsBlocked().store(true);
     std::vector<std::string> blockedNotes;

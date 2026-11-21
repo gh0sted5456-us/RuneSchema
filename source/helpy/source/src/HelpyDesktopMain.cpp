@@ -1,5 +1,6 @@
 #include "Runtime/HelpyPluginHost.h"
 #include "Runtime/PluginActivation.h"
+#include "Runtime/PluginEvents.h"
 #include "Core/HelpyVulkanSetup.h"
 #include "RuntimePaths.h"
 #include "HelpyDesktopTransport.h"
@@ -48,14 +49,35 @@ void Notify(const char* service,const Json& value){
     const auto text=value.dump();uint32_t ignored=0;target.Callback(target.Context,text.c_str(),nullptr,0,&ignored);
 }
 void Connection(uint32_t pid){if(pid==ConnectedPid)return;ConnectedPid=pid;Notify("helpy.desktop.connection",{{"Pid",pid}});Log(RS_LOG_INFO,"RuneSchema.Helpy",pid?("Attached to game PID "+std::to_string(pid)).c_str():"Game disconnected; cached browsing remains available.");}
+std::atomic<HANDLE> ActivateEvent{nullptr};
+// Owned plugin events go only to the owner's "<Id>.events" service; Open selects only its own route.
+void DeliverPluginEvent(const Json& event){
+    if(!PS::PluginEvents::Deliverable(event))return;
+    const auto owner=event["Owner"].get<std::string>();
+    if(event.contains("Open")&&PS::HelpyPluginNavigation::RequestOpen(owner,event["Open"].get<std::string>())==RS_PLUGIN_OK)
+        if(const auto activate=ActivateEvent.load())SetEvent(activate);
+    Service target;{std::lock_guard lock(ServicesMutex);const auto found=Services.find(PS::PluginEvents::EventsService(owner));if(found==Services.end()||found->second.Owner!=owner)return;target=found->second;}
+    auto forward=event;forward.erase("Kind");const auto text=forward.dump();uint32_t ignored=0;
+    try{target.Callback(target.Context,text.c_str(),nullptr,0,&ignored);}catch(...){}
+}
+// A reset may have dropped queued events: tell each owner to resynchronize by Revision.
+void PluginEventsLost(){
+    std::vector<std::pair<std::string,Service>> targets;
+    {std::lock_guard lock(ServicesMutex);for(const auto& [name,service]:Services)if(name==PS::PluginEvents::EventsService(service.Owner))targets.emplace_back(service.Owner,service);}
+    for(const auto& [owner,service]:targets){const auto text=Json{{"Event","EventsLost"},{"Owner",owner},{"Payload",Json::object()}}.dump();uint32_t ignored=0;try{service.Callback(service.Context,text.c_str(),nullptr,0,&ignored);}catch(...){}}
+}
 void Deliver(const Json& reply){
-    Connection(Bridge.Pid.load());if(reply.value("Reset",false)){Connection(0);Connection(Bridge.Pid.load());}
-    if(reply.contains("Events")&&reply["Events"].is_array())for(const auto& event:reply["Events"])Notify("helpy.tools.push",event);
+    Connection(Bridge.Pid.load());if(reply.value("Reset",false)){Connection(0);Connection(Bridge.Pid.load());PluginEventsLost();}
+    if(reply.contains("Events")&&reply["Events"].is_array())for(const auto& event:reply["Events"]){
+        if(event.is_object()&&event.value("Kind",std::string{})==PS::PluginEvents::Kind)DeliverPluginEvent(event);
+        else Notify("helpy.tools.push",event);
+    }
 }
 int32_t RS_PLUGIN_CALL Capability(const char* plugin,const char* name){return plugin&&name&&PS::PluginCatalog::Token(name)&&(std::string_view(plugin)=="RuneSchema.Helpy"||FrontendPlugins.CanRegister(plugin))?RS_PLUGIN_OK:RS_PLUGIN_INVALID_ARGUMENT;}
 int32_t RS_PLUGIN_CALL Register(const char* plugin,const char* name,RuneSchemaServiceFn callback,void* context){
     if(!plugin||(std::string_view(plugin)!="RuneSchema.Helpy"&&!FrontendPlugins.CanRegister(plugin))||!name||!PS::PluginCatalog::Token(name)||!callback)return RS_PLUGIN_INVALID_ARGUMENT;
     if(std::string_view(name)=="helpy.host"||std::string_view(name)=="runeschema.tools")return RS_PLUGIN_DUPLICATE;
+    if(!PS::PluginEvents::ServiceNameAllowed(plugin,name))return RS_PLUGIN_INVALID_ARGUMENT;
     std::lock_guard lock(ServicesMutex);return Services.emplace(name,Service{callback,context,plugin}).second?RS_PLUGIN_OK:RS_PLUGIN_DUPLICATE;
 }
 int32_t Reply(const Json& value,char* response,uint32_t capacity,uint32_t* size){
@@ -179,9 +201,10 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR,int){
         }catch(const std::exception& error){Log(RS_LOG_WARNING,"RuneSchema.Helpy",(std::string("[RS-OVL-002] Vulkan startup path refresh failed: ")+error.what()).c_str());}
         const auto local=PS::HelpyDesktopLaunch::InstanceName(root);
         activate=CreateEventW(nullptr,FALSE,FALSE,(local+L".activate").c_str());if(!activate)throw std::runtime_error("Cannot create desktop activation event");
+        ActivateEvent.store(activate);
         singleton=CreateMutexW(nullptr,FALSE,local.c_str());
         if(!singleton)throw std::runtime_error("Cannot reserve this runtime's Helpy window");
-        if(GetLastError()==ERROR_ALREADY_EXISTS){if(!startHidden)SetEvent(activate);CloseHandle(activate);CloseHandle(singleton);return 0;}
+        if(GetLastError()==ERROR_ALREADY_EXISTS){if(!startHidden)SetEvent(activate);ActivateEvent.store(nullptr);CloseHandle(activate);CloseHandle(singleton);return 0;}
         if(!smoke)try{PS::HelpyDesktopShortcut::Ensure(installed,platform,PS::RuneSchemaData::PlatformDirectory(platform));}catch(const std::exception& error){Log(RS_LOG_WARNING,"RuneSchema.Helpy",error.what());}
         OfflineEnvironment={{"Storefront",platform=="gamepass"?"Game Pass/WinGDK":"Steam/Epic"},{"Platform",platform=="epic"?"Epic Games":"Steam"},{"DedicatedServer",platform=="server"},{"NativeIconCaptureAvailable",false},{"UpdateChecksAvailable",true},{"DesktopStartHidden",startHidden}};
         PS::HelpyGameLifetime game;game.Observe(gamePid);
@@ -230,10 +253,10 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR,int){
             const HANDLE wake[]{activate,game.WaitHandle()};
             if(WaitForMultipleObjects(wake[1]?2:1,wake,FALSE,250)==WAIT_OBJECT_0)EnumWindows([](HWND window,LPARAM){DWORD pid=0;GetWindowThreadProcessId(window,&pid);wchar_t name[128]{};GetClassNameW(window,name,128);if(pid==GetCurrentProcessId()&&std::wstring_view(name)==L"RuneSchema.Helpy.Window"){ShowWindowAsync(window,SW_RESTORE);SetForegroundWindow(window);}return TRUE;},0);
         }
-        worker.request_stop();worker.join();shutdown(instance);instance=nullptr;FrontendPlugins.Shutdown();Bridge.Disconnect();module=nullptr;CloseHandle(activate);CloseHandle(singleton);return 0;
+        worker.request_stop();worker.join();shutdown(instance);instance=nullptr;FrontendPlugins.Shutdown();Bridge.Disconnect();module=nullptr;ActivateEvent.store(nullptr);CloseHandle(activate);CloseHandle(singleton);return 0;
     }catch(const std::exception& error){
         worker.request_stop();if(worker.joinable())worker.join();
-        if(instance&&shutdown)shutdown(instance);FrontendPlugins.Shutdown();Bridge.Disconnect();if(module)FreeLibrary(module);if(activate)CloseHandle(activate);if(singleton)CloseHandle(singleton);
+        if(instance&&shutdown)shutdown(instance);FrontendPlugins.Shutdown();Bridge.Disconnect();if(module)FreeLibrary(module);if(activate){ActivateEvent.store(nullptr);CloseHandle(activate);};if(singleton)CloseHandle(singleton);
         Log(RS_LOG_ERROR,"RuneSchema.Helpy",("[RS-UI-002] "+std::string(error.what())).c_str());
         if(!smoke)MessageBoxA(nullptr,error.what(),"Helpy desktop",MB_OK|MB_ICONERROR);return 1;
     }

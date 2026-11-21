@@ -93,6 +93,12 @@ public:
             }
         });return true;
     }
+    // Like Push, but reports whether Helpy.exe is attached and the event was queued.
+    bool TryPush(const std::string& event){
+        std::lock_guard lock(Mutex);if(!Connected||event.size()>MaxBody)return false;
+        if(Bytes+event.size()>MaxBody||Events.size()>=128){Events.clear();Bytes=0;Overflow=true;}
+        Events.push_back(event);Bytes+=event.size();if(Updates)SetEvent(Updates);return true;
+    }
     void Push(const std::string& event){
         std::lock_guard lock(Mutex);if(!Connected||event.size()>MaxBody)return;
         if(Bytes+event.size()>MaxBody||Events.size()>=128){Events.clear();Bytes=0;Overflow=true;}

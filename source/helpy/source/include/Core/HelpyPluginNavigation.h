@@ -5,12 +5,15 @@
 #include <mutex>
 #include <shared_mutex>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace PS::HelpyPluginNavigation {
 struct Tab {std::string Owner,Route,Title,Icon;RuneSchemaNavDrawFn Draw{};void* Context{};};
 inline std::shared_mutex Mutex;
 inline std::map<std::string,Tab> Tabs;
+// One pending route requested by an owned plugin event; the window takes it on its next frame.
+inline std::string PendingRoute;
 inline bool Label(const char* text,size_t limit,bool empty=false) {
     if(!text)return false;
     size_t n=0;for(;n<=limit&&text[n];++n)if(static_cast<unsigned char>(text[n])<32||text[n]=='#')return false;
@@ -34,7 +37,15 @@ inline std::vector<Tab> Read() {
 }
 inline void Remove(const std::string& owner) {
     std::unique_lock lock(Mutex);std::erase_if(Tabs,[&](const auto& row){return row.second.Owner==owner;});
+    if(PendingRoute.starts_with(owner+"."))PendingRoute.clear();
 }
+// Selects a route only if that owner registered it. Opening never authorizes anything.
+inline int32_t RequestOpen(const std::string& owner,const std::string& route) {
+    std::unique_lock lock(Mutex);const auto found=Tabs.find(route);
+    if(found==Tabs.end()||found->second.Owner!=owner)return RS_PLUGIN_NOT_FOUND;
+    PendingRoute=route;return RS_PLUGIN_OK;
+}
+inline std::string TakePendingRoute() {std::unique_lock lock(Mutex);return std::exchange(PendingRoute,{});}
 inline int32_t Draw(const std::string& route,const RuneSchemaNavUiV1& ui) {
     std::shared_lock lock(Mutex);const auto found=Tabs.find(route);
     if(found==Tabs.end())return RS_PLUGIN_NOT_FOUND;
