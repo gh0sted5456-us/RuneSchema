@@ -8,10 +8,14 @@ promote_to: GRAND-EXCHANGE.md
 
 # Grand Exchange integration
 
-Grand Exchange remains an independent mod and companion app. The optional native
-Helpy plugin belongs at `Helpy/plugins/GrandExchange`. Its manifest uses `Host: "helpy"`,
-`ApiVersion: 1`, and `EntryPoint: "GrandExchange.Helpy.dll"`; the DLL belongs in the
-child plugin's **`dll/`** folder. `settings/plugins.txt` accepts its `GrandExchange` ID.
+Grand Exchange ships as a dedicated Helpy plugin at `Helpy/plugins/GrandExchange`.
+RuneSchema core and Helpy are required. Its manifest uses `Host: "helpy"`,
+`ApiVersion: 1`, and `EntryPoint: "GrandExchange.Helpy.dll"`; DLLs belong in the
+plugin's **`dll/`** folder. The plugin may also declare a `GameEntryPoint` and
+`GameCapabilities` for its in-game half and `"Content": true` for its
+`runeschema/` data, as described under "Dedicated Helpy plugins" in the
+repository's `docs/development/API-REFERENCE.md`.
+PAKs go in `paks/<PackageName>/`. `settings/plugins.txt` accepts its `GrandExchange` ID.
 Staging and repair preserve this layout and the plugin's own notices. Installing a
 plugin is separate from enabling game mutations or enrolling a character.
 

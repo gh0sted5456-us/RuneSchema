@@ -198,5 +198,44 @@ int main() try
     Check(PS::PluginCatalog::DiscoverOwned(modern,{root/"elsewhere/Example"},&diagnostics).empty(),"nonruntime owner root rejected");
     Write(owned/"plugin.json",R"({"Id":"Other.Native","Version":"1","EntryPoint":"Example.dll"})");
     Check(PS::PluginCatalog::DiscoverOwned(modern,{modern/"mods/Example"},&diagnostics).empty(),"native plugin cannot claim another owner's namespace");
+    // Dedicated Helpy plugin: one folder with a Helpy UI DLL, an in-game half and content.
+    const auto unit=root/"Unit";
+    Write(unit/"Helpy/plugins/Exchange/plugin.json",R"({"Id":"Exchange","Version":"1.0.0","Host":"helpy","EntryPoint":"Exchange.Helpy.dll",
+        "GameEntryPoint":"Exchange.Game.dll","Capabilities":["helpy.nav-tab"],"GameCapabilities":["exchange.vault"],"Content":true})");
+    Write(unit/"Helpy/plugins/Exchange/runeschema/raw/70-Loot.jsonc","{}");
+    Write(unit/"Helpy/plugins/BadHost/plugin.json",R"({"Id":"BadHost","Version":"1","Host":"game","EntryPoint":"A.dll","GameEntryPoint":"B.dll"})");
+    Write(unit/"Helpy/plugins/BadCaps/plugin.json",R"({"Id":"BadCaps","Version":"1","Host":"helpy","EntryPoint":"A.dll","GameCapabilities":["x"]})");
+    Write(unit/"Helpy/plugins/SameDll/plugin.json",R"({"Id":"SameDll","Version":"1","Host":"helpy","EntryPoint":"A.dll","GameEntryPoint":"A.dll"})");
+    Write(unit/"Helpy/plugins/NestedDll/plugin.json",R"({"Id":"NestedDll","Version":"1","Host":"helpy","EntryPoint":"A.dll","GameEntryPoint":"x/B.dll"})");
+    Write(unit/"Helpy/plugins/GameContent/plugin.json",R"({"Id":"GameContent","Version":"1","EntryPoint":"A.dll","Content":true})");
+    Write(unit/"Helpy/plugins/BadContent/plugin.json",R"({"Id":"BadContent","Version":"1","Host":"helpy","EntryPoint":"A.dll","Content":"yes"})");
+    std::vector<std::string> unitNotes;
+    auto units=PS::PluginCatalog::DiscoverRuntime(unit,&unitNotes);
+    const auto exchangeUnit=std::find_if(units.begin(),units.end(),[](const auto& p){return p.Id=="Exchange";});
+    Check(exchangeUnit!=units.end()&&exchangeUnit->Host=="helpy"&&exchangeUnit->EntryPoint==unit/"Helpy/plugins/Exchange/dll/Exchange.Helpy.dll"
+        &&exchangeUnit->GameEntryPoint==unit/"Helpy/plugins/Exchange/dll/Exchange.Game.dll"&&exchangeUnit->GameCapabilities==std::vector<std::string>{"exchange.vault"}
+        &&exchangeUnit->Capabilities==std::vector<std::string>{"helpy.nav-tab"}&&exchangeUnit->ContentRoot==unit/"Helpy/plugins/Exchange/runeschema"&&exchangeUnit->MountPaks,
+        "Helpy plugin declares its in-game half, game capabilities and content root in one folder");
+    for(const auto* rejected:{"BadHost","BadCaps","SameDll","NestedDll","GameContent","BadContent"})
+        Check(std::none_of(units.begin(),units.end(),[&](const auto& p){return p.Id==rejected;})&&std::any_of(unitNotes.begin(),unitNotes.end(),[&](const auto& note){return note.find(std::string(rejected)+": rejected")==0;}),
+            "invalid game-half or content declarations reject only that manifest");
+    std::vector<std::string> contentNotes;
+    auto roots=PS::PluginCatalog::ContentRoots(units,unit/"mods",&contentNotes);
+    Check(roots.size()==1&&roots[0].Id=="Exchange"&&roots[0].Path==unit/"Helpy/plugins/Exchange/runeschema","enabled Helpy plugin content is enrolled under its Id");
+    Write(unit/"mods/Exchange/ID.txt","ModID: Exchange");
+    contentNotes.clear();
+    Check(PS::PluginCatalog::ContentRoots(units,unit/"mods",&contentNotes).empty()&&!contentNotes.empty(),"an ordinary RuneSchema mod of the same name takes precedence");
+    fs::remove_all(unit/"mods/Exchange");
+    Write(unit/"Helpy/plugins/Exchange/runeschema/paks/Exchange/Exchange.pak");
+    Check(PS::PluginCatalog::ContentRoots(units,unit/"mods").empty(),"PAKs belong in the plugin paks folder, not runeschema/paks");
+    fs::remove_all(unit/"Helpy/plugins/Exchange/runeschema/paks");
+    auto disabled=units;for(auto& plugin:disabled)plugin.Enabled=false;
+    Check(PS::PluginCatalog::ContentRoots(disabled,unit/"mods").empty(),"a disabled plugin contributes no content");
+    fs::remove_all(unit/"Helpy/plugins/Exchange/runeschema");
+    Check(PS::PluginCatalog::ContentRoots(units,unit/"mods").empty(),"a declared but missing runeschema folder is skipped");
+    Check(PS::PluginCatalog::OwnedServiceAllowed("Exchange","exchange.vault","Exchange"),"a frontend plugin reaches its own in-game service");
+    Check(!PS::PluginCatalog::OwnedServiceAllowed("Exchange","other.service","Other"),"a frontend plugin cannot reach another plugin's service");
+    Check(!PS::PluginCatalog::OwnedServiceAllowed("RuneSchema.Helpy","runeschema.tools","RuneSchema.Helpy")&&!PS::PluginCatalog::OwnedServiceAllowed("RuneSchema.Core","x","RuneSchema.Core"),"core and Helpy never use the owned-service route");
+    Check(!PS::PluginCatalog::OwnedServiceAllowed("bad id","exchange.vault","bad id"),"caller identity must be a token");
     std::cout << "Plugin catalog compatibility contract passed.\n";
 }catch(const std::exception& error){std::cerr<<"FAIL: "<<error.what()<<'\n';return 1;}

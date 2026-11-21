@@ -73,8 +73,19 @@ int32_t RS_PLUGIN_CALL Call(const char* caller,const char* service,const char* i
             return Reply(identity,response,capacity,size);
         }
         if(std::string_view(service)!="runeschema.tools"){
-            Service local;{std::lock_guard lock(ServicesMutex);const auto found=Services.find(service);if(found==Services.end()){*size=0;return RS_PLUGIN_NOT_FOUND;}local=found->second;}
-            return local.Callback(local.Context,input,response,capacity,size);
+            Service local;bool here=false;{std::lock_guard lock(ServicesMutex);const auto found=Services.find(service);if(found!=Services.end()){local=found->second;here=true;}}
+            if(here)return local.Callback(local.Context,input,response,capacity,size);
+            // A frontend plugin may reach only services its own in-game half registered.
+            // Offline there is no game half, so nothing is queued or replayed later.
+            if(std::string_view(caller)=="RuneSchema.Helpy"||!Bridge.Pid.load()){*size=0;return RS_PLUGIN_NOT_FOUND;}
+            std::lock_guard lock(RpcMutex);Json result;
+            if(!Bridge.Exchange({{"Version",1},{"Op","Service"},{"Caller",caller},{"Service",service},{"Input",std::string(input)},{"Capacity",capacity}},result)){Connection(0);*size=0;return RS_PLUGIN_NOT_FOUND;}
+            *size=result.value("Size",uint32_t{});const auto code=result.value("Code",int32_t(RS_PLUGIN_FAILED));
+            if(code!=RS_PLUGIN_OK)return code;
+            const auto output=result.value("Output",std::string{});
+            if(output.size()+1>RUNESCHEMA_PLUGIN_MAX_MESSAGE)return RS_PLUGIN_FAILED;
+            *size=static_cast<uint32_t>(output.size()+1);if(!response||capacity<*size)return RS_PLUGIN_BUFFER_TOO_SMALL;
+            std::memcpy(response,output.c_str(),*size);return RS_PLUGIN_OK;
         }
         const auto request=PS::HelpyDesktop::Parse(input);const auto action=request.value("Action",std::string{});
         if(action=="HelpyVisibility"){Visible=request.at("Visible").get<bool>();CaptureInput=request.value("CaptureInput",false);}

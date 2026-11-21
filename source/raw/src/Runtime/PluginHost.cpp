@@ -302,6 +302,19 @@ int32_t RS_PLUGIN_CALL CallService(const char* caller,const char* name,const cha
     Service service;{std::scoped_lock lock(Gate);const auto found=Services.find(name);if(found==Services.end())return RS_PLUGIN_NOT_FOUND;service=found->second;}
     try{return service.Callback(service.Context,request,response,capacity,size);}catch(...){return RS_PLUGIN_FAILED;}
 }
+// Desktop pipe: a Helpy frontend plugin calls a service owned by its own in-game half.
+static nlohmann::json OwnedServiceCall(const nlohmann::json& request) {
+    const auto caller=request.value("Caller",std::string{}),name=request.value("Service",std::string{});
+    const auto input=request.value("Input",std::string{});const auto capacity=request.value("Capacity",uint32_t{});
+    if(capacity>RUNESCHEMA_PLUGIN_MAX_MESSAGE||input.size()>RUNESCHEMA_PLUGIN_MAX_MESSAGE||input.find('\0')!=std::string::npos)return {{"Code",RS_PLUGIN_INVALID_ARGUMENT}};
+    Service service;{std::scoped_lock lock(Gate);const auto found=Services.find(name);
+        if(found==Services.end()||!PluginCatalog::OwnedServiceAllowed(caller,name,found->second.Owner))return {{"Code",RS_PLUGIN_NOT_FOUND}};service=found->second;}
+    thread_local std::vector<char> output;if(output.size()<capacity)output.resize(capacity);uint32_t size=0;int32_t code=RS_PLUGIN_FAILED;
+    try{code=service.Callback(service.Context,input.c_str(),capacity?output.data():nullptr,capacity,&size);}catch(...){code=RS_PLUGIN_FAILED;}
+    nlohmann::json reply={{"Code",code},{"Size",size}};
+    if(code==RS_PLUGIN_OK&&size&&size<=capacity){auto length=size;if(output[length-1]=='\0')--length;reply["Output"]=std::string(output.data(),length);}
+    return reply;
+}
 void* RS_PLUGIN_CALL FindObject(void* objectClass,void* objectPackage,const wchar_t* name,int32_t exactClass) {
     if(!name)return nullptr;
     return UECustom::UObjectGlobals::StaticFindObject(
@@ -381,14 +394,25 @@ void PluginHost::LoadOwned(const std::filesystem::path& root,const std::vector<s
     },options);
     if(m_state->OwnedInit==RC::Unreal::Hook::ERROR_ID)HostLog(RS_LOG_ERROR,"RuneSchema.Core","Mod-owned plugin initialization requires an available game-thread tick");
 }
-void PluginHost::LoadCatalog(const std::vector<PluginCatalog::Plugin>& manifests){
+void PluginHost::LoadCatalog(const std::vector<PluginCatalog::Plugin>& catalog){
+    // A Host=helpy plugin's UI DLL runs in Helpy.exe. Its optional GameEntryPoint is its
+    // in-game native half: same ABI and identity, checked against GameCapabilities.
+    // Catalog order is preserved; Helpy-only manifests stay listed and are skipped below.
+    std::vector<PluginCatalog::Plugin> manifests;manifests.reserve(catalog.size());
+    for(const auto& listed:catalog) {
+        manifests.push_back(listed);
+        if(listed.Host=="helpy"&&!listed.GameEntryPoint.empty()) {
+            auto& gameHalf=manifests.back();gameHalf.Host="game";gameHalf.EntryPoint=listed.GameEntryPoint;
+            gameHalf.Capabilities=listed.GameCapabilities;gameHalf.Connections.clear();
+        }
+    }
     for(const auto& manifest:manifests) {
         if(!manifest.Enabled||manifest.Host!="game")continue;
         auto identity=manifest.Id;std::transform(identity.begin(),identity.end(),identity.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
         if(!m_state->SelectedIds.insert(identity).second){m_state->Messages.push_back(manifest.Id+": duplicate plugin identity rejected");continue;}
         // The desktop bridge and networking policy are available on dedicated hosts.
         if(Storefront::IsDedicatedServer()&&manifest.Id!="RuneSchema.Helpy"&&manifest.Id!="RSNetworking"
-            &&!(manifest.ServerCompatible&&!manifest.ModOwner.empty()))continue;
+            &&!(manifest.ServerCompatible&&(!manifest.ModOwner.empty()||!manifest.GameEntryPoint.empty())))continue;
         std::vector<std::filesystem::path> packages;
         try{packages=PluginCatalog::PakDirectories(manifest);}
         catch(const std::exception& error){
@@ -474,6 +498,7 @@ void PluginHost::StartDesktop(){
     if(HelpyDesktop::Enabled(root)&&std::any_of(m_state->LoadedPlugins.begin(),m_state->LoadedPlugins.end(),[](const auto& plugin){return plugin.Manifest.Id=="RuneSchema.Helpy";})){
         try{if(!DesktopBridgeReady)DesktopBridgeReady=m_state->Desktop.Start(root,[](const nlohmann::json& request){
             if(request.value("Op",std::string{})=="Poll")return nlohmann::json{{"Code",RS_PLUGIN_OK}};
+            if(request.value("Op",std::string{})=="Service")return OwnedServiceCall(request);
             if(request.value("Op",std::string{})!="Call"||!request.contains("Request")||!request["Request"].is_object())return nlohmann::json{{"Code",RS_PLUGIN_INVALID_ARGUMENT}};
             const auto capacity=request.value("Capacity",uint32_t{});if(capacity>RUNESCHEMA_PLUGIN_MAX_MESSAGE)return nlohmann::json{{"Code",RS_PLUGIN_INVALID_ARGUMENT}};
             const auto input=request["Request"].dump();if(input.size()>RUNESCHEMA_PLUGIN_MAX_MESSAGE)return nlohmann::json{{"Code",RS_PLUGIN_INVALID_ARGUMENT}};

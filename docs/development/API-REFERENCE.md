@@ -61,6 +61,10 @@ The loader recognizes this manifest contract:
 | `Dependencies` | no | Object of plugin ID to expected version, at most 32 entries. Missing or differently versioned optional dependencies are reported without stopping the plugin attempt. |
 | `Required` | legacy | Accepted for compatibility but does not override an explicit disable. Plugins remain optional to RuneSchema core. |
 | `MountPaks` | no | Defaults to `true`. Set `false` for DLL-only plugins; any stale `paks/` content is ignored. |
+| `Host` | no | `game` (default) loads `EntryPoint` in the game; `helpy` loads it in Helpy.exe. |
+| `GameEntryPoint` | no | `Host: "helpy"` only. DLL filename directly under `dll/`, different from `EntryPoint`. RuneSchema core loads it in the game with the same exports and plugin identity. |
+| `GameCapabilities` | no | Requires `GameEntryPoint`. Tokens the in-game half must register; `Capabilities` stays the Helpy-side list. |
+| `Content` | no | `Host: "helpy"` only. `true` enrolls `<plugin>/runeschema/` as RuneSchema content under the plugin `Id`. |
 
 `PackagedRoot` is rejected. PAKs use the fixed
 `paks/<PackageName>/<same-name>.pak/.ucas/.utoc` layout, and every container
@@ -73,6 +77,31 @@ preserved unless a declared dependency requires its provider to load first.
 Unlisted plugins are appended deterministically; dependency cycles use the
 preferred order as the best-effort fallback. A DLL failure does not prevent a
 complete PAK triplet from being discovered and mounted.
+
+### Dedicated Helpy plugins
+
+A Helpy plugin can ship as one folder under `Helpy/plugins/<Id>/`:
+
+```text
+Helpy/plugins/<Id>/
+  plugin.json        Host "helpy", EntryPoint, optional GameEntryPoint, Content
+  dll/               Helpy UI DLL and optional in-game DLL
+  paks/<Package>/    complete .pak/.ucas/.utoc triplets, mounted by core
+  runeschema/        optional raw/, registry/, assets/ ... (no paks/ here)
+```
+
+RuneSchema core is required: it mounts the PAKs, loads the in-game half and
+starts Helpy. `runeschema/` loads after ordinary and UE4SS sister mods. An
+ordinary RuneSchema mod or sister mod with the same name takes precedence, and
+links or a `runeschema/paks` folder skip the content. The Helpy UI DLL and the
+in-game DLL must report the manifest `Id` and `Version`.
+
+The Helpy UI half reaches its in-game half with `CallService`. When the service
+is not registered in Helpy.exe and the game is connected, Helpy forwards the call
+over its desktop pipe. The game answers only if the plugin's own in-game half
+registered that service; otherwise the result is `RS_PLUGIN_NOT_FOUND`. Nothing
+is queued or replayed while the game is offline. Service callbacks run on the
+pipe thread: return quickly and queue engine work to the game thread.
 
 Required DLL exports:
 
