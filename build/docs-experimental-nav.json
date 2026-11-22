@@ -12,6 +12,9 @@
     "Grand Exchange integration": "experimental/GRAND-EXCHANGE.md"
   },
   {
+    "Dragonwilds Wiki in Helpy": "experimental/HELPY-WIKI.md"
+  },
+  {
     "Install & compatibility": [
       {
         "Install or update": "experimental/INSTALLATION.md"

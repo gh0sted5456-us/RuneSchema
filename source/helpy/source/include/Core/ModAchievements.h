@@ -169,7 +169,8 @@ inline bool Matches(const Condition& condition, const Json& event, std::string_v
     return true;
 }
 
-struct Unlock { std::string Key, Owner, ModName, Title, Description; int Points = 0; uint64_t Time = 0; };
+// Label is set only for a plugin notice (helpy.notify): it replaces the gamer-points heading and hides the points badge.
+struct Unlock { std::string Key, Owner, ModName, Title, Description; int Points = 0; uint64_t Time = 0; std::string Label; };
 
 // Profile-wide progress plus the core feed position, persisted as runeschema.profile/achievements.json.
 class Progress {

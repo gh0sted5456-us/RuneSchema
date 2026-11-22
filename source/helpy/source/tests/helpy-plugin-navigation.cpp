@@ -25,5 +25,26 @@ int main(){
     if(N::RequestOpen("GrandExchange","GrandExchange.exchange")!=RS_PLUGIN_OK)return 16;
     N::Remove("GrandExchange");if(!N::TakePendingRoute().empty())return 17;
     N::Remove("OtherMod");
+    // A plugin built before the Home tile fields passes the original, shorter struct.
+    auto legacy=tab;legacy.StructSize=static_cast<uint32_t>(N::BaseTabSize);legacy.IconImage="ignored.png";
+    if(N::Register("GrandExchange",&legacy)!=RS_PLUGIN_OK||!N::Read()[0].IconPath.empty())return 20;
+    N::Remove("GrandExchange");
+    auto short_=tab;short_.StructSize=static_cast<uint32_t>(N::BaseTabSize-1);if(N::Register("GrandExchange",&short_)!=RS_PLUGIN_INVALID_ARGUMENT)return 21;
+    // Home tile fields: a description, and one PNG directly in the plugin's own folder.
+    auto tile=tab;tile.Description="Trade with other players.";tile.IconImage="ge.png";tile.IconFlags=RS_NAV_ICON_FULL_COLOR;
+    if(N::Register("GrandExchange",&tile)!=RS_PLUGIN_INVALID_ARGUMENT)return 22; // an icon needs the plugin folder
+    if(N::Register("GrandExchange",&tile,"plugins/GrandExchange")!=RS_PLUGIN_OK)return 23;
+    const auto tiles=N::Read();
+    if(tiles.size()!=1||tiles[0].Description!=tile.Description||tiles[0].IconPath!=std::filesystem::path("plugins/GrandExchange/ge.png")||tiles[0].IconFlags!=RS_NAV_ICON_FULL_COLOR)return 24;
+    N::Remove("GrandExchange");
+    for(const char* bad:{"../ge.png","sub/ge.png","sub\\ge.png","C:ge.png",".png","ge.jpg","ge","ge.png#x"}){
+        auto wrong=tile;wrong.IconImage=bad;if(N::Register("GrandExchange",&wrong,"plugins/GrandExchange")!=RS_PLUGIN_INVALID_ARGUMENT)return 25;
+    }
+    auto upper=tile;upper.IconImage="GE.PNG";if(N::Register("GrandExchange",&upper,"plugins/GrandExchange")!=RS_PLUGIN_OK)return 26;
+    N::Remove("GrandExchange");
+    auto flags=tile;flags.IconFlags=2;if(N::Register("GrandExchange",&flags,"plugins/GrandExchange")!=RS_PLUGIN_INVALID_ARGUMENT)return 27;
+    auto words=tile;words.Description="line\nbreak";if(N::Register("GrandExchange",&words,"plugins/GrandExchange")!=RS_PLUGIN_INVALID_ARGUMENT)return 28;
+    auto plain=tile;plain.IconImage=nullptr;plain.Description=nullptr;if(N::Register("GrandExchange",&plain)!=RS_PLUGIN_OK||!N::Read()[0].IconPath.empty())return 29;
+    N::Remove("GrandExchange");
     return 0;
 }

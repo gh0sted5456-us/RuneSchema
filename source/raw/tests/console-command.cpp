@@ -34,6 +34,13 @@ int main(){
     assert(Parse(L"rs closeconsole")==Command::CloseConsole&&Parse(L"runeschema CLOSECONSOLE")==Command::CloseConsole);
     assert(Parse(L"rs closeconsole open")==Command::Invalid&&Parse(L"rs closeconsole;quit")==Command::Invalid);
     assert(MenuWidgetName(Command::CloseConsole)==nullptr);
+    // rs wiki keeps the rest of the line, apostrophes included; no control characters.
+    assert(Parse(L"rs wiki adventurer's tunic")==Command::Wiki&&*ParseWiki(L"rs wiki adventurer's tunic")==L"adventurer's tunic");
+    assert(Parse(L"RuneSchema WIKI   Rune bar  ")==Command::Wiki&&*ParseWiki(L"RuneSchema WIKI   Rune bar  ")==L"Rune bar");
+    assert(Parse(L"rs wiki")==Command::Wiki&&ParseWiki(L"rs wiki")->empty());
+    assert(Parse(L"rs wiki bad\x01name")==Command::Invalid&&Parse(L"rs wiki tab\nline")==Command::Invalid);
+    assert(Parse(std::wstring(L"rs wiki ")+std::wstring(201,L'x'))==Command::Invalid&&Parse(std::wstring(L"rs wiki ")+std::wstring(200,L'x'))==Command::Wiki);
+    assert(!ParseWiki(L"rs mod a:b")&&!ParseWiki(L"rs wikipedia x")&&MenuWidgetName(Command::Wiki)==nullptr);
     for(const auto* other:{L"",L"pause",L"rsdwt_help",L"rs.status",L"runeschema_other",L"showdebug enhancedinput"})
         assert(Parse(other)==Command::NotOurs);
     for(const auto* bad:{L"rs unknown",L"rs vision on",L"rs status | quit",L"rs status;quit",L"rs status\nquit",L"rs exec",L"rs delete",L"rs \u03b1"})

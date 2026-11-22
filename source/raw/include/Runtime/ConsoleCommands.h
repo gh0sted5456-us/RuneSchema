@@ -8,12 +8,29 @@
 #include "Unreal/Hooks.hpp"
 #include "Utility/Logging.h"
 #include "SDK/WeakObjectHandle.h"
+#include <windows.h>
 #include <atomic>
 #include <mutex>
 #include <optional>
 #include <nlohmann/json.hpp>
 
 namespace PS::Console {
+// rs wiki: ask the RuneSchema.Wiki plugin's in-game half to open the page in Helpy.
+inline std::string DispatchWiki(RC::Unreal::ULocalPlayer* player,std::wstring_view query){
+    std::string text;
+    if(!query.empty()){
+        const int size=WideCharToMultiByte(CP_UTF8,0,query.data(),static_cast<int>(query.size()),nullptr,0,nullptr,nullptr);
+        if(size<=0)return "That wiki search could not be read.";
+        text.resize(static_cast<size_t>(size));
+        WideCharToMultiByte(CP_UTF8,0,query.data(),static_cast<int>(query.size()),text.data(),size,nullptr,nullptr);
+    }
+    nlohmann::json result;
+    try{result=nlohmann::json::parse(PluginHost::Call("RuneSchema.Core","RuneSchema.Wiki.lookup",nlohmann::json{{"Query",text}}.dump()));}
+    catch(const std::exception&){return "The wiki needs Helpy running and the RuneSchema.Wiki plugin enabled.";}
+    if(!result.value("Opened",false))return result.value("Status",std::string("Helpy could not open the wiki."));
+    try{CloseConsole(player);}catch(...){} // let Helpy's overlay take focus
+    return result.value("Status",std::string("Opening the wiki in Helpy."));
+}
 class Commands {
     RC::Unreal::Hook::GlobalCallbackId Callback=RC::Unreal::Hook::ERROR_ID;
     RC::Unreal::Hook::GlobalCallbackId MenuTick=RC::Unreal::Hook::ERROR_ID;
@@ -57,6 +74,7 @@ public:
                 try{
                     if(command==Command::Help)reply=Help;
                     else if(command==Command::Mod)reply=ToWideSafe(DispatchMod(player,*ParseMod(std::wstring_view(input,length))));
+                    else if(command==Command::Wiki)reply=ToWideSafe(DispatchWiki(player,*ParseWiki(std::wstring_view(input,length))));
                     else if(command==Command::Invalid)reply=TEXT("Invalid RuneSchema command. Use: rs help");
                     else{
                         nlohmann::json result;

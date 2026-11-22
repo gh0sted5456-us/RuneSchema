@@ -4,7 +4,7 @@
 #include <optional>
 
 namespace PS::Console {
-enum class Command { NotOurs, Invalid, Help, Status, Network, Mappings, Services, Menu, Inventory, Spellbook, Map, Journal, Skills, Settings, BuildMenu, CloseConsole, Mod };
+enum class Command { NotOurs, Invalid, Help, Status, Network, Mappings, Services, Menu, Inventory, Spellbook, Map, Journal, Skills, Settings, BuildMenu, CloseConsole, Mod, Wiki };
 enum class MenuAction { Open, Close, Toggle };
 constexpr const wchar_t* MenuWidgetName(Command command){
     switch(command){
@@ -32,6 +32,7 @@ inline constexpr std::wstring_view Help =
     L"  rs buildmenu  - native building menu\n"
     L"  rs closeconsole - close the console without changing game menus\n"
     L"  rs mod Owner:Id [args] - mod-owned local host command\n"
+    L"  rs wiki <page or search> - open the Dragonwilds wiki in Helpy\n"
     L"Menus accept open (default), close, or toggle. Example: rs inventory toggle\n"
     L"Alias: runeschema. Diagnostics are read-only. No Exit action or save edit.";
 
@@ -87,11 +88,24 @@ constexpr std::optional<ModRequest> ParseMod(std::wstring_view value){
     }
     return result;
 }
+// "rs wiki adventurer's tunic": everything after "wiki", trimmed. Printable text only, at most 200 characters.
+constexpr std::optional<std::wstring_view> ParseWiki(std::wstring_view value){
+    if(value.size()>=1024)return {};
+    const auto prefix=Word(value);
+    if((!Equal(prefix,L"rs")&&!Equal(prefix,L"runeschema"))||!Equal(Word(value),L"wiki"))return {};
+    while(!value.empty()&&Space(value.front()))value.remove_prefix(1);
+    while(!value.empty()&&Space(value.back()))value.remove_suffix(1);
+    if(value.size()>200)return {};
+    for(auto c:value)if(c<32||c==127)return {};
+    return value;
+}
 constexpr Command Parse(std::wstring_view value) {
     const auto original=value;
     const auto prefix=Word(value);
     if(!Equal(prefix,L"rs")&&!Equal(prefix,L"runeschema"))return Command::NotOurs;
-    auto check=value;if(Equal(Word(check),L"mod"))return ParseMod(original)?Command::Mod:Command::Invalid;
+    auto check=value;const auto first=Word(check);
+    if(Equal(first,L"mod"))return ParseMod(original)?Command::Mod:Command::Invalid;
+    if(Equal(first,L"wiki"))return ParseWiki(original)?Command::Wiki:Command::Invalid;
     if(value.size()>256)return Command::Invalid;
     const auto command=Word(value);
     const auto action=Word(value);if(!Word(value).empty())return Command::Invalid;

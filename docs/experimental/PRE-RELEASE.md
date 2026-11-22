@@ -16,6 +16,12 @@ This prerelease packages RuneSchema and Helpy for Dragonwilds CL260223. Install 
 
 ## Changes since 0.8.0.3
 
+### Wiki in Helpy, plugin tiles and plugin notices · November 21
+
+- New `RuneSchema.Wiki` plugin: a **Wiki** tile that shows the Dragonwilds wiki inside Helpy's window and its game overlay. Type `rs wiki <name>` in the game console to open a page. See [Dragonwilds Wiki in Helpy](HELPY-WIKI.md).
+- Plugin entries such as Grand Exchange are now tiles on Home with their own icon and description, and sidebar rows with their icon, instead of a plain button above the tiles.
+- Plugins can post into Helpy's notifications (`helpy.notify`), with an in-game popup and an **Open** button for their own page. Notices appear under **Notifications → Plugins**. Grand Exchange can use this for sale alerts. See [Grand Exchange integration](GRAND-EXCHANGE.md#plugin-notices).
+
 ### Helpy data in AppData, Achievements plugin · November 19
 
 - Helpy keeps its own files in `%LOCALAPPDATA%/RSDragonwilds/RuneSchema/core`: settings, theme, item groupings, downloaded artwork, your own backgrounds and fonts, and a copy of the licence bundle. The installed mod now holds only runtime files, plugin DLLs and the single licence bundle in `settings/licenses`.

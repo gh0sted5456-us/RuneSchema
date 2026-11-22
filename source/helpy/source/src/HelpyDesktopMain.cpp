@@ -1,6 +1,7 @@
 #include "Runtime/HelpyPluginHost.h"
 #include "Runtime/PluginActivation.h"
 #include "Runtime/PluginEvents.h"
+#include "Core/HelpyPluginNotices.h"
 #include "Core/HelpyVulkanSetup.h"
 #include "RuntimePaths.h"
 #include "HelpyDesktopTransport.h"
@@ -76,7 +77,7 @@ void Deliver(const Json& reply){
 int32_t RS_PLUGIN_CALL Capability(const char* plugin,const char* name){return plugin&&name&&PS::PluginCatalog::Token(name)&&(std::string_view(plugin)=="RuneSchema.Helpy"||FrontendPlugins.CanRegister(plugin))?RS_PLUGIN_OK:RS_PLUGIN_INVALID_ARGUMENT;}
 int32_t RS_PLUGIN_CALL Register(const char* plugin,const char* name,RuneSchemaServiceFn callback,void* context){
     if(!plugin||(std::string_view(plugin)!="RuneSchema.Helpy"&&!FrontendPlugins.CanRegister(plugin))||!name||!PS::PluginCatalog::Token(name)||!callback)return RS_PLUGIN_INVALID_ARGUMENT;
-    if(std::string_view(name)=="helpy.host"||std::string_view(name)=="runeschema.tools")return RS_PLUGIN_DUPLICATE;
+    if(std::string_view(name)=="helpy.host"||std::string_view(name)=="runeschema.tools"||std::string_view(name)==PS::HelpyPluginNotices::Service)return RS_PLUGIN_DUPLICATE;
     if(!PS::PluginEvents::ServiceNameAllowed(plugin,name))return RS_PLUGIN_INVALID_ARGUMENT;
     std::lock_guard lock(ServicesMutex);return Services.emplace(name,Service{callback,context,plugin}).second?RS_PLUGIN_OK:RS_PLUGIN_DUPLICATE;
 }
@@ -94,6 +95,15 @@ int32_t RS_PLUGIN_CALL Call(const char* caller,const char* service,const char* i
             if(std::string_view(caller)=="RuneSchema.ModMenu2"&&Json::parse(input).value("ModMenuRuntime",false))
                 identity["RuntimeRoot"]=PS::RuntimeModPath::Text(AssignedRoot);
             return Reply(identity,response,capacity,size);
+        }
+        // helpy.notify: a frontend plugin's own notice. Nothing is queued unless the reply fits.
+        if(std::string_view(service)==PS::HelpyPluginNotices::Service){
+            if(std::string_view(caller)=="RuneSchema.Helpy")return RS_PLUGIN_INVALID_ARGUMENT;
+            static const std::string queued=R"({"Queued":true})";
+            *size=static_cast<uint32_t>(queued.size()+1);if(!response||capacity<*size)return RS_PLUGIN_BUFFER_TOO_SMALL;
+            try{if(!PS::HelpyPluginNotices::Pending().Accept(caller,input,GetTickCount64())){*size=0;return RS_PLUGIN_FAILED;}}
+            catch(...){*size=0;return RS_PLUGIN_INVALID_ARGUMENT;}
+            std::memcpy(response,queued.c_str(),*size);return RS_PLUGIN_OK;
         }
         if(std::string_view(service)!="runeschema.tools"){
             Service local;bool here=false;{std::lock_guard lock(ServicesMutex);const auto found=Services.find(service);if(found!=Services.end()){local=found->second;here=true;}}
@@ -138,7 +148,7 @@ int32_t RS_PLUGIN_CALL Call(const char* caller,const char* service,const char* i
 }
 int32_t RS_PLUGIN_CALL RegisterNavTab(const char* owner,const RuneSchemaNavTabV1* tab) {
     if(!FrontendPlugins.CanRegister(owner))return RS_PLUGIN_INVALID_ARGUMENT;
-    return PS::HelpyPluginNavigation::Register(owner,tab);
+    return PS::HelpyPluginNavigation::Register(owner,tab,FrontendPlugins.RegisteringRoot(owner));
 }
 RuneSchemaHostApi MakeHost() {
     RuneSchemaHostApi host{sizeof(RuneSchemaHostApi),RUNESCHEMA_PLUGIN_API_VERSION,Log,Capability,Register,Call};
@@ -214,7 +224,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR,int){
         shutdown=RuneSchemaPlugin_Shutdown;
         if(RuneSchemaPlugin_Initialize(&Host,&instance)!=RS_PLUGIN_OK)throw std::runtime_error("Helpy application initialization failed");
         {PS::PluginActivation::StartupLease lease(root);for(const auto& note:lease.Notes())Log(RS_LOG_WARNING,"RuneSchema.Helpy",("[PLUGIN-ACTIVATION] "+note).c_str());
-        FrontendPlugins.Load(root,&Host,[](const std::string& id){std::lock_guard lock(ServicesMutex);std::erase_if(Services,[&](const auto& item){return item.second.Owner==id;});});}
+        FrontendPlugins.Load(root,&Host,[](const std::string& id){PS::HelpyPluginNotices::Pending().Forget(id);std::lock_guard lock(ServicesMutex);std::erase_if(Services,[&](const auto& item){return item.second.Owner==id;});});}
         const auto unreal=RuneSchemaPlugin_OnUnrealInit;
         if(unreal(instance)!=RS_PLUGIN_OK||!Ready())throw std::runtime_error("Helpy desktop window could not start; check its plugin settings");
         worker=std::jthread([root](std::stop_token stop){

@@ -15,12 +15,13 @@ struct Mod {std::string Id,Name,Version;bool Enabled=true,Present=true;std::stri
 struct Notice {
     std::string Id,Kind,Source,Title,Detail,Version,Action;
     uint64_t Created=0;bool Read=false,Dismissed=false,Resolved=false,Active=true;
+    std::string Route; // plugin notices only: one of Source's own Helpy routes to open
 };
 class Store {
     static bool Text(const std::string& value,size_t limit){return value.size()<=limit&&std::none_of(value.begin(),value.end(),[](unsigned char c){return c<32||c==127;});}
     void Put(Notice next,bool repeat=false){
         const auto clean=[](std::string& text,size_t limit){for(auto& c:text)if(static_cast<unsigned char>(c)<32||c==127)c=' ';if(text.size()>limit)text.resize(limit);};
-        clean(next.Id,512);clean(next.Source,256);clean(next.Title,2048);clean(next.Detail,4096);clean(next.Version,256);
+        clean(next.Id,512);clean(next.Source,256);clean(next.Title,2048);clean(next.Detail,4096);clean(next.Version,256);clean(next.Route,192);
         auto found=std::find_if(Notices.begin(),Notices.end(),[&](const auto& n){return n.Id==next.Id;});
         if(found!=Notices.end()){if(repeat){*found=std::move(next);++Revision;}return;}
         if(Notices.size()>=256){auto oldest=std::min_element(Notices.begin(),Notices.end(),[](const auto& a,const auto& b){return a.Created<b.Created;});Notices.erase(oldest);}
@@ -90,6 +91,11 @@ public:
     void Result(const std::string& job,const std::string& source,const std::string& name,bool success,const std::string& detail,uint64_t now){
         Put({"build:"+job,success?"cache-ready":"cache-failed",source,success?name+" cache is ready":name+" cache needs attention",detail,{},success?"":source.empty()?"resync-vanilla":"build-mod",now});
     }
+    // A Helpy-side plugin's notice (helpy.notify). The same Id replaces the earlier notice and marks it unread.
+    void Plugin(const std::string& owner,const std::string& id,const std::string& title,const std::string& detail,const std::string& route,uint64_t now){
+        if(!route.empty()&&!route.starts_with(owner+"."))throw std::runtime_error("A plugin notice may open only its own route.");
+        Notice notice{"plugin:"+owner+":"+id,"plugin",owner,title,detail,{},"",now};notice.Route=route;Put(std::move(notice),true);
+    }
     void Read(const std::string& id){for(auto& n:Notices)if(n.Id==id&&!n.Read){n.Read=true;++Revision;}}
     void ReadAll(){for(auto& n:Notices)if(!n.Read){n.Read=true;++Revision;}}
     void DeleteAll(){if(!Notices.empty()){Notices.clear();++Revision;}}
@@ -98,6 +104,7 @@ public:
     bool VanillaPending()const{return std::any_of(Notices.begin(),Notices.end(),[](const auto& n){return n.Kind=="game-update"&&n.Active&&!n.Resolved&&!n.Dismissed;});}
     Json Document()const{
         auto entries=Json::array();for(const auto& n:Notices)entries.push_back({{"Id",n.Id},{"Kind",n.Kind},{"Source",n.Source},{"Title",n.Title},{"Detail",n.Detail},{"Version",n.Version},{"Action",n.Action},{"Created",n.Created},{"Read",n.Read},{"Dismissed",n.Dismissed},{"Resolved",n.Resolved},{"Active",n.Active}});
+        for(size_t i=0;i<Notices.size();++i)if(!Notices[i].Route.empty())entries[i]["Route"]=Notices[i].Route;
         return {{"Format",1},{"Game",Game},{"LastReleaseNotice",LastReleaseNotice},{"Versions",Versions},{"Fingerprints",Fingerprints},{"Notices",std::move(entries)}};
     }
     static Store Parse(const Json& doc){
@@ -110,8 +117,8 @@ public:
             for(const auto& [id,value]:fingerprints.items()){if(!Text(id,256)||!value.is_string())throw std::runtime_error("Invalid local mod fingerprint.");const auto hash=value.get<std::string>();if(hash.size()!=64||hash.find_first_not_of("0123456789abcdef")!=hash.npos)throw std::runtime_error("Invalid local mod fingerprint.");result.Fingerprints[id]=hash;}}
         std::set<std::string> ids;
         for(const auto& value:doc["Notices"]){
-            Notice n{value.at("Id").get<std::string>(),value.at("Kind").get<std::string>(),value.value("Source",std::string{}),value.at("Title").get<std::string>(),value.value("Detail",std::string{}),value.value("Version",std::string{}),value.value("Action",std::string{}),value.value("Created",uint64_t{}),value.value("Read",false),value.value("Dismissed",false),value.value("Resolved",false),value.value("Active",true)};
-            if(n.Id.empty()||!ids.insert(n.Id).second||!Text(n.Id,512)||!Text(n.Kind,32)||!Text(n.Source,256)||!Text(n.Title,2048)||!Text(n.Detail,4096)||!Text(n.Version,256)||!std::set<std::string>{"","build-mod","resync-vanilla","hotfix"}.contains(n.Action))throw std::runtime_error("Invalid notification entry.");
+            Notice n{value.at("Id").get<std::string>(),value.at("Kind").get<std::string>(),value.value("Source",std::string{}),value.at("Title").get<std::string>(),value.value("Detail",std::string{}),value.value("Version",std::string{}),value.value("Action",std::string{}),value.value("Created",uint64_t{}),value.value("Read",false),value.value("Dismissed",false),value.value("Resolved",false),value.value("Active",true),value.value("Route",std::string{})};
+            if(n.Id.empty()||!ids.insert(n.Id).second||!Text(n.Id,512)||!Text(n.Kind,32)||!Text(n.Source,256)||!Text(n.Title,2048)||!Text(n.Detail,4096)||!Text(n.Version,256)||!Text(n.Route,192)||(!n.Route.empty()&&(n.Kind!="plugin"||!n.Route.starts_with(n.Source+".")))||!std::set<std::string>{"","build-mod","resync-vanilla","hotfix"}.contains(n.Action))throw std::runtime_error("Invalid notification entry.");
             result.Notices.push_back(std::move(n));
         }return result;
     }

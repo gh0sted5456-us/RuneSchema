@@ -44,7 +44,17 @@ is accepted only from the plugin's initialization thread. The plugin declares th
 
 - `Route`: stable `<pluginId>.<route>` token, for example `GrandExchange.exchange`;
 - `Title` and a short text/glyph `Icon` for the collapsed sidebar;
-- `Draw` and `Context`, valid until shutdown.
+- `Draw` and `Context`, valid until shutdown;
+- optional (0.9.0.7) Home tile fields: `Description`, one line shown when the tile is
+  focused; `IconImage`, a `.png` file name directly in the plugin's own folder
+  (at most 256×256 and 1 MiB); and `IconFlags`. Helpy tints the PNG like its own
+  icons, so draw it white on transparency, or set `RS_NAV_ICON_FULL_COLOR` to show
+  it as is. Without an image, the `Icon` text is drawn.
+
+Every registered tab is a tile on Home, after Helpy's own, and a sidebar row with its
+icon. A plugin built before 0.9.0.7 passes the shorter struct; it still registers and
+gets a text-icon tile. Grand Exchange should set `IconImage` to its logo, with
+`RS_NAV_ICON_FULL_COLOR` if the logo is coloured.
 
 The UI thread calls `Draw(context,ui)`. `RuneSchemaNavUiV1` supplies host text,
 button and separator functions; no private ImGui context or ABI crosses the DLL.
@@ -58,6 +68,45 @@ Helpy. `RuneSchemaNavUiV1` appends optional `Companion` and `ReturnHome` callbac
 check `StructSize` and pointers before using them. The companion uses the same
 pages and account process as its standalone window. Its own navigation includes
 **Return to Helpy**. Older hosts retain an explicit standalone fallback.
+
+0.9.0.7 appends two more optional callbacks; check `StructSize` and pointers:
+
+- `InputText(context,label,buffer,capacity)` draws a themed text box (with the
+  controller keyboard) and returns 1 when the player presses Enter. `capacity` is
+  2 to 4096 bytes and the buffer must already be NUL-terminated.
+- `WebPage(context,page)` fills the rest of the workspace with a host-owned web page
+  (`RuneSchemaWebPageV1`): `Origin` (`https://host`, no path), `Home`, and an optional
+  `Navigate` URL opened once per new nonzero `NavigateId`. Navigation stays on
+  `Origin`; other links open in the player's browser only when clicked. Helpy denies
+  permissions, downloads, script dialogs, host objects and web messages, and draws
+  Back, Forward, Home, Reload and Open in browser. It returns a
+  `RuneSchemaWebPageState`. The page shows in Helpy's window and its game overlay;
+  in the native overlay it returns `RS_WEB_UNAVAILABLE` after drawing a fallback.
+  [Dragonwilds Wiki in Helpy](HELPY-WIKI.md) is the reference use.
+
+## Plugin notices
+
+A Helpy-side plugin can post into Helpy's notifications with the host service
+`helpy.notify`:
+
+```json
+{"Id":"sale:9f2c","Title":"Listing sold","Detail":"3 Rune bars for 1,200 coins","Open":"GrandExchange.exchange","Toast":true}
+```
+
+- `Id` (letters, digits, `.`, `_`, `-`, `:`; up to 128) identifies the notice. Posting
+  the same `Id` again replaces it and marks it unread, so use one per sale.
+- `Title` (up to 120 characters) and `Detail` (up to 400) are plain text.
+- `Open` is optional and must be one of the caller's own routes. The notice gets an
+  **Open** button; it never runs anything else.
+- `Toast` (default `true`) also shows the in-game popup and, when Helpy is open, a
+  toast. Turning off gamer-points popups does not hide plugin notices.
+
+Notices appear under **Notifications → Plugins** and are kept in the notification
+history. The reply is `{"Queued":true}`; nothing is queued unless the reply buffer
+fits. Each plugin may post 16 at once, then about one a second (`RS_PLUGIN_FAILED`
+when over), and invalid notices return `RS_PLUGIN_INVALID_ARGUMENT`. Coalesce bursts,
+for example "5 listings sold". For real-time sale alerts, the Grand Exchange
+companion or plugin posts a notice when the Bazaar reports a settled sale.
 
 `RuneSchemaCompanionSurface.h` defines the local UI transport. The host creates a
 same-user, nonce-bound session and binds it to the companion window. Shared D3D11

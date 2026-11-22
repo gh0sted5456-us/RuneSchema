@@ -123,16 +123,19 @@ class HelpyAchievementOverlay {
         const HFONT labelFont = font(10.5f, FW_SEMIBOLD), heading = font(16, FW_SEMIBOLD), regular = font(12, FW_NORMAL);
         const int textLeft = body.left + Px(18), right = body.right - Px(16);
         const auto labelColor = Blend(bg, gold, m_frame.Text);
-        // Points pill on the right.
-        const auto points = L"+" + std::to_wstring(unlock->Points);
-        SIZE pointsSize{}; { const auto old = SelectObject(dc, heading); GetTextExtentPoint32W(dc, points.c_str(), static_cast<int>(points.size()), &pointsSize); SelectObject(dc, old); }
-        const int pillWidth = pointsSize.cx + Px(22), pillHeight = Px(28), pillTop = top + (m_height - pillHeight) / 2 - Px(2);
-        RECT pill{right - pillWidth, pillTop, right, pillTop + pillHeight};
-        Rounded(dc, pill, pillHeight, Blend(bg, gold, .2f * m_frame.Text), Blend(bg, gold, .55f * m_frame.Text));
-        Text(dc, heading, labelColor, points, pill, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-        const int textRight = pill.left - Px(12);
+        // Points pill on the right; a plugin notice has a label of its own and no points.
+        int textRight = right;
+        if (unlock->Label.empty()) {
+            const auto points = L"+" + std::to_wstring(unlock->Points);
+            SIZE pointsSize{}; { const auto old = SelectObject(dc, heading); GetTextExtentPoint32W(dc, points.c_str(), static_cast<int>(points.size()), &pointsSize); SelectObject(dc, old); }
+            const int pillWidth = pointsSize.cx + Px(22), pillHeight = Px(28), pillTop = top + (m_height - pillHeight) / 2 - Px(2);
+            RECT pill{right - pillWidth, pillTop, right, pillTop + pillHeight};
+            Rounded(dc, pill, pillHeight, Blend(bg, gold, .2f * m_frame.Text), Blend(bg, gold, .55f * m_frame.Text));
+            Text(dc, heading, labelColor, points, pill, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            textRight = pill.left - Px(12);
+        }
         int y = top + Px(13);
-        Text(dc, labelFont, labelColor, L"RUNESCHEMA GAMER POINTS", RECT{textLeft, y, textRight, y + Px(15)}, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
+        Text(dc, labelFont, labelColor, unlock->Label.empty() ? std::wstring(L"RUNESCHEMA GAMER POINTS") : Wide(unlock->Label), RECT{textLeft, y, textRight, y + Px(15)}, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
         y += Px(16);
         Text(dc, heading, Blend(bg, text, m_frame.Text), Wide(unlock->Title), RECT{textLeft, y, textRight, y + Px(22)}, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
         y += Px(23);
@@ -192,7 +195,12 @@ public:
 #endif
     void Update(HINSTANCE module, HWND game, const HelpyImGuiTheme::Theme& theme, bool native, bool desktop, bool animate, std::deque<ModAchievements::Unlock>& queue) {
         const double now = std::chrono::duration<double>(std::chrono::steady_clock::now() - m_origin).count();
-        if (!theme.achievementPopups) { queue.clear(); Reset(); return; }
+        // Turning gamer-points popups off drops achievements only; plugin notices (Label set) still show.
+        if (!theme.achievementPopups) {
+            const bool award = Busy() && Current() && Current()->Label.empty();
+            std::erase_if(queue, [](const ModAchievements::Unlock& unlock) { return unlock.Label.empty(); });
+            if (award) Reset();
+        }
         if (queue.empty() && !Busy()) return;
         if (!native && (!desktop || !game || IsIconic(game) || !Ensure(module))) {
             m_timeline.Pause(now);

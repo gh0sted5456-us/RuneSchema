@@ -13,12 +13,14 @@ namespace PS {
 class HelpyPluginHost {
  struct Loaded {std::string Id;HMODULE Module;void* Instance;RuneSchemaPluginShutdownFn Shutdown;};
  std::vector<Loaded> loaded;
- mutable std::mutex gate;std::unordered_set<std::string> owners;std::string registering;DWORD registrationThread=0;
+ mutable std::mutex gate;std::unordered_set<std::string> owners;std::string registering;std::filesystem::path registeringRoot;DWORD registrationThread=0;
  std::function<void(const std::string&)> cleanup;
 public:
  ~HelpyPluginHost(){Shutdown();}
  bool Authorized(const char* id)const{if(!id)return false;std::lock_guard lock(gate);return owners.contains(id);}
  bool CanRegister(const char* id)const{if(!id)return false;std::lock_guard lock(gate);return registrationThread==GetCurrentThreadId()&&registering==id;}
+ // The folder of the plugin now initializing (for its Home tile icon); empty for anyone else.
+ std::filesystem::path RegisteringRoot(const char* id)const{if(!id)return {};std::lock_guard lock(gate);return registrationThread==GetCurrentThreadId()&&registering==id?registeringRoot:std::filesystem::path{};}
  void Load(const std::filesystem::path& root,const RuneSchemaHostApi* api,std::function<void(const std::string&)> removeServices){
   Shutdown();cleanup=std::move(removeServices);std::vector<std::string> errors;
   std::vector<PluginCatalog::Plugin> manifests;try{manifests=PluginCatalog::DiscoverRuntime(root,&errors);}catch(const std::exception& error){api->Log(RS_LOG_WARNING,"RuneSchema.Helpy",(std::string("[RS-PLUG-001] ")+error.what()).c_str());return;}
@@ -41,17 +43,17 @@ public:
     code="[RS-PLUG-004] ";if(!query||!start||!stop)throw std::runtime_error("Helpy plugin API exports are missing");
     code="[RS-PLUG-005] ";const auto* descriptor=query();
     if(!descriptor||descriptor->StructSize<sizeof(RuneSchemaPluginDescriptor)||descriptor->ApiVersion!=RUNESCHEMA_PLUGIN_API_VERSION||!descriptor->Id||manifest.Id!=descriptor->Id||!descriptor->Version||manifest.Version!=descriptor->Version||!start||!stop)throw std::runtime_error("Helpy plugin exports/identity do not match its manifest");
-    {std::lock_guard lock(gate);owners.insert(manifest.Id);registering=manifest.Id;registrationThread=GetCurrentThreadId();}
+    {std::lock_guard lock(gate);owners.insert(manifest.Id);registering=manifest.Id;registeringRoot=manifest.Root;registrationThread=GetCurrentThreadId();}
     code="[RS-PLUG-006] ";if(start(api,&instance)!=RS_PLUGIN_OK||!instance)throw std::runtime_error("Helpy plugin initialization failed");
     code="[RS-PLUG-007] ";if(const auto ui=reinterpret_cast<RuneSchemaPluginPhaseFn>(GetProcAddress(module,"RuneSchemaPlugin_OnUiInit"));ui&&ui(instance)!=RS_PLUGIN_OK)throw std::runtime_error("Helpy plugin UI initialization failed");
-    {std::lock_guard lock(gate);registering.clear();registrationThread=0;}
+    {std::lock_guard lock(gate);registering.clear();registeringRoot.clear();registrationThread=0;}
     loaded.push_back({manifest.Id,module,instance,stop});module=nullptr;instance=nullptr;
     api->Log(RS_LOG_INFO,manifest.Id.c_str(),"Native Helpy plugin loaded");
    }catch(const std::exception& error){
     HelpyPluginNavigation::Remove(manifest.Id);
     if(instance&&stop)stop(instance);
     if(cleanup)cleanup(manifest.Id);
-    {std::lock_guard lock(gate);owners.erase(manifest.Id);registering.clear();registrationThread=0;}
+    {std::lock_guard lock(gate);owners.erase(manifest.Id);registering.clear();registeringRoot.clear();registrationThread=0;}
     if(module)FreeLibrary(module);api->Log(RS_LOG_WARNING,manifest.Id.c_str(),(std::string(code)+error.what()).c_str());
    }
   }
