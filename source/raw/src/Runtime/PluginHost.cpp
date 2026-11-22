@@ -35,6 +35,7 @@
 #include "Runtime/ItemDestroyService.h"
 #include "Core/ItemGrant.h"
 #include "Runtime/ItemGrantService.h"
+#include "Runtime/HelpyDeliveryGate.h"
 #include "Core/PluginServerRequest.h"
 #include "Runtime/NetworkContext.h"
 #include "Runtime/NetworkRole.h"
@@ -82,6 +83,8 @@ bool Declared(const char* caller,std::string_view capability){
 }
 // runeschema.server.request: the bridge transport and the answers this game is waiting for.
 std::mutex ServerRequestGate;PluginHost::ServerTransport ServerSend;PluginServerRequest::Pending ServerPending;
+// The server request whose "<Id>.server" callback is running on this thread, for item.grant.
+thread_local const PluginServerRequest::Serving* CurrentServing=nullptr;
 std::mutex EventGate;HelpyDesktop::Server* EventDesktop=nullptr;std::unordered_map<std::string,PluginEvents::Bucket> EventBuckets;
 thread_local const char* ActiveOwner=nullptr;
 std::atomic<bool> DesktopBridgeReady=false;
@@ -322,7 +325,7 @@ int32_t RS_PLUGIN_CALL RegisterService(const char* plugin,const char* name,RuneS
     std::scoped_lock lock(Gate);return Services.emplace(name,Service{plugin,callback,context}).second?RS_PLUGIN_OK:RS_PLUGIN_DUPLICATE;
 }
 // runeschema.server.request, server side: the sender is the controller RuneSchema found, never the payload.
-static nlohmann::json ServePluginRequest(RC::Unreal::UObject* controller,bool remote,const std::string& plugin,const PluginServerRequest::Request& request){
+static nlohmann::json ServePluginRequest(RC::Unreal::UObject* controller,bool remote,const std::string& plugin,const PluginServerRequest::Request& request,const PluginServerRequest::Deliveries& sender={}){
     namespace P=PluginServerRequest;
     const auto character=ItemSnapshot::NormalizeGuid(PlayerStatusRuntime::CharacterGuid(DragonWilds::ActorHelper::GetObjectRef(controller,TEXT("PlayerState"))));
     if(character.empty())return P::Result(request.Action,request.Id,false,nlohmann::json("The sending character is not initialized yet."));
@@ -332,7 +335,10 @@ static nlohmann::json ServePluginRequest(RC::Unreal::UObject* controller,bool re
         service=found->second;}
     const auto call=P::ServerCall(plugin,request,character,remote).dump();
     std::string reply(P::MaxReplyBytes,'\0');uint32_t size=0;int32_t code=RS_PLUGIN_FAILED;
-    try{code=service.Callback(service.Context,call.c_str(),reply.data(),static_cast<uint32_t>(reply.size()),&size);}catch(...){code=RS_PLUGIN_FAILED;}
+    // Core services the server half calls during this callback see which request it is serving.
+    const P::Serving serving{plugin,character,remote,sender};
+    struct ServingScope{const P::Serving* previous;explicit ServingScope(const P::Serving* now):previous(CurrentServing){CurrentServing=now;}~ServingScope(){CurrentServing=previous;}};
+    try{ServingScope scope(&serving);code=service.Callback(service.Context,call.c_str(),reply.data(),static_cast<uint32_t>(reply.size()),&size);}catch(...){code=RS_PLUGIN_FAILED;}
     if(code==RS_PLUGIN_BUFFER_TOO_SMALL)return P::Result(request.Action,request.Id,false,nlohmann::json("The server's reply exceeded the transport limit."));
     if(code!=RS_PLUGIN_OK||!size||size>reply.size())return P::Result(request.Action,request.Id,false,nlohmann::json("The server's "+plugin+" refused the request (code "+std::to_string(code)+")."));
     if(reply[size-1]=='\0')--size;reply.resize(size);
@@ -369,7 +375,16 @@ static int32_t ServerRequest(const char* caller,const char* request,char* respon
         std::scoped_lock lock(ServerRequestGate);
         if(!ServerSend)return RS_PLUGIN_NOT_FOUND;
         if(ServerPending.Full(P::Pending::Clock::now()))return RS_PLUGIN_FAILED;
-        const auto revision=ServerSend(caller,parsed.Action,P::Wire(parsed).dump());
+        // This PC's own delivery flags for its character, with the caller's own pause exempt:
+        // the server cannot read them, and a grant while serving this request needs them open.
+        P::Deliveries sender{true,false,"unknown"};
+        try{
+            const auto character=PlayerStatusRuntime::CharacterGuid(DragonWilds::ActorHelper::GetObjectRef(controller,TEXT("PlayerState")));
+            const auto block=HelpyDeliveryGate::Assess(character,"",ItemGrant::OwnPauseMod(caller));
+            if(!block)sender={true,true,""};
+            else sender.By=block->User?std::string("helpy"):block->Id.empty()?std::string("unknown"):block->Mod;
+        }catch(...){}
+        const auto revision=ServerSend(caller,parsed.Action,P::Wire(parsed,sender).dump());
         if(revision<=0)return RS_PLUGIN_NOT_FOUND;
         ServerPending.Add(revision,{caller,parsed.Action,parsed.Id,P::Pending::Clock::now()});
         reply={{"Local",false},{"Revision",revision}};
@@ -398,7 +413,7 @@ int32_t RS_PLUGIN_CALL CallService(const char* caller,const char* name,const cha
     // Core-owned and read-only; game thread, authoritative world. Not reachable over the desktop pipe.
     if(std::string_view(name)==ItemSnapshot::Service)return ItemSnapshotService::Call(request,response,capacity,size);
     // Core-owned grant into one inventory; the caller must declare item.grant in its manifest.
-    if(std::string_view(name)==ItemGrant::Service)return ItemGrantService::Call(caller,Declared(caller,ItemGrant::Capability),request,response,capacity,size);
+    if(std::string_view(name)==ItemGrant::Service)return ItemGrantService::Call(caller,Declared(caller,ItemGrant::Capability),CurrentServing,request,response,capacity,size);
     if(std::string_view(name)==PluginServerRequest::Service){
         if(!Declared(caller,PluginServerRequest::Capability))return RS_PLUGIN_INVALID_ARGUMENT;
         return ServerRequest(caller,request,response,capacity,size);
@@ -704,12 +719,15 @@ std::string PluginHost::HandleRemotePluginRequest(RC::Unreal::UObject* pawn,cons
         if(!P::Token(plugin,128)||!PluginCatalog::Token(plugin))throw std::runtime_error("Invalid plugin id.");
         const auto wire=nlohmann::json::parse(payload);
         if(wire.is_object()&&wire.contains("Request")&&wire["Request"].is_string())id=wire["Request"].get<std::string>().substr(0,36);
-        if(!wire.is_object()||wire.size()>2)throw std::runtime_error("Invalid plugin request.");
+        if(!wire.is_object()||wire.size()>3)throw std::runtime_error("Invalid plugin request.");
+        for(const auto& [key,value]:wire.items())if(key!="Request"&&key!="Body"&&key!="Deliveries")throw std::runtime_error("Invalid plugin request.");
         const auto request=P::Parse({{"Action",action},{"Request",wire.value("Request",std::string{})},{"Body",wire.value("Body",nlohmann::json::object())}});
+        const auto deliveries=wire.find("Deliveries");
+        const auto sender=P::ParseDeliveries(deliveries==wire.end()?nullptr:&*deliveries);
         auto* controller=pawn?DragonWilds::ActorHelper::GetObjectRef(pawn,TEXT("Controller")):nullptr;
         if(!controller||controller->GetWorld()!=pawn->GetWorld()||DragonWilds::ActorHelper::GetObjectRef(controller,TEXT("Pawn"))!=pawn)
             throw std::runtime_error("Plugin requests need the sender's current owned character.");
-        return ServePluginRequest(controller,true,plugin,request).dump();
+        return ServePluginRequest(controller,true,plugin,request,sender).dump();
     }catch(const std::exception& error){
         return P::Result(P::Token(action,64)?action:std::string("invalid"),id,false,nlohmann::json(std::string(error.what()))).dump();
     }

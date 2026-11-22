@@ -9,6 +9,12 @@
 // and acts through capability-gated core services (item.grant, item.destroy).
 //
 // The result comes back to "<Plugin>.server-result" on the sending game (or inline when local).
+//
+// Deliveries: the sending game reports its own Helpy delivery-flags result for its character,
+// with this plugin's own pause exempt, because a server cannot read a remote player's flags.
+// item.grant uses it for a grant to that character while serving this request; the server
+// still checks its own flags folder. It is trusted the way Helpy trusts a client's check before
+// sending: a modified client can only skip its own player's switches.
 #include <nlohmann/json.hpp>
 #include <chrono>
 #include <cstdint>
@@ -52,12 +58,33 @@ inline Request Parse(const Json& input){
     if(!request.Body.is_object()||request.Body.dump().size()>MaxBodyBytes)throw std::invalid_argument("Body must be an object of at most 3000 bytes.");
     return request;
 }
+// Open, or the reason it is not: "helpy" (the player's switch), "unknown" (the character could not
+// be identified while a pause exists), or the pausing mod's id.
+struct Deliveries{bool Known=false,Open=false;std::string By;};
+inline Json DeliveriesJson(const Deliveries& d){
+    if(d.Open)return {{"Open",true}};
+    return {{"Open",false},{"By",d.By.empty()?std::string("unknown"):d.By}};
+}
+// Absent (an older sender) is Known=false; a malformed value is refused with the request.
+inline Deliveries ParseDeliveries(const Json* value){
+    Deliveries result;if(!value)return result;
+    if(!value->is_object()||value->size()<1||value->size()>2||!value->contains("Open")||!(*value)["Open"].is_boolean())
+        throw std::invalid_argument("Invalid sender delivery state.");
+    result.Known=true;result.Open=(*value)["Open"].get<bool>();
+    for(const auto& [key,field]:value->items())if(key!="Open"&&key!="By")throw std::invalid_argument("Invalid sender delivery state.");
+    if(result.Open){if(value->size()!=1)throw std::invalid_argument("Invalid sender delivery state.");return result;}
+    const auto by=value->find("By");
+    if(by==value->end()||!by->is_string()||!Token(by->get<std::string>(),40))throw std::invalid_argument("Invalid sender delivery state.");
+    result.By=by->get<std::string>();return result;
+}
 // What travels to the server (the channel entity carries the plugin id).
-inline Json Wire(const Request& r){return {{"Request",r.Id},{"Body",r.Body}};}
+inline Json Wire(const Request& r,const Deliveries& sender){return {{"Request",r.Id},{"Body",r.Body},{"Deliveries",DeliveriesJson(sender)}};}
 // What the server half receives: the sender is supplied by RuneSchema, never by the payload.
 inline Json ServerCall(std::string_view plugin,const Request& r,std::string_view character,bool remote){
     return {{"Plugin",plugin},{"Action",r.Action},{"Request",r.Id},{"Body",r.Body},{"From",{{"Character",character},{"Remote",remote}}}};
 }
+// The request a server half is handling right now, on the game thread, for the core services it calls.
+struct Serving{std::string Plugin,Character;bool Remote=false;Deliveries Sender;};
 // What the sending plugin receives, inline or through "<Plugin>.server-result".
 inline Json Result(std::string_view action,std::string_view id,bool ok,const Json& value){
     Json result={{"Action",action},{"Request",id},{"Ok",ok}};

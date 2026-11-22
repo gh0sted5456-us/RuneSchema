@@ -28,6 +28,15 @@ int main(){try{
     for(int64_t i=1;i<=64;++i)Check(pending.Add(100+i,{"GrandExchange","a",request.Id,t0}),"fill");
     Check(!pending.Add(999,{"GrandExchange","a",request.Id,t0})&&pending.Size()==64&&pending.Full(t0),"at most 64 outstanding");
     Check(!pending.Full(t0+P::Expiry+std::chrono::seconds(1))&&pending.Size()==0,"expired requests free their places");
-    std::cout<<"Plugin server request contract passed: envelope, real sender, results, pending answers.\n";
+    // The sender's own delivery state travels with the request; absent means an older sender.
+    Check(!P::ParseDeliveries(nullptr).Known,"absent delivery state is unknown");
+    {const Json opened=P::DeliveriesJson({true,true,""});const auto open=P::ParseDeliveries(&opened);Check(open.Known&&open.Open,"open round-trips");
+        const Json paused=P::DeliveriesJson({true,false,"othermod"});const auto closed=P::ParseDeliveries(&paused);Check(closed.Known&&!closed.Open&&closed.By=="othermod","pause round-trips");
+        const Json blank=P::DeliveriesJson({true,false,""});Check(blank["By"]=="unknown","an unnamed block reads as unknown");}
+    for(const auto& bad:std::vector<Json>{Json("open"),Json::object(),{{"Open","yes"}},{{"Open",true},{"By","x"}},{{"Open",false}},{{"Open",false},{"By","has space"}},
+        {{"Open",false},{"By",std::string(41,'a')}},{{"Open",false},{"By","helpy"},{"Extra",1}}})
+        Check(Refused([&]{P::ParseDeliveries(&bad);}),"malformed delivery state refused");
+    {const auto wire=P::Wire(request,{true,false,"helpy"});Check(wire.size()==3&&wire["Deliveries"]["By"]=="helpy"&&wire["Request"]==request.Id,"wire carries the sender's state");}
+    std::cout<<"Plugin server request contract passed: envelope, real sender, delivery state, results, pending answers.\n";
     return 0;
 }catch(const std::exception& error){std::cerr<<"FAIL: "<<error.what()<<'\n';return 1;}}

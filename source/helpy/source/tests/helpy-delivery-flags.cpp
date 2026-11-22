@@ -201,6 +201,22 @@ int main(){
         // The player's own opt-out still wins over an exception.
         {SetUserDeliveries(ex,O,false,1800000100,"Owner");const auto block=Check(at(1800000100),O,W);assert(block&&block->User);
             SetUserDeliveries(ex,O,true,1800000100);assert(!Check(at(1800000100),O,W));}
+        // A grant the mod's own plugin makes while serving the character's own server request skips
+        // only that mod's pauses (exempt). An enrolled character with no exception is still blocked
+        // for every ordinary delivery; other mods' pauses and the player's switch still apply.
+        Flags(ex,"examplemod",{exWorldPause,exOwnerPause,exOtherPause});Flags(ex,"othermod",{});
+        {const auto read=at(1800000100);assert(read.Excepted.empty());
+            const auto ordinary=Check(read,O,W);assert(ordinary&&ordinary->Mod=="examplemod");     // Ordinary Helpy grant: blocked.
+            assert(!Check(read,O,W,"examplemod")&&!Check(read,O,"","examplemod"));                  // Its own signed withdrawal: allowed.
+            const auto wrong=Check(read,O,W,"othermod");assert(wrong&&wrong->Mod=="examplemod");}   // Naming another mod lifts nothing.
+        Flags(ex,"othermod",{otherModPause});
+        {const auto block=Check(at(1800000100),O,W,"examplemod");assert(block&&block->Mod=="othermod");}
+        Flags(ex,"othermod",{});
+        {SetUserDeliveries(ex,O,false,1800000100,"Owner");const auto block=Check(at(1800000100),O,W,"examplemod");assert(block&&block->User);
+            SetUserDeliveries(ex,O,true,1800000100);assert(!Check(at(1800000100),O,W,"examplemod"));}
+        // An exempt mod the player declined is already not honoured; one it allows is skipped only when named.
+        {SetModAllowed(ex,"examplemod",false,1800000100);assert(!Check(at(1800000100),O,W));SetModAllowed(ex,"examplemod",true,1800000100);
+            assert(Check(at(1800000100),O,W));}
         // An exception statement placed in another mod's folder names the wrong mod and is rejected.
         Flags(ex,"othermod",{exAllow});{const auto read=at(1800000100);assert(read.Mods[1].Rejected==1);}
         Flags(ex,"othermod",{});

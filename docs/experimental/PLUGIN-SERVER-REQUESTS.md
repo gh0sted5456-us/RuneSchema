@@ -12,8 +12,8 @@ promote_to: modders/PLUGIN-SERVER-REQUESTS.md
 
 A plugin's in-game half can ask the server it is connected to, or its own game when it hosts
 or plays alone, to run the **same plugin's server half**. That server half can then put items
-into a chest or a player's inventory, or remove an exact stack, through RuneSchema's
-capability-gated services.
+into the sending player's inventory or the plugin's own storage on that character, or into a
+world chest, or remove an exact stack, through RuneSchema's capability-gated services.
 
 This is how Grand Exchange delivers on any server that has Grand Exchange installed:
 
@@ -22,7 +22,8 @@ This is how Grand Exchange delivers on any server that has Grand Exchange instal
 3. RuneSchema sends it to the server on its owning-player bridge, the same channel as Helpy's
    own server requests, and attaches the sending player's character.
 4. The server's GE half checks the withdrawal, then calls `runeschema.item.grant` to put the
-   items into the Vault chest.
+   items into that character's Grand Exchange storage, a component GE owns on the player's
+   controller. The Vault prop in the world only marks where players open it; it holds nothing.
 5. The answer returns to GE's in-game half, which tells the Grand Exchange window.
 
 RuneSchema never grants, removes or changes anything because a player asked. Only the
@@ -92,6 +93,11 @@ of the authoritative game:
 `From` comes from RuneSchema: it's the character of the player whose bridge sent the request.
 A `Body` field can't change it. Reply with one JSON object of up to 2700 bytes.
 
+The sending game also reports, alongside the request, whether its own Helpy delivery flags
+allow deliveries to that character, with your plugin's own pause left out. A server can't read
+a remote player's flags, so `item.grant` uses this report for a grant while serving the
+request (see below). It isn't passed to your server half.
+
 A remote request also needs the player's connection to have finished item-registry
 synchronization, just like Helpy's own server deliveries.
 
@@ -107,10 +113,48 @@ synchronization, just like Helpy's own server deliveries.
  "Target": {"Character": "5A3F0C21B6D84E7F9A1C2B3D4E5F6071", "Scope": "Inventory"}}
 ```
 
+```json
+{"Request": "6b1e...uuid", "Item": "/Game/Items/Ore/Copper.Copper", "Count": 5,
+ "Target": {"Character": "5A3F0C21B6D84E7F9A1C2B3D4E5F6071", "Container": {"Index": 90411, "Serial": 3}}}
+```
+
 - **Container target:** a world inventory component, such as a chest's, named by the
-  `ObjectIdentity` your plugin read for it. A player's own containers are refused here.
-- **Character target:** a connected character's `Inventory` or `Personal` container. This is
-  a delivery, so the player's own Helpy delivery switch and every mod's delivery pauses apply.
+  `ObjectIdentity` your plugin read for it. Anything a player owns (on their controller,
+  player state or character) is refused here.
+- **Character target:** a connected character's `Inventory` or `Personal` container, or with
+  `Container` instead of `Scope`, one exact inventory component that character's controller
+  owns, such as your plugin's own storage. RuneSchema checks it is live, in that character's
+  world, owned by exactly that controller and not the equipment loadout, and checks again on
+  every count and just before the grant.
+
+### Who a Character target can be
+
+A grant to a character is a delivery. Which deliveries are allowed depends on whether your
+server half is serving that character's own request:
+
+| Situation | Allowed target | Pauses that apply |
+| --- | --- | --- |
+| Inside your `<YourId>.server` call, granting to `From.Character` | That character only | The player's switch and every other mod's pause. **Your plugin's own pause is skipped.** |
+| Inside your `<YourId>.server` call, any other character | Refused | |
+| Outside a request, a character local to this game (single player, the host's own) | That character | All, including your own |
+| Outside a request, another player's character | Refused | |
+
+- **Your own pause** is the Helpy flags mod whose id is your plugin id lower-cased (plugin
+  `GrandExchange`, flags mod `grandexchange`). Plugins whose id has other characters, such as a
+  `.`, have none to skip.
+- **Where it is checked.** On the authoritative game against its own flags folder (world
+  pauses, and every pause on the host's PC), with your pause skipped when serving. For a remote
+  player, also against the report their game sent with the request: if their switch is off or
+  another mod paused them on their PC, the grant is refused with that reason.
+- **Why your own pause is skipped.** A mod pauses ordinary Helpy deliveries to the characters
+  it manages. A delivery its own server half makes, after its own checks, is the one delivery
+  that pause isn't meant to stop. Grand Exchange makes one only for a withdrawal the Bazaar
+  signed for that character.
+- A refusal is cached for its `Request` UUID like any result. Use a new UUID to try again
+  after the player turns deliveries back on.
+- Treat a player's own installed plugins as theirs: a plugin id isn't signed, and the pause
+  isn't a defence against code the player installed. What a server trusts is that server's
+  own plugins.
 - `Count` is 1 to 10000 of one item definition. The game adds new items at full durability
   with `InventoryComponent:AddItemByData`, the call Helpy's own grants use.
 - It runs only on the game thread where the game is authoritative.
@@ -128,3 +172,6 @@ The result has `State` and `Ok`:
 The first result for a `Request` UUID is replayed for the rest of the session, and the same
 UUID with a different body is refused. Like `item.destroy`, this cache is in memory only:
 keep your own durable journal and reconcile after a restart.
+
+`Confirmed` is a live count, not proof the game saved it. Don't treat it, or an answer
+reaching the player, as a save receipt.

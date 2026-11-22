@@ -22,7 +22,8 @@
 // runeschema.item.grant: the same native calls as Helpy's own item grant
 // (InventoryComponent:CanAddItemByData, AddItemByData, and GetNumItemsByData before and after),
 // aimed at one inventory component the caller names: a connected character's Inventory or
-// Personal container, or a world container such as a chest.
+// Personal container, one exact component that character's controller owns, or a world
+// container such as a chest.
 namespace PS::ItemGrantService {
 namespace {
 using namespace RC::Unreal;
@@ -60,9 +61,33 @@ UObject* Controller(const std::string& character){
     if(!found)throw std::runtime_error("That character is not connected.");
     return found;
 }
+bool IsLocal(UObject* controller){
+    AH::FunctionCall local(controller,TEXT("/Script/Engine.Controller:IsLocalController"));local.Invoke();return local.Result<bool>();
+}
+bool Live(UObject* object){
+    return object&&!object->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed))&&object->GetWorld();
+}
+// The first player controller in the component's outer chain, or null.
+UObject* OwningController(UObject* component,UClass* controllerType){
+    for(auto* outer=component->GetOuterPrivate();outer;outer=outer->GetOuterPrivate())if(outer->IsA(controllerType))return outer;
+    return nullptr;
+}
+// A component inside a player's state or a player's pawn also belongs to that player.
+bool PlayerOwned(UObject* component,UClass* controllerType){
+    if(OwningController(component,controllerType))return true;
+    auto* stateType=AH::ResolveClass(TEXT("/Script/Engine.PlayerState"));
+    auto* pawnType=AH::ResolveClass(TEXT("/Script/Engine.Pawn"));
+    if(!stateType||!pawnType)return true; // Cannot rule it out: refuse.
+    for(auto* outer=component->GetOuterPrivate();outer;outer=outer->GetOuterPrivate()){
+        if(outer->IsA(stateType))return true;
+        if(outer->IsA(pawnType)){auto* controller=AH::GetObjectRef(outer,TEXT("Controller"));if(controller&&controller->IsA(controllerType))return true;}
+    }
+    return false;
+}
 struct Prepared{
     G::Request Request;UObject* Inventory{};UObject* Item{};WeakObjectHandle InventoryHandle;
-    explicit Prepared(const G::Request& request):Request(request){
+    UObject* Owner{};WeakObjectHandle OwnerHandle;
+    Prepared(const std::string& caller,const PluginServerRequest::Serving* serving,const G::Request& request):Request(request){
         auto* inventoryType=AH::ResolveClass(TEXT("/Script/Dominion.InventoryComponent"));
         auto* itemType=AH::ResolveClass(TEXT("/Script/Dominion.ItemData"));
         auto* controllerType=AH::ResolveClass(TEXT("/Script/Dominion.DominionPlayerController"));
@@ -70,20 +95,33 @@ struct Prepared{
         if(Request.To.Is==G::Kind::Character){
             auto* controller=Controller(Request.To.Character);
             if(!Network::OwnsGameplay(Network::Detect(controller).Mode))throw std::runtime_error("Items are granted only where the game is authoritative.");
-            Inventory=Request.To.Where==S::Scope::Personal
+            // Bound to the sender's own request, or a character local to this game (ItemGrant::Gate).
+            const auto gate=G::Gate(caller,serving,Request.To.Character,IsLocal(controller));
+            if(Request.To.Owned){
+                // One exact inventory component that this character's controller owns, in its world.
+                auto* loadoutType=AH::ResolveClass(TEXT("/Script/Dominion.LoadoutComponent"));
+                if(!loadoutType)throw std::runtime_error("The game's loadout type is unavailable; nothing was granted.");
+                WeakObjectHandle handle;handle.ObjectIndex=Request.To.Index;handle.ObjectSerialNumber=Request.To.Serial;
+                Inventory=handle.Get();
+                if(!Live(Inventory)||!Inventory->IsA(inventoryType))throw std::runtime_error("The container is not a live inventory.");
+                if(Inventory->IsA(loadoutType))throw std::runtime_error("Equipped items cannot be granted into; name a storage container.");
+                if(Inventory->GetWorld()!=controller->GetWorld())throw std::runtime_error("The container is not in that character's world.");
+                if(OwningController(Inventory,controllerType)!=controller)throw std::runtime_error("That container does not belong to this character.");
+            }else Inventory=Request.To.Where==S::Scope::Personal
                 ?E::Owned(controller,TEXT("PersonalInventoryComponent"),TEXT("/Script/Dominion.PersonalInventoryComponent"))
                 :E::Owned(controller,TEXT("InventoryComponent"),TEXT("/Script/Dominion.InventoryComponent"));
-            // A grant to a character is a delivery: the player's own switch and every mod's pauses apply.
+            // A grant to a character is a delivery: the player's own switch and every mod's pauses
+            // apply, except the caller's own pause when bound to the sender's request.
             std::string world;try{world=DragonWilds::WorldSaveIdentity::Guid(controller,"Helpy delivery flags");}catch(...){}
-            HelpyDeliveryGate::Require(Request.To.Character,world);
+            HelpyDeliveryGate::Require(Request.To.Character,world,gate.Exempt);
+            Owner=controller;OwnerHandle.Assign(controller);
         }else{
             WeakObjectHandle handle;handle.ObjectIndex=Request.To.Index;handle.ObjectSerialNumber=Request.To.Serial;
             Inventory=handle.Get();
             if(!Inventory||!Inventory->IsA(inventoryType)||Inventory->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed))||!Inventory->GetWorld())
                 throw std::runtime_error("The container is not a live inventory in a world.");
             // A player's own containers are reachable only as a Character target, where delivery flags apply.
-            for(auto* outer=Inventory->GetOuterPrivate();outer;outer=outer->GetOuterPrivate())
-                if(outer->IsA(controllerType))throw std::runtime_error("Name a player's container by its character, not by object identity.");
+            if(PlayerOwned(Inventory,controllerType))throw std::runtime_error("Name a player's container by its character, not by object identity.");
             if(!Network::OwnsGameplay(Network::Detect(Inventory->GetWorld()).Mode))throw std::runtime_error("Items are granted only where the game is authoritative.");
         }
         if(!Inventory||!Inventory->IsA(inventoryType))throw std::runtime_error("The target inventory is unavailable.");
@@ -95,8 +133,20 @@ struct Prepared{
         Validate(ReadyPath,{{TEXT("ItemData"),0,8},{TEXT("Count"),8,4},{TEXT("ReturnValue"),12,1}});
         Validate(GivePath,{{TEXT("ItemData"),0,8},{TEXT("Count"),8,4},{TEXT("DurabilityPercentage"),12,4},{TEXT("GameplayTags"),16,32},{TEXT("ReturnValue"),48,1}});
     }
+    // The same component, and for a character the same controller, still holding that character.
+    void Recheck(){
+        if(InventoryHandle.Get()!=Inventory||!Live(Inventory))throw std::runtime_error("The target inventory changed.");
+        if(Request.To.Is!=G::Kind::Character)return;
+        if(OwnerHandle.Get()!=Owner||!Live(Owner)||Inventory->GetWorld()!=Owner->GetWorld()
+            ||S::NormalizeGuid(PlayerStatusRuntime::CharacterGuid(AH::GetObjectRef(Owner,TEXT("PlayerState"))))!=Request.To.Character)
+            throw std::runtime_error("The target character changed.");
+        if(Request.To.Owned){
+            auto* controllerType=AH::ResolveClass(TEXT("/Script/Dominion.DominionPlayerController"));
+            if(!controllerType||OwningController(Inventory,controllerType)!=Owner)throw std::runtime_error("The container's owner changed.");
+        }
+    }
     int64_t Count(){
-        if(InventoryHandle.Get()!=Inventory)throw std::runtime_error("The target inventory changed.");
+        Recheck();
         AH::FunctionCall count(Inventory,CountPath);count.Arg(TEXT("ItemData"),Item).Invoke();return count.Result<int32_t>();
     }
     int64_t Before(){
@@ -106,7 +156,7 @@ struct Prepared{
         return before;
     }
     void Invoke(){
-        if(InventoryHandle.Get()!=Inventory)throw std::runtime_error("The target inventory changed before the grant.");
+        Recheck();
         AH::FunctionCall give(Inventory,GivePath);
         give.Arg(TEXT("ItemData"),Item).Arg(TEXT("Count"),static_cast<int32_t>(Request.Count)).Arg(TEXT("DurabilityPercentage"),1.0f).JsonArg(TEXT("GameplayTags"),nlohmann::json::object());
         give.Invoke();
@@ -114,7 +164,7 @@ struct Prepared{
     }
 };
 }
-int32_t Call(const char* caller,bool permitted,const char* request,char* response,uint32_t capacity,uint32_t* size){
+int32_t Call(const char* caller,bool permitted,const PluginServerRequest::Serving* serving,const char* request,char* response,uint32_t capacity,uint32_t* size){
     if(!caller||!request||!size||(!response&&capacity)||capacity>RUNESCHEMA_PLUGIN_MAX_MESSAGE)return RS_PLUGIN_INVALID_ARGUMENT;
     if(!permitted)return RS_PLUGIN_INVALID_ARGUMENT;
     // A size probe looks nothing up and reserves nothing.
@@ -127,7 +177,7 @@ int32_t Call(const char* caller,bool permitted,const char* request,char* respons
         try{
             const auto parsed=G::Parse(nlohmann::json::parse(request));std::unique_ptr<Prepared> operation;
             reply=Receipts.Run(caller,permitted,parsed,capacity,
-                [&]{operation=std::make_unique<Prepared>(parsed);return operation->Before();},
+                [&]{operation=std::make_unique<Prepared>(caller,serving,parsed);return operation->Before();},
                 [&]{operation->Invoke();},[&]{return operation->Count();});
         }catch(const G::BufferRequired& needed){*size=static_cast<uint32_t>(needed.Size);return RS_PLUGIN_BUFFER_TOO_SMALL;}
         catch(const std::exception& error){reply=G::Refusal("Request",error.what());}

@@ -238,11 +238,15 @@ inline const Flag* ExceptionFor(const Snapshot& snapshot,std::string_view mod,st
     return nullptr;
 }
 // The reason a player-driven delivery to this character (and world, when known) must not run.
-inline std::optional<Block> Check(const Snapshot& snapshot,std::string_view character,std::string_view world){
+// exempt names one mod whose own pauses are skipped for this delivery: RuneSchema passes it only
+// for a grant the mod's own plugin makes while serving that character's own server request
+// (see PLUGIN-SERVER-REQUESTS.md). The player's switch and every other mod's pauses still apply.
+inline std::optional<Block> Check(const Snapshot& snapshot,std::string_view character,std::string_view world,std::string_view exempt={}){
     const auto guid=NormalizeGuid(character),place=NormalizeGuid(world);
     if(!UserAllows(snapshot.State,guid))
         return Block{"helpy","Helpy","character",guid,"You turned off Helpy deliveries for this character in Settings > Deliveries.",true};
     for(const auto& flag:snapshot.Active){
+        if(!exempt.empty()&&flag.Mod==exempt)continue;
         if(!((flag.Target=="character"&&flag.Id==guid&&!guid.empty())||(flag.Target=="world"&&flag.Id==place&&!place.empty())))continue;
         if(ExceptionFor(snapshot,flag.Mod,guid))continue; // That mod exempted this character from its own pauses.
         const auto name=ModName(snapshot,flag.Mod);

@@ -4,11 +4,16 @@
 // engine-free half (request rules and the replay cache), shared with tests;
 // Runtime/ItemGrantService.cpp does the native work on the game thread.
 //
-// Targets: a connected character's Inventory or Personal container (the Helpy delivery flags
-// apply, as for any delivery to a character), or a world container such as a chest, named by
-// its object identity. A player's own containers are reachable only as a Character target.
+// Targets:
+//   - a connected character's Inventory or Personal container, or one exact inventory component
+//     that character's controller owns (a mod's own storage), named by object identity;
+//   - a world container such as a chest, named by object identity. A player's own containers
+//     are reachable only as a Character target.
+// Every Character target is a delivery: the Helpy delivery flags apply (CharacterRule below).
 // The cache is volatile, like item.destroy's: a consumer keeps its own durable journal.
+// A Confirmed grant means the live count grew by exactly Count. It is not a save receipt.
 #include "Core/ItemSnapshot.h"
+#include "Core/PluginServerRequest.h"
 #include <map>
 #include <tuple>
 namespace PS::ItemGrant {
@@ -20,7 +25,8 @@ struct BufferRequired{size_t Size;};
 enum class State{Confirmed,Unknown};
 inline std::string_view Name(State state){return state==State::Confirmed?"Confirmed":"Unknown";}
 enum class Kind{Character,Container};
-struct Target{Kind Is=Kind::Character;std::string Character;ItemSnapshot::Scope Where=ItemSnapshot::Scope::Inventory;int32_t Index=-1,Serial=0;};
+// Owned: a Character target naming one component by Index/Serial instead of a Scope.
+struct Target{Kind Is=Kind::Character;std::string Character;ItemSnapshot::Scope Where=ItemSnapshot::Scope::Inventory;int32_t Index=-1,Serial=0;bool Owned=false;};
 struct Request{std::string Id,Item;int Count=0;Target To;};
 
 // A lower-case canonical UUID; the all-zero UUID is refused.
@@ -35,7 +41,15 @@ inline std::string Uuid(const Json& value){
     if(id=="00000000-0000-0000-0000-000000000000")throw std::invalid_argument("A zero Request UUID is invalid.");
     return id;
 }
+inline void Identity(const Json& container,Target& to){
+    if(!container.is_object()||container.size()!=2||!container.contains("Index")||!container.contains("Serial")
+        ||!container["Index"].is_number_integer()||!container["Serial"].is_number_integer())throw std::invalid_argument("Container must be {Index, Serial} from ObjectIdentity.");
+    const auto index=container["Index"].get<int64_t>(),serial=container["Serial"].get<int64_t>();
+    if(index<0||index>INT32_MAX||serial<1||serial>INT32_MAX)throw std::invalid_argument("Container identity is out of range.");
+    to.Index=static_cast<int32_t>(index);to.Serial=static_cast<int32_t>(serial);
+}
 // {"Request":uuid,"Item":"/Game/...","Count":n,"Target":{"Character":guid,"Scope":"Inventory"|"Personal"}}
+// {"Request":uuid,"Item":"/Game/...","Count":n,"Target":{"Character":guid,"Container":{"Index":i,"Serial":s}}}
 // {"Request":uuid,"Item":"/Game/...","Count":n,"Target":{"Container":{"Index":i,"Serial":s}}}
 inline Request Parse(const Json& input){
     if(!input.is_object())throw std::invalid_argument("A grant request must be an object.");
@@ -52,30 +66,70 @@ inline Request Parse(const Json& input){
     const auto target=input.find("Target");
     if(target==input.end()||!target->is_object()||target->size()<1||target->size()>2)throw std::invalid_argument("Target must name one character or one container.");
     if(target->contains("Character")){
-        for(const auto& [key,value]:target->items())if(key!="Character"&&key!="Scope")throw std::invalid_argument("Unknown target field: "+key);
+        for(const auto& [key,value]:target->items())if(key!="Character"&&key!="Scope"&&key!="Container")throw std::invalid_argument("Unknown target field: "+key);
         request.To.Is=Kind::Character;
         const auto& guid=target->at("Character");
         if(!guid.is_string()||(request.To.Character=ItemSnapshot::NormalizeGuid(guid.get<std::string>())).empty())throw std::invalid_argument("Character must be a character GUID.");
+        if(target->contains("Container")){
+            if(target->contains("Scope"))throw std::invalid_argument("Name a Scope or a Container, not both.");
+            Identity(target->at("Container"),request.To);request.To.Owned=true;return request;
+        }
+        if(!target->value("Scope",Json("Inventory")).is_string())throw std::invalid_argument("Scope must be Inventory or Personal.");
         const auto scope=target->value("Scope",std::string("Inventory"));
         if(scope=="Inventory")request.To.Where=ItemSnapshot::Scope::Inventory;
         else if(scope=="Personal")request.To.Where=ItemSnapshot::Scope::Personal;
         else throw std::invalid_argument("Scope must be Inventory or Personal.");
     }else if(target->contains("Container")){
         if(target->size()!=1)throw std::invalid_argument("A container target has no other fields.");
-        const auto& container=target->at("Container");
-        if(!container.is_object()||container.size()!=2||!container.contains("Index")||!container.contains("Serial")
-            ||!container["Index"].is_number_integer()||!container["Serial"].is_number_integer())throw std::invalid_argument("Container must be {Index, Serial} from ObjectIdentity.");
-        const auto index=container["Index"].get<int64_t>(),serial=container["Serial"].get<int64_t>();
-        if(index<0||index>INT32_MAX||serial<1||serial>INT32_MAX)throw std::invalid_argument("Container identity is out of range.");
-        request.To.Is=Kind::Container;request.To.Index=static_cast<int32_t>(index);request.To.Serial=static_cast<int32_t>(serial);
+        request.To.Is=Kind::Container;Identity(target->at("Container"),request.To);
     }else throw std::invalid_argument("Target must name one character or one container.");
     return request;
 }
 inline Json TargetJson(const Target& to){
+    if(to.Is==Kind::Character&&to.Owned)return {{"Character",to.Character},{"Container",{{"Index",to.Index},{"Serial",to.Serial}}}};
     if(to.Is==Kind::Character)return {{"Character",to.Character},{"Scope",ItemSnapshot::Name(to.Where)}};
     return {{"Container",{{"Index",to.Index},{"Serial",to.Serial}}}};
 }
 inline Json Body(const Request& r){return {{"Request",r.Id},{"Item",r.Item},{"Count",r.Count},{"Target",TargetJson(r.To)}};}
+
+// The Helpy flags mod whose pauses are this plugin's own: the plugin id lower-cased, when that is a
+// valid flags mod id (letters, digits, - and _, at most 40). GrandExchange -> grandexchange.
+inline std::string OwnPauseMod(std::string_view plugin){
+    if(plugin.empty()||plugin.size()>40)return {};
+    std::string id;
+    for(const unsigned char c:plugin){
+        const char lower=static_cast<char>(c>='A'&&c<='Z'?c-'A'+'a':c);
+        if(!((lower>='a'&&lower<='z')||(lower>='0'&&lower<='9')||lower=='-'||lower=='_'))return {};
+        id.push_back(lower);
+    }
+    return id;
+}
+// How a Character target is gated. Exempt: the one flags mod whose own pauses are skipped.
+struct CharacterGate{std::string Exempt;};
+// serving: the server request the caller is handling now, if any. local: the target's controller
+// is local to this game. Throws the refusal, before anything is looked up in the inventory.
+//   - Bound (the caller's own server half, serving that character's own request): the target must
+//     be the sender, the caller's own pause is exempt, and for a remote sender its reported
+//     delivery state must be open (other mods' pauses and the player's switch on the player's PC).
+//   - Not bound: only a character local to this game, with every pause in force.
+// The server's own flags folder is checked by the caller in both cases, with the same exemption.
+inline CharacterGate Gate(std::string_view caller,const PluginServerRequest::Serving* serving,std::string_view character,bool local){
+    const bool bound=serving&&serving->Plugin==caller;
+    if(bound&&serving->Character!=character)throw std::runtime_error("While serving a request, a plugin can grant only to the character that sent it.");
+    if(!bound&&!local)throw std::runtime_error("A grant to another player's character runs only while serving that player's own request.");
+    CharacterGate gate;if(!bound)return gate;
+    gate.Exempt=OwnPauseMod(caller);
+    if(serving->Remote){
+        const auto& sender=serving->Sender;
+        if(!sender.Known)throw std::runtime_error("The player's RuneSchema did not report its delivery settings; it needs RuneSchema 0.9.0.7 or later.");
+        if(!sender.Open){
+            if(sender.By=="helpy")throw std::runtime_error("The player turned off Helpy deliveries for this character (Settings > Deliveries on their PC).");
+            if(sender.By=="unknown")throw std::runtime_error("The player's Helpy could not confirm which character this delivery is for, and a delivery pause is set on their PC.");
+            throw std::runtime_error(sender.By+" has paused deliveries to this character on the player's PC.");
+        }
+    }
+    return gate;
+}
 inline Json Refusal(std::string_view phase,std::string_view error){return {{"Schema",Schema},{"State","Refused"},{"Ok",false},{"Phase",phase},{"Error",std::string(error.substr(0,300))}};}
 
 // Replay before any live lookup; Unknown reserved before the native call and never evicted.

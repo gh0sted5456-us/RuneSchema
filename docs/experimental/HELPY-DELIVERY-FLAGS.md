@@ -32,6 +32,7 @@ RuneSchema checks the flags where items are granted, not only in Helpy's interfa
 | Clone Creator with *Give* | Before the clone is granted |
 | Character editor: adding an item or raising a stack | Before the draft changes |
 | A host delivering to another connected player | Never |
+| A plugin's server half granting to a player while serving that player's own request ([plugin server requests](PLUGIN-SERVER-REQUESTS.md)) | On the authoritative game against its own flags, and against the flags the player's game reported. That plugin's own pause is skipped; every other pause applies |
 
 A refused delivery shows the mod's message, or *"{mod name} has paused Helpy deliveries to this
 character."* A character you turned off shows *"You turned off Helpy deliveries for this character
