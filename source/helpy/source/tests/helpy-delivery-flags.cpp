@@ -4,7 +4,7 @@
 #include <chrono>
 #include <fstream>
 // Helpy delivery flags: signature checks, newest-seq rule, key pinning, the player's own
-// opt-out and per-mod choices, temporary lifts (until), and the limits on what a flags folder can do.
+// opt-out and per-mod choices, temporary lifts (until), character exceptions, and the limits on what a flags folder can do.
 namespace {
 namespace fs=std::filesystem;using namespace PS::HelpyDeliveryFlags;
 struct Row{std::string Statement,Sig;};
@@ -23,6 +23,25 @@ const Row passRevoke{"helpy-flag/1\n{\"mod\":\"examplemod\",\"target\":\"charact
 const Row passBadUntil{"helpy-flag/1\n{\"mod\":\"examplemod\",\"target\":\"character\",\"id\":\"11112222333344445555666677778888\",\"flag\":\"noPlayerDeliveries\",\"on\":false,\"until\":0,\"seq\":6,\"at\":1800000000}","3046022100d977389db60a982d7a5648c02354ae74f172f4ce1f5794d85905e25d639f5c51022100a5e42cb19415fa292f7654fc1abbe6d3902db40fd043d907f550507584bba94e"};
 const Row passPauseUntil{"helpy-flag/1\n{\"mod\":\"examplemod\",\"target\":\"character\",\"id\":\"11112222333344445555666677778888\",\"flag\":\"noPlayerDeliveries\",\"on\":true,\"until\":1800000500,\"seq\":7,\"at\":1800000000}","30440220186ae9cb4719e3af25c3fc3a42e227c9d3db924c3d8dac933c38072262f8e174022001b65efa3478c8bb4fafae9f89993b268b4519580eee52a9b6775634be5af82e"};
 const Row impostorOn{"helpy-flag/1\n{\"mod\":\"grandexchange\",\"target\":\"character\",\"id\":\"5A3F0C21B6D84E7F9A1C2B3D4E5F6071\",\"flag\":\"noPlayerDeliveries\",\"on\":true,\"seq\":1,\"at\":1800000000,\"message\":\"Not from the Bazaar.\"}","304502200d0a2fd6a25526e6d8a1f2ee4e36206cc5b264c6c28b5641c279a28e09dc09760221008878df92523e05f9e10691393f3b29609d723e645e1cb24801fc2e7c9582cbf3"};
+// Character exceptions: signed by a fixed test-only scalar (tools/sign_exception_tests.py in the handoff).
+const std::string KeyE="3059301306072a8648ce3d020106082a8648ce3d03010703420004be2ca03129a9eac4fdfc4a6b4b2c09275bd08c2869449d147e0b19c5ec5d79e12b9809c0db9a9a62481716d86a8994def308955fd6456fa3ebb1657ffa247c68";
+const Row exWorldPause{"helpy-flag/1\n{\"mod\":\"examplemod\",\"target\":\"world\",\"id\":\"00112233445566778899AABBCCDDEEFF\",\"flag\":\"noPlayerDeliveries\",\"on\":true,\"seq\":1,\"at\":1800000000,\"message\":\"Grand Exchange world.\"}","3044022034cd2bd63cf2bd69b441b9a6ee6f2744af02e1066b03d8c83ae5dcc1185746ad02201fb4d3f6281b8fff0a686c6df6427df573dfdff93769211ae7c536f98e524e40"};
+const Row exOwnerPause{"helpy-flag/1\n{\"mod\":\"examplemod\",\"target\":\"character\",\"id\":\"0A0B0C0D0E0F10111213141516171819\",\"flag\":\"noPlayerDeliveries\",\"on\":true,\"seq\":1,\"at\":1800000000,\"message\":\"Enrolled in the Grand Exchange.\"}","3046022100a4e0e24b2f59993a248304f4610e54c233ebf13357f4d8e66aa8254b92db96a9022100cfc64b55d2607a386856947067f4c822ce51f806acc2654e799e0d00fda5acd6"};
+const Row exOtherPause{"helpy-flag/1\n{\"mod\":\"examplemod\",\"target\":\"character\",\"id\":\"1A1B1C1D1E1F20212223242526272829\",\"flag\":\"noPlayerDeliveries\",\"on\":true,\"seq\":1,\"at\":1800000000}","30450221009659e595a4a8ec37dee3a0d06a723dd9a56215bcc82cea780b819bb90a85ddb1022011057bab75eea4b69b79dd4495d9216c2c185970d7a18253b041e3c2c114a87f"};
+const Row exAllow{"helpy-flag/1\n{\"mod\":\"examplemod\",\"target\":\"character\",\"id\":\"0A0B0C0D0E0F10111213141516171819\",\"flag\":\"deliveryPauseException\",\"on\":true,\"seq\":10,\"at\":1800000000,\"until\":1800000500,\"message\":\"Trusted Helpy access.\"}","304502200f19b3c1b7ec4e89036b7a05137460e3a151119122b1a99e1020208ccce0f27f0221008c8de92f39d574e2b7031f36f83387b9d98e03796baf55c7f60d48fb449cccad"};
+const Row exRevoke{"helpy-flag/1\n{\"mod\":\"examplemod\",\"target\":\"character\",\"id\":\"0A0B0C0D0E0F10111213141516171819\",\"flag\":\"deliveryPauseException\",\"on\":false,\"seq\":11,\"at\":1800000050}","304502206086f9978fbd41f89fb626ee1e73538b72e3a2ff0b9bd2f251e536d6b55d3ee9022100cba2fcff9a2c3847be6ff423340a18e4bfa3dfbad627a137636b83a27a31e8af"};
+const Row exAllowTie{"helpy-flag/1\n{\"mod\":\"examplemod\",\"target\":\"character\",\"id\":\"0A0B0C0D0E0F10111213141516171819\",\"flag\":\"deliveryPauseException\",\"on\":true,\"seq\":11,\"at\":1800000000,\"until\":1800000500}","304402207bf7a934baba3f9ce90126f72de057b05742707498151aef9c7afbb77ca3002c0220047a1a7c5fd45afa828c3994f9de6c23762d8a9e772fc1f3e601e1c9a4b2544c"};
+const Row exAllowNewer{"helpy-flag/1\n{\"mod\":\"examplemod\",\"target\":\"character\",\"id\":\"0A0B0C0D0E0F10111213141516171819\",\"flag\":\"deliveryPauseException\",\"on\":true,\"seq\":12,\"at\":1800000060,\"until\":1800000900}","3045022045190340b380f864648d7fbd8753eebb31524f625961d2c110b2978e7f33adc8022100a459c7b376f484bd76d8f90d9507279c10aa39cd8e201ea13c341e37cbaddf55"};
+const Row exNoUntil{"helpy-flag/1\n{\"mod\":\"examplemod\",\"target\":\"character\",\"id\":\"0A0B0C0D0E0F10111213141516171819\",\"flag\":\"deliveryPauseException\",\"on\":true,\"seq\":20,\"at\":1800000000}","304502207f1bef7e84176dbcfccae5c446d9d7e124fba726d1a8127220f618c633f70c53022100df5028e268304689ab4353f909cff66e82965e19bd29a9623456b79add40a3ba"};
+const Row exNoAt{"helpy-flag/1\n{\"mod\":\"examplemod\",\"target\":\"character\",\"id\":\"0A0B0C0D0E0F10111213141516171819\",\"flag\":\"deliveryPauseException\",\"on\":true,\"seq\":21,\"until\":1800000500}","3045022036f08bd57ddd3e3efe8e4e95134f0dba88fd9f6ea9a9664c9efad95c42585814022100d93a1269e1ee4a468341a0076bad7538f1b6719b2e1cfee104ce95995fe788a0"};
+const Row exTooLong{"helpy-flag/1\n{\"mod\":\"examplemod\",\"target\":\"character\",\"id\":\"0A0B0C0D0E0F10111213141516171819\",\"flag\":\"deliveryPauseException\",\"on\":true,\"seq\":22,\"at\":1800000000,\"until\":1802592001}","3044022067b2c4dcba9472d9a0d0a88ec75615ffe3cb9bb5adb86c2abb1f7513c66fc1db022060dc725211947ca576aaabd9dda33cb374a96b5f62bf51c552aa946e1b3c0fcc"};
+const Row exMaxLease{"helpy-flag/1\n{\"mod\":\"examplemod\",\"target\":\"character\",\"id\":\"0A0B0C0D0E0F10111213141516171819\",\"flag\":\"deliveryPauseException\",\"on\":true,\"seq\":23,\"at\":1800000000,\"until\":1802592000}","304502201b661ce60a9d6b4824ec83c99c6115d4221fdbf3a16316b5f20a257dbada79880221008c6d02132ddda254ff3bfae182faeedca5fb05e7895d396dcb9a8186204410d1"};
+const Row exWorldTarget{"helpy-flag/1\n{\"mod\":\"examplemod\",\"target\":\"world\",\"id\":\"00112233445566778899AABBCCDDEEFF\",\"flag\":\"deliveryPauseException\",\"on\":true,\"seq\":24,\"at\":1800000000,\"until\":1800000500}","30460221009d236d0b27853095fa753d0bfeb885a8289615f52a9e4a6fba50cdcdd59bdba8022100f7016607e90f798f171931bfebfcdeda77a2e68ba24cf64ef79caf1ad7d94fbc"};
+const Row exBackwards{"helpy-flag/1\n{\"mod\":\"examplemod\",\"target\":\"character\",\"id\":\"0A0B0C0D0E0F10111213141516171819\",\"flag\":\"deliveryPauseException\",\"on\":true,\"seq\":25,\"at\":1800000000,\"until\":1800000000}","304502205da14b9f4173ed078224c636261a46b560793f74e20f01e81ac05c1157cf9aa5022100b56dac50928e8743648b4ad0288db57858d7d9c7db334ea7b4030b377af4aa99"};
+const Row exWorldPauseHigh{"helpy-flag/1\n{\"mod\":\"examplemod\",\"target\":\"world\",\"id\":\"00112233445566778899AABBCCDDEEFF\",\"flag\":\"noPlayerDeliveries\",\"on\":true,\"seq\":999,\"at\":1800000000}","3045022100e88063b178c9c9759d29a517c1c7438f104ff594188694d2c7399f164c4291b7022062db9ea0109d61d6f45799e22cce1f54387b8c5494d1caf4de10c3530f018d5c"};
+const Row exAllowLow{"helpy-flag/1\n{\"mod\":\"examplemod\",\"target\":\"character\",\"id\":\"0A0B0C0D0E0F10111213141516171819\",\"flag\":\"deliveryPauseException\",\"on\":true,\"seq\":3,\"at\":1800000000,\"until\":1800000500}","3045022100df540070c30311ff5077491721fe9f3a48e9266a0f3ddec4d99971e85fc8aaf40220625a51eec6fd039b5d84dcd7bc42092a485de92c36a64a57013096bf4d7ee542"};
+const Row exRevokeLow{"helpy-flag/1\n{\"mod\":\"examplemod\",\"target\":\"character\",\"id\":\"0A0B0C0D0E0F10111213141516171819\",\"flag\":\"deliveryPauseException\",\"on\":false,\"seq\":4,\"at\":1800000010}","3045022029d6912e0d37948067aa57ccf8e3f16ff930617ed4c0911a8ba6ea92e58ef5e9022100e67ccae76ad034e5b2c69690e2b8320d8806e7bfcc19fa5616c85ecb65643084"};
+const Row otherModPause{"helpy-flag/1\n{\"mod\":\"othermod\",\"target\":\"character\",\"id\":\"0A0B0C0D0E0F10111213141516171819\",\"flag\":\"noPlayerDeliveries\",\"on\":true,\"seq\":1,\"at\":1800000000,\"message\":\"Other mod pause.\"}","304502203e5c7d62f2abd32f5975fab10823d954a1880bab7d9643c21a8808f997bf777c022100f74ad9c9474117713f50a635d71bfe4b6850fd4eb798eb19c83aecac49a9446f"};
 const std::string T="11112222333344445555666677778888";
 const std::string C="5A3F0C21B6D84E7F9A1C2B3D4E5F6071",W="00112233445566778899AABBCCDDEEFF",D="ABCDEFABCDEFABCDEFABCDEFABCDEF01";
 void Put(const fs::path& path,const std::string& text){fs::create_directories(path.parent_path());std::ofstream(path,std::ios::binary)<<text;}
@@ -131,5 +150,62 @@ int main(){
         assert(!ReadState(impostor)["mods"]["grandexchange"].contains("fingerprint"));    // Never pinned.
         ResetKey(impostor,"grandexchange",1800000200);                                   // A reset cannot override the registry.
         assert(Now(impostor).Mods[0].Key==ModStatus::Trust::Mismatch&&!Check(Now(impostor),C,""));}
+    // Character exceptions ("deliveryPauseException"): one character is exempt from the issuing mod's own
+    // pauses (its character pause and its world pause), and from nothing else.
+    {const std::string O="0A0B0C0D0E0F10111213141516171819",P="1A1B1C1D1E1F20212223242526272829";
+        const auto ex=root/"exceptions";Register(ex,"examplemod",KeyE);Register(ex,"othermod",KeyE);
+        const auto at=[&](int64_t now){return Read(ex,Signature::DefaultVerifier(),now);};
+        // Parsing: a grant is a bounded lease on one character; a revocation needs no until.
+        assert(ParseStatement(exAllow.Statement,"examplemod")->Until==1800000500);
+        assert(ParseStatement(exRevoke.Statement,"examplemod")->Until==0);
+        assert(ParseStatement(exMaxLease.Statement,"examplemod").has_value());
+        for(const auto* bad:{&exNoUntil,&exNoAt,&exTooLong,&exWorldTarget,&exBackwards})assert(!ParseStatement(bad->Statement,"examplemod"));
+        // Baseline: the owner is paused by the mod's character pause and by its world pause.
+        Flags(ex,"examplemod",{exWorldPause,exOwnerPause,exOtherPause});Flags(ex,"othermod",{});
+        {const auto read=at(1800000100);assert(Check(read,O,"")&&Check(read,O,W)&&read.Excepted.empty());}
+        // Granted: the owner is allowed in that world and with no world known; the other account's
+        // character in the same world stays paused (its own pause, and the world pause).
+        Flags(ex,"examplemod",{exWorldPause,exOwnerPause,exOtherPause,exAllow});
+        {const auto read=at(1800000100);assert(read.Excepted.size()==1&&read.Excepted[0].Id==O&&ExceptionFor(read,"examplemod",O));
+            assert(!Check(read,O,W)&&!Check(read,O,""));
+            const auto other=Check(read,P,W);assert(other&&other->Mod=="examplemod");
+            const auto stranger=Check(read,"2A2B2C2D2E2F30313233343536373839",W);assert(stranger&&stranger->Target=="world");
+            assert(AnyCharacterPause(read)); // Unknown character: an exception cannot be applied, so still fail closed.
+            assert(!ExceptionFor(read,"othermod",O)&&!ExceptionFor(read,"examplemod",P));}
+        // Expiry by this PC's clock restores the mod's pauses without another statement.
+        for(const int64_t now:{int64_t{1800000500},int64_t{1800009999}}){const auto read=at(now);
+            const auto block=Check(read,O,W);assert(block&&block->Mod=="examplemod"&&read.Excepted.empty());}
+        // A newer revocation beats the allowance, in any file order, and a tied replayed allowance cannot revive it.
+        for(const auto& order:std::vector<std::vector<Row>>{{exWorldPause,exOwnerPause,exAllow,exRevoke},{exRevoke,exAllow,exWorldPause,exOwnerPause},
+                {exWorldPause,exOwnerPause,exRevoke,exAllowTie},{exAllowTie,exRevoke,exWorldPause,exOwnerPause}}){
+            Flags(ex,"examplemod",order);const auto read=at(1800000100);
+            assert(read.Excepted.empty()&&Check(read,O,W)&&Check(read,O,""));}
+        // Only a newer signed allowance restores access.
+        Flags(ex,"examplemod",{exWorldPause,exOwnerPause,exAllow,exRevoke,exAllowNewer});
+        {const auto read=at(1800000100);assert(read.Excepted.size()==1&&read.Excepted[0].Seq==12&&!Check(read,O,W));}
+        // Rejected exceptions (unbounded, no issue time, too long, world target, empty lease) change nothing.
+        Flags(ex,"examplemod",{exWorldPause,exOwnerPause,exNoUntil,exNoAt,exTooLong,exWorldTarget,exBackwards});
+        {const auto read=at(1800000100);assert(read.Mods[0].Rejected==5&&read.Excepted.empty()&&Check(read,O,W));}
+        // Sequence numbers never compare across targets or flags: a character exception at seq 3 exempts
+        // the character from the same mod's world pause at seq 999, and a newer character revocation
+        // (seq 4) ends it without any comparison against the world's counter.
+        Flags(ex,"examplemod",{exWorldPauseHigh,exAllowLow});
+        {const auto read=at(1800000100);assert(read.Excepted.size()==1&&!Check(read,O,W));
+            const auto other=Check(read,P,W);assert(other&&other->Target=="world");}
+        Flags(ex,"examplemod",{exWorldPauseHigh,exAllowLow,exRevokeLow});
+        {const auto read=at(1800000100);assert(read.Excepted.empty()&&Check(read,O,W));}
+        // Another mod's pause still applies to the excepted character.
+        Flags(ex,"examplemod",{exWorldPause,exOwnerPause,exAllow});Flags(ex,"othermod",{otherModPause});
+        {const auto read=at(1800000100);const auto block=Check(read,O,W);assert(block&&block->Mod=="othermod"&&block->Message=="Other mod pause.");}
+        Flags(ex,"othermod",{});
+        // The player's own opt-out still wins over an exception.
+        {SetUserDeliveries(ex,O,false,1800000100,"Owner");const auto block=Check(at(1800000100),O,W);assert(block&&block->User);
+            SetUserDeliveries(ex,O,true,1800000100);assert(!Check(at(1800000100),O,W));}
+        // An exception statement placed in another mod's folder names the wrong mod and is rejected.
+        Flags(ex,"othermod",{exAllow});{const auto read=at(1800000100);assert(read.Mods[1].Rejected==1);}
+        Flags(ex,"othermod",{});
+        // An exception signed by a key Helpy does not trust is ignored.
+        {const auto wrong=root/"exceptions-wrong";Register(wrong,"examplemod",KeyA);Flags(wrong,"examplemod",{exWorldPause,exOwnerPause,exAllow});
+            const auto read=Read(wrong,Signature::DefaultVerifier(),1800000100);assert(read.Excepted.empty()&&read.Mods[0].Rejected==3);}}
     std::error_code error;fs::remove_all(root,error);
 }

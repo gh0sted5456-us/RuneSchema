@@ -64,6 +64,8 @@ inline void Characters(){
         if(HelpyImGuiTheme::Toggle(label.c_str(),&allowed))
             Apply([&]{F::SetUserDeliveries(Folder(),row.Guid,allowed,Now(),row.Name);},allowed?"Deliveries are on for this character.":"Deliveries are off for this character.");
         if(const auto* lift=allowed?LiftFor(row.Guid):nullptr)ImGui::TextDisabled("    %s",Allowed(*lift,F::ModName(Snapshot,lift->Mod)).c_str());
+        if(allowed)for(const auto& exception:Snapshot.Excepted)if(exception.Id==row.Guid)
+            ImGui::TextDisabled("    Exempt from %s's pauses until %s",F::ModName(Snapshot,exception.Mod).c_str(),Date(exception.Until).c_str());
         ImGui::PopID();
     }
 }
@@ -84,6 +86,11 @@ inline void Mods(){
         for(const auto& lift:Snapshot.Lifted)if(lift.Mod==mod.Id){
             ImGui::BulletText("%s %s: %s",lift.Target=="world"?"World":"Character",Short(lift.Id).c_str(),Allowed(lift,mod.Name).c_str());
             if(!lift.Message.empty())ImGui::TextDisabled("    %s",lift.Message.c_str());
+        }
+        // Character exceptions: that character is exempt from this mod's own pauses until the lease ends.
+        for(const auto& exception:Snapshot.Excepted)if(exception.Mod==mod.Id){
+            ImGui::BulletText("Character %s: exempt from this mod's pauses until %s",Short(exception.Id).c_str(),Date(exception.Until).c_str());
+            if(!exception.Message.empty())ImGui::TextDisabled("    %s",exception.Message.c_str());
         }
         if(mod.Trusted()){
             bool allow=mod.AllowPause;

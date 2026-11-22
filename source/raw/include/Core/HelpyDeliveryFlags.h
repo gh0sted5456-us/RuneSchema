@@ -21,6 +21,12 @@
 //   - a registered mod has a valid, signed noPlayerDeliveries flag on the character or world.
 // A mod lifts its pause with a newer "on": false statement. With "until" (unix seconds) the lift is
 // temporary: after that moment, by this PC's clock, the pause is back without another statement.
+// A character exception ("deliveryPauseException", target character, "on": true) exempts one character
+// from that same mod's pauses: its character pause and its pause on any world. Nothing else changes:
+// the player's own opt-out and every other mod's pauses still apply, and other characters in the same
+// world stay paused. An exception is always a lease: it needs "at" and "until", at most 30 days apart,
+// and ends by itself at "until" by this PC's clock. A newer "on": false revokes it; on a tied seq the
+// revocation wins, so a replayed or reordered allowance can never override a revocation.
 // Deliveries a server makes through Helpy to another player are never blocked here.
 // Folder: <Helpy shared folder>/flags/<mod id>/{mod.json,flags.json}, plus helpy-state.json,
 // which Helpy owns and mods may read (user opt-outs, per-mod choices, pinned keys).
@@ -29,6 +35,8 @@ namespace fs=std::filesystem;
 using Json=nlohmann::json;
 inline constexpr std::string_view StatementPrefix="helpy-flag/1\n";
 inline constexpr std::string_view PauseFlag="noPlayerDeliveries";
+inline constexpr std::string_view PauseExceptionFlag="deliveryPauseException";
+inline constexpr int64_t MaxExceptionSeconds=30LL*24*60*60;
 inline constexpr size_t MaxMods=64,MaxStatements=4096,MaxStatementBytes=2048,MaxFlagsFileBytes=1024*1024,MaxStateBytes=1024*1024;
 inline constexpr size_t MaxEvents=64;
 
@@ -58,7 +66,8 @@ inline bool ValidModId(std::string_view id){
     return std::all_of(id.begin(),id.end(),[](unsigned char c){return (c>='a'&&c<='z')||(c>='0'&&c<='9')||c=='-'||c=='_';});
 }
 
-// Until: end of a temporary lift (an "on": false statement only), 0 when the lift has no end.
+// Until: end of a temporary lift (an "on": false pause statement) or of a character exception (an
+// "on": true exception statement, where it is required); 0 when there is no end.
 // Lapsed: a temporary lift that has ended, so the flag pauses again.
 struct Flag{std::string Mod,Target,Id,Name,Message;bool On=false,Lapsed=false;uint64_t Seq=0;int64_t At=0,Until=0;};
 struct ModStatus{
@@ -72,6 +81,7 @@ struct Snapshot{
     std::vector<Flag> Active;       // Newest valid flags that pause deliveries, from trusted mods the player allows.
     std::vector<Flag> Declined;     // Same, from mods the player chose not to honour.
     std::vector<Flag> Lifted;       // Temporary lifts still in force ("on": false with a future "until").
+    std::vector<Flag> Excepted;     // Character exceptions in force: that mod's pauses skip that character.
     Json State=Json::object();
     std::vector<std::string> Problems;
 };
@@ -120,9 +130,13 @@ inline std::optional<Flag> ParseStatement(std::string_view statement,std::string
             if(!until->is_number_unsigned())return std::nullopt;
             const auto seconds=until->get<uint64_t>();
             if(seconds==0||seconds>static_cast<uint64_t>(INT64_MAX))return std::nullopt;
-            if(!flag.On)flag.Until=static_cast<int64_t>(seconds); // Meaningless on a pause; ignored there.
+            // Meaningless on a pause and on an exception's revocation; ignored there.
+            if(flag.Name==PauseExceptionFlag?flag.On:!flag.On)flag.Until=static_cast<int64_t>(seconds);
         }
         if(flag.Mod!=mod||(flag.Target!="character"&&flag.Target!="world")||flag.Id.empty()||flag.Name.empty()||flag.Message.size()>300)return std::nullopt;
+        // An exception names one character and, when granted, is a bounded lease, never open-ended.
+        if(flag.Name==PauseExceptionFlag&&(flag.Target!="character"
+            ||(flag.On&&(flag.At<=0||flag.Until<=flag.At||flag.Until-flag.At>MaxExceptionSeconds))))return std::nullopt;
         return flag;
     }catch(...){return std::nullopt;}
 }
@@ -179,8 +193,10 @@ inline Snapshot Read(const fs::path& folder,const Signature::Verifier& verifier,
                 ++status.Valid;
                 if(flag->On){auto& pause=pauses[{flag->Mod,flag->Target,flag->Id,flag->Name}];if(pause.Mod.empty()||flag->Seq>=pause.Seq)pause=*flag;}
                 auto& slot=newest[{flag->Mod,flag->Target,flag->Id,flag->Name}];
-                // Highest seq wins; on a tie the pause stands, so a replayed "off" cannot lift it.
-                if(slot.Mod.empty()||flag->Seq>slot.Seq||(flag->Seq==slot.Seq&&flag->On&&!slot.On))slot=std::move(*flag);
+                // Highest seq wins. On a tie the restrictive statement stands: a pause's "on", an
+                // exception's "off". A replay can therefore never lift a pause or revive an exception.
+                const auto restrictive=[](const Flag& value){return value.Name==PauseExceptionFlag?!value.On:value.On;};
+                if(slot.Mod.empty()||flag->Seq>slot.Seq||(flag->Seq==slot.Seq&&restrictive(*flag)&&!restrictive(slot)))slot=std::move(*flag);
             }
         }catch(const std::exception& failure){
             std::error_code missing;
@@ -189,6 +205,7 @@ inline Snapshot Read(const fs::path& folder,const Signature::Verifier& verifier,
         finish();
     }
     for(auto& [key,flag]:newest){
+        if(flag.Name==PauseExceptionFlag){if(flag.On&&now<flag.Until)snapshot.Excepted.push_back(flag);continue;}
         if(flag.Name!=PauseFlag)continue;
         if(!flag.On&&flag.Until){
             if(now<flag.Until){snapshot.Lifted.push_back(flag);continue;}
@@ -214,6 +231,12 @@ inline std::string ModName(const Snapshot& snapshot,std::string_view id){
     for(const auto& mod:snapshot.Mods)if(mod.Id==id)return mod.Name;
     return std::string(id);
 }
+// The character exception a mod has in force for this character, if any.
+inline const Flag* ExceptionFor(const Snapshot& snapshot,std::string_view mod,std::string_view character){
+    const auto guid=NormalizeGuid(character);if(guid.empty())return nullptr;
+    for(const auto& exception:snapshot.Excepted)if(exception.Mod==mod&&exception.Id==guid)return &exception;
+    return nullptr;
+}
 // The reason a player-driven delivery to this character (and world, when known) must not run.
 inline std::optional<Block> Check(const Snapshot& snapshot,std::string_view character,std::string_view world){
     const auto guid=NormalizeGuid(character),place=NormalizeGuid(world);
@@ -221,6 +244,7 @@ inline std::optional<Block> Check(const Snapshot& snapshot,std::string_view char
         return Block{"helpy","Helpy","character",guid,"You turned off Helpy deliveries for this character in Settings > Deliveries.",true};
     for(const auto& flag:snapshot.Active){
         if(!((flag.Target=="character"&&flag.Id==guid&&!guid.empty())||(flag.Target=="world"&&flag.Id==place&&!place.empty())))continue;
+        if(ExceptionFor(snapshot,flag.Mod,guid))continue; // That mod exempted this character from its own pauses.
         const auto name=ModName(snapshot,flag.Mod);
         return Block{flag.Mod,name,flag.Target,flag.Id,flag.Message.empty()?name+" has paused Helpy deliveries to this "+flag.Target+".":flag.Message,false};
     }

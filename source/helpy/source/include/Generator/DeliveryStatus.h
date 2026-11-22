@@ -58,7 +58,7 @@ inline Status For(const std::string& recipientGuid, const std::string& localGuid
     Refresh(force);
     out.Block = F::Check(Snapshot, recipient, {});
     for (const auto& flag : Snapshot.Active)
-        if (flag.Target == "world") {
+        if (flag.Target == "world" && !F::ExceptionFor(Snapshot, flag.Mod, recipient)) { // An exempt character isn't paused by that mod.
             auto name = F::ModName(Snapshot, flag.Mod);
             if (std::find(out.WorldMods.begin(), out.WorldMods.end(), name) == out.WorldMods.end()) out.WorldMods.push_back(std::move(name));
         }
