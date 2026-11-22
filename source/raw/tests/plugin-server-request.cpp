@@ -37,6 +37,18 @@ int main(){try{
         {{"Open",false},{"By",std::string(41,'a')}},{{"Open",false},{"By","helpy"},{"Extra",1}}})
         Check(Refused([&]{P::ParseDeliveries(&bad);}),"malformed delivery state refused");
     {const auto wire=P::Wire(request,{true,false,"helpy"});Check(wire.size()==3&&wire["Deliveries"]["By"]=="helpy"&&wire["Request"]==request.Id,"wire carries the sender's state");}
-    std::cout<<"Plugin server request contract passed: envelope, real sender, delivery state, results, pending answers.\n";
+    // Failure reasons the plugin can act on: NotInstalled means the player should back out or use a server with it.
+    {const auto missing=P::Result("VaultWithdraw",request.Id,false,Json("GrandExchange is not installed on this server."),P::NotInstalled);
+        Check(missing["Reason"]=="NotInstalled"&&missing["Ok"]==false,"not installed is named");
+        Check(P::Result("x",request.Id,false,Json("e"))["Reason"]=="Refused","the default reason is the cautious one");
+        Check(!P::Result("x",request.Id,true,Json::object()).contains("Reason"),"successes carry no reason");
+        Check(P::Result("x",request.Id,true,{{"x",std::string(4000,'z')}})["Reason"]=="Refused","an undeliverable reply is Refused: the server half may have acted");}
+    // Core services act on a remote player's character only for that player's own request.
+    {const P::Serving serving{"GrandExchange","5A3F0C21B6D84E7F9A1C2B3D4E5F6071",true,{true,true,""}};
+        Check(P::RequireSender("GrandExchange",&serving,"5A3F0C21B6D84E7F9A1C2B3D4E5F6071",false),"bound to the sender");
+        Check(Refused([&]{P::RequireSender("GrandExchange",&serving,"ABCDEFABCDEFABCDEFABCDEFABCDEF01",false);})&&Refused([&]{P::RequireSender("GrandExchange",&serving,"ABCDEFABCDEFABCDEFABCDEFABCDEF01",true);}),"never another character while serving");
+        Check(Refused([&]{P::RequireSender("OtherPlugin",&serving,"5A3F0C21B6D84E7F9A1C2B3D4E5F6071",false);})&&Refused([&]{P::RequireSender("GrandExchange",nullptr,"5A3F0C21B6D84E7F9A1C2B3D4E5F6071",false);}),"a remote character needs that plugin's own request");
+        Check(!P::RequireSender("GrandExchange",nullptr,"5A3F0C21B6D84E7F9A1C2B3D4E5F6071",true),"a local character outside a request is allowed, unbound");}
+    std::cout<<"Plugin server request contract passed: envelope, real sender, delivery state, reasons, sender binding, results, pending answers.\n";
     return 0;
 }catch(const std::exception& error){std::cerr<<"FAIL: "<<error.what()<<'\n';return 1;}}

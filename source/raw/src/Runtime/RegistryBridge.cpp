@@ -1112,17 +1112,17 @@ void RegistryBridge::HandleGenericRequest(UObject* source,UFunction* function,vo
         }
         if(channel=="plugin.request"){
             // runeschema.server.request: always answered with plugin.result on the sender's own bridge.
-            std::string result;
+            std::string result;std::string reason="Invalid"; // PluginServerRequest reasons.
             try{
                 const auto peer=m_requestWindows.find(DiagnosticOwner(caster)+"|system.compat");
                 const auto lanes=PS::NetworkIdentityState::Snapshot();const auto own=lanes.find(PS::HelpyRemoteAccess::ItemLane);
-                if(peer==m_requestWindows.end()||!peer->second.ItemIdsVerified||own==lanes.end()||own->second!=peer->second.ItemFingerprint)
-                    throw std::runtime_error("Item network IDs are not verified for this connection yet. Wait for registry synchronization; nothing was done.");
-                if(!PluginRequest)throw std::runtime_error("Plugin requests are unavailable on this server.");
+                if(peer==m_requestWindows.end()||!peer->second.ItemIdsVerified||own==lanes.end()||own->second!=peer->second.ItemFingerprint){
+                    reason="NotReady";throw std::runtime_error("Item network IDs are not verified for this connection yet. Wait for registry synchronization; nothing was done.");}
+                if(!PluginRequest){reason="NotInstalled";throw std::runtime_error("Plugin requests are unavailable on this server.");}
                 result=PluginRequest(caster,entity,action,payloadText);
             }catch(const std::exception& error){
                 const auto id=payload.contains("Request")&&payload["Request"].is_string()?payload["Request"].get<std::string>().substr(0,36):std::string{};
-                result=nlohmann::json{{"Action",action},{"Request",id},{"Ok",false},{"Error",std::string(error.what()).substr(0,400)}}.dump();
+                result=nlohmann::json{{"Action",action},{"Request",id},{"Ok",false},{"Error",std::string(error.what()).substr(0,400)},{"Reason",reason}}.dump();
             }
             SendNotification(source,"plugin.result",entity,revision,result);
             SendReceipt(source,channel,entity,revision,true,"Plugin request answered.");return;

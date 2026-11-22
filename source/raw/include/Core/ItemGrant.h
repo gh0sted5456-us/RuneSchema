@@ -114,9 +114,7 @@ struct CharacterGate{std::string Exempt;};
 //   - Not bound: only a character local to this game, with every pause in force.
 // The server's own flags folder is checked by the caller in both cases, with the same exemption.
 inline CharacterGate Gate(std::string_view caller,const PluginServerRequest::Serving* serving,std::string_view character,bool local){
-    const bool bound=serving&&serving->Plugin==caller;
-    if(bound&&serving->Character!=character)throw std::runtime_error("While serving a request, a plugin can grant only to the character that sent it.");
-    if(!bound&&!local)throw std::runtime_error("A grant to another player's character runs only while serving that player's own request.");
+    const bool bound=PluginServerRequest::RequireSender(caller,serving,character,local);
     CharacterGate gate;if(!bound)return gate;
     gate.Exempt=OwnPauseMod(caller);
     if(serving->Remote){

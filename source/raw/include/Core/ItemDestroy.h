@@ -28,13 +28,19 @@ inline Request Parse(Json input){
     if(request.Exact.Where==ItemSnapshot::Scope::Loadout)throw std::invalid_argument("Equipped items cannot be destroyed.");
     return request;
 }
-inline Json Body(const Request& r){return {{"Player",r.Exact.Player},{"Scope",ItemSnapshot::Name(r.Exact.Where)},{"Slot",r.Exact.Slot},{"Instance",r.Exact.Instance},{"Item",r.Exact.Item},{"Count",r.Count},{"Request",r.Id}};}
+inline Json Body(const Request& r){
+    Json body{{"Player",r.Exact.Player},{"Scope",ItemSnapshot::Name(r.Exact.Where)},{"Slot",r.Exact.Slot},{"Instance",r.Exact.Instance},{"Item",r.Exact.Item},{"Count",r.Count},{"Request",r.Id}};
+    if(r.Exact.Where==ItemSnapshot::Scope::Owned)body["Container"]=ItemSnapshot::ContainerJson(r.Exact);
+    return body;
+}
 inline Json Refusal(std::string_view phase,std::string_view error){return {{"Schema",Schema},{"State","Refused"},{"Ok",false},{"Phase",phase},{"Error",std::string(error.substr(0,300))},{"Observed",{{"InMemory",true}}}};}
 inline void CheckSnapshot(const Request& r,const Json& snapshot){
     if(!snapshot.is_object()||!snapshot.value("Ok",false)||snapshot.at("Schema")!=std::string(ItemSnapshot::Schema)
         ||snapshot.at("Item")!=r.Exact.Item||snapshot.at("SourceInstance")!=r.Exact.Instance)
         throw std::runtime_error("The exact live item could not be captured.");
     const auto& observed=snapshot.at("Observed");
+    if(r.Exact.Where==ItemSnapshot::Scope::Owned&&(!observed.contains("Container")||observed.at("Container")!=ItemSnapshot::ContainerJson(r.Exact)))
+        throw std::runtime_error("The live item observation belongs to another container.");
     if(observed.at("Player")!=r.Exact.Player||observed.at("Scope")!=std::string(ItemSnapshot::Name(r.Exact.Where))||observed.at("Slot")!=r.Exact.Slot||observed.at("InMemory")!=true)
         throw std::runtime_error("The live item observation belongs to another target.");
     int live=0,counts=0;

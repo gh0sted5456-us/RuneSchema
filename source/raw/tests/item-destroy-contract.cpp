@@ -34,5 +34,14 @@ int main(){try{
     Check(oversized.Run("Fixture",true,request,needed,large,invoke,verify)["State"]=="Confirmed"&&invokes==attempted+1);
     D::Requests retained;Check(retained.Run("Fixture",true,request,D::MinCapacity,prepare,invoke,[]{return D::State::Retained;})["State"]=="Retained");
     D::Requests observations;Check(observations.Run("Fixture",true,request,D::MinCapacity,[&]{auto s=snapshot();s["Observed"]["Player"]=std::string(32,'C');return s;},invoke,verify)["State"]=="Refused");
-    std::cout<<"Item destroy contract passed: whole stack, capability, bounded reply, replay, conflict, retained and unknown.\n";
+    // A deposit in a mod's own storage on the character (Scope Owned): the Container is part of the
+    // body and of the observation it must match.
+    {auto vault=body;vault["Scope"]="Owned";vault["Container"]={{"Index",90411},{"Serial",3}};const auto owned=D::Parse(vault);
+        Check(owned.Exact.Where==S::Scope::Owned&&D::Body(owned)["Container"]==vault["Container"]&&D::Body(owned)!=D::Body(request));
+        const auto observed=[&](Json container){auto s=snapshot();s["Observed"]["Scope"]="Owned";if(!container.is_null())s["Observed"]["Container"]=container;return s;};
+        D::Requests ok;Check(ok.Run("Fixture",true,owned,D::MinCapacity,[&]{return observed(vault["Container"]);},invoke,verify)["State"]=="Confirmed");
+        D::Requests other;Check(other.Run("Fixture",true,owned,D::MinCapacity,[&]{return observed(Json{{"Index",90411},{"Serial",4}});},invoke,verify)["State"]=="Refused");
+        D::Requests missing;Check(missing.Run("Fixture",true,owned,D::MinCapacity,[&]{return observed(Json());},invoke,verify)["State"]=="Refused");
+        auto mixed=vault;mixed["Scope"]="Inventory";Check(Refused([&]{D::Parse(mixed);}));}
+    std::cout<<"Item destroy contract passed: whole stack, capability, bounded reply, replay, conflict, retained, unknown and owned storage.\n";
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

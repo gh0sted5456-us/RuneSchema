@@ -328,10 +328,10 @@ int32_t RS_PLUGIN_CALL RegisterService(const char* plugin,const char* name,RuneS
 static nlohmann::json ServePluginRequest(RC::Unreal::UObject* controller,bool remote,const std::string& plugin,const PluginServerRequest::Request& request,const PluginServerRequest::Deliveries& sender={}){
     namespace P=PluginServerRequest;
     const auto character=ItemSnapshot::NormalizeGuid(PlayerStatusRuntime::CharacterGuid(DragonWilds::ActorHelper::GetObjectRef(controller,TEXT("PlayerState"))));
-    if(character.empty())return P::Result(request.Action,request.Id,false,nlohmann::json("The sending character is not initialized yet."));
+    if(character.empty())return P::Result(request.Action,request.Id,false,nlohmann::json("The sending character is not initialized yet."),P::NotReady);
     Service service;
     {std::scoped_lock lock(Gate);const auto found=Services.find(P::ServerService(plugin));
-        if(found==Services.end()||found->second.Owner!=plugin)return P::Result(request.Action,request.Id,false,nlohmann::json(plugin+" is not installed on this server."));
+        if(found==Services.end()||found->second.Owner!=plugin)return P::Result(request.Action,request.Id,false,nlohmann::json(plugin+" is not installed on this server."),P::NotInstalled);
         service=found->second;}
     const auto call=P::ServerCall(plugin,request,character,remote).dump();
     std::string reply(P::MaxReplyBytes,'\0');uint32_t size=0;int32_t code=RS_PLUGIN_FAILED;
@@ -420,6 +420,16 @@ int32_t RS_PLUGIN_CALL CallService(const char* caller,const char* name,const cha
     }
     if(std::string_view(name)==ItemDestroy::Service){
         bool permitted=false;{std::scoped_lock lock(Gate);const auto cap=Capabilities.find(std::string(ItemDestroy::Capability));permitted=DestroyCallers.contains(caller)&&cap!=Capabilities.end()&&cap->second==caller;}
+        // A remote player's character only while serving that player's own request (PluginServerRequest::RequireSender).
+        if(permitted&&response&&capacity>=ItemDestroy::MinCapacity){
+            std::string target;
+            try{const auto input=nlohmann::json::parse(request);if(input.is_object()&&input.contains("Player")&&input["Player"].is_string())target=ItemSnapshot::NormalizeGuid(input["Player"].get<std::string>());}catch(...){}
+            if(!target.empty())try{
+                std::string local;
+                {using namespace RC::Unreal;if(IsInGameThread())if(auto* own=LocalController())local=ItemSnapshot::NormalizeGuid(PlayerStatusRuntime::CharacterGuid(DragonWilds::ActorHelper::GetObjectRef(own,TEXT("PlayerState"))));}
+                PluginServerRequest::RequireSender(caller,CurrentServing,target,!local.empty()&&local==target);
+            }catch(const std::exception& error){return JsonResponse(ItemDestroy::Refusal("Target",error.what()),response,capacity,size);}
+        }
         return ItemDestroyService::Call(caller,permitted,request,response,capacity,size);
     }
     std::unique_lock policyLock(MultiplayerPolicyLifetime,std::defer_lock);
@@ -729,7 +739,7 @@ std::string PluginHost::HandleRemotePluginRequest(RC::Unreal::UObject* pawn,cons
             throw std::runtime_error("Plugin requests need the sender's current owned character.");
         return ServePluginRequest(controller,true,plugin,request,sender).dump();
     }catch(const std::exception& error){
-        return P::Result(P::Token(action,64)?action:std::string("invalid"),id,false,nlohmann::json(std::string(error.what()))).dump();
+        return P::Result(P::Token(action,64)?action:std::string("invalid"),id,false,nlohmann::json(std::string(error.what())),P::Invalid).dump();
     }
 }
 void PluginHost::DeliverPluginResult(int64_t revision,const std::string& plugin,const std::string& payload){

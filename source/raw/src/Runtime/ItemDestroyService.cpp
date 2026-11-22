@@ -23,7 +23,13 @@ struct Prepared{
     D::Request Request;ItemSnapshotService::LiveItem Live;
     UObject* World{};UObject* Pawn{};UObject* Mover{};
     WeakObjectHandle ControllerHandle,WorldHandle,PawnHandle,MoverHandle;
-    std::array<UObject*,3> Inventories{};std::array<WeakObjectHandle,3> InventoryHandles;
+    // The character's Inventory, Loadout and Personal, plus for Scope Owned the named component.
+    std::array<UObject*,4> Inventories{};std::array<WeakObjectHandle,4> InventoryHandles;size_t Used=3;
+    bool OwnedBy(UObject* component)const{
+        auto* type=AH::ResolveClass(TEXT("/Script/Dominion.DominionPlayerController"));if(!type)return false;
+        for(auto* outer=component->GetOuterPrivate();outer;outer=outer->GetOuterPrivate())if(outer->IsA(type))return outer==Live.Controller;
+        return false;
+    }
     std::unique_ptr<E::Call> Remove;
     nlohmann::json Snapshot;int64_t BeforeTotal{};
     explicit Prepared(const D::Request& request):Request(request){
@@ -35,10 +41,14 @@ struct Prepared{
         const std::array<const TCHAR*,3> names{TEXT("InventoryComponent"),TEXT("LoadoutComponent"),TEXT("PersonalInventoryComponent")};
         const std::array<const TCHAR*,3> types{TEXT("/Script/Dominion.InventoryComponent"),TEXT("/Script/Dominion.LoadoutComponent"),TEXT("/Script/Dominion.PersonalInventoryComponent")};
         for(size_t i=0;i<3;++i){Inventories[i]=E::Owned(Live.Controller,names[i],types[i]);InventoryHandles[i].Assign(Inventories[i]);}
+        if(Request.Exact.Where==S::Scope::Owned){
+            for(size_t i=0;i<3;++i)if(Inventories[i]==Live.Container)throw std::runtime_error("Name the character's own containers by Scope, not as Owned.");
+            Inventories[3]=Live.Container;InventoryHandles[3].Assign(Live.Container);Used=4;
+        }
         Mover=E::Owned(Live.Controller,TEXT("InventoryController"),TEXT("/Script/Dominion.InventoryController"));MoverHandle.Assign(Mover);
         if(Count(Live.Item)!=Request.Count)throw std::runtime_error("Destroy requires the whole current stack.");
         size_t identities=0;
-        for(size_t i=0;i<3;++i)for(auto* item:E::Slots(Inventories[i]))if(item&&GuidText(E::Identity(item))==Request.Exact.Instance){
+        for(size_t i=0;i<Used;++i)for(auto* item:E::Slots(Inventories[i]))if(item&&GuidText(E::Identity(item))==Request.Exact.Instance){
             if(i==1)throw std::runtime_error("Equipped items cannot be destroyed.");++identities;}
         if(identities!=1)throw std::runtime_error("Native item identity is ambiguous.");
         Snapshot=ItemSnapshotService::Read(Request.Exact);D::CheckSnapshot(Request,Snapshot);BeforeTotal=Total();
@@ -56,8 +66,9 @@ struct Prepared{
             throw std::runtime_error("The native character/world changed.");
         const std::array<const TCHAR*,3> names{TEXT("InventoryComponent"),TEXT("LoadoutComponent"),TEXT("PersonalInventoryComponent")};
         for(size_t i=0;i<3;++i)if(InventoryHandles[i].Get()!=Inventories[i]||AH::GetObjectRef(Live.Controller,names[i])!=Inventories[i])throw std::runtime_error("Native inventory ownership changed.");
+        if(Used==4&&(InventoryHandles[3].Get()!=Inventories[3]||Inventories[3]->GetWorld()!=World||!OwnedBy(Inventories[3])))throw std::runtime_error("Native inventory ownership changed.");
     }
-    int64_t Total(){int64_t n=0;for(auto* inventory:Inventories)for(auto* item:E::Slots(inventory))if(item&&E::Data(item)==Live.Data)n+=Count(item);return n;}
+    int64_t Total(){int64_t n=0;for(size_t i=0;i<Used;++i)for(auto* item:E::Slots(Inventories[i]))if(item&&E::Data(item)==Live.Data)n+=Count(item);return n;}
     void Invoke(){
         Validate();const auto exact=ItemSnapshotService::Resolve(Request.Exact);
         if(!exact.Error.is_null()||exact.Controller!=Live.Controller||exact.Container!=Live.Container||exact.Item!=Live.Item||Count(exact.Item)!=Request.Count)
@@ -68,7 +79,7 @@ struct Prepared{
     }
     D::State Verify(){
         Validate();size_t remains=0;
-        for(auto* inventory:Inventories)for(auto* item:E::Slots(inventory))if(item&&GuidText(E::Identity(item))==Request.Exact.Instance)++remains;
+        for(size_t i=0;i<Used;++i)for(auto* item:E::Slots(Inventories[i]))if(item&&GuidText(E::Identity(item))==Request.Exact.Instance)++remains;
         if(!remains)return BeforeTotal-Total()==Request.Count?D::State::Confirmed:D::State::Unknown;
         if(remains!=1)return D::State::Unknown;
         const auto retained=ItemSnapshotService::Read(Request.Exact);

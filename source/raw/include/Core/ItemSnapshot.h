@@ -26,8 +26,10 @@ inline constexpr std::string_view DateTimeCodec="native-datetime-le64/1";
 inline constexpr std::string_view DateTimeStruct="/Script/CoreUObject.DateTime";
 inline constexpr uint64_t MaxDateTimeTicks=3652059ULL*864000000000ULL-1; // 9999-12-31 23:59:59.9999999
 
-enum class Scope{Inventory,Personal,Loadout};
-inline std::string_view Name(Scope scope){return scope==Scope::Inventory?"Inventory":scope==Scope::Personal?"Personal":"Loadout";}
+// Owned: one exact inventory component the character's controller owns (a mod's own storage),
+// named by Container {Index, Serial} from its ObjectIdentity.
+enum class Scope{Inventory,Personal,Loadout,Owned};
+inline std::string_view Name(Scope scope){return scope==Scope::Inventory?"Inventory":scope==Scope::Personal?"Personal":scope==Scope::Loadout?"Loadout":"Owned";}
 
 // 32 upper-case hex digits; braces and dashes accepted on input. Empty when invalid or all zero.
 inline std::string NormalizeGuid(std::string_view value){
@@ -42,10 +44,11 @@ inline std::string NormalizeGuid(std::string_view value){
 
 // The exact item the caller means: a character, one of its containers, a slot, and the instance
 // GUID and definition it expects there. Every part must match the live slot or nothing is read.
-struct Request{std::string Player,Instance,Item;Scope Where=Scope::Inventory;int Slot=0;};
+struct Request{std::string Player,Instance,Item;Scope Where=Scope::Inventory;int Slot=0;int32_t Index=-1,Serial=0;};
+inline Json ContainerJson(const Request& r){return {{"Index",r.Index},{"Serial",r.Serial}};}
 inline Request Parse(const Json& input){
     if(!input.is_object())throw std::invalid_argument("The request must be a JSON object.");
-    static const std::set<std::string> known{"Player","Scope","Slot","Instance","Item"};
+    static const std::set<std::string> known{"Player","Scope","Slot","Instance","Item","Container"};
     for(const auto& [key,value]:input.items())if(!known.contains(key))throw std::invalid_argument("Unknown request field: "+key);
     Request request;
     const auto text=[&](const char* key)->std::string{
@@ -62,7 +65,17 @@ inline Request Parse(const Json& input){
     if(scope=="Inventory")request.Where=Scope::Inventory;
     else if(scope=="Personal")request.Where=Scope::Personal;
     else if(scope=="Loadout")request.Where=Scope::Loadout;
-    else throw std::invalid_argument("Scope must be Inventory, Personal or Loadout.");
+    else if(scope=="Owned")request.Where=Scope::Owned;
+    else throw std::invalid_argument("Scope must be Inventory, Personal, Loadout or Owned.");
+    const auto container=input.find("Container");
+    if((container!=input.end())!=(request.Where==Scope::Owned))throw std::invalid_argument("Container goes with Scope Owned, and only with it.");
+    if(container!=input.end()){
+        if(!container->is_object()||container->size()!=2||!container->contains("Index")||!container->contains("Serial")
+            ||!(*container)["Index"].is_number_integer()||!(*container)["Serial"].is_number_integer())throw std::invalid_argument("Container must be {Index, Serial} from ObjectIdentity.");
+        const auto index=(*container)["Index"].get<int64_t>(),serial=(*container)["Serial"].get<int64_t>();
+        if(index<0||index>INT32_MAX||serial<1||serial>INT32_MAX)throw std::invalid_argument("Container identity is out of range.");
+        request.Index=static_cast<int32_t>(index);request.Serial=static_cast<int32_t>(serial);
+    }
     const auto slot=input.find("Slot");
     if(slot==input.end()||!slot->is_number_integer())throw std::invalid_argument("Slot must be an integer.");
     const auto value=slot->get<int64_t>();if(value<0||value>=1024)throw std::invalid_argument("Slot is outside 0..1023.");

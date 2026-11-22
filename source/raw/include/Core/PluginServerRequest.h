@@ -85,11 +85,29 @@ inline Json ServerCall(std::string_view plugin,const Request& r,std::string_view
 }
 // The request a server half is handling right now, on the game thread, for the core services it calls.
 struct Serving{std::string Plugin,Character;bool Remote=false;Deliveries Sender;};
+// The rule every core service that acts on a player's character applies to a plugin caller
+// (item.grant, item.destroy). Returns whether the caller is bound to that character's own request.
+//   - Inside the caller's own "<Id>.server" callback, only the character that sent it.
+//   - Outside it, only a character local to this game (single player, the host's own).
+inline bool RequireSender(std::string_view caller,const Serving* serving,std::string_view character,bool local){
+    const bool bound=serving&&serving->Plugin==caller;
+    if(bound&&serving->Character!=character)throw std::runtime_error("While serving a request, a plugin can act only on the character that sent it.");
+    if(!bound&&!local)throw std::runtime_error("A plugin can act on another player's character only while serving that player's own request.");
+    return bound;
+}
+// Why a request failed, for the plugin to act on without reading the message:
+//   NotInstalled  the server has no "<Plugin>.server" (the plugin isn't installed there). Nothing ran.
+//   NotReady      the sender's character or item-ID sync isn't ready yet. Nothing ran; retry later.
+//   Invalid       RuneSchema refused the request itself (malformed, or not the sender's current
+//                 character). Nothing ran.
+//   Refused       the server half ran and failed, or its reply couldn't be delivered. It may have acted;
+//                 ask it about the Request before trying again.
+inline constexpr std::string_view NotInstalled="NotInstalled",NotReady="NotReady",Invalid="Invalid",Refused="Refused";
 // What the sending plugin receives, inline or through "<Plugin>.server-result".
-inline Json Result(std::string_view action,std::string_view id,bool ok,const Json& value){
+inline Json Result(std::string_view action,std::string_view id,bool ok,const Json& value,std::string_view reason=Refused){
     Json result={{"Action",action},{"Request",id},{"Ok",ok}};
-    if(ok)result["Result"]=value;else result["Error"]=value.is_string()?value.get<std::string>().substr(0,400):std::string("The server refused the request.");
-    if(result.dump().size()>MaxResultBytes)return {{"Action",action},{"Request",id},{"Ok",false},{"Error","The server's reply exceeded the transport limit."}};
+    if(ok)result["Result"]=value;else{result["Error"]=value.is_string()?value.get<std::string>().substr(0,400):std::string("The server refused the request.");result["Reason"]=reason;}
+    if(result.dump().size()>MaxResultBytes)return {{"Action",action},{"Request",id},{"Ok",false},{"Error","The server's reply exceeded the transport limit."},{"Reason",Refused}};
     return result;
 }
 // Requests this game sent and still expects an answer to, by bridge revision. Unsolicited or

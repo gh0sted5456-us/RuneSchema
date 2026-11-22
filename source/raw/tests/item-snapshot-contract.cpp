@@ -31,7 +31,14 @@ int main(){
         Check(refused([](Json& j){j["Slot"]=1024;})&&refused([](Json& j){j["Slot"]=-1;})&&refused([](Json& j){j["Slot"]="3";}),"slot bounds and type");
         Check(refused([](Json& j){j["Item"]="DA_CopperOre";})&&refused([](Json& j){j["Item"]=std::string(1025,'/');}),"item path form and bound");
         Check(refused([](Json& j){j["Restore"]=true;}),"unknown fields are refused, so no option can turn a read into a write");
-        Check(Throws([]{(void)S::Parse(Json::array());}),"non-object requests are refused");}
+        Check(Throws([]{(void)S::Parse(Json::array());}),"non-object requests are refused");
+        // A mod's own storage on the character: Scope Owned with its exact ObjectIdentity, and only then.
+        {auto j=Good();j["Scope"]="Owned";j["Container"]={{"Index",90411},{"Serial",3}};const auto owned=S::Parse(j);
+            Check(owned.Where==S::Scope::Owned&&owned.Index==90411&&owned.Serial==3&&S::ContainerJson(owned)==j["Container"]&&S::Name(owned.Where)=="Owned","an owned container parses");}
+        Check(refused([](Json& j){j["Scope"]="Owned";}),"Owned needs its Container");
+        Check(refused([](Json& j){j["Container"]={{"Index",1},{"Serial",1}};}),"a Container needs Scope Owned");
+        for(const auto& bad:std::vector<Json>{{{"Index",-1},{"Serial",1}},{{"Index",1},{"Serial",0}},{{"Index",1}},{{"Index",1},{"Serial",1},{"X",1}},Json("1:1")})
+            Check(refused([&](Json& j){j["Scope"]="Owned";j["Container"]=bad;}),"a malformed Container is refused");}
     // Exact DateTime: 8 little-endian bytes, lower-case hex, inside Unreal's range.
     {Check(S::EncodeTicks(1)=="0100000000000000"&&S::DecodeTicks("0100000000000000")==1,"little-endian byte order");
         for(const uint64_t ticks:std::initializer_list<uint64_t>{0ULL,638000000000000123ULL,S::MaxDateTimeTicks})Check(S::DecodeTicks(S::EncodeTicks(ticks))==ticks,"ticks round-trip exactly");

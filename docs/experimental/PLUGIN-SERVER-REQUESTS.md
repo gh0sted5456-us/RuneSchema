@@ -17,7 +17,11 @@ world chest, or remove an exact stack, through RuneSchema's capability-gated ser
 
 This is how Grand Exchange delivers on any server that has Grand Exchange installed:
 
-1. The Grand Exchange window tells GE's in-game half that a withdrawal is ready.
+Grand Exchange keeps purchases in the app's withdrawals box. The player moves them to app storage
+or to the game Vault, and presses **Sync** to move things between the app and the game; nothing
+moves on its own. Sync, on a server:
+
+1. The Grand Exchange window tells GE's in-game half what to move.
 2. GE's in-game half calls `runeschema.server.request`.
 3. RuneSchema sends it to the server on its owning-player bridge, the same channel as Helpy's
    own server requests, and attaches the sending player's character.
@@ -25,6 +29,14 @@ This is how Grand Exchange delivers on any server that has Grand Exchange instal
    items into that character's Grand Exchange storage, a component GE owns on the player's
    controller. The Vault prop in the world only marks where players open it; it holds nothing.
 5. The answer returns to GE's in-game half, which tells the Grand Exchange window.
+
+The other direction, a deposit from the game Vault into the app, is the same request: GE's
+server half captures the deposited stack with `runeschema.item.snapshot` and removes it with
+`runeschema.item.destroy`, both with `"Scope": "Owned"` and the storage's identity. See
+[Exact item destroy](ITEM-DESTROY.md).
+
+If the server doesn't have the plugin, the answer says so (`Reason: "NotInstalled"`), and GE tells
+the player to use the Vault in single player or from the main menu.
 
 RuneSchema never grants, removes or changes anything because a player asked. Only the
 plugin's server half decides, so a server without that plugin refuses. These requests don't
@@ -74,6 +86,19 @@ Both answer shapes have the same form:
 {"Action": "VaultWithdraw", "Request": "1f0c6a52-...", "Ok": true, "Result": {...}}
 {"Action": "VaultWithdraw", "Request": "1f0c6a52-...", "Ok": false, "Error": "GrandExchange is not installed on this server."}
 ```
+
+A failed answer also has `Reason`:
+
+| Reason | Meaning | What to do |
+| --- | --- | --- |
+| `NotInstalled` | The server has no `<YourId>.server`. Nothing ran. | Tell the player this server can't do it. |
+| `NotReady` | The character or the item-ID sync isn't ready yet. Nothing ran. | Retry in a moment. |
+| `Invalid` | RuneSchema refused the request itself. Nothing ran. | Fix the request. |
+| `Refused` | Your server half ran and failed, or its reply couldn't be delivered. It may have acted. | Ask your server half about the `Request` before trying again. |
+
+`RS_PLUGIN_NOT_FOUND` from the call itself means there's no RuneSchema bridge to a server, for
+example on a server without RuneSchema. If no answer arrives, keep your own timer and treat the
+request as unknown: a server half may have acted even though the answer was lost.
 
 An answer is delivered only if this game sent that request to that plugin within the last two
 minutes. A lost answer is never retried for you. Ask your server half about the `Request` if

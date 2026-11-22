@@ -8,6 +8,7 @@
 #include "Runtime/NetworkContext.h"
 #include "Runtime/NetworkRole.h"
 #include "Runtime/RuneSchemaPluginApi.h"
+#include "SDK/WeakObjectHandle.h"
 #include "Unreal/UnrealInitializer.hpp"
 #include "Unreal/CoreUObject/UObject/Class.hpp"
 #include "Unreal/CoreUObject/UObject/UnrealType.hpp"
@@ -92,6 +93,11 @@ S::Field Capture(FProperty* property,UObject* item){
     return field;
 }
 }
+// The first player controller in the component's outer chain, or null.
+static UObject* OwningController(UObject* component,UClass* controllerType){
+    for(auto* outer=component->GetOuterPrivate();outer;outer=outer->GetOuterPrivate())if(outer->IsA(controllerType))return outer;
+    return nullptr;
+}
 LiveItem Resolve(const S::Request& request){
     if(!IsInGameThread())return {nullptr,nullptr,nullptr,nullptr,S::Refusal("Thread","runeschema.item.snapshot must be called on the game thread.")};
     auto* controllerClass=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,TEXT("/Script/Dominion.DominionPlayerController"));
@@ -108,7 +114,18 @@ LiveItem Resolve(const S::Request& request){
     // Save fields are complete only where the game is authoritative: single player, host or server.
     if(!Network::OwnsGameplay(Network::Detect(controller).Mode))return {nullptr,nullptr,nullptr,nullptr,S::Refusal("Authority","Item snapshots are read only where the game is authoritative.")};
     UObject* container=nullptr;
-    try{
+    if(request.Where==S::Scope::Owned){
+        // One exact inventory component this character's controller owns, in its world; never the loadout.
+        auto* inventoryType=AH::ResolveClass(TEXT("/Script/Dominion.InventoryComponent"));
+        auto* loadoutType=AH::ResolveClass(TEXT("/Script/Dominion.LoadoutComponent"));
+        if(!inventoryType||!loadoutType)return {nullptr,nullptr,nullptr,nullptr,S::Refusal("Container","The game's inventory types are unavailable.")};
+        WeakObjectHandle handle;handle.ObjectIndex=request.Index;handle.ObjectSerialNumber=request.Serial;container=handle.Get();
+        if(!container||container->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed))||!container->IsA(inventoryType))
+            return {nullptr,nullptr,nullptr,nullptr,S::Refusal("Container","The container is not a live inventory.")};
+        if(container->IsA(loadoutType))return {nullptr,nullptr,nullptr,nullptr,S::Refusal("Container","Name equipped items with Scope Loadout.")};
+        if(container->GetWorld()!=controller->GetWorld()||OwningController(container,controllerClass)!=controller)
+            return {nullptr,nullptr,nullptr,nullptr,S::Refusal("Container","That container does not belong to this character.")};
+    }else try{
         if(request.Where==S::Scope::Inventory)container=E::Owned(controller,TEXT("InventoryComponent"),TEXT("/Script/Dominion.InventoryComponent"));
         else if(request.Where==S::Scope::Personal)container=E::Owned(controller,TEXT("PersonalInventoryComponent"),TEXT("/Script/Dominion.PersonalInventoryComponent"));
         else container=E::Owned(controller,TEXT("LoadoutComponent"),TEXT("/Script/Dominion.LoadoutComponent"));
@@ -142,6 +159,7 @@ nlohmann::json Read(const S::Request& request){
     catch(const std::exception& error){return S::Refusal("Layout",error.what());}
     snapshot["Ok"]=true;
     snapshot["Observed"]={{"Player",request.Player},{"Scope",S::Name(request.Where)},{"Slot",request.Slot},{"InMemory",true}};
+    if(request.Where==S::Scope::Owned)snapshot["Observed"]["Container"]=S::ContainerJson(request);
     return snapshot;
 }
 int32_t Call(const char* request,char* response,uint32_t capacity,uint32_t* size){
