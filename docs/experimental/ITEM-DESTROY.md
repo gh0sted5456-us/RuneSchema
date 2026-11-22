@@ -2,6 +2,11 @@
 channel: experimental
 promote_to: ITEM-DESTROY.md
 ---
+
+!!! warning "In development · 0.9.0.7"
+    Service only, for in-game plugin halves. There is no Helpy Destroy button yet, and
+    Grand Exchange transfers stay disabled. Live native invocation is not yet accepted.
+
 # Exact native item destroy (in development)
 
 The game-side `runeschema.item.destroy` service requires the loaded caller's declared `item.destroy` capability and a game-thread call. It targets a whole stack in the active character's Inventory or Personal container by Player GUID, Scope, Slot, Instance GUID, Item path, Count and Request UUID. Equipped items and partial stacks are refused. Split a stack in game first.

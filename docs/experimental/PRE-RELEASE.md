@@ -38,6 +38,7 @@ This candidate collects everything since 0.9.0.3.
 - New Helpy plugin UI: Home tile fields, a text box and host-owned web pages. Plugins can also post notices with `helpy.notify`. See [Navigation API](GRAND-EXCHANGE.md#navigation-api) and [Plugin notices](GRAND-EXCHANGE.md#plugin-notices).
 - A mod can sign a time-limited **character exception** to its own delivery pauses. See [Character exceptions](HELPY-DELIVERY-FLAGS.md#character-exceptions).
 - Core service `runeschema.item.snapshot`: a read-only, lossless record of one live item, for in-game plugin halves.
+- Core service `runeschema.item.destroy` (in development): removes one exact whole stack through the game's own destroy call, for in-game plugin halves that declare `item.destroy`. See [Exact item destroy](ITEM-DESTROY.md).
 - Name-only engine hooks share one dispatcher, which cuts per-call overhead.
 
 ### Helpy data in AppData, Achievements plugin · November 19
