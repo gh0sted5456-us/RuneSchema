@@ -1110,6 +1110,23 @@ void RegistryBridge::HandleGenericRequest(UObject* source,UFunction* function,vo
             SendNotification(source,channel,entity,revision,snapshot);
             SendReceipt(source,channel,entity,revision,true,"World-state snapshot sent.");return;
         }
+        if(channel=="plugin.request"){
+            // runeschema.server.request: always answered with plugin.result on the sender's own bridge.
+            std::string result;
+            try{
+                const auto peer=m_requestWindows.find(DiagnosticOwner(caster)+"|system.compat");
+                const auto lanes=PS::NetworkIdentityState::Snapshot();const auto own=lanes.find(PS::HelpyRemoteAccess::ItemLane);
+                if(peer==m_requestWindows.end()||!peer->second.ItemIdsVerified||own==lanes.end()||own->second!=peer->second.ItemFingerprint)
+                    throw std::runtime_error("Item network IDs are not verified for this connection yet. Wait for registry synchronization; nothing was done.");
+                if(!PluginRequest)throw std::runtime_error("Plugin requests are unavailable on this server.");
+                result=PluginRequest(caster,entity,action,payloadText);
+            }catch(const std::exception& error){
+                const auto id=payload.contains("Request")&&payload["Request"].is_string()?payload["Request"].get<std::string>().substr(0,36):std::string{};
+                result=nlohmann::json{{"Action",action},{"Request",id},{"Ok",false},{"Error",std::string(error.what()).substr(0,400)}}.dump();
+            }
+            SendNotification(source,"plugin.result",entity,revision,result);
+            SendReceipt(source,channel,entity,revision,true,"Plugin request answered.");return;
+        }
         if(AuthorityChannel) {
             if(channel=="helpy.authority"&&action=="GiveItems"){
                 const auto peer=m_requestWindows.find(DiagnosticOwner(caster)+"|system.compat");
@@ -1239,6 +1256,14 @@ void RegistryBridge::ObserveClientTransport(UObject* source,UFunction* function,
             DragonWilds::ActorHelper::FunctionCall controller(pawn,TEXT("/Script/Engine.Pawn:GetController"));controller.Invoke();
             if(!LocalController(controller.Result<UObject*>())||ControllerPawn(controller.Result<UObject*>())!=pawn)return;
             if(ClientNotification)ClientNotification(pawn,channel,entity,payload);
+            return;
+        }
+        if(channel=="plugin.result"){
+            // An answer to this game's own plugin request, accepted only on the owning local player's bridge.
+            auto* pawn=owner.Result<UObject*>();if(!pawn||!pawn->IsA<AActor>())return;
+            DragonWilds::ActorHelper::FunctionCall controller(pawn,TEXT("/Script/Engine.Pawn:GetController"));controller.Invoke();
+            if(!LocalController(controller.Result<UObject*>())||ControllerPawn(controller.Result<UObject*>())!=pawn)return;
+            if(PluginResult)PluginResult(ParameterInt64(function,parameters,TEXT("Revision")),entity,payload);
             return;
         }
         if(channel=="save.cleanup"){
@@ -1584,6 +1609,26 @@ bool RegistryBridge::RequestAuthority(const std::string& action,const std::strin
             .Arg(TEXT("Revision"),revision).Invoke();return true;
     }catch(...){}
     return false;
+}
+
+int64_t RegistryBridge::RequestPluginAction(const std::string& plugin,const std::string& action,const std::string& payload) {
+    if(!Token(plugin,128)||!Token(action,64)||payload.empty()||payload.size()>MaxActionPayloadBytes)return 0;
+    auto* playerType=DragonWilds::ActorHelper::ResolveClass(TEXT("/Script/Dominion.DominionPlayerCharacter"));
+    if(!playerType)return 0;const auto contract=ResolveContract();
+    TArray<UObject*> players;UECustom::UObjectGlobals::GetObjectsOfClass(playerType,players,true);
+    for(auto* player:players)if(player&&player->IsA<AActor>())try {
+        DragonWilds::ActorHelper::FunctionCall local(player,TEXT("/Script/Engine.Pawn:IsLocallyControlled"));local.Invoke();
+        if(!local.Result<bool>())continue;
+        const auto components=static_cast<AActor*>(player)->GetComponentsByClass(contract.Type);if(!components.Num())continue;
+        auto* rpc=components[0]->GetFunctionByNameInChain(TEXT("ServerRequestRuneSchemaAction"));
+        if(!rpc||!rpc->HasAnyFunctionFlags(FUNC_Net|FUNC_NetServer))continue;
+        const auto revision=++m_outboundRevision;
+        DragonWilds::ActorHelper::FunctionCall request(components[0],rpc);
+        request.Arg(TEXT("Channel"),std::string("plugin.request")).Arg(TEXT("EntityId"),plugin)
+            .Arg(TEXT("ActionKey"),action).Arg(TEXT("Payload"),payload).Arg(TEXT("Revision"),revision).Invoke();
+        return revision;
+    }catch(...){}
+    return 0;
 }
 
 bool RegistryBridge::Attach(AGameModeBase* mode) {

@@ -5,7 +5,9 @@ promote_to: ITEM-DESTROY.md
 
 !!! warning "In development · 0.9.0.7"
     Service only, for in-game plugin halves. There is no Helpy Destroy button yet, and
-    Grand Exchange transfers stay disabled. Live native invocation is not yet accepted.
+    Grand Exchange transfers stay disabled. Live native invocation is not yet accepted. On a
+    server, call it from your plugin's server half; see
+    [Plugin server requests](PLUGIN-SERVER-REQUESTS.md).
 
 # Exact native item destroy (in development)
 

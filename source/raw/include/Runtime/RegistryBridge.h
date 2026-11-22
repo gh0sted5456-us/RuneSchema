@@ -63,6 +63,8 @@ public:
     // Sends a bounded request through the bridge component owned by the local
     // player. The server remains the only executor and applies its own policy.
     bool RequestAuthority(const std::string& action,const std::string& payload);
+    // runeschema.server.request: send one plugin request to the server; returns its revision or 0.
+    int64_t RequestPluginAction(const std::string& plugin,const std::string& action,const std::string& payload);
     void PublishHelpyResult(RC::Unreal::UObject* player,int64_t revision,const nlohmann::json& result);
     bool PublishCleanupNotice(RC::Unreal::UObject* controller,std::size_t removed,const std::string& mod);
     // Host -> owning client: a confirmed kill for that player's Helpy achievements (channel helpy.activity).
@@ -82,6 +84,10 @@ public:
     GenericAuthorityHandler AuthorityChannel;
     ClientNotificationHandler ClientNotification;
     ClientNotificationHandler PersistentState;
+    // Server: run a plugin.request for the sending pawn and return the result JSON text.
+    std::function<std::string(RC::Unreal::UObject* pawn,const std::string& plugin,const std::string& action,const std::string& payload)> PluginRequest;
+    // Sending game: a plugin.result answer for one of its requests.
+    std::function<void(int64_t revision,const std::string& plugin,const std::string& payload)> PluginResult;
     std::function<void(const PS::ModDataRelay::Message&)> ModDataReceived;
     std::function<PS::BuildingNetworkGuard::Registry(RC::Unreal::UObject*)> BuildingRegistry;
 

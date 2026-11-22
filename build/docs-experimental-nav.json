@@ -175,5 +175,8 @@
   },
   {
     "Exact item destroy (in development)": "experimental/ITEM-DESTROY.md"
+  },
+  {
+    "Plugin server requests and item grants (in development)": "experimental/PLUGIN-SERVER-REQUESTS.md"
   }
 ]

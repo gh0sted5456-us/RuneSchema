@@ -8,6 +8,7 @@
 #include "Core/RuneSchemaDataRoot.h"
 #include "Core/PakDiscovery.h"
 #include "Runtime/PakLoader.h"
+#include "Runtime/PluginHost.h"
 #include "Core/NativePersistencePolicy.h"
 #include "Core/ModIdentity.h"
 #include "Core/ModManager.h"
@@ -957,6 +958,7 @@ namespace DragonWilds {
         PS::NetworkIdentityBootstrap::Stop();
         PS::ServerFilterStartup::Stop();
         m_worldComponents.Stop();
+        PS::PluginHost::SetServerTransport({});
         m_registryBridge.Stop();
         m_dataRegistrar.Shutdown();
         m_characterEntryRecovery.Shutdown();
@@ -1617,6 +1619,14 @@ namespace DragonWilds {
         m_spawnLoader->IsEventActive=[npcService](RC::Unreal::UWorld* world,const std::string& event){
             return npcService->EventService().Running(event,world);
         };
+        // runeschema.server.request: plugin requests travel on the same owning-player bridge as Helpy's.
+        m_registryBridge.PluginRequest=[](RC::Unreal::UObject* pawn,const std::string& plugin,const std::string& action,const std::string& payload){
+            return PS::PluginHost::HandleRemotePluginRequest(pawn,plugin,action,payload);
+        };
+        m_registryBridge.PluginResult=[](int64_t revision,const std::string& plugin,const std::string& payload){PS::PluginHost::DeliverPluginResult(revision,plugin,payload);};
+        PS::PluginHost::SetServerTransport([this](const std::string& plugin,const std::string& action,const std::string& payload){
+            return m_registryBridge.RequestPluginAction(plugin,action,payload);
+        });
         m_registryBridge.AuthorityChannel=[service=m_spawnLoader](RC::Unreal::UObject* player,const std::string& channel,
             const std::string&,const std::string& action,const std::string& payload){
             if(channel!="helpy.authority")throw std::runtime_error("Unsupported RuneSchema authority channel");
@@ -1850,6 +1860,7 @@ namespace DragonWilds {
         PS::NetworkIdentityBootstrap::Stop();
         PS::ServerFilterStartup::Stop();
         m_worldComponents.Stop();
+        PS::PluginHost::SetServerTransport({});
         m_registryBridge.Stop();
         m_dataRegistrar.Shutdown();
         m_characterEntryRecovery.Shutdown();

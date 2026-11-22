@@ -38,6 +38,7 @@ This candidate collects everything since 0.9.0.3.
 - New Helpy plugin UI: Home tile fields, a text box and host-owned web pages. Plugins can also post notices with `helpy.notify`. See [Navigation API](GRAND-EXCHANGE.md#navigation-api) and [Plugin notices](GRAND-EXCHANGE.md#plugin-notices).
 - A mod can sign a time-limited **character exception** to its own delivery pauses. See [Character exceptions](HELPY-DELIVERY-FLAGS.md#character-exceptions).
 - Core service `runeschema.item.snapshot`: a read-only, lossless record of one live item, for in-game plugin halves.
+- Plugin server requests (in development): a plugin's in-game half can ask the server it's on to run the same plugin's server half, which can put items into a chest or inventory with `runeschema.item.grant`. Grand Exchange uses this to deliver on any server that has it installed. See [Plugin server requests and item grants](PLUGIN-SERVER-REQUESTS.md).
 - Core service `runeschema.item.destroy` (in development): removes one exact whole stack through the game's own destroy call, for in-game plugin halves that declare `item.destroy`. See [Exact item destroy](ITEM-DESTROY.md).
 - Name-only engine hooks share one dispatcher, which cuts per-call overhead.
 
