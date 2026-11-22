@@ -524,38 +524,80 @@ bool NavItem(Page page,const HelpyImGuiTheme::Theme& t,const std::vector<int>& s
     }return clicked;
 }
 
-// Plugin pages show Helpy's navigation as a bar across the top, so a page with its own left
-// navigation (the wiki) keeps its width and the player can always get back into Helpy.
+// Plugin pages: Helpy (Home and a page menu) on the left, the plugin tabs centred, and an "i" on the
+// right whose tooltip shows each plugin's legal notice. A page with its own left navigation (the
+// wiki) keeps its full width, and the player can always get back into Helpy.
 void RenderPluginTopNavigation(const HelpyImGuiTheme::Theme& t,const std::vector<HelpyPluginNavigation::Tab>& tabs){
     ImGui::PushID("plugin-top-navigation");
-    const float icon=t.Y(18.0f),avail=ImGui::GetContentRegionAvail().x,spacing=ImGui::GetStyle().ItemSpacing.x;float used=0;
-    const auto item=[&](const char* id,const char* label,bool active,const auto& drawIcon)->bool{
-        const auto text=ImGui::CalcTextSize(label);
-        const ImVec2 size{t.X(8)+icon+t.X(6)+text.x+t.X(10),std::max(icon,text.y)+t.Y(10)};
-        if(used>0&&used+size.x<=avail)ImGui::SameLine(0,spacing);else used=0;
-        const auto at=ImGui::GetCursorScreenPos();const ImVec2 end{at.x+size.x,at.y+size.y};
+    auto* draw=ImGui::GetWindowDrawList();
+    const float icon=t.Y(18.0f),spacing=ImGui::GetStyle().ItemSpacing.x,height=std::max(icon,ImGui::GetTextLineHeight())+t.Y(10);
+    const auto row=ImGui::GetCursorScreenPos();const float avail=ImGui::GetContentRegionAvail().x;
+    const auto width=[&](const char* label){return t.X(8)+icon+t.X(6)+ImGui::CalcTextSize(label).x+t.X(10);};
+    const auto item=[&](const char* id,float x,const char* label,bool active,const auto& drawIcon)->bool{
+        const ImVec2 at{x,row.y},size{width(label),height},end{at.x+size.x,at.y+size.y};
         const bool hovered=ImGui::IsWindowHovered()&&ImGui::IsMouseHoveringRect(at,end);
-        ImGui::GetWindowDrawList()->AddRectFilled(at,end,ImGui::GetColorU32(active?t.navigationActive:hovered?t.navigationHover:t.navigation),t.X(6));
-        ImGui::PushID(id);ImGui::PushStyleColor(ImGuiCol_Header,{0,0,0,0});ImGui::PushStyleColor(ImGuiCol_HeaderHovered,{0,0,0,0});ImGui::PushStyleColor(ImGuiCol_HeaderActive,{0,0,0,0});
+        draw->AddRectFilled(at,end,ImGui::GetColorU32(active?t.navigationActive:hovered?t.navigationHover:t.navigation),t.X(6));
+        ImGui::SetCursorScreenPos(at);ImGui::PushID(id);
+        ImGui::PushStyleColor(ImGuiCol_Header,{0,0,0,0});ImGui::PushStyleColor(ImGuiCol_HeaderHovered,{0,0,0,0});ImGui::PushStyleColor(ImGuiCol_HeaderActive,{0,0,0,0});
         const bool clicked=ImGui::Selectable("##top-nav",active,ImGuiSelectableFlags_None,size);
         ImGui::PopStyleColor(3);ImGui::PopID();
         drawIcon(ImVec2{at.x+t.X(8)+icon*.5f,at.y+size.y*.5f},active?t.accentHover:t.icon);
-        ImGui::GetWindowDrawList()->AddText({at.x+t.X(8)+icon+t.X(6),at.y+(size.y-text.y)*.5f},ImGui::GetColorU32(active?t.text:t.textDisabled),label);
-        used+=size.x+spacing;return clicked;
+        draw->AddText({at.x+t.X(8)+icon+t.X(6),at.y+(size.y-ImGui::GetTextLineHeight())*.5f},ImGui::GetColorU32(active?t.text:t.textDisabled),label);
+        return clicked;
     };
-    const auto defaults=HelpyNavigationOrder::SidebarDefaults();
-    for(int id:HelpyNavigationOrder::Ordered(HelpyNavigationOrder::SidebarSurface,defaults)){
-        if(id==HelpyNavigationOrder::SidebarDivider)continue;
-        const auto page=static_cast<Page>(id);
-        if(!HelpyNavigation::Available(page,t.workspaces,HelpyEnvironment::Server()))continue;
-        if(item(PageTitle(page),PageTitle(page),false,[&](ImVec2 center,const ImVec4& color){HelpyImGuiTheme::DrawIcon(PageIcon(page),center,icon,color);})){
-            if(page==Page::BugReport){if(!BugReportPanel::Open()){CurrentPage=Page::BugReport;CurrentPluginRoute.clear();}}
-            else OpenSidebarPage(page,t);
+    // Left: Helpy's Home, and every Helpy page in the player's order.
+    float x=row.x;
+    if(item("helpy-home",x,"Helpy",false,[&](ImVec2 c,const ImVec4& color){HelpyImGuiTheme::DrawIcon(PageIcon(Page::Home),c,icon,color);}))OpenSidebarPage(Page::Home,t);
+    x+=width("Helpy")+t.X(2);
+    if(item("helpy-pages",x,"Pages",ImGui::IsPopupOpen("##helpy-pages"),[&](ImVec2 c,const ImVec4& color){
+        draw->AddTriangleFilled({c.x-icon*.3f,c.y-icon*.15f},{c.x+icon*.3f,c.y-icon*.15f},{c.x,c.y+icon*.22f},ImGui::GetColorU32(color));}))
+        ImGui::OpenPopup("##helpy-pages");
+    const float left=x+width("Pages")+spacing;
+    if(ImGui::BeginPopup("##helpy-pages")){
+        const auto defaults=HelpyNavigationOrder::SidebarDefaults();
+        for(int id:HelpyNavigationOrder::Ordered(HelpyNavigationOrder::SidebarSurface,defaults)){
+            if(id==HelpyNavigationOrder::SidebarDivider){ImGui::Separator();continue;}
+            const auto page=static_cast<Page>(id);
+            if(!HelpyNavigation::Available(page,t.workspaces,HelpyEnvironment::Server()))continue;
+            if(ImGui::MenuItem(PageTitle(page))){
+                if(page==Page::BugReport){if(!BugReportPanel::Open()){CurrentPage=Page::BugReport;CurrentPluginRoute.clear();}}
+                else OpenSidebarPage(page,t);
+            }
+        }
+        ImGui::EndPopup();
+    }
+    // Right: the legal notices of every plugin that has one.
+    const bool legal=std::any_of(tabs.begin(),tabs.end(),[](const auto& tab){return !tab.Legal.empty();});
+    const float right=row.x+avail-(legal?height:0.f);
+    if(legal){
+        const ImVec2 at{right,row.y},end{right+height,row.y+height},center{at.x+height*.5f,at.y+height*.5f};
+        ImGui::SetCursorScreenPos(at);ImGui::InvisibleButton("##legal",{height,height});
+        const bool hovered=ImGui::IsItemHovered();
+        draw->AddCircle(center,icon*.5f,ImGui::GetColorU32(hovered?t.accentHover:t.icon),20,std::max(1.f,t.Y(1.5f)));
+        const auto mark=ImGui::CalcTextSize("i");
+        draw->AddText({center.x-mark.x*.5f,center.y-mark.y*.5f},ImGui::GetColorU32(hovered?t.text:t.textDisabled),"i");
+        if(hovered){
+            HelpyImGuiTheme::BeginDetailsTooltip(at,end,420.0f);bool first=true;
+            for(const auto& tab:tabs){
+                if(tab.Legal.empty())continue;
+                if(!first)ImGui::Separator();first=false;
+                ImGui::TextColored(t.text,"%s",tab.Title.c_str());
+                HelpyImGuiTheme::DetailsTextUnformatted(tab.Legal.c_str());
+            }
+            HelpyImGuiTheme::EndDetailsTooltip();
         }
     }
-    for(const auto& tab:tabs)
-        if(item(tab.Route.c_str(),tab.Title.c_str(),CurrentPluginRoute==tab.Route,[&](ImVec2 center,const ImVec4& color){HelpyPluginIcons::Draw(ImGui::GetWindowDrawList(),tab,center,icon,color);}))
+    // Centre: the plugin tabs, kept clear of Helpy on the left and the "i" on the right.
+    float total=0;for(const auto& tab:tabs)total+=width(tab.Title.c_str())+spacing;
+    if(!tabs.empty())total-=spacing;
+    float tabX=std::max(left,row.x+(avail-total)*.5f);
+    if(tabX+total>right-spacing)tabX=std::max(left,right-spacing-total);
+    for(const auto& tab:tabs){
+        if(item(tab.Route.c_str(),tabX,tab.Title.c_str(),CurrentPluginRoute==tab.Route,[&](ImVec2 center,const ImVec4& color){HelpyPluginIcons::Draw(draw,tab,center,icon,color);}))
             CurrentPluginRoute=tab.Route;
+        tabX+=width(tab.Title.c_str())+spacing;
+    }
+    ImGui::SetCursorScreenPos({row.x,row.y+height});ImGui::Dummy({std::max(1.f,avail),ImGui::GetStyle().ItemSpacing.y*.5f});
     ImGui::Separator();ImGui::PopID();
 }
 

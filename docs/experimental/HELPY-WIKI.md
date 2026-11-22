@@ -15,8 +15,10 @@ Helpy, including Helpy's in-game overlay, so you can browse the real wiki withou
 the game.
 
 The wiki has its own navigation down the left, so on the Wiki tab Helpy's navigation moves to
-a bar across the top. Choose **Home** or any page there to get back into Helpy. Every plugin
-page (Grand Exchange too) uses the same top bar.
+a bar across the top: **Helpy** and **Pages** on the left take you back into Helpy, the plugin
+tabs (Wiki, Grand Exchange) sit in the middle, and hovering the **i** on the right shows the
+wiki's licence and credits along with every other plugin's notice. Every plugin page uses the
+same top bar.
 
 ## Open a page
 

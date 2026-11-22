@@ -49,12 +49,17 @@ is accepted only from the plugin's initialization thread. The plugin declares th
   focused; `IconImage`, a `.png` file name directly in the plugin's own folder
   (at most 256×256 and 1 MiB); and `IconFlags`. Helpy tints the PNG like its own
   icons, so draw it white on transparency, or set `RS_NAV_ICON_FULL_COLOR` to show
-  it as is. Without an image, the `Icon` text is drawn.
+  it as is. Without an image, the `Icon` text is drawn;
+- optional (0.9.0.7) `Legal`: your legal or attribution notice, up to 1200 bytes of
+  UTF-8 with line breaks. Plugin pages show Helpy's navigation across the top with the
+  plugin tabs centred and an **i** on the right; hovering it shows every plugin's notice
+  under its title. Put licences, credits and "not endorsed by" lines here rather than
+  on the page.
 
 Every registered tab is a tile on Home, after Helpy's own, and a sidebar row with its
 icon. A plugin built before 0.9.0.7 passes the shorter struct; it still registers and
 gets a text-icon tile. Grand Exchange should set `IconImage` to its logo, with
-`RS_NAV_ICON_FULL_COLOR` if the logo is coloured.
+`RS_NAV_ICON_FULL_COLOR` if the logo is coloured, and its notice in `Legal`.
 
 The UI thread calls `Draw(context,ui)`. `RuneSchemaNavUiV1` supplies host text,
 button and separator functions; no private ImGui context or ABI crosses the DLL.

@@ -89,6 +89,9 @@ struct RuneSchemaNavTabV1 {
     const char* Description; // one line shown when the tile is focused
     const char* IconImage;   // PNG file name in the plugin's own folder, at most 256x256
     uint32_t IconFlags;      // RS_NAV_ICON_FULL_COLOR: draw the PNG as is instead of tinting it
+    // Optional, append-only: the plugin's legal or attribution notice, shown when the player hovers
+    // the "i" on the plugin top bar. UTF-8, at most 1200 bytes; line breaks allowed.
+    const char* Legal;
 };
 inline constexpr uint32_t RS_NAV_ICON_FULL_COLOR = 1;
 struct RuneSchemaHostApi {

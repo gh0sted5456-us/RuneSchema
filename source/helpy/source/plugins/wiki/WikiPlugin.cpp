@@ -50,7 +50,7 @@ int32_t RS_PLUGIN_CALL Draw(void*, const RuneSchemaNavUiV1* ui) {
     }
     const bool entered = ui->InputText(ui->Context, "Search the wiki", Search.data(), static_cast<uint32_t>(Search.size())) == 1;
     if (ui->Button(ui->Context, "Search") || entered) Request(Search.data());
-    ui->Text(ui->Context, "Content from the RuneScape: Dragonwilds Wiki (CC BY-NC-SA 3.0). Tip: type rs wiki <name> in the game console.");
+    ui->Text(ui->Context, "Tip: type rs wiki <name> in the game console. Licence and credits: the \"i\" at the top.");
     std::string navigate; uint64_t id = 0;
     { std::lock_guard lock(Gate); navigate = Navigate; id = NavigateId; }
     const std::string origin(PS::WikiLinks::Origin), home(PS::WikiLinks::Home);
@@ -71,7 +71,10 @@ extern "C" __declspec(dllexport) int32_t RS_PLUGIN_CALL RuneSchemaPlugin_Initial
         if (host->RegisterCapability(Descriptor.Id, "helpy.nav-tab") != RS_PLUGIN_OK) return RS_PLUGIN_DUPLICATE;
         if (host->RegisterService(Descriptor.Id, "RuneSchema.Wiki.events", Events, nullptr) != RS_PLUGIN_OK) return RS_PLUGIN_DUPLICATE;
         static const RuneSchemaNavTabV1 tab{sizeof(RuneSchemaNavTabV1), Route, "Wiki", "W", Draw, nullptr,
-            "Read the Dragonwilds wiki without leaving the game.", "wiki.png", 0};
+            "Read the Dragonwilds wiki without leaving the game.", "wiki.png", 0,
+            "Content from the RuneScape: Dragonwilds Wiki (dragonwilds.runescape.wiki), written by its editors and "
+            "used under CC BY-NC-SA 3.0.\nRuneScape and RuneScape: Dragonwilds are trademarks of Jagex Ltd. Helpy, "
+            "RuneSchema and this plugin are not made or endorsed by Jagex or by the wiki."};
         if (host->RegisterNavTab(Descriptor.Id, &tab) != RS_PLUGIN_OK) return RS_PLUGIN_FAILED;
         *instance = const_cast<RuneSchemaPluginDescriptor*>(&Descriptor);
         return RS_PLUGIN_OK;

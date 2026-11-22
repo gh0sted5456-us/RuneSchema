@@ -22,7 +22,10 @@ int main(int argc,char** argv){
         const auto plugin=At(window,"if(!CurrentPluginRoute.empty()) {\r\n        RenderPluginTopNavigation(t,pluginTabs);");
         Check(plugin<At(window,"HelpyPluginNavigation::Draw(CurrentPluginRoute,ui)",plugin),"Plugin pages draw Helpy's top navigation before the page");
         const auto top=At(window,"void RenderPluginTopNavigation(");
-        Check(At(window,"OpenSidebarPage(page,t);",top)<At(window,"void RenderWorkspaceTabs(",top),"Top navigation opens Helpy's pages");
+        const auto workspace=At(window,"void RenderWorkspaceTabs(",top);
+        Check(At(window,"OpenSidebarPage(page,t);",top)<workspace&&At(window,"OpenSidebarPage(Page::Home,t);",top)<workspace,"Top navigation opens Helpy's Home and pages");
+        Check(At(window,"row.x+(avail-total)*.5f",top)<workspace,"Plugin tabs are centred on the top bar");
+        Check(At(window,"InvisibleButton(\"##legal\"",top)<workspace&&At(window,"tab.Legal",top)<workspace,"The \"i\" shows each plugin's legal notice");
         const auto pane=Read(root/"helpy/source/src/Generator/HelpyWebPane.cpp");
         Check(pane.contains("CreateFreeThreaded(")&&pane.contains("CreateForWindow(pane.Window"),"Texture mode captures the page window");
         Check(pane.contains("Show(pane, Offscreen(state.Pixels), HWND_BOTTOM);"),"Texture mode keeps the page window off-screen and below everything");

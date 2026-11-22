@@ -46,5 +46,17 @@ int main(){
     auto words=tile;words.Description="line\nbreak";if(N::Register("GrandExchange",&words,"plugins/GrandExchange")!=RS_PLUGIN_INVALID_ARGUMENT)return 28;
     auto plain=tile;plain.IconImage=nullptr;plain.Description=nullptr;if(N::Register("GrandExchange",&plain)!=RS_PLUGIN_OK||!N::Read()[0].IconPath.empty())return 29;
     N::Remove("GrandExchange");
+    // The legal notice shown from the top bar's "i": optional, line breaks allowed, other controls and overlong refused.
+    auto notice=tile;notice.Legal="Trading terms.\nNot endorsed by Jagex.";
+    if(N::Register("GrandExchange",&notice,"plugins/GrandExchange")!=RS_PLUGIN_OK||N::Read()[0].Legal!=notice.Legal)return 30;
+    N::Remove("GrandExchange");
+    for(const std::string bad:{std::string("tab\there"),std::string("bell\a"),std::string(N::MaxLegalBytes+1,'x')}){
+        auto wrong=tile;wrong.Legal=bad.c_str();if(N::Register("GrandExchange",&wrong,"plugins/GrandExchange")!=RS_PLUGIN_INVALID_ARGUMENT)return 31;
+    }
+    {const std::string full(N::MaxLegalBytes,'x');auto most=tile;most.Legal=full.c_str();if(N::Register("GrandExchange",&most,"plugins/GrandExchange")!=RS_PLUGIN_OK)return 32;N::Remove("GrandExchange");}
+    // A plugin built before the notice field (Home tile size) still registers, without a notice.
+    auto older=tile;older.StructSize=static_cast<uint32_t>(N::TileTabSize);older.Legal="ignored";
+    if(N::Register("GrandExchange",&older,"plugins/GrandExchange")!=RS_PLUGIN_OK||!N::Read()[0].Legal.empty())return 33;
+    N::Remove("GrandExchange");
     return 0;
 }
