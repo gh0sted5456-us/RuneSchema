@@ -16,11 +16,29 @@ This prerelease packages RuneSchema and Helpy for Dragonwilds CL260223. Install 
 
 ## Changes since 0.8.0.3
 
-### Wiki in Helpy, plugin tiles and plugin notices · November 21
+### 0.9.0.7: Wiki, plugin tiles, Grand Exchange support, character sheet · November 20–21
+
+This candidate collects everything since 0.9.0.3.
+
+**For players**
 
 - New `RuneSchema.Wiki` plugin: a **Wiki** tile that shows the Dragonwilds wiki inside Helpy's window and its game overlay. Type `rs wiki <name>` in the game console to open a page. See [Dragonwilds Wiki in Helpy](HELPY-WIKI.md).
-- Plugin entries such as Grand Exchange are now tiles on Home with their own icon and description, and sidebar rows with their icon, instead of a plain button above the tiles.
-- Plugins can post into Helpy's notifications (`helpy.notify`), with an in-game popup and an **Open** button for their own page. Notices appear under **Notifications → Plugins**. Grand Exchange can use this for sale alerts. See [Grand Exchange integration](GRAND-EXCHANGE.md#plugin-notices).
+- Plugin entries such as Grand Exchange are tiles on Home with their own icon and description, and sidebar rows with their icon, instead of a plain button above the tiles.
+- Plugins can post into Helpy's notifications, with an in-game popup and an **Open** button for their own page. Notices appear under **Notifications → Plugins**; Grand Exchange can use this for sale alerts.
+- Grand Exchange opens as its own workspace inside Helpy, with **Return to Helpy**. See [Grand Exchange integration](GRAND-EXCHANGE.md).
+- The character sheet has four pages (Inventory & loadout, Appearance, Skills, Save data) and one draft bar for Review & export and Discard changes. Add Item Bay items to the draft with a quantity. See [Character sheet](CHARACTER-SHEET.md).
+- The Item Bay shows why deliveries to your own character are off or paused by a mod, with **Turn deliveries on** for your own switch, and checks again before sending. See [Helpy delivery flags](HELPY-DELIVERY-FLAGS.md).
+- Item search understands `OR` / `|`, `-word` / `NOT`, parentheses and "phrases", in the Item Bay, gear pickers and spawn tools.
+
+**For mod and plugin authors**
+
+- A `Host: "helpy"` plugin can ship as one folder under `Helpy/plugins/<Id>`: an optional in-game half (`GameEntryPoint`), RuneSchema content (`Content: true`), and calls from its Helpy half to services its in-game half registered.
+- Owned plugin events (`helpy.plugin.event`) let an in-game half notify its own Helpy half and open its own route.
+- An interrupted plugin update is recovered before plugin discovery, and the externally updated plugin folders are not scanned if the update lock can't be taken.
+- New Helpy plugin UI: Home tile fields, a text box and host-owned web pages. Plugins can also post notices with `helpy.notify`. See [Navigation API](GRAND-EXCHANGE.md#navigation-api) and [Plugin notices](GRAND-EXCHANGE.md#plugin-notices).
+- A mod can sign a time-limited **character exception** to its own delivery pauses. See [Character exceptions](HELPY-DELIVERY-FLAGS.md#character-exceptions).
+- Core service `runeschema.item.snapshot`: a read-only, lossless record of one live item, for in-game plugin halves.
+- Name-only engine hooks share one dispatcher, which cuts per-call overhead.
 
 ### Helpy data in AppData, Achievements plugin · November 19
 
