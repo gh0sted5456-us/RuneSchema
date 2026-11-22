@@ -87,7 +87,7 @@ public:
     // prepare() returns the count already in the target, or throws a refusal; invoke() calls the game;
     // verify() returns the count afterwards. Confirmed only when it grew by exactly Count.
     template<class Prepare,class Invoke,class Verify>
-    Json Run(const std::string& caller,bool permitted,const Request& request,size_t capacity,Prepare prepare,Invoke invoke,Verify verify){
+    Json Run(const std::string& caller,bool permitted,const Request& request,size_t capacity,Prepare prepare,Invoke invoke,Verify verifyState){
         if(!permitted)throw std::invalid_argument("The caller has no item.grant capability.");
         if(capacity<MinCapacity)throw BufferRequired{MinCapacity};
         const auto key=std::make_tuple(caller,request.Id);const auto body=Body(request).dump();
@@ -105,7 +105,7 @@ public:
         auto [entry,inserted]=Entries.emplace(key,Entry{body,std::move(reply)});Bytes+=body.size()+2048;
         if(refused)return entry->second.Reply;
         try{
-            invoke();const auto after=verify();
+            invoke();const auto after=verifyState();
             entry->second.Reply["After"]=after;
             if(after-before==request.Count){entry->second.Reply["State"]="Confirmed";entry->second.Reply["Ok"]=true;}
         }catch(...){/* The reserved Unknown stays the first result, including a failure during the native call. */}

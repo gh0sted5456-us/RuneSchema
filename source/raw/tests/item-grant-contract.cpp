@@ -1,4 +1,7 @@
+// UE4SS defines verify; the shared contract must compile after its headers.
+#define verify(...) static_assert(false,"Unreal verify macro must not expand here")
 #include "Core/ItemGrant.h"
+#undef verify
 #include <iostream>
 #include <stdexcept>
 namespace G=PS::ItemGrant;using Json=nlohmann::json;
