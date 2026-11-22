@@ -3,7 +3,7 @@
 namespace {
 constexpr RuneSchemaPluginDescriptor Plugin{
     sizeof(RuneSchemaPluginDescriptor), RUNESCHEMA_PLUGIN_API_VERSION,
-    "RuneSchema.UE4SS.Bridge", "RuneSchema UE4SS Bridge", "0.9.0.6"
+    "RuneSchema.UE4SS.Bridge", "RuneSchema UE4SS Bridge", "0.9.0.7"
 };
 }
 
