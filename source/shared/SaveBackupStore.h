@@ -77,10 +77,10 @@ inline fs::path Store(const fs::path& directory,const std::string& bytes,const s
     if(reason!="Before cleanup"&&reason!="Automatic"&&reason!="Before restore"&&reason!="Manual")throw std::runtime_error("Unknown backup reason");
     context=Context(std::move(context));
     Lock lock(directory);const auto hash=CacheBundleIO::Hash(bytes);const auto file=File(directory,guid,hash);
-    if(!fs::exists(file))CacheBundleIO::Publish(file,bytes);
+    if(!fs::exists(CacheBundleIO::NativePath(file)))CacheBundleIO::Publish(file,bytes);
     Verify(file,bytes);
     Json metadata={{"Format","RuneSchemaSaveBackup"},{"Version",1},{"Guid",guid},{"SHA256",hash},{"Bytes",bytes.size()},{"CreatedUtc",Now()},{"Reasons",Json::array()}};
-    if(fs::exists(Metadata(file))){const auto old=Json::parse(CacheBundleIO::Read(Metadata(file),512*1024));if(old.value("Guid",std::string{})!=guid||old.value("SHA256",std::string{})!=hash)throw std::runtime_error("Backup metadata identity changed");metadata=old;}
+    if(fs::exists(CacheBundleIO::NativePath(Metadata(file)))){const auto old=Json::parse(CacheBundleIO::Read(Metadata(file),512*1024));if(old.value("Guid",std::string{})!=guid||old.value("SHA256",std::string{})!=hash)throw std::runtime_error("Backup metadata identity changed");metadata=old;}
     auto& reasons=metadata["Reasons"];if(!reasons.is_array()||reasons.size()>8)throw std::runtime_error("Invalid backup reasons");
     if(std::find(reasons.begin(),reasons.end(),reason)==reasons.end())reasons.push_back(reason);
     for(const auto& [key,value]:context.items())if(key=="LastPlayedUtc"||(key=="Mods"&&!metadata.contains("Mods")))metadata[key]=value;
@@ -95,7 +95,7 @@ inline std::vector<Entry> List(const fs::path& directory){
     for(const auto& owner:fs::directory_iterator(directory)){if(++examined>MaximumEntries*2)throw std::runtime_error("Save backup listing exceeds its entry limit");const auto guid=owner.path().filename().string();if(Guid(guid)!=guid)continue;CacheBundleIO::Safe(owner.path());if(!owner.is_directory())continue;
         for(const auto& file:fs::directory_iterator(owner.path())){if(++examined>MaximumEntries*4||rows.size()>=MaximumEntries)throw std::runtime_error("Save backup listing exceeds its entry limit");const auto name=file.path().filename().string();if(name.size()!=73||!name.ends_with(".json.bak"))continue;const auto hash=name.substr(0,64);if(!CacheBundleIO::Digest(hash))continue;
             CacheBundleIO::Safe(file.path());if(!file.is_regular_file())continue;Entry row;row.Guid=guid;row.Hash=hash;row.Bytes=file.file_size();if(!row.Bytes||row.Bytes>MaximumBytes)continue;
-            try{if(fs::exists(Metadata(file.path()))){const auto meta=Json::parse(CacheBundleIO::Read(Metadata(file.path()),512*1024));if(meta.value("Guid",std::string{})!=guid||meta.value("SHA256",std::string{})!=hash)throw std::runtime_error("Backup metadata mismatch");
+            try{if(fs::exists(CacheBundleIO::NativePath(Metadata(file.path())))){const auto meta=Json::parse(CacheBundleIO::Read(Metadata(file.path()),512*1024));if(meta.value("Guid",std::string{})!=guid||meta.value("SHA256",std::string{})!=hash)throw std::runtime_error("Backup metadata mismatch");
                 row.Name=meta.value("Name",row.Name);row.CreatedUtc=meta.value("CreatedUtc",std::string{});row.LastPlayedUtc=meta.value("LastPlayedUtc",std::string{});row.Mods=meta.value("Mods",Json());row.Reasons=meta.value("Reasons",Json::array());row.ValidMetadata=true;
             }else if(legacyBytes+row.Bytes<=64*1024*1024){legacyBytes+=row.Bytes;const auto document=Decode(Read(directory,guid,hash));if(document.contains("meta_data"))row.Name=document["meta_data"].value("char_name",row.Name);}
             }catch(...){row.ValidMetadata=false;row.Mods=nullptr;row.Reasons=Json::array();}

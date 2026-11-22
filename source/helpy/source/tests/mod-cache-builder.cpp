@@ -5,13 +5,17 @@
 #include <shellapi.h>
 #include <fstream>
 #include <stdexcept>
-static void Check(bool value){if(!value)throw std::runtime_error("Mod cache builder regression");}
-int main(int argc,char** argv){
+#include <source_location>
+#include <iostream>
+static void Check(bool value,std::source_location at=std::source_location::current()){if(!value)throw std::runtime_error("Mod cache builder regression at line "+std::to_string(at.line()));}
+int main(int argc,char** argv)try{
     namespace fs=std::filesystem;using namespace PS::HelpyModCacheBuilder;
     Check(argc==5);const auto module=LoadLibraryExW(fs::u8path(argv[1]).c_str(),nullptr,LOAD_LIBRARY_AS_DATAFILE|LOAD_LIBRARY_AS_IMAGE_RESOURCE);Check(module!=nullptr);
     const auto resource=FindResourceW(module,MAKEINTRESOURCEW(IDR_CACHE_BUILDER),RT_RCDATA);Check(resource!=nullptr);
     const auto loaded=LoadResource(module,resource);Check(loaded!=nullptr);const auto data=static_cast<const char*>(LockResource(loaded));
-    const auto expected=PS::ConfigFiles::Read(fs::u8path(argv[2]),2*1024*1024);Check(data&&std::string_view(data,SizeofResource(module,resource))==expected);
+    const auto expected=PS::ConfigFiles::Read(fs::u8path(argv[2]),2*1024*1024);
+    if(!data||std::string_view(data,SizeofResource(module,resource))!=expected)std::cerr<<"Cache resource bytes="<<SizeofResource(module,resource)<<", source="<<expected.size()<<", input="<<argv[2]<<'\n';
+    Check(data&&std::string_view(data,SizeofResource(module,resource))==expected);
     const auto repair=FindResourceW(module,MAKEINTRESOURCEW(IDR_RUNESCHEMA_REPAIR),RT_RCDATA);Check(repair!=nullptr);const auto repairData=static_cast<const char*>(LockResource(LoadResource(module,repair)));
     Check(repairData&&std::string_view(repairData,SizeofResource(module,repair))==PS::ConfigFiles::Read(fs::u8path(argv[3]),2*1024*1024));
     const auto wheel=FindResourceW(module,MAKEINTRESOURCEW(IDR_LOADING_WHEEL),RT_RCDATA);Check(wheel!=nullptr);
@@ -41,4 +45,4 @@ int main(int argc,char** argv){
         Control("run");Poll();Check(CurrentBatch().Failed==1&&!Current().Running);Poll();Check(CurrentBatch().Failed==2);Poll();Check(!CurrentBatch().Active);
         Check(StartEnabled(root,nlohmann::json::array({row("MissingA",true,true)}),false));Control("stop");Poll();Check(!CurrentBatch().Active&&CurrentBatch().Failed==0);Shutdown();
     }catch(...){fs::remove_all(root);throw;}fs::remove_all(root);
-}
+}catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}
