@@ -11,8 +11,12 @@ promote_to: HELPY-WIKI.md
 
 The `RuneSchema.Wiki` plugin adds a **Wiki** tile and sidebar entry to Helpy. It
 shows the [RuneScape: Dragonwilds Wiki](https://dragonwilds.runescape.wiki/) inside
-Helpy's window and its game overlay, so you can look things up without leaving the
-game.
+Helpy, including Helpy's in-game overlay, so you can browse the real wiki without leaving
+the game.
+
+The wiki has its own navigation down the left, so on the Wiki tab Helpy's navigation moves to
+a bar across the top. Choose **Home** or any page there to get back into Helpy. Every plugin
+page (Grand Exchange too) uses the same top bar.
 
 ## Open a page
 
@@ -30,7 +34,13 @@ Links to other websites open in your own browser, and only when you click them.
 | --- | --- |
 | Separate window | Yes |
 | Game overlay (Helpy's own window over the game) | Yes |
-| Native overlay (drawn by the game's renderer) | No: choose **Open in your browser**, or switch overlay mode in Settings |
+| Native overlay (drawn by the game's renderer) | Yes: Helpy draws the page inside its panel. Click links and scroll as usual; click the page before typing into it. **Search the wiki** above the page always works. |
+| Notifications only | No |
+
+In the native overlay the game keeps focus: Helpy keeps the page in a hidden window off the edge
+of your screens, copies its picture into the panel with Windows screen capture, and passes your
+clicks, scrolling and typing to it. This needs Windows 10 version 1903 or later. Right-click
+menus and link tooltips don't appear there, because they are separate windows.
 
 The page needs the Microsoft Edge WebView2 Runtime, which Windows 10 and 11 normally
 include. Helpy keeps the page's cookies and cache in its own state folder, separate

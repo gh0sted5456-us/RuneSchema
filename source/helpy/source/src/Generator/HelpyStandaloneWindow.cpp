@@ -524,6 +524,41 @@ bool NavItem(Page page,const HelpyImGuiTheme::Theme& t,const std::vector<int>& s
     }return clicked;
 }
 
+// Plugin pages show Helpy's navigation as a bar across the top, so a page with its own left
+// navigation (the wiki) keeps its width and the player can always get back into Helpy.
+void RenderPluginTopNavigation(const HelpyImGuiTheme::Theme& t,const std::vector<HelpyPluginNavigation::Tab>& tabs){
+    ImGui::PushID("plugin-top-navigation");
+    const float icon=t.Y(18.0f),avail=ImGui::GetContentRegionAvail().x,spacing=ImGui::GetStyle().ItemSpacing.x;float used=0;
+    const auto item=[&](const char* id,const char* label,bool active,const auto& drawIcon)->bool{
+        const auto text=ImGui::CalcTextSize(label);
+        const ImVec2 size{t.X(8)+icon+t.X(6)+text.x+t.X(10),std::max(icon,text.y)+t.Y(10)};
+        if(used>0&&used+size.x<=avail)ImGui::SameLine(0,spacing);else used=0;
+        const auto at=ImGui::GetCursorScreenPos();const ImVec2 end{at.x+size.x,at.y+size.y};
+        const bool hovered=ImGui::IsWindowHovered()&&ImGui::IsMouseHoveringRect(at,end);
+        ImGui::GetWindowDrawList()->AddRectFilled(at,end,ImGui::GetColorU32(active?t.navigationActive:hovered?t.navigationHover:t.navigation),t.X(6));
+        ImGui::PushID(id);ImGui::PushStyleColor(ImGuiCol_Header,{0,0,0,0});ImGui::PushStyleColor(ImGuiCol_HeaderHovered,{0,0,0,0});ImGui::PushStyleColor(ImGuiCol_HeaderActive,{0,0,0,0});
+        const bool clicked=ImGui::Selectable("##top-nav",active,ImGuiSelectableFlags_None,size);
+        ImGui::PopStyleColor(3);ImGui::PopID();
+        drawIcon(ImVec2{at.x+t.X(8)+icon*.5f,at.y+size.y*.5f},active?t.accentHover:t.icon);
+        ImGui::GetWindowDrawList()->AddText({at.x+t.X(8)+icon+t.X(6),at.y+(size.y-text.y)*.5f},ImGui::GetColorU32(active?t.text:t.textDisabled),label);
+        used+=size.x+spacing;return clicked;
+    };
+    const auto defaults=HelpyNavigationOrder::SidebarDefaults();
+    for(int id:HelpyNavigationOrder::Ordered(HelpyNavigationOrder::SidebarSurface,defaults)){
+        if(id==HelpyNavigationOrder::SidebarDivider)continue;
+        const auto page=static_cast<Page>(id);
+        if(!HelpyNavigation::Available(page,t.workspaces,HelpyEnvironment::Server()))continue;
+        if(item(PageTitle(page),PageTitle(page),false,[&](ImVec2 center,const ImVec4& color){HelpyImGuiTheme::DrawIcon(PageIcon(page),center,icon,color);})){
+            if(page==Page::BugReport){if(!BugReportPanel::Open()){CurrentPage=Page::BugReport;CurrentPluginRoute.clear();}}
+            else OpenSidebarPage(page,t);
+        }
+    }
+    for(const auto& tab:tabs)
+        if(item(tab.Route.c_str(),tab.Title.c_str(),CurrentPluginRoute==tab.Route,[&](ImVec2 center,const ImVec4& color){HelpyPluginIcons::Draw(ImGui::GetWindowDrawList(),tab,center,icon,color);}))
+            CurrentPluginRoute=tab.Route;
+    ImGui::Separator();ImGui::PopID();
+}
+
 void RenderWorkspaceTabs(const HelpyImGuiTheme::Theme& t,bool arriving){
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::WorkspaceTabs.clear();
@@ -2127,6 +2162,7 @@ void RenderWorkspace(const HelpyImGuiTheme::Theme& t) {
         RenderSplash(t);return;
     }
     if(!CurrentPluginRoute.empty()) {
+        RenderPluginTopNavigation(t,pluginTabs);
         HelpyCompanionSurface::ActiveRoute=CurrentPluginRoute;
         const RuneSchemaNavUiV1 ui{sizeof(RuneSchemaNavUiV1),nullptr,
             [](void*,const char* text){if(text&&strnlen_s(text,16385)<=16384)ImGui::TextWrapped("%s",text);},
@@ -5548,7 +5584,11 @@ void HelpyStandaloneWindow::RenderFrame() {
 #endif
     HelpySupportPage::Frame support(m_hwnd,m_module,m_device,helpBrowser&&!m_gameOverlay.Active()&&!m_nativeOverlay.Presenting()&&!m_nativeOverlay.NotificationsVisible());
     // Plugin web pages ride in an owned window, so unlike the support page they also show in the game overlay.
-    HelpyWebPane::Frame webPages(m_hwnd,m_module,PluginRuntimeServices::ExternalDesktop&&!HelpyEnvironment::Server()&&!m_nativeOverlay.Presenting()&&!m_nativeOverlay.NotificationsVisible());
+    // Web pages: over Helpy's window, or captured into the native in-game overlay; none on the notifications HUD or a server.
+    const auto webMode=!PluginRuntimeServices::ExternalDesktop||HelpyEnvironment::Server()?HelpyWebPane::Mode::Hidden
+        :m_nativeOverlay.Visible()?HelpyWebPane::Mode::Texture
+        :m_nativeOverlay.Presenting()||m_nativeOverlay.NotificationsVisible()?HelpyWebPane::Mode::Hidden:HelpyWebPane::Mode::Window;
+    HelpyWebPane::Frame webPages(m_hwnd,m_module,webMode,m_device);
     HelpyFeatureSettings::Load();const bool modMenuLoaded=ModMenu2Panel::Loaded();HelpyImGuiTheme::Current.workspaces.ModMenu=HelpyFeatureSettings::Key&&modMenuLoaded;RuneSchemaSettingsPanel::ModMenuSettings=modMenuLoaded?ModMenu2Panel::Settings:std::function<void()>{};
     HudViewport={};HudOrigin={};
 #if defined(HELPY_PREVIEW)
@@ -6090,6 +6130,7 @@ LRESULT CALLBACK HelpyStandaloneWindow::WndProc(HWND hwnd,UINT msg,WPARAM wParam
         if(main){HelpyImGuiTheme::SetRuntimeDpi(static_cast<float>(HIWORD(wParam))/96.f);NativeCaption.Update(hwnd,HIWORD(wParam));}
         if(const auto* rect=reinterpret_cast<RECT*>(lParam))SetWindowPos(hwnd,nullptr,rect->left,rect->top,rect->right-rect->left,rect->bottom-rect->top,SWP_NOZORDER|SWP_NOACTIVATE);return 0;
     case WM_DEVICECHANGE:HelpyControllerInput::Changed();break;
+    case WM_MOVE:if(main&&self&&hwnd==self->m_hwnd)HelpyWebPane::FollowOwner(hwnd);break; // A web page follows a drag at once.
     case WM_CLOSE:if(self){if(hwnd==self->m_bayWindow){ItemGridPicker::DetachedBay=false;ShowWindow(hwnd,SW_HIDE);}else if(hwnd==self->m_cacheWindow){HelpyIconPacks::Detached=false;ShowWindow(hwnd,SW_HIDE);}else if(hwnd==self->m_hwnd){if(PluginRuntimeServices::ExternalDesktop&&!HelpySettings::CloseToTaskbar())self->m_stop=true;else self->ClosePopup();}else for(size_t i=0;i<self->m_workspaces.size();++i)if(hwnd==self->m_workspaces[i].Window){WorkspaceDetached(i)=false;if(i==2)RuntimeDetailsPanel::Open=false;if(i==3)MapPanel::Data.ShowParty=false;if(i==4)PlayerInventoryPanel::Open=false;ShowWindow(hwnd,SW_HIDE);break;}}return 0;
     case WM_SYSCOMMAND:
         if((wParam&0xfff0)==SC_KEYMENU&&lParam!=VK_SPACE)return 0;

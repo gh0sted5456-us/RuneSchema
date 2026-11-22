@@ -22,7 +22,7 @@ This candidate collects everything since 0.9.0.3.
 
 **For players**
 
-- New `RuneSchema.Wiki` plugin: a **Wiki** tile that shows the Dragonwilds wiki inside Helpy's window and its game overlay. Type `rs wiki <name>` in the game console to open a page. See [Dragonwilds Wiki in Helpy](HELPY-WIKI.md).
+- New `RuneSchema.Wiki` plugin: a **Wiki** tile that shows the real Dragonwilds wiki inside Helpy, including the native in-game overlay (captured into Helpy's panel, with clicks, scrolling and typing passed to the page). Plugin pages show Helpy's navigation as a bar across the top, so the wiki keeps its own left navigation. A page in Helpy's separate window now follows the window while you drag it. Type `rs wiki <name>` in the game console to open a page. See [Dragonwilds Wiki in Helpy](HELPY-WIKI.md).
 - Plugin entries such as Grand Exchange are tiles on Home with their own icon and description, and sidebar rows with their icon, instead of a plain button above the tiles.
 - Plugins can post into Helpy's notifications, with an in-game popup and an **Open** button for their own page. Notices appear under **Notifications → Plugins**; Grand Exchange can use this for sale alerts.
 - Grand Exchange opens as its own workspace inside Helpy, with **Return to Helpy**. See [Grand Exchange integration](GRAND-EXCHANGE.md).
