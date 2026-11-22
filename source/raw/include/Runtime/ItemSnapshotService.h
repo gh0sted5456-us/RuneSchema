@@ -1,7 +1,10 @@
 #pragma once
+#include "Core/ItemSnapshot.h"
 #include <cstdint>
-// Core-owned service runeschema.item.snapshot (read-only). See Core/ItemSnapshot.h for the record
-// and docs/development/API-REFERENCE.md "Item snapshot" for the contract.
+namespace RC::Unreal { class UObject; }
 namespace PS::ItemSnapshotService {
+struct LiveItem { RC::Unreal::UObject* Controller{}; RC::Unreal::UObject* Container{}; RC::Unreal::UObject* Item{}; RC::Unreal::UObject* Data{}; nlohmann::json Error; };
+LiveItem Resolve(const ItemSnapshot::Request& request);
+nlohmann::json Read(const ItemSnapshot::Request& request);
 int32_t Call(const char* request,char* response,uint32_t capacity,uint32_t* size);
 }

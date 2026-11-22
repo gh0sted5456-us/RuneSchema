@@ -31,6 +31,8 @@
 #include "Runtime/PluginEvents.h"
 #include "Runtime/ItemSnapshotService.h"
 #include "Core/ItemSnapshot.h"
+#include "Core/ItemDestroy.h"
+#include "Runtime/ItemDestroyService.h"
 #include "Runtime/GameFrameRate.h"
 #include "Core/HelpySourceCache.h"
 #include "Core/HelpyCacheOwnership.h"
@@ -63,6 +65,7 @@ std::mutex Gate;std::unordered_map<std::string,Service> Services;std::unordered_
 std::unordered_map<std::string,std::string> ActiveConnections;
 // Owned plugin events: loaded Host=helpy game halves (guarded by Gate) and the push target.
 std::unordered_set<std::string> HelpyGameHalves;
+std::unordered_set<std::string> DestroyCallers;
 std::mutex EventGate;HelpyDesktop::Server* EventDesktop=nullptr;std::unordered_map<std::string,PluginEvents::Bucket> EventBuckets;
 thread_local const char* ActiveOwner=nullptr;
 std::atomic<bool> DesktopBridgeReady=false;
@@ -294,7 +297,7 @@ int32_t RS_PLUGIN_CALL RegisterCapability(const char* plugin,const char* capabil
     return inserted||it->second==plugin?RS_PLUGIN_OK:RS_PLUGIN_DUPLICATE;
 }
 int32_t RS_PLUGIN_CALL RegisterService(const char* plugin,const char* name,RuneSchemaServiceFn callback,void* context) {
-    if(!Token(plugin)||!Token(name)||!callback||!ActiveOwner||std::string_view(plugin)!=ActiveOwner||std::string_view(name)==PluginEvents::Service||std::string_view(name)==ItemSnapshot::Service)return RS_PLUGIN_INVALID_ARGUMENT;
+    if(!Token(plugin)||!Token(name)||!callback||!ActiveOwner||std::string_view(plugin)!=ActiveOwner||std::string_view(name)==PluginEvents::Service||std::string_view(name)==ItemSnapshot::Service||std::string_view(name)==ItemDestroy::Service)return RS_PLUGIN_INVALID_ARGUMENT;
     std::scoped_lock lock(Gate);return Services.emplace(name,Service{plugin,callback,context}).second?RS_PLUGIN_OK:RS_PLUGIN_DUPLICATE;
 }
 // helpy.plugin.event: queue an owner-tagged event for the caller's own Helpy-side half.
@@ -318,6 +321,10 @@ int32_t RS_PLUGIN_CALL CallService(const char* caller,const char* name,const cha
     if(std::string_view(name)==PluginEvents::Service)return PluginEvent(caller,request,size);
     // Core-owned and read-only; game thread, authoritative world. Not reachable over the desktop pipe.
     if(std::string_view(name)==ItemSnapshot::Service)return ItemSnapshotService::Call(request,response,capacity,size);
+    if(std::string_view(name)==ItemDestroy::Service){
+        bool permitted=false;{std::scoped_lock lock(Gate);const auto cap=Capabilities.find(std::string(ItemDestroy::Capability));permitted=DestroyCallers.contains(caller)&&cap!=Capabilities.end()&&cap->second==caller;}
+        return ItemDestroyService::Call(caller,permitted,request,response,capacity,size);
+    }
     std::unique_lock policyLock(MultiplayerPolicyLifetime,std::defer_lock);
     if(std::string_view(name)==MultiplayerPolicy::Service){
         if(std::string_view(caller)!="RuneSchema.Core")return RS_PLUGIN_INVALID_ARGUMENT;
@@ -509,6 +516,7 @@ void PluginHost::LoadCatalog(const std::vector<PluginCatalog::Plugin>& catalog){
         const auto uiInit=reinterpret_cast<RuneSchemaPluginPhaseFn>(GetProcAddress(module,"RuneSchemaPlugin_OnUiInit"));
         const auto unrealInit=reinterpret_cast<RuneSchemaPluginPhaseFn>(GetProcAddress(module,"RuneSchemaPlugin_OnUnrealInit"));
         m_state->LoadedPlugins.push_back({manifest,module,instance,shutdown,uiInit,unrealInit});
+        if(std::find(manifest.Capabilities.begin(),manifest.Capabilities.end(),ItemDestroy::Capability)!=manifest.Capabilities.end()){std::scoped_lock lock(Gate);DestroyCallers.insert(manifest.Id);}
         if(!manifest.GameEntryPoint.empty()){std::scoped_lock lock(Gate);HelpyGameHalves.insert(manifest.Id);}
         m_state->Messages.push_back(manifest.Id+": loaded API 1");
     }
@@ -589,7 +597,7 @@ void PluginHost::Shutdown() noexcept {
         if(iterator->Manifest.Id=="RSNetworking")policyLock.lock();
         if(!ModLocalServices::Drop(iterator->Manifest.Id))continue;
         if(iterator->Shutdown)try{iterator->Shutdown(iterator->Instance);}catch(...){}
-        {std::scoped_lock lock(Gate);std::erase_if(Services,[&](const auto& value){return value.second.Owner==iterator->Manifest.Id;});std::erase_if(Capabilities,[&](const auto& value){return value.second==iterator->Manifest.Id;});std::erase_if(ActiveConnections,[&](const auto& value){return value.second==iterator->Manifest.Id;});}
+        {std::scoped_lock lock(Gate);DestroyCallers.erase(iterator->Manifest.Id);std::erase_if(Services,[&](const auto& value){return value.second.Owner==iterator->Manifest.Id;});std::erase_if(Capabilities,[&](const auto& value){return value.second==iterator->Manifest.Id;});std::erase_if(ActiveConnections,[&](const auto& value){return value.second==iterator->Manifest.Id;});}
         if(iterator->Module)FreeLibrary(iterator->Module);
     }
     m_state->LoadedPlugins.clear();m_state->SelectedIds.clear();

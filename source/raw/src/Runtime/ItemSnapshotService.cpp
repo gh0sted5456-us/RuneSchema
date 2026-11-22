@@ -91,35 +91,41 @@ S::Field Capture(FProperty* property,UObject* item){
     if(!property->Identical(source,parsed->Data))throw std::runtime_error("Native item property cannot round-trip without loss: "+field.Name);
     return field;
 }
-nlohmann::json Read(const S::Request& request){
-    if(!IsInGameThread())return S::Refusal("Thread","runeschema.item.snapshot must be called on the game thread.");
+}
+LiveItem Resolve(const S::Request& request){
+    if(!IsInGameThread())return {nullptr,nullptr,nullptr,nullptr,S::Refusal("Thread","runeschema.item.snapshot must be called on the game thread.")};
     auto* controllerClass=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,TEXT("/Script/Dominion.DominionPlayerController"));
-    if(!controllerClass)return S::Refusal("Player","The game's player controller type is unavailable.");
+    if(!controllerClass)return {nullptr,nullptr,nullptr,nullptr,S::Refusal("Player","The game's player controller type is unavailable.")};
     UObject* controller=nullptr;TArray<UObject*> controllers;
     UECustom::UObjectGlobals::GetObjectsOfClass(controllerClass,controllers,true);
     for(auto* candidate:controllers){
         if(!candidate||candidate->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed))||!candidate->GetWorld())continue;
         if(S::NormalizeGuid(PlayerStatusRuntime::CharacterGuid(AH::GetObjectRef(candidate,TEXT("PlayerState"))))!=request.Player)continue;
-        if(controller)return S::Refusal("Player","More than one controller has that character GUID.");
+        if(controller)return {nullptr,nullptr,nullptr,nullptr,S::Refusal("Player","More than one controller has that character GUID.")};
         controller=candidate;
     }
-    if(!controller)return S::Refusal("Player","That character is not connected.");
+    if(!controller)return {nullptr,nullptr,nullptr,nullptr,S::Refusal("Player","That character is not connected.")};
     // Save fields are complete only where the game is authoritative: single player, host or server.
-    if(!Network::OwnsGameplay(Network::Detect(controller).Mode))return S::Refusal("Authority","Item snapshots are read only where the game is authoritative.");
+    if(!Network::OwnsGameplay(Network::Detect(controller).Mode))return {nullptr,nullptr,nullptr,nullptr,S::Refusal("Authority","Item snapshots are read only where the game is authoritative.")};
     UObject* container=nullptr;
     try{
         if(request.Where==S::Scope::Inventory)container=E::Owned(controller,TEXT("InventoryComponent"),TEXT("/Script/Dominion.InventoryComponent"));
         else if(request.Where==S::Scope::Personal)container=E::Owned(controller,TEXT("PersonalInventoryComponent"),TEXT("/Script/Dominion.PersonalInventoryComponent"));
         else container=E::Owned(controller,TEXT("LoadoutComponent"),TEXT("/Script/Dominion.LoadoutComponent"));
-    }catch(const std::exception&){return S::Refusal("Container",std::string("The character's ")+std::string(S::Name(request.Where))+" container is unavailable.");}
+    }catch(const std::exception&){return {nullptr,nullptr,nullptr,nullptr,S::Refusal("Container",std::string("The character's ")+std::string(S::Name(request.Where))+" container is unavailable.")};}
     const auto slots=E::Slots(container);
-    if(static_cast<size_t>(request.Slot)>=slots.size()||!slots[request.Slot])return S::Refusal("Slot","That slot is empty or out of range.");
+    if(static_cast<size_t>(request.Slot)>=slots.size()||!slots[request.Slot])return {nullptr,nullptr,nullptr,nullptr,S::Refusal("Slot","That slot is empty or out of range.")};
     auto* item=slots[request.Slot];
     auto* base=AH::ResolveClass(TEXT("/Script/Dominion.Item"));
-    if(!base||!item->IsA(base)||item->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed|RF_FinishDestroyed)))return S::Refusal("Slot","That slot does not hold a live item instance.");
-    if(GuidText(E::Identity(item))!=request.Instance)return S::Refusal("Instance","The slot holds a different item instance.");
+    if(!base||!item->IsA(base)||item->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed|RF_FinishDestroyed)))return {nullptr,nullptr,nullptr,nullptr,S::Refusal("Slot","That slot does not hold a live item instance.")};
+    if(GuidText(E::Identity(item))!=request.Instance)return {nullptr,nullptr,nullptr,nullptr,S::Refusal("Instance","The slot holds a different item instance.")};
     auto* data=E::Data(item);
-    if(!data||RC::to_string(data->GetPathName())!=request.Item)return S::Refusal("Item","The slot holds a different item definition.");
+    if(!data||RC::to_string(data->GetPathName())!=request.Item)return {nullptr,nullptr,nullptr,nullptr,S::Refusal("Item","The slot holds a different item definition.")};
+    return {controller,container,item,data,{}};
+}
+nlohmann::json Read(const S::Request& request){
+    const auto live=Resolve(request);if(!live.Error.is_null())return live.Error;
+    auto* item=live.Item;auto* data=live.Data;
     auto* type=item->GetClassPrivate();std::vector<S::Field> fields;
     for(auto* property:TFieldRange<FProperty>(type,EFieldIterationFlags::IncludeSuper)){
         if(!property->HasAnyPropertyFlags(CPF_SaveGame))continue;
@@ -137,7 +143,6 @@ nlohmann::json Read(const S::Request& request){
     snapshot["Ok"]=true;
     snapshot["Observed"]={{"Player",request.Player},{"Scope",S::Name(request.Where)},{"Slot",request.Slot},{"InMemory",true}};
     return snapshot;
-}
 }
 int32_t Call(const char* request,char* response,uint32_t capacity,uint32_t* size){
     if(!request||!size)return RS_PLUGIN_INVALID_ARGUMENT;

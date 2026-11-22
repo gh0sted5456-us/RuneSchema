@@ -172,5 +172,8 @@
   },
   {
     "Cooked world components": "experimental/WORLD-COMPONENTS.md"
+  },
+  {
+    "Exact item destroy (in development)": "experimental/ITEM-DESTROY.md"
   }
 ]
