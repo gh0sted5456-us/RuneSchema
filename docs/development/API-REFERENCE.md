@@ -169,6 +169,49 @@ host->CallService("GrandExchange", "helpy.plugin.event",
   `{"Event":"EventsLost"}`: resynchronize from the in-game half (for example by
   `Revision`). `helpy.plugin.event` cannot be registered by a plugin.
 
+
+### Item snapshot (read-only)
+
+`runeschema.item.snapshot` is a core service that returns a lossless record of one live item
+instance. It reads; it never creates, moves or changes an item.
+
+```cpp
+host->CallService("GrandExchange", "runeschema.item.snapshot",
+    R"({"Player":"<character GUID>","Scope":"Inventory","Slot":12,
+        "Instance":"<item instance GUID>","Item":"/Game/.../DA_CopperOre.DA_CopperOre"})",
+    buffer, capacity, &size);
+```
+
+- **Request.** Exactly these five fields. `Scope` is `Inventory`, `Personal` or `Loadout`.
+  `Slot` is 0..1023. `Instance` and `Item` must match the item in that slot, or nothing is read.
+  Unknown fields are refused.
+- **Where.** Call it on the game thread, in an authoritative world (single player, a listen host or
+  a dedicated server). It is reachable only from in-game plugins, not over Helpy's desktop pipe, and
+  no plugin can register its name.
+- **What is captured.** Every `SaveGame` property on the item's class chain, including properties
+  that are also `Transient` (listed in `TransientFields`, kept as evidence). Each value is Unreal's
+  property text, accepted only when it imports back `Identical` to the live value. `FDateTime` uses
+  an exact codec, `native-datetime-le64/1` (its 8 bytes as 16 lower-case hex digits, little-endian,
+  inside Unreal's tick range), because its text export truncates ticks.
+- **Refused as a whole.** An object reference in any saved field, a multi-element or out-of-extent
+  field, a value that doesn't round-trip, more than 128 fields, or a missing `Count`, `Guid` or
+  `Durability`. There is no raw-memory fallback.
+- **Reply.** `{"Schema":"runeschema.item-snapshot/1","Ok":true,"Item","Class","SourceInstance",
+  "Layout","Fields":[{"Name","Owner","Type","CppType","Codec","Value"[,"Transient"][,"Identity"]}],
+  "IdentityFields","TransientFields","Digest","StateDigest","Observed"}`.
+  - `Layout` hashes each field's name, owner, reflected type, C++ type, nested shape (struct
+    members, enums, container elements), codec and transient flag. Values are not part of it.
+  - `Digest` covers the item, class, layout and every value. `StateDigest` leaves out the identity
+    field (`Guid`), so two instances with the same state compare equal.
+  - `Observed.InMemory` is `true`: this is the live object, not a save receipt.
+- **Refusal.** `{"Schema","Ok":false,"Phase","Error"}` with result `RS_PLUGIN_OK`. Phases: `Request`,
+  `Thread`, `Player`, `Authority`, `Container`, `Slot`, `Instance`, `Item`, `Layout`, `Value`,
+  `Native`. Malformed JSON returns `RS_PLUGIN_INVALID_ARGUMENT`.
+- **Buffer.** The usual sizing call (`RS_PLUGIN_BUFFER_TOO_SMALL` with `size`) is safe: it is a
+  read. The two calls are separate reads.
+
+Restore is a separate contract that isn't built.
+
 Required DLL exports:
 
 ```cpp
