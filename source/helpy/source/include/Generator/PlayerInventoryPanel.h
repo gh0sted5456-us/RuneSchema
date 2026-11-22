@@ -9,6 +9,7 @@
 #include "Generator/MapLayerIcons.h"
 #include "Generator/AuthoringClient.h"
 #include "Core/LoadoutEligibility.h"
+#include "Core/HelpyItemDestroy.h"
 namespace PS::PlayerInventoryPanel {
 using Json=nlohmann::json;
 inline bool Open=false,Detached=false,Refresh=false,AddWanted=false,Personal=false,Container=false,WasDelivering=false,FocusCart=false;
@@ -29,6 +30,10 @@ inline std::function<void(float)> RenderCart;
 inline int Offset=0;inline uint64_t Pending=0,Sequence=0x5700000000000000ull,Generation=0,Revision=1;
 inline std::chrono::steady_clock::time_point Started{};
 inline HelpyWindowChrome::State Chrome;
+// Destroy: one whole stack, confirmed twice (the menu item, then a checkbox and the button), with
+// one request UUID per dialog. After an unknown result no destroy is offered until a fresh read.
+inline Json DestroyRow;inline std::string DestroyId,DestroyStatus;inline bool DestroyOpen=false,DestroyUnderstood=false,DestroyPersonal=false,DestroyHold=false;
+inline uint64_t DestroyPending=0;inline std::chrono::steady_clock::time_point DestroyOpened{},DestroyStarted{};
 inline void Request(const Json& row){Target=row;Snapshot=Json::object();Offset=0;Personal=false;Container=false;Pending=0;Group="Inventory";SelectedSlot.clear();SelectedInventory=Json::object();ChangingGear=false;GearMutationUnconfirmed=false;GearCatalogRequest=0;Open=true;Detached=true;Refresh=true;Generation=SpawnToolRequests::CurrentGeneration();Status="Reading native inventory...";HelpyTaskbar::Current.Restore(HelpyTaskbar::Window::Inventory);}
 inline void ResetGearCatalog(){
     GearRows=Json::array();GearOffset=0;GearWanted=48;GearCursor.clear();GearMore=LoadoutEligibility::Valid(GearLocation);GearQuery=ItemGridPicker::BackendQuery(Bay);++GearRevision;Bay.CatalogRevision=0;Bay.PageIndex=0;
@@ -58,11 +63,55 @@ inline void PollRepair(){
         RepairStatus=confirmed?"Durability restored.":result.value("Status",std::string("Repair not confirmed. Check durability before retrying."));
     }else if(std::chrono::steady_clock::now()-RepairStarted>std::chrono::seconds(15)){RepairPending=0;RepairStatus="Repair result unconfirmed. Check durability before retrying.";}
 }
+inline bool CanDestroy(const Json& row){
+    return !Container&&Group!="Equipped"&&!row.value("Equipped",false)&&row.value("Available",true)&&row.contains("Instance")
+        &&!DestroyPending&&!DestroyHold&&!Pending&&!Refresh&&!ChangingGear&&Snapshot.contains("ObservedUnixMs")&&Generation==SpawnToolRequests::CurrentGeneration();
+}
+inline void BeginDestroy(const Json& row){
+    DestroyRow=row;DestroyPersonal=Personal;DestroyId=HelpyItemDestroy::NewRequestId();DestroyUnderstood=false;DestroyOpen=true;DestroyOpened=std::chrono::steady_clock::now();
+}
+inline void SubmitDestroy(){
+    if(std::chrono::steady_clock::now()-DestroyOpened>std::chrono::seconds(HelpyItemDestroy::ConfirmSeconds)){DestroyStatus="The confirmation expired. Open Destroy again.";return;}
+    if(Generation!=SpawnToolRequests::CurrentGeneration()||DestroyPersonal!=Personal){DestroyStatus="The inventory changed. Refresh it, then try again.";return;}
+    try{
+        auto request=HelpyItemDestroy::Build(DestroyRow,Target.value("Path",std::string{}),Target.value("Guid",std::string{}),DestroyPersonal,Generation,DestroyId);
+        const auto id=++Sequence;request["_RequestId"]=id;
+        if(SpawnToolRequests::TrySubmit(request)){DestroyPending=id;DestroyStarted=std::chrono::steady_clock::now();DestroyStatus="Destroying… Helpy will not retry.";}
+        else DestroyStatus="The game is busy; nothing was sent.";
+    }catch(const std::exception& error){DestroyStatus=std::string("Not sent: ")+error.what();}
+}
+inline void PollDestroy(){
+    if(!DestroyPending)return;
+    Json result;if(SpawnToolRequests::TakeCompleted(DestroyPending,result)){
+        DestroyPending=0;const auto outcome=result.find("DestroyResult");
+        if(outcome!=result.end()&&outcome->is_object()){DestroyStatus=HelpyItemDestroy::Status(*outcome);const auto state=outcome->value("State",std::string{});DestroyHold=state!="Confirmed"&&state!="Retained"&&state!="Refused";}
+        else{DestroyStatus=result.value("Status",std::string("Destroy returned no result."));DestroyHold=!result.contains("Error");if(DestroyHold)DestroyStatus+=" Refresh the inventory before doing anything else.";}
+        Offset=0;Snapshot=Json::object();Refresh=true;++Revision; // Reload(), defined below.
+    }else if(std::chrono::steady_clock::now()-DestroyStarted>std::chrono::seconds(20)){DestroyPending=0;DestroyHold=true;DestroyStatus="No destroy result arrived. Refresh the inventory before doing anything else; Helpy will not retry.";}
+}
+inline void DestroyDialog(){
+    if(DestroyOpen){ImGui::OpenPopup("Destroy stack?");DestroyOpen=false;}
+    if(!ImGui::BeginPopupModal("Destroy stack?",nullptr,ImGuiWindowFlags_AlwaysAutoResize))return;
+    const auto name=ItemPresentation::Name(DestroyRow);const auto count=DestroyRow.value("Count",1);
+    ImGui::TextWrapped("Destroy %s ×%d from %s, slot %d?",name.c_str(),count,DestroyPersonal?"personal storage":"the inventory",DestroyRow.value("Slot",0));
+    ImGui::PushStyleColor(ImGuiCol_Text,HelpyImGuiTheme::Current.warning);
+    ImGui::TextWrapped("The whole stack is removed from the game. This can't be undone, and nothing is refunded.");ImGui::PopStyleColor();
+    const auto label="I understand: permanently destroy "+std::to_string(count)+" × "+name;
+    ImGui::Checkbox(label.c_str(),&DestroyUnderstood);
+    const bool expired=std::chrono::steady_clock::now()-DestroyOpened>std::chrono::seconds(HelpyItemDestroy::ConfirmSeconds);
+    if(expired)ImGui::TextDisabled("This confirmation expired. Cancel and open Destroy again.");
+    ImGui::BeginDisabled(!DestroyUnderstood||expired||DestroyPending!=0);
+    ImGui::PushStyleColor(ImGuiCol_Button,HelpyImGuiTheme::Current.error);
+    if(ImGui::Button(("Destroy "+std::to_string(count)+" × "+name).c_str())){SubmitDestroy();ImGui::CloseCurrentPopup();}
+    ImGui::PopStyleColor();ImGui::EndDisabled();ImGui::SameLine();
+    if(ImGui::Button("Cancel")){DestroyRow=Json::object();DestroyId.clear();ImGui::CloseCurrentPopup();}
+    ImGui::EndPopup();
+}
 inline void RequestContainer(const Json& row){Request(row);Container=true;Group="Storage";Status="Reading loaded placed-storage contents...";}
 inline void Reload(){Offset=0;Snapshot=Json::object();Refresh=true;++Revision;}
 inline bool ValidSnapshot(){return Snapshot.contains("ObservedUnixMs")&&Generation==SpawnToolRequests::CurrentGeneration();}
 inline void Poll(){
-    PollRepair();
+    PollRepair();PollDestroy();
     if(!Open)return;
     if(Generation!=SpawnToolRequests::CurrentGeneration()){Snapshot=Json::object();Pending=0;Refresh=false;GearMutationUnconfirmed|=GearPending!=0;GearPending=0;GearCatalogRequest=0;GearMore=false;Status="World changed; close this view and select a current party member.";return;}
     if(GearPending){Json result;if(SpawnToolRequests::TakeCompleted(GearPending,result)){GearPending=0;Status=result.value("Status",std::string("Gear action returned without a receipt; inspect inventory."));GearMutationUnconfirmed=!result.value("EquipmentAction",Json::object()).value("Confirmed",false);Reload();}}
@@ -81,7 +130,7 @@ inline void Poll(){
         Pending=0;Status=receipt.value("Status",std::string{});
         const auto value=receipt.find("InventorySnapshot");
         if(value!=receipt.end()&&value->is_object()&&value->value("Offset",0)==Offset&&value->value("Generation",uint64_t{})==Generation&&value->value("PlayerGuid",std::string{})==Target.value("Guid",std::string{})&&value->value("Player",std::string{})==Target.value("Path",std::string{})&&value->value("Container",false)==Container&&value->value("Personal",false)==Personal){
-            if(Offset==0)Snapshot=*value;
+            if(Offset==0){Snapshot=*value;DestroyHold=false;}
             else{auto accumulated=Snapshot.value("Items",Json::array());for(const auto& row:value->value("Items",Json::array()))accumulated.push_back(row);const auto loadout=Snapshot.value("Loadout",Json::array());const auto loadoutError=Snapshot.value("LoadoutError",std::string{});Snapshot=*value;Snapshot["Items"]=std::move(accumulated);Snapshot["Loadout"]=loadout;if(!loadoutError.empty())Snapshot["LoadoutError"]=loadoutError;}
             ++Revision;const auto next=value->value("NextOffset",Offset);
             if(value->value("HasMore",false)&&next>Offset&&next<=1024){Offset=next;Refresh=true;Status="Reading remaining inventory pages...";}
@@ -138,7 +187,10 @@ inline void Inventory(float height){
         const auto count=std::string("×")+std::to_string(row.value("Count",1));const auto extent=ImGui::CalcTextSize(count.c_str());ImGui::GetWindowDrawList()->AddText({a.x+width-extent.x-t.X(8),a.y+t.Y(6)},ImGui::GetColorU32(t.text),count.c_str());
         if(HelpyImGuiTheme::TooltipReady("live-inventory:"+slot,ImGui::IsItemHovered()))ItemGridPicker::VerboseTooltip(row,name,path,false,true);
         if(ImGui::BeginPopupContextItem("##inventory-item-actions")){ImGui::TextUnformatted(name.c_str());ImGui::Separator();ItemGridPicker::InspectActions(row);ImGui::Separator();PersonalizationPanel::Menu(row);
-            ImGui::TextDisabled("Slot %s · count %d",slot.c_str(),row.value("Count",1));ImGui::EndPopup();}
+            ImGui::TextDisabled("Slot %s · count %d",slot.c_str(),row.value("Count",1));
+            if(!Container&&Group!="Equipped"){ImGui::Separator();if(ImGui::MenuItem("Destroy stack…",nullptr,false,CanDestroy(row)))BeginDestroy(row);
+                if(DestroyHold)ImGui::TextDisabled("Refresh first: the last destroy result is unknown.");}
+            ImGui::EndPopup();}
         ImGui::PopID();
     }
     if(matches.empty())ImGui::TextWrapped("%s",Pending||Refresh?"Reading inventory pages…":Group=="Equipped"&&Snapshot.contains("LoadoutError")?Snapshot["LoadoutError"].get_ref<const std::string&>().c_str():"No matching items in this tab.");
@@ -152,6 +204,8 @@ inline void Contents(){
     HelpyImGuiTheme::BeginPanel("##inventory-workbench-body",{0,0});
     if(Container){ImGui::TextWrapped("Lock status: Unknown · locked by: not verified");ImGui::TextWrapped("%s",Snapshot.value("AccessReason",std::string("Direct chest deposits and unlock overrides require a verified native access contract.")).c_str());}
     ImGui::TextWrapped("%s",Status.c_str());
+    if(!DestroyStatus.empty())ImGui::TextWrapped("%s",DestroyStatus.c_str());
+    DestroyDialog();
     if(ChangingGear){
         ImGui::SeparatorText(("Change gear · "+GearLocation).c_str());
         Json catalog={{"Items",GearRows}};

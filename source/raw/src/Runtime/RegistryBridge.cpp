@@ -1575,6 +1575,7 @@ void RegistryBridge::PublishHelpyResult(UObject* player,int64_t revision,const n
     if(result.contains("GrantResults"))compact["GrantResults"]=result["GrantResults"];
     if(result.contains("SpawnResult"))compact["SpawnResult"]=result["SpawnResult"];
     if(result.contains("ServerControl"))compact["ServerControl"]=result["ServerControl"];
+    if(result.contains("DestroyResult"))compact["DestroyResult"]=result["DestroyResult"]; // Bounded; never the item snapshot.
     std::vector<nlohmann::json> parts;
     try{parts=PS::HelpyRemoteResult::Split(std::move(compact));}
     catch(...){parts=PS::HelpyRemoteResult::Split({{"Status","Server completed the operation but its receipt exceeded the transport limit. Inspect inventory/position before retrying; no automatic retry was made."}});}

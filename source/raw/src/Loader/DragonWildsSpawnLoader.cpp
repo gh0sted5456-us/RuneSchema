@@ -51,6 +51,9 @@
 #include "Core/ItemDelivery.h"
 #include "Generator/HelpyGrantBatch.h"
 #include "Runtime/HelpyDeliveryGate.h"
+#include "Core/HelpyItemDestroy.h"
+#include "Runtime/ItemDestroyService.h"
+#include "Runtime/RuneSchemaPluginApi.h"
 #include "Loader/WorldSaveIdentity.h"
 #include "Unreal/Property/FEnumProperty.hpp"
 using namespace DragonWilds::SpawnRuntime;
