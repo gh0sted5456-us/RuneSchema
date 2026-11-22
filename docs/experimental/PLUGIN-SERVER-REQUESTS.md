@@ -35,8 +35,9 @@ server half captures the deposited stack with `runeschema.item.snapshot` and rem
 `runeschema.item.destroy`, both with `"Scope": "Owned"` and the storage's identity. See
 [Exact item destroy](ITEM-DESTROY.md).
 
-If the server doesn't have the plugin, the answer says so (`Reason: "NotInstalled"`), and GE tells
-the player to use the Vault in single player or from the main menu.
+If the server doesn't have the plugin, the answer says so (`Reason: "NotInstalled"`), and GE can
+tell the player to move items in single player instead, with that character loaded. The main menu
+is for account trading only: no game transfer edits a character that isn't loaded.
 
 RuneSchema never grants, removes or changes anything because a player asked. Only the
 plugin's server half decides, so a server without that plugin refuses. These requests don't
