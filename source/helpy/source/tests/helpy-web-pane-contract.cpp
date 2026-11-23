@@ -36,7 +36,7 @@ int main(int argc,char** argv){
         Check(pane.contains("Helpy draws the captured page")||pane.contains("Helpy draws the captured page."),"Texture mode is documented in place");
         // Helpy's browser: off by default, its own profile, web addresses only, ad blocker from Helpy's download only.
         const auto theme=Read(root/"helpy/source/include/Generator/HelpyImGuiTheme.h");
-        Check(theme.contains("bool webBrowser{false},browserAdBlock{false},browserPictureInPicture{true};")&&theme.contains("runtime.value(\"webBrowser\",false)")&&theme.contains("runtime.value(\"browserAdBlock\",false)"),"The browser and its ad blocker are off until chosen");
+        Check(theme.contains("bool webBrowser{false},browserAdBlock{false};")&&theme.contains("runtime.value(\"webBrowser\",false)")&&theme.contains("runtime.value(\"browserAdBlock\",false)"),"The browser and its ad blocker are off until chosen");
         const auto sync=At(window,"void SyncBrowser(){");
         Check(At(window,"theme.webBrowser&&PluginRuntimeServices::ExternalDesktop&&!HelpyEnvironment::Server()",sync)>sync,"No browser on a server or without Helpy's desktop window");
         Check(At(window,"HelpyBrowser::AdBlock(on&&theme.browserAdBlock)",sync)>sync&&At(window,"blocker.State==HelpyBrowser::Blocker::Ready?blocker.Folder",sync)>sync,"Only a verified, unpacked ad blocker is loaded");
@@ -50,12 +50,15 @@ int main(int argc,char** argv){
         const auto installer=Read(root/"helpy/source/src/Generator/HelpyBrowser.cpp");
         const auto install=At(installer,"View Install(View current) {");
         Check(At(installer,"Sha256(zip) != release.Sha256",install)<At(installer,"HelpyZip::Extract(file, staging);",install),"The ad blocker is checked against its published SHA-256 before it is unpacked");
-        Check(At(installer,"std::filesystem::rename(staging, folder);",install)<At(installer,"installed.json",install),"Only a complete unpack is recorded as installed");
-        Check(At(installer,"if (!on) {")<At(installer,"if (State.State != Blocker::Ready) Start(false); // First use: download once."),"Nothing is downloaded while ad blocking is off");
-        // Picture-in-picture: the playing video stays captured and the HUD draws it.
-        Check(At(window,"m_nativeOverlay.NotificationsVisible()&&HelpyWebPane::PictureInPicture()?HelpyWebPane::Mode::Texture",mode)<At(window,"m_nativeOverlay.NotificationsVisible()?HelpyWebPane::Mode::Hidden",mode),"The HUD keeps a playing video captured");
-        Check(window.contains("passiveHud=notices||coordinates||minimap||starting||award||pictureInPicture")&&window.contains("HelpyWebPane::DrawPictureInPicture(ImGui::GetBackgroundDrawList()"),"The HUD shows the video while Helpy is closed");
-        Check(pane.contains("} else if (!wanted && state.Showing == Mode::Texture && Playing(*pane)) {"),"The browser stays captured off-screen while its video plays");
-        std::cout<<"Helpy web pane contract passed: modes, capture, drag follow, top navigation, browser, picture-in-picture.\n";return 0;
+        Check(installer.contains("CacheBundleIO::MetadataLock lock(root / \"installed.json\");"),"Extension publication is shared across Helpy processes");
+        Check(installer.contains("void Activated(")&&installer.contains("ConfigFiles::Write(Root()/\"installed.json\",marker.dump(2));"),"The installed marker follows browser activation");
+        Check(pane.contains("HelpyTextInput::InputTextWithHint(\"##helpy-browser-address\""),"Browser addresses use Helpy's controller keyboard");
+        Check(pane.contains("ImGuiWindowFlags_Tooltip")&&pane.contains("window->Active&&!window->Hidden"),"Visible host tooltips cover the owned WebView");
+        Check(pane.contains("FAILED(status)||!list||FAILED(list->get_Count(&count))")&&pane.contains("removals->second=removals->second&&SUCCEEDED(result)"),"Enumeration and removal failures cannot be reported as success");
+        Check(pane.contains("HelpyBrowser::Activated(")&&pane.contains("HelpyBrowser::Rejected("),"Browser activation acknowledges success and failed candidates restore the previous version");
+        Check(window.contains("HelpyWebPane::Suspend();")&&pane.contains("void Suspend()"),"Hiding Helpy releases page capture even when rendering stops");
+        Check(window.contains("theme.webBrowser&&!theme.browserAdBlock&&HelpyWebPane::BrowserExtensionFailed()")&&window.contains("HelpyWebPane::RetryBrowserExtension();"),"Removal failures remain visible and retryable when blocking is off");
+        Check(!pane.contains("VideoScript")&&!pane.contains("PollVideo")&&!window.contains("PictureInPicture")&&!theme.contains("browserPictureInPicture"),"PiP and video polling are removed");
+        std::cout<<"Helpy web pane contract passed: modes, capture, drag follow, top navigation, browser lifecycle.\n";return 0;
     }catch(const std::exception& error){std::cerr<<"FAIL: "<<error.what()<<'\n';return 1;}
 }

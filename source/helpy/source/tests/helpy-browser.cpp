@@ -54,7 +54,7 @@ int main() {
         Check(Refused([&] { R::Parse(Json{{"tag_name", tag}, {"assets", Json::array({asset(".firefox.signed.xpi")})}}); }), "no usable build refused");
         // ZIP extraction.
         for (const auto* good : {"manifest.json", "js/a.js", "rulesets/main/x.json", "dir/"}) Check(Z::SafeEntry(good), std::string("plain entry ") + good);
-        for (const auto* bad : {"../outside.txt", "a/../../outside", "/abs.txt", "C:/x", "a\\b", "a//b", "./x", "", ".."}) Check(!Z::SafeEntry(bad), std::string("refused entry ") + bad);
+        for (const auto* bad : {"../outside.txt", "a/../../outside", "/abs.txt", "C:/x", "a\\b", "a//b", "./x", "", "..", "../", "a/../", ".. /outside.txt", "a./b", "a /b"}) Check(!Z::SafeEntry(bad), std::string("refused entry ") + bad);
         const auto root = std::filesystem::temp_directory_path() / "helpy-browser-test";
         std::filesystem::remove_all(root); std::filesystem::create_directories(root);
         Zip(root / "good.zip", {{"manifest.json", "{\"name\":\"uBlock Origin Lite\"}"}, {"js/app.js", "console.log(1)"}});

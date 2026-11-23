@@ -350,15 +350,6 @@ HelpyHudLayout::Rect AwardBounds(const HelpyImGuiTheme::Theme& theme, float widt
     const float cardWidth = A::Width * scale, cardHeight = (A::Height + A::Margin) * scale;
     return {(width - cardWidth) * .5f, A::Top(height, scale, 0.f), cardWidth, cardHeight};
 }
-// Picture-in-picture: the browser's playing video in the bottom-right corner, above the coordinates.
-HelpyHudLayout::Rect PictureInPictureBox(const HelpyImGuiTheme::Theme& theme,ImVec2 viewport){
-    const float aspect=HelpyWebPane::PictureInPictureAspect();
-    float width=std::clamp(viewport.x*.26f,std::min(320.f,viewport.x*.5f),640.f),height=width/aspect;
-    if(height>viewport.y*.4f){height=viewport.y*.4f;width=height*aspect;}
-    float bottom=viewport.y-theme.Y(24);
-    if(theme.showCoordinates&&!HelpyCoordinates::Label.empty()){const auto box=CoordinatesBox(theme,viewport);if(box.X+box.W>viewport.x-width-theme.X(24))bottom=std::min(bottom,box.Y-theme.Y(12));}
-    return {std::max(0.f,viewport.x-width-theme.X(24)),std::max(0.f,bottom-height),width,height};
-}
 // Helpy's web browser: a host-owned tab beside the plugins, only while the setting is on.
 constexpr char BrowserOwner[]="RuneSchema.Helpy",BrowserTabRoute[]="RuneSchema.Helpy.browser";
 int32_t RS_PLUGIN_CALL DrawBrowserTab(void*,const RuneSchemaNavUiV1*){return HelpyWebPane::DrawBrowser();}
@@ -367,7 +358,7 @@ void SyncBrowser(){
     const bool on=theme.webBrowser&&PluginRuntimeServices::ExternalDesktop&&!HelpyEnvironment::Server();
     HelpyBrowser::AdBlock(on&&theme.browserAdBlock);
     const auto blocker=HelpyBrowser::Current();
-    HelpyWebPane::Browser({on,on&&theme.browserAdBlock&&blocker.State==HelpyBrowser::Blocker::Ready?blocker.Folder:std::filesystem::path{},on&&theme.browserPictureInPicture});
+    HelpyWebPane::Browser({on,on&&theme.browserAdBlock&&blocker.State==HelpyBrowser::Blocker::Ready?blocker.Folder:std::filesystem::path{}});
     static bool registered=false;
     if(on==registered)return;
     if(on){
@@ -398,12 +389,14 @@ void RenderBrowserSettings(){
         if(blocker.State==HelpyBrowser::Blocker::Ready||blocker.State==HelpyBrowser::Blocker::Failed)
             if(HelpyImGuiTheme::SoftButton(blocker.State==HelpyBrowser::Blocker::Ready?"Check for update":"Try again"))HelpyBrowser::CheckForUpdate();
     }
-    if(HelpyImGuiTheme::Toggle("Picture-in-picture while playing",&theme.browserPictureInPicture))HelpyImGuiTheme::SaveCurrent();
-    hint("When a video is playing in the browser and you close Helpy, it keeps playing in the bottom-right corner of the game. Needs native in-game presentation. Pause it from the Browser tab.");
+    if(theme.webBrowser&&!theme.browserAdBlock&&HelpyWebPane::BrowserExtensionFailed()){
+        const auto status=HelpyWebPane::BrowserExtensionStatus();ImGui::TextWrapped("%s",status.c_str());
+        if(HelpyImGuiTheme::SoftButton("Retry removal"))HelpyWebPane::RetryBrowserExtension();
+    }
     ImGui::EndDisabled();ImGui::EndDisabled();
     if(HelpyEnvironment::Server())ImGui::TextWrapped("Dedicated servers don't have the web browser.");
 }
-RECT HudSurfaceBounds(int width,int height,bool map,bool coordinates,bool loading,bool diagnostics,bool award,bool pictureInPicture=false){
+RECT HudSurfaceBounds(int width,int height,bool map,bool coordinates,bool loading,bool diagnostics,bool award){
     float left=float(width),top=float(height),right=0,bottom=0;const auto& layout=HelpyFeatureSettings::Hud;
     const auto include=[&](HelpyHudLayout::Rect box){left=std::min(left,box.X);top=std::min(top,box.Y);right=std::max(right,box.X+box.W);bottom=std::max(bottom,box.Y+box.H);};
     if(map)include(HelpyHudLayout::Map(float(width),float(height),layout));
@@ -412,7 +405,6 @@ RECT HudSurfaceBounds(int width,int height,bool map,bool coordinates,bool loadin
     if(diagnostics)include({0,0,float(width),float(height)});
     const auto card=AwardBounds(HelpyImGuiTheme::Current,float(width),float(height));
     if(award)include(card);
-    if(pictureInPicture)include(PictureInPictureBox(HelpyImGuiTheme::Current,{float(width),float(height)}));
     const LONG w=std::clamp(LONG(std::ceil(right)-std::floor(left)),160L,LONG(HelpyOverlayFrames::MaxWidth)),h=std::clamp(LONG(std::ceil(bottom)-std::floor(top)),120L,LONG(HelpyOverlayFrames::MaxHeight));
     const LONG x=std::clamp(LONG(std::floor(left)),award?std::max(0L,LONG(std::ceil(card.X+card.W))-w):0L,std::max(0L,LONG(width)-w));
     const LONG y=std::clamp(LONG(std::floor(top)),award?std::max(0L,LONG(std::ceil(card.Y+card.H))-h):0L,std::max(0L,LONG(height)-h));
@@ -2621,7 +2613,7 @@ bool HelpyStandaloneWindow::OpenPopup(bool desktop) {
     LazyCatalog::FirstOpen(SpawnToolRequests::CurrentGeneration());QueuePlayerRefresh(true);return true;
 }
 void HelpyStandaloneWindow::ClosePopup(){
-    HelpySupportPage::Close();
+    HelpySupportPage::Close();HelpyWebPane::Suspend();
 #if defined(HELPY_PREVIEW)
     ++HelpyPreviewHooks::HideRequests;
 #endif
@@ -2908,8 +2900,7 @@ void HelpyStandaloneWindow::ThreadMain() {
         const bool gameFocused=GameWindow(foreground)&&!HelpyEnvironment::Server();
         const bool pluginToast=std::any_of(HelpyAchievements::Popups.begin(),HelpyAchievements::Popups.end(),[](const auto& unlock){return !unlock.Label.empty();})||(AchievementOverlay.Current()&&!AchievementOverlay.Current()->Label.empty());
         const bool award=(HelpyImGuiTheme::Current.achievementPopups||pluginToast)&&(AchievementOverlay.Busy()||!HelpyAchievements::Popups.empty());
-        const bool pictureInPicture=HelpyWebPane::PictureInPicture()&&!HelpyEnvironment::Server();
-        const bool passiveHud=notices||coordinates||minimap||starting||award||pictureInPicture;
+        const bool passiveHud=notices||coordinates||minimap||starting||award;
         const bool panelVisible=m_visible.load();
         const bool gameAward=award&&gameFocused&&!wasNative&&(!panelVisible||!m_gameOverlay.Active());
         const bool showHud=gameFocused&&((!panelVisible&&passiveHud)||gameAward);
@@ -2917,7 +2908,7 @@ void HelpyStandaloneWindow::ThreadMain() {
         auto hud=HelpyNativeOverlayClient::Hud::None;
         if(showHud)hud=notices||award?HelpyNativeOverlayClient::Hud::Combined:starting?HelpyNativeOverlayClient::Hud::Startup:HelpyNativeOverlayClient::Hud::Coordinates;
         m_nativeOverlay.Notifications(showHud);
-        m_nativeOverlay.Tick(RuneSchemaSettingsPanel::Remote,shortcutPid,HelpyStartupProgress::Presentation(PluginRuntimeServices::ExternalDesktop,HelpyEnvironment::Server(),HelpyImGuiTheme::Current.gameOverlay,HelpyImGuiTheme::Current.nativeOverlay,passiveHud),m_device,HelpyImGuiTheme::Current.overlaySize,1.f,hud,[&](int width,int height){return HudSurfaceBounds(width,height,minimap,coordinates,starting,notices,award,pictureInPicture);},foreground);
+        m_nativeOverlay.Tick(RuneSchemaSettingsPanel::Remote,shortcutPid,HelpyStartupProgress::Presentation(PluginRuntimeServices::ExternalDesktop,HelpyEnvironment::Server(),HelpyImGuiTheme::Current.gameOverlay,HelpyImGuiTheme::Current.nativeOverlay,passiveHud),m_device,HelpyImGuiTheme::Current.overlaySize,1.f,hud,[&](int width,int height){return HudSurfaceBounds(width,height,minimap,coordinates,starting,notices,award);},foreground);
         if(const auto* page=m_nativeOverlay.Page();page&&page->ViewportWidth&&page->ViewportHeight){HelpyHudPanel::Viewport={float(page->ViewportWidth),float(page->ViewportHeight)};HelpyHudPanel::Detected=true;}
         else {RECT rect{};HelpyHudPanel::Detected=GameWindow(foreground)&&GetClientRect(foreground,&rect)&&rect.right>0&&rect.bottom>0;if(HelpyHudPanel::Detected)HelpyHudPanel::Viewport={float(rect.right),float(rect.bottom)};}
         LUID adapter{};if(m_nativeOverlay.AdapterChange(adapter))RebindNativeDevice(adapter);
@@ -2992,7 +2983,7 @@ void HelpyStandaloneWindow::ThreadMain() {
         if(DiagnosticOverlay.TakeModsRequest()){SplashEntered=true;CurrentPage=Page::Mods;ModsPanel::Tab=1;OpenPopup();}
         if(renderable&&std::chrono::steady_clock::now()>=NextPlayerRefresh)QueuePlayerRefresh(true);
         const bool presenting=renderable||m_nativeOverlay.NotificationsVisible();
-        const int hudFps=AchievementOverlay.Animating()?60:starting?LoadingIndicator::StartupFps(ClientAreaAnimations):HelpyWebPane::PictureInPicture()?30:minimap||award||notices?15:2;
+        const int hudFps=AchievementOverlay.Animating()?60:starting?LoadingIndicator::StartupFps(ClientAreaAnimations):minimap||award||notices?15:2;
         if(pacing.Due(std::chrono::steady_clock::now(),presenting,m_nativeOverlay.Presenting()||OwnsWindow(GetForegroundWindow()),m_nativeOverlay.NotificationsVisible()?hudFps:performance.helpyFpsLimit))RenderFrame();
         const auto now=std::chrono::steady_clock::now();
         if(presenting&&pacing.Focused&&frameTimer&&pacing.Next>now){
@@ -5685,7 +5676,6 @@ void HelpyStandaloneWindow::RenderFrame() {
     // Web pages: over Helpy's window, or captured into the native in-game overlay; none on the notifications HUD or a server.
     const auto webMode=!PluginRuntimeServices::ExternalDesktop||HelpyEnvironment::Server()?HelpyWebPane::Mode::Hidden
         :m_nativeOverlay.Visible()?HelpyWebPane::Mode::Texture
-        :m_nativeOverlay.NotificationsVisible()&&HelpyWebPane::PictureInPicture()?HelpyWebPane::Mode::Texture // Keeps the playing video captured.
         :m_nativeOverlay.Presenting()||m_nativeOverlay.NotificationsVisible()?HelpyWebPane::Mode::Hidden:HelpyWebPane::Mode::Window;
     SyncBrowser();if(!RuneSchemaSettingsPanel::BrowserSettings)RuneSchemaSettingsPanel::BrowserSettings=RenderBrowserSettings;
     HelpyWebPane::Frame webPages(m_hwnd,m_module,webMode,m_device);
@@ -5702,8 +5692,6 @@ void HelpyStandaloneWindow::RenderFrame() {
         MainSurfacePosition={0,0};MainSurfaceSize=io.DisplaySize;ImGui::NewFrame();
         HudViewport={page->ViewportWidth?float(page->ViewportWidth):float(page->Width),page->ViewportHeight?float(page->ViewportHeight):float(page->Height)};HudOrigin={float(page->Left),float(page->Top)};
         {HelpyImGuiTheme::Scope skin(HelpyImGuiTheme::Current);if(UiRegularFont)ImGui::PushFont(UiRegularFont);
-            if(HelpyWebPane::PictureInPicture()){const auto box=PictureInPictureBox(HelpyImGuiTheme::Current,HudViewport);const ImVec2 at{box.X-HudOrigin.x,box.Y-HudOrigin.y};
-                HelpyWebPane::DrawPictureInPicture(ImGui::GetBackgroundDrawList(),at,{at.x+box.W,at.y+box.H});}
             RenderDiagnosticToasts(HelpyImGuiTheme::Current,false);HelpyMiniMap::Draw(HelpyImGuiTheme::Current,HudViewport,HudOrigin);RenderCoordinates(HelpyImGuiTheme::Current);
             RenderStartupProgress(HelpyImGuiTheme::Current,HudOrigin,HudViewport);RenderGamerPoints(HelpyImGuiTheme::Current);
             if(UiRegularFont)ImGui::PopFont();}

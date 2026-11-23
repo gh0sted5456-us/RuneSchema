@@ -1,6 +1,8 @@
 #include "Runtime/HelpyBrowser.h"
 #include "Core/HelpyBlockerRelease.h"
 #include "Core/HelpyZip.h"
+#include "Core/CacheBundleIO.h"
+#include "Core/ConfigFiles.h"
 #include "Core/ProcessExitFuture.h"
 #include "Core/RuneSchemaDataRoot.h"
 #include "Runtime/HostServices.h"
@@ -13,6 +15,7 @@
 #include <chrono>
 #include <fstream>
 #include <future>
+#include <functional>
 #include <stdexcept>
 #include <vector>
 #pragma comment(lib, "bcrypt.lib")
@@ -33,7 +36,13 @@ std::filesystem::path Root() { return HostServices::StateDirectory() / "web-brow
 struct Handle { HINTERNET Value{}; ~Handle() { if (Value) WinHttpCloseHandle(Value); } operator HINTERNET() const { return Value; } };
 // HTTPS GET with a size limit. Redirects are followed (release files redirect to GitHub's file
 // host) but never from HTTPS to HTTP; what arrives is trusted only after its checksum matches.
+#ifdef HELPY_BROWSER_TEST
+std::function<Bytes(const std::string&)> DownloadForTest;
+#endif
 Bytes Get(const std::string& url, uint64_t limit, const wchar_t* accept) {
+#ifdef HELPY_BROWSER_TEST
+    if (DownloadForTest) return DownloadForTest(url);
+#endif
     if (Cancelled) throw std::runtime_error("Cancelled.");
     const std::wstring wide(url.begin(), url.end());
     URL_COMPONENTS parts{sizeof(parts)};
@@ -82,18 +91,20 @@ std::string Sha256(const Bytes& bytes) {
 // The copy already unpacked, from the marker written after a verified install. No network.
 View Installed() {
     View view;
-    const auto marker = Root() / "installed.json";
+    auto marker = Root() / "installed.json";
     std::error_code error;
+    const bool pending=!std::filesystem::is_regular_file(marker,error);
+    if (pending) marker=Root()/"downloaded.json";
     if (!std::filesystem::is_regular_file(marker, error) || std::filesystem::file_size(marker, error) > 4096) return view;
     try {
         RuneSchemaData::Safe(marker);
-        std::ifstream in(marker, std::ios::binary);
-        const auto json = Json::parse(in);
+        CacheBundleIO::MetadataLock lock(Root()/"installed.json");
+        const auto json = Json::parse(ConfigFiles::Read(marker,4096));
         const auto tag = json.at("Tag").get<std::string>();
         const auto folder = Root() / ("ubol-" + tag);
         if (!HelpyBlockerRelease::Tag(tag) || !std::filesystem::is_regular_file(folder / "manifest.json", error)) return view;
-        view.State = Blocker::Ready; view.Version = tag; view.Folder = folder;
-        view.Message = "uBlock Origin Lite " + tag + " is on.";
+        view.State = Blocker::Ready; view.Version = tag; view.Folder = folder;view.PendingActivation=pending;
+        view.Message = "uBlock Origin Lite " + tag + " is ready to load.";
     } catch (...) {}
     return view;
 }
@@ -103,7 +114,7 @@ View Install(View current) {
     const auto latestJson = Get(std::string(HelpyBlockerRelease::LatestApi), 1024 * 1024, L"application/vnd.github+json");
     const auto release = HelpyBlockerRelease::Parse(Json::parse(latestJson.begin(), latestJson.end()));
     if (current.State == Blocker::Ready && current.Version == release.Tag) {
-        current.Message = "uBlock Origin Lite " + release.Tag + " is on and up to date.";
+        current.Message = "uBlock Origin Lite " + release.Tag + " is ready and up to date.";
         return current;
     }
     const auto zip = Get(release.Url, release.Size, L"application/octet-stream");
@@ -114,20 +125,29 @@ View Install(View current) {
     const auto stamp = std::to_string(GetCurrentProcessId()) + "-" + std::to_string(GetTickCount64());
     const auto file = root / ("download-" + stamp + ".zip"), staging = root / ("unpacking-" + stamp), folder = root / ("ubol-" + release.Tag);
     struct Tidy { std::filesystem::path A, B; ~Tidy() { std::error_code e; std::filesystem::remove(A, e); std::filesystem::remove_all(B, e); } } tidy{file, staging};
-    { std::ofstream out(file, std::ios::binary | std::ios::trunc); out.write(zip.data(), static_cast<std::streamsize>(zip.size())); if (!out) throw std::runtime_error("The download could not be saved."); }
+    {
+        std::ofstream out(file, std::ios::binary | std::ios::trunc);
+        out.write(zip.data(), static_cast<std::streamsize>(zip.size()));out.close();
+        if (!out) throw std::runtime_error("The download could not be saved.");
+    }
     HelpyZip::Extract(file, staging);
     if (!std::filesystem::is_regular_file(staging / "manifest.json")) throw std::runtime_error("The download is not a browser extension.");
-    std::error_code ignored;
-    std::filesystem::remove_all(folder, ignored);
-    std::filesystem::rename(staging, folder);
     const Json marker{{"Tag", release.Tag}, {"Asset", release.Asset}, {"Sha256", release.Sha256}, {"Source", release.Url}};
-    { std::ofstream out(root / "installed.json.tmp", std::ios::binary | std::ios::trunc); out << marker.dump(2); if (!out) throw std::runtime_error("The install could not be recorded."); }
-    std::filesystem::rename(root / "installed.json.tmp", root / "installed.json");
-    // Older versions are no longer used.
-    for (const auto& entry : std::filesystem::directory_iterator(root, ignored))
-        if (entry.is_directory(ignored) && entry.path().filename().string().starts_with("ubol-") && entry.path() != folder) std::filesystem::remove_all(entry.path(), ignored);
-    View view; view.State = Blocker::Ready; view.Version = release.Tag; view.Folder = folder;
-    view.Message = "uBlock Origin Lite " + release.Tag + " was downloaded, checked and turned on.";
+    ConfigFiles::Write(staging / "download.json", marker.dump(2));
+    {
+        CacheBundleIO::MetadataLock lock(root / "installed.json");
+        RuneSchemaData::Safe(folder);
+        if (std::filesystem::exists(folder)) {
+            // Another Helpy may have published this version while we downloaded it.
+            const auto metadata = std::filesystem::is_regular_file(folder / "download.json") ? folder / "download.json" : root / "installed.json";
+            if (!std::filesystem::is_regular_file(folder / "manifest.json") || Json::parse(ConfigFiles::Read(metadata,4096)) != marker)
+                throw std::runtime_error("The existing ad blocker does not match this download; it was left untouched.");
+        } else std::filesystem::rename(staging, folder);
+        ConfigFiles::Write(root/"downloaded.json",marker.dump(2));
+    }
+    // Installed versions can still be loaded by another Helpy process or needed for rollback.
+    View view; view.State = Blocker::Ready; view.Version = release.Tag; view.Folder = folder; view.PendingActivation = true;
+    view.Message = "uBlock Origin Lite " + release.Tag + " was downloaded and checked; open Browser to load it.";
     return view;
 }
 
@@ -142,9 +162,9 @@ bool Start(bool update) {
         Worker = std::async(std::launch::async, [current] {
             try { return Install(current); }
             catch (const std::exception& error) {
-                auto view = current;
+                auto view = Installed();
                 if (view.State != Blocker::Ready) view.State = Blocker::Failed;
-                view.Message = std::string(error.what()) + (current.State == Blocker::Ready ? " The installed copy is still on." : "");
+                view.Message = std::string(error.what()) + (view.State == Blocker::Ready ? " The previous copy is still available." : "");
                 return view;
             }
         });
@@ -164,14 +184,42 @@ void AdBlock(bool on) {
         if (!Worker.valid()) { const auto keep = State.Version; State = {}; State.Version = keep; }
         return;
     }
-    if (!Wanted) { Wanted = true; Checked = false; }
+    if (!Wanted) { Wanted = true;State=Installed();Checked=State.State==Blocker::Ready; }
     if (Checked || Worker.valid()) return;
-    Checked = true;
+    if (State.State==Blocker::Ready) { Checked=true;return; }
+    if (std::chrono::steady_clock::now() < NextAttempt) {
+        if (State.State != Blocker::Failed) { State.State = Blocker::Failed; State.Message = "Waiting for the download cooldown; Helpy will retry when it ends."; }
+        return;
+    }
     State = Installed();
-    if (State.State != Blocker::Ready) Start(false); // First use: download once.
+    Checked = State.State == Blocker::Ready || Start(false);
 }
 bool CheckForUpdate() { return Wanted && Start(true); }
 View Current() { Poll(); return Wanted || Worker.valid() ? State : View{}; }
+void Activated(const std::filesystem::path& folder) noexcept {
+    if (!Wanted || State.State != Blocker::Ready || folder != State.Folder) return;
+    if (!State.PendingActivation) return;
+    try {
+        RuneSchemaData::Safe(folder);
+        if (folder.parent_path() != Root()) throw std::runtime_error("Unexpected ad blocker folder.");
+        CacheBundleIO::MetadataLock lock(Root() / "installed.json");
+        const auto metadata=std::filesystem::is_regular_file(folder/"download.json")?folder/"download.json":Root()/"installed.json";
+        const auto marker=Json::parse(ConfigFiles::Read(metadata,4096));
+        if (marker.at("Tag") != State.Version || folder.filename() != "ubol-"+State.Version) throw std::runtime_error("Ad blocker identity changed.");
+        ConfigFiles::Write(Root()/"installed.json",marker.dump(2));
+        State.PendingActivation=false;State.Message="uBlock Origin Lite "+State.Version+" is on.";
+    } catch (const std::exception& error) { State.Message=std::string("The ad blocker loaded, but its installation could not be recorded: ")+error.what(); }
+    catch (...) { State.Message="The ad blocker loaded, but its installation could not be recorded."; }
+}
+void Rejected(const std::filesystem::path& folder,const std::string& reason) noexcept {
+    if (!Wanted || folder != State.Folder) return;
+    try {
+        auto previous=Installed();
+        if (previous.State==Blocker::Ready && previous.Folder!=folder) {
+            previous.Message=reason+" Restoring the previous ad blocker.";State=std::move(previous);
+        } else { State={};State.State=Blocker::Failed;State.Message=reason; }
+    } catch (...) { State={};State.State=Blocker::Failed; }
+}
 void Shutdown() noexcept {
     Cancelled = true;
     if (Worker.valid()) try { (void)Worker.get(); } catch (...) {}

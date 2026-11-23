@@ -1,6 +1,8 @@
 #include <unknwn.h> // Before C++/WinRT, so it can query classic COM interfaces.
 #include "Generator/HelpyWebPane.h"
 #include "Generator/HelpyImGuiTheme.h"
+#include "Generator/HelpyTextInput.h"
+#include "Runtime/HelpyBrowser.h"
 #include "Core/HelpyBrowserAddress.h"
 #include "Core/HelpyWebOrigin.h"
 #include "Core/RuneSchemaDataRoot.h"
@@ -23,13 +25,11 @@
 #include <array>
 #include <atomic>
 #include <climits>
-#include <chrono>
 #include <functional>
 #include <map>
 #include <memory>
 #include <optional>
 #include <vector>
-#include <nlohmann/json.hpp>
 
 namespace PS::HelpyWebPane {
 namespace {
@@ -94,14 +94,11 @@ struct Pane {
     std::array<bool, 3> Buttons{};
     bool Hovered = false, KeyFocus = false;
     POINT Mouse{LONG_MIN, LONG_MIN};
-    // Helpy's browser: any web address, its own profile, an address bar and picture-in-picture.
+    // Helpy's browser: any web address, its own profile, an address bar and an address bar.
     bool Browser = false;
-    SIZE Pixels{};            // The page window's last size, kept for picture-in-picture.
     std::array<char, HelpyBrowserAddress::MaxLength + 1> Address{};
     std::wstring AddressShown;
-    struct { bool Playing = false; float X = 0, Y = 0, W = 0, H = 0; std::chrono::steady_clock::time_point Seen{}; } Video;
-    bool Polling = false, Editing = false;
-    std::chrono::steady_clock::time_point NextPoll{};
+    bool Editing = false;
 };
 struct Environment {
     ComPtr<ICoreWebView2Environment> Value;
@@ -117,6 +114,8 @@ struct State {
     BrowserSettings Settings;
     std::wstring Applied;      // The ad blocker folder loaded into the browser profile ("" = none).
     bool AppliedOnce = false, ExtensionBusy = false;
+    std::optional<std::wstring> FailedExtension;
+    uint64_t BrowserGeneration = 0;
     std::string ExtensionStatus;
     std::map<std::string, std::shared_ptr<Pane>> Panes;
     std::string Requested;
@@ -176,88 +175,75 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
 
 // The ad blocker in the browser profile: whatever is installed there is removed, then Helpy's own
 // download is loaded (nothing when ad blocking is off). Runs again whenever the setting changes.
-void FinishExtension(const std::weak_ptr<Pane>& weak, const std::wstring& wanted, bool ok, bool changed = true) {
-    state.ExtensionBusy = false; state.Applied = wanted; state.AppliedOnce = true;
-    state.ExtensionStatus = wanted.empty() ? (ok ? "" : "Helpy couldn't remove the ad blocker from the browser profile.")
-        : ok ? "Ads are blocked in the browser." : "The ad blocker couldn't be loaded. Turn ad blocking off and on to download it again.";
-    if (const auto pane = weak.lock(); pane && pane->Page && ok && changed) pane->Page->Reload(); // Apply it to the open page.
+bool CurrentBrowser(const std::weak_ptr<Pane>& weak,uint64_t generation) {
+    const auto pane=weak.lock();
+    return state.Settings.Enabled&&generation==state.BrowserGeneration&&pane&&pane->Page;
+}
+void FinishExtension(const std::weak_ptr<Pane>& weak,uint64_t generation,const std::wstring& wanted,bool ok,bool changed=true) {
+    state.ExtensionBusy=false;
+    if (!CurrentBrowser(weak,generation)) return;
+    if (ok) {
+        state.Applied=wanted;state.AppliedOnce=true;state.FailedExtension.reset();
+        state.ExtensionStatus=wanted.empty()?"":"Ads are blocked in the browser.";
+        if (!wanted.empty()) HelpyBrowser::Activated(std::filesystem::path(wanted));
+        if (const auto pane=weak.lock();changed&&pane&&pane->Page) pane->Page->Reload();
+    } else {
+        state.AppliedOnce=false;state.FailedExtension=wanted;
+        state.ExtensionStatus=wanted.empty()?"Helpy couldn't remove the ad blocker. Toggle blocking on and off to retry.":"The ad blocker couldn't be loaded.";
+        if (!wanted.empty()) HelpyBrowser::Rejected(std::filesystem::path(wanted),state.ExtensionStatus);
+    }
 }
 void SyncExtension(const std::shared_ptr<Pane>& pane) {
-    if (!pane->Browser || !pane->Page || state.ExtensionBusy) return;
+    if (!pane->Browser||!pane->Page||state.ExtensionBusy) return;
     const auto wanted = state.Settings.Extension.wstring();
-    if (state.AppliedOnce && wanted == state.Applied) return;
-    ComPtr<ICoreWebView2_13> withProfile; ComPtr<ICoreWebView2Profile> profile; ComPtr<ICoreWebView2Profile7> extensions;
-    if (!state.Browser.Extensions || FAILED(pane->Page.As(&withProfile)) || FAILED(withProfile->get_Profile(&profile)) || !profile || FAILED(profile.As(&extensions))) {
-        state.Applied = wanted; state.AppliedOnce = true;
-        state.ExtensionStatus = wanted.empty() ? "" : "This WebView2 Runtime can't load the ad blocker. Update the Microsoft Edge WebView2 Runtime, then restart Helpy.";
+    if ((state.AppliedOnce&&wanted==state.Applied)||(state.FailedExtension&&*state.FailedExtension==wanted)) return;
+    state.FailedExtension.reset();
+    const auto generation=state.BrowserGeneration;
+    const std::weak_ptr<Pane> weak=pane;
+    ComPtr<ICoreWebView2_13> withProfile;ComPtr<ICoreWebView2Profile> profile;ComPtr<ICoreWebView2Profile7> extensions;
+    if (!state.Browser.Extensions||FAILED(pane->Page.As(&withProfile))||FAILED(withProfile->get_Profile(&profile))||!profile||FAILED(profile.As(&extensions))) {
+        FinishExtension(weak,generation,wanted,false,false);
+        state.ExtensionStatus="This WebView2 Runtime can't manage the ad blocker. Update Microsoft Edge WebView2, then restart Helpy.";
         return;
     }
-    state.ExtensionBusy = true;
-    state.ExtensionStatus = wanted.empty() ? "Turning the ad blocker off..." : "Loading the ad blocker...";
-    const std::weak_ptr<Pane> weak = pane;
-    const auto add = [weak, extensions, wanted](bool removedAny) {
-        if (wanted.empty()) { FinishExtension(weak, wanted, true, removedAny); return; }
-        if (FAILED(extensions->AddBrowserExtension(wanted.c_str(), Callback<ICoreWebView2ProfileAddBrowserExtensionCompletedHandler>(
-            [weak, wanted](HRESULT status, ICoreWebView2BrowserExtension*) -> HRESULT { FinishExtension(weak, wanted, SUCCEEDED(status)); return S_OK; }).Get())))
-            FinishExtension(weak, wanted, false);
+    state.ExtensionBusy=true;
+    state.ExtensionStatus=wanted.empty()?"Turning the ad blocker off...":"Loading the ad blocker...";
+    const auto add=[weak,generation,extensions,wanted](bool removedAny) {
+        if (!CurrentBrowser(weak,generation)) { FinishExtension(weak,generation,wanted,false,false);return; }
+        if (wanted.empty()) { FinishExtension(weak,generation,wanted,true,removedAny);return; }
+        if (FAILED(extensions->AddBrowserExtension(wanted.c_str(),Callback<ICoreWebView2ProfileAddBrowserExtensionCompletedHandler>(
+            [weak,generation,wanted](HRESULT status,ICoreWebView2BrowserExtension*) -> HRESULT {
+                FinishExtension(weak,generation,wanted,SUCCEEDED(status));return S_OK;
+            }).Get()))) FinishExtension(weak,generation,wanted,false);
     };
     if (FAILED(extensions->GetBrowserExtensions(Callback<ICoreWebView2ProfileGetBrowserExtensionsCompletedHandler>(
-        [weak, wanted, add](HRESULT status, ICoreWebView2BrowserExtensionList* list) -> HRESULT {
+        [weak,generation,wanted,add](HRESULT status,ICoreWebView2BrowserExtensionList* list) -> HRESULT {
+            if (!CurrentBrowser(weak,generation)) { FinishExtension(weak,generation,wanted,false,false);return S_OK; }
+            UINT count=0;
+            if (FAILED(status)||!list||FAILED(list->get_Count(&count))||count>64) {
+                FinishExtension(weak,generation,wanted,false,false);return S_OK;
+            }
             std::vector<ComPtr<ICoreWebView2BrowserExtension>> installed;
-            UINT count = 0;
-            if (SUCCEEDED(status) && list && SUCCEEDED(list->get_Count(&count)))
-                for (UINT i = 0; i < count; ++i) { ComPtr<ICoreWebView2BrowserExtension> item; if (SUCCEEDED(list->GetValueAtIndex(i, &item)) && item) installed.push_back(item); }
-            if (installed.empty()) { add(false); return S_OK; }
-            const auto left = std::make_shared<size_t>(installed.size());
-            const auto removed = [left, add] { if (--*left == 0) add(true); };
-            for (const auto& item : installed)
-                if (FAILED(item->Remove(Callback<ICoreWebView2BrowserExtensionRemoveCompletedHandler>([removed](HRESULT) -> HRESULT { removed(); return S_OK; }).Get()))) removed();
+            for (UINT i=0;i<count;++i) {
+                ComPtr<ICoreWebView2BrowserExtension> item;
+                if (FAILED(list->GetValueAtIndex(i,&item))||!item) { FinishExtension(weak,generation,wanted,false,false);return S_OK; }
+                installed.push_back(item);
+            }
+            if (installed.empty()) { add(false);return S_OK; }
+            const auto removals=std::make_shared<std::pair<size_t,bool>>(installed.size(),true);
+            const auto removed=[weak,generation,wanted,removals,add](HRESULT result) {
+                removals->second=removals->second&&SUCCEEDED(result);
+                if (--removals->first) return;
+                if (removals->second) add(true);
+                else FinishExtension(weak,generation,wanted,false,false);
+            };
+            for (const auto& item:installed) {
+                const auto result=item->Remove(Callback<ICoreWebView2BrowserExtensionRemoveCompletedHandler>(
+                    [removed](HRESULT result) -> HRESULT { removed(result);return S_OK; }).Get());
+                if (FAILED(result)) removed(result);
+            }
             return S_OK;
-        }).Get()))) FinishExtension(weak, wanted, false);
-}
-
-// Picture-in-picture: twice a second, where the largest playing video sits in the page, in pixels.
-// Reads layout only; videos inside another site's frame are not seen.
-constexpr wchar_t VideoScript[] = LR"JS((() => {
-  let best = null, area = 0;
-  for (const v of document.querySelectorAll('video')) {
-    if (v.paused || v.ended || v.readyState < 2) continue;
-    const r = v.getBoundingClientRect();
-    const x = Math.max(r.left, 0), y = Math.max(r.top, 0);
-    const w = Math.min(r.right, innerWidth) - x, h = Math.min(r.bottom, innerHeight) - y;
-    if (w >= 64 && h >= 36 && w * h > area) { area = w * h; best = [x, y, w, h]; }
-  }
-  const d = devicePixelRatio || 1;
-  return best ? { p: 1, x: best[0] * d, y: best[1] * d, w: best[2] * d, h: best[3] * d } : { p: 0 };
-})())JS";
-constexpr wchar_t PauseScript[] = L"document.querySelectorAll('video').forEach(v => v.pause())";
-void PollVideo(const std::shared_ptr<Pane>& pane) {
-    if (!state.Settings.PictureInPicture) { pane->Video.Playing = false; return; }
-    const auto now = std::chrono::steady_clock::now();
-    if (!pane->Page || pane->Polling || now < pane->NextPoll) return;
-    pane->NextPoll = now + std::chrono::milliseconds(500); pane->Polling = true;
-    const std::weak_ptr<Pane> weak = pane;
-    if (FAILED(pane->Page->ExecuteScript(VideoScript, Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
-        [weak](HRESULT status, LPCWSTR result) -> HRESULT {
-            const auto pane = weak.lock(); if (!pane) return S_OK;
-            pane->Polling = false;
-            auto& video = pane->Video;
-            try {
-                const auto json = nlohmann::json::parse(SUCCEEDED(status) && result ? Utf8(result) : std::string("{}"));
-                const auto number = [&](const char* key) { return std::clamp(json.value(key, 0.0), 0.0, double(MaxPixels) * 4); };
-                video.Playing = json.is_object() && json.value("p", 0) == 1;
-                if (video.Playing) { video.X = float(number("x")); video.Y = float(number("y")); video.W = float(number("w")); video.H = float(number("h")); video.Seen = std::chrono::steady_clock::now(); }
-            } catch (...) { video.Playing = false; }
-            return S_OK;
-        }).Get()))) pane->Polling = false;
-}
-bool Playing(const Pane& pane) {
-    return pane.Browser && state.Settings.Enabled && state.Settings.PictureInPicture && pane.Page && !pane.Failed && pane.Video.Playing
-        && std::chrono::steady_clock::now() - pane.Video.Seen < std::chrono::seconds(2);
-}
-std::shared_ptr<Pane> BrowserPane() {
-    const auto found = state.Panes.find(BrowserRoute);
-    return found == state.Panes.end() ? nullptr : found->second;
+        }).Get()))) FinishExtension(weak,generation,wanted,false,false);
 }
 
 void Configure(const std::shared_ptr<Pane>& pane) {
@@ -407,6 +393,7 @@ bool EnsureWindow(const std::shared_ptr<Pane>& pane) {
 }
 
 void Destroy(Pane& pane) {
+    if (pane.Browser) { ++state.BrowserGeneration;state.AppliedOnce=false;state.FailedExtension.reset(); }
     pane.Capture.reset(); pane.Input = nullptr;
     if (pane.Controller) pane.Controller->Close();
     pane.Controller.Reset(); pane.Page.Reset();
@@ -426,7 +413,6 @@ void Show(const std::shared_ptr<Pane>& pane, RECT screen, HWND order) {
     if (!EnsureWindow(pane)) { pane->Failed = true; return; }
     StartEnvironment(pane->Browser);
     CreateController(pane);
-    pane->Pixels = {screen.right - screen.left, screen.bottom - screen.top};
     const bool moved = !EqualRect(&screen, &pane->Placed);
     if (moved || !pane->Showing) {
         SetWindowPos(pane->Window, order, screen.left, screen.top, screen.right - screen.left, screen.bottom - screen.top,
@@ -575,7 +561,10 @@ Frame::Frame(HWND owner, HINSTANCE module, Mode mode, ID3D11Device* device) {
 }
 
 Frame::~Frame() {
-    const bool popup = ImGui::GetCurrentContext() && ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
+    const auto* context=ImGui::GetCurrentContext();
+    bool popup=context&&ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId|ImGuiPopupFlags_AnyPopupLevel);
+    if (context) for (const auto* window:context->Windows)
+        if (window->Active&&!window->Hidden&&(window->Flags&ImGuiWindowFlags_Tooltip)) { popup=true;break; }
     const bool ownerShown = state.Owner && IsWindowVisible(state.Owner) && !IsIconic(state.Owner);
     const bool sized = state.Bounds.right > state.Bounds.left + 48 && state.Bounds.bottom > state.Bounds.top + 48;
     HWND shown = nullptr;
@@ -593,13 +582,8 @@ Frame::~Frame() {
             // Off-screen and below everything: the game keeps focus; Helpy draws the captured page.
             Show(pane, Offscreen(state.Pixels), HWND_BOTTOM);
             if (pane->Showing && pane->Window) StartCapture(*pane);
-        } else if (!wanted && state.Showing == Mode::Texture && Playing(*pane)) {
-            // Picture-in-picture: the browser stays captured at its last size while its video plays.
-            const SIZE size = pane->Pixels.cx >= MinPixels && pane->Pixels.cy >= MinPixels ? pane->Pixels : SIZE{1280, 720};
-            Show(pane, Offscreen(size), HWND_BOTTOM);
-            if (pane->Showing && pane->Window) StartCapture(*pane);
         } else Hide(*pane);
-        if (pane->Browser) { PollVideo(pane); SyncExtension(pane); }
+        if (pane->Browser) SyncExtension(pane);
     }
     Visible.store(shown);
 }
@@ -716,6 +700,7 @@ int32_t Draw(const std::string& route, const RuneSchemaWebPageV1* page) {
 }
 
 void Browser(const BrowserSettings& settings) {
+    if (state.Settings.Enabled!=settings.Enabled) { ++state.BrowserGeneration;state.FailedExtension.reset(); }
     state.Settings = settings;
     if (settings.Enabled) return;
     if (const auto found = state.Panes.find(BrowserRoute); found != state.Panes.end()) {
@@ -746,56 +731,31 @@ int32_t DrawBrowser() {
         std::copy(text.begin(), text.end(), pane.Address.begin());
         pane.AddressShown = where;
     }
-    const float pause = pane.Video.Playing ? ImGui::CalcTextSize("Pause video").x + ImGui::GetStyle().FramePadding.x * 2 + ImGui::GetStyle().ItemSpacing.x : 0.f;
-    ImGui::SetNextItemWidth(std::max(120.f, ImGui::GetContentRegionAvail().x - pause));
-    if (ImGui::InputTextWithHint("##helpy-browser-address", "Search or type a web address", pane.Address.data(), pane.Address.size(),
+    ImGui::SetNextItemWidth(std::max(120.f, ImGui::GetContentRegionAvail().x));
+    if (HelpyTextInput::InputTextWithHint("##helpy-browser-address", "Search or type a web address", pane.Address.data(), pane.Address.size(),
             ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll)) {
         if (const auto url = HelpyBrowserAddress::Resolve(pane.Address.data()); !url.empty()) { Go(pane, Wide(url)); pane.AddressShown = Wide(url); }
         pane.KeyFocus = false;
     }
     pane.Editing = ImGui::IsItemActive();
-    if (pane.Video.Playing) {
-        ImGui::SameLine();
-        if (HelpyImGuiTheme::SoftButton("Pause video") && pane.Page) { pane.Page->ExecuteScript(PauseScript, Callback<ICoreWebView2ExecuteScriptCompletedHandler>([](HRESULT, LPCWSTR) -> HRESULT { return S_OK; }).Get()); pane.Video.Playing = false; }
-    }
+    if (pane.Editing||HelpyTextInput::Owner) pane.KeyFocus=false;
     if (pane.Loading || !pane.Page) ImGui::TextDisabled("Loading...");
     else ImGui::TextDisabled("%s", pane.Title.empty() ? " " : pane.Title.c_str());
     return Surface(pane, BrowserRoute);
 }
 
 std::string BrowserExtensionStatus() { return state.Settings.Enabled ? state.ExtensionStatus : std::string{}; }
-
-bool PictureInPicture() {
-    const auto pane = BrowserPane();
-    if (!pane) return false;
-    PollVideo(pane); // Also while nothing renders (the game lost focus), so the video is found again.
-    return Playing(*pane);
-}
-float PictureInPictureAspect() {
-    const auto pane = BrowserPane();
-    if (!pane || pane->Video.W < 1 || pane->Video.H < 1) return 16.f / 9.f;
-    return std::clamp(pane->Video.W / pane->Video.H, .5f, 3.f);
-}
-bool DrawPictureInPicture(ImDrawList* draw, ImVec2 min, ImVec2 max) {
-    const auto pane = BrowserPane();
-    if (!draw || !pane || !Playing(*pane) || !pane->Capture) return false;
-    PollCapture(*pane);
-    const auto& shot = *pane->Capture;
-    if (shot.Failed || !shot.View || shot.Width < 1 || shot.Height < 1) return false;
-    const auto& video = pane->Video;
-    const ImVec2 uv0{std::clamp(video.X / float(shot.Width), 0.f, 1.f), std::clamp(video.Y / float(shot.Height), 0.f, 1.f)};
-    const ImVec2 uv1{std::clamp((video.X + video.W) / float(shot.Width), 0.f, 1.f), std::clamp((video.Y + video.H) / float(shot.Height), 0.f, 1.f)};
-    if (uv1.x - uv0.x < .01f || uv1.y - uv0.y < .01f) return false;
-    constexpr float rounding = 8.f;
-    draw->AddRectFilled({min.x - 3, min.y - 3}, {max.x + 3, max.y + 3}, IM_COL32(10, 9, 7, 230), rounding + 3);
-    draw->AddImageRounded(ImTextureRef(reinterpret_cast<ImTextureID>(shot.View.Get())), min, max, uv0, uv1, IM_COL32_WHITE, rounding);
-    draw->AddRect(min, max, ImGui::GetColorU32(ImGuiCol_Border), rounding, 0, 1.5f);
-    return true;
-}
+bool BrowserExtensionFailed() { return state.FailedExtension.has_value(); }
+void RetryBrowserExtension() { if (!state.ExtensionBusy) { state.FailedExtension.reset();state.AppliedOnce=false; } }
 
 bool Owns(HWND window) {
     const auto shown = Visible.load();
     return shown && window && (window == shown || GetAncestor(window, GA_ROOT) == shown);
+}
+
+void Suspend() {
+    for (auto& [_,pane]:state.Panes) if (pane) Hide(*pane);
+    Visible.store(nullptr);
 }
 
 void Close() {
@@ -803,7 +763,8 @@ void Close() {
     state.Panes.clear();
     state.CaptureDevice = nullptr; state.CaptureDeviceFor = nullptr;
     state.Pages = {}; state.Browser = {};
-    state.Applied.clear(); state.AppliedOnce = state.ExtensionBusy = false; state.ExtensionStatus.clear();
+    ++state.BrowserGeneration;state.FailedExtension.reset();
+    state.Applied.clear(); state.AppliedOnce = false; state.ExtensionStatus.clear();
     Visible.store(nullptr);
 }
 }

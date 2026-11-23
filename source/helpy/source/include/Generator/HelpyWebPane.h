@@ -28,6 +28,8 @@ int32_t Draw(const std::string& route, const RuneSchemaWebPageV1* page);
 bool Owns(HWND window);
 // From Helpy's WM_MOVE: moves the shown page with Helpy's window at once, so a drag doesn't trail.
 void FollowOwner(HWND owner);
+// Release page captures and hide their windows when Helpy closes, keeping navigation state.
+void Suspend();
 void Close();
 
 // Helpy's own web browser (the Browser tab; off until the player turns it on in Settings). It has
@@ -35,7 +37,6 @@ void Close();
 struct BrowserSettings {
     bool Enabled = false;
     std::filesystem::path Extension; // The unpacked ad blocker, or empty for none.
-    bool PictureInPicture = false;
 };
 // Called once a frame before Frame. Turning the browser off closes its page.
 void Browser(const BrowserSettings& settings);
@@ -43,10 +44,6 @@ void Browser(const BrowserSettings& settings);
 int32_t DrawBrowser();
 // The ad blocker's state in the browser, for Settings.
 std::string BrowserExtensionStatus();
-// Picture-in-picture: true while a video plays in the browser and it has been watched in the game
-// overlay, so the notifications HUD keeps the page captured and shows the video.
-bool PictureInPicture();
-float PictureInPictureAspect(); // The playing video's width / height.
-// Draws the playing video into box (HUD surface coordinates). False when there is nothing to draw yet.
-bool DrawPictureInPicture(ImDrawList* draw, ImVec2 min, ImVec2 max);
+bool BrowserExtensionFailed();
+void RetryBrowserExtension();
 }

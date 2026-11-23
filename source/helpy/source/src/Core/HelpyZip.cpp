@@ -14,10 +14,8 @@ bool SafeEntry(std::string_view name) {
     while (start < name.size()) {
         const auto end = name.find('/', start);
         const auto segment = name.substr(start, end == std::string_view::npos ? std::string_view::npos : end - start);
-        if (end == std::string_view::npos || end + 1 < name.size()) {
-            // Every segment but a directory entry's trailing slash must be a plain name.
-            if (segment.empty() || segment == "." || segment == "..") return false;
-        }
+        // Windows trims trailing spaces/dots; a disguised parent component must not escape.
+        if (segment.empty()||segment=="."||segment==".."||segment.back()==' '||segment.back()=='.') return false;
         for (const unsigned char c : segment) if (c < 32 || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|') return false;
         if (end == std::string_view::npos) break;
         start = end + 1;
@@ -49,8 +47,8 @@ void Extract(const std::filesystem::path& zip, const std::filesystem::path& fold
         if (!mz_zip_reader_file_stat(&archive, i, &stat)) throw std::runtime_error("The ZIP has an unreadable entry.");
         if (!SafeEntry(stat.m_filename)) throw std::runtime_error(std::string("The ZIP has an unsafe entry: ") + stat.m_filename);
         if (stat.m_is_encrypted || !stat.m_is_supported) throw std::runtime_error("The ZIP has an encrypted or unsupported entry.");
+        if (stat.m_uncomp_size>limits.MaxBytes-total) throw std::runtime_error("The ZIP is larger than allowed.");
         total += stat.m_uncomp_size;
-        if (total > limits.MaxBytes) throw std::runtime_error("The ZIP is larger than allowed.");
     }
     std::error_code ignored;
     try {
@@ -68,6 +66,7 @@ void Extract(const std::filesystem::path& zip, const std::filesystem::path& fold
             if (size != stat.m_uncomp_size) throw std::runtime_error("A ZIP entry has the wrong size.");
             std::ofstream out(target, std::ios::binary | std::ios::trunc);
             out.write(static_cast<const char*>(data), static_cast<std::streamsize>(size));
+            out.close();
             if (!out) throw std::runtime_error(std::string("Could not write ") + stat.m_filename);
         }
     } catch (...) {

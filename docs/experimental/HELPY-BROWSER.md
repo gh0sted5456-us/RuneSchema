@@ -5,8 +5,7 @@ promote_to: HELPY-BROWSER.md
 
 !!! warning "Experimental · 0.9.0.7"
     Requires Helpy from the same build and the Microsoft Edge WebView2 Runtime. The browser is
-    off until you turn it on. In-game acceptance of the ad blocker and picture-in-picture is
-    pending.
+    off until you turn it on. In-game acceptance of the ad blocker is pending.
 
 # Web browser in Helpy
 
@@ -22,7 +21,6 @@ Open **Settings** and find **Web browser**:
 | --- | --- | --- |
 | Web browser | Off | Adds the **Browser** tab and its Home tile. Turning it off closes the page and removes the tab. |
 | Block ads (uBlock Origin Lite) | Off | Downloads uBlock Origin Lite the first time you turn it on and loads it into the browser. |
-| Picture-in-picture while playing | On | Keeps a playing video in the corner of the game after you close Helpy. |
 
 Dedicated servers don't have the browser.
 
@@ -55,26 +53,17 @@ and contributors, licensed under GPL-3.0. Helpy doesn't include it and doesn't c
 2. It downloads that file from the project's own release page and checks it against the
    SHA-256 checksum GitHub publishes for it. A file that doesn't match is never used.
 3. It unpacks the file into Helpy's state folder under `web-browser-extensions`, then loads it
-   into the browser and reloads the page.
+   into the browser and reloads the page. The installed marker is updated after WebView2 accepts
+   the extension. A failed replacement restores the previously installed version.
 
 After that, turning ad blocking on uses the copy already downloaded, with no network request.
 **Check for update** in Settings downloads a newer release when there is one. Turning ad blocking
-off removes it from the browser; the downloaded copy stays until you delete that folder.
+off removes it from the browser; removal errors remain visible for retry. Downloaded versions
+stay available for recovery and for other running Helpy instances. Installation and marker writes
+are serialized across Steam and Game Pass Helpy processes.
 
 If Settings says your WebView2 Runtime can't load the ad blocker, update the Microsoft Edge
 WebView2 Runtime and restart Helpy.
-
-## Picture-in-picture
-
-Start a video in the Browser tab, then close Helpy. While the video plays, it keeps playing in
-the bottom-right corner of the game, above your coordinates if they're shown. When the video
-pauses or ends, the corner clears.
-
-- Picture-in-picture needs Helpy's native in-game presentation (Settings → Window & overlay).
-- To stop it, open Helpy and choose **Pause video** on the Browser tab, or turn picture-in-picture
-  off. The sound keeps playing when picture-in-picture is off, just like a hidden browser tab.
-- Helpy finds the largest playing video on the page. A video embedded from another site inside
-  the page (an embedded player) isn't found, so open the video's own page instead.
 
 ## Problems
 
@@ -83,4 +72,3 @@ pauses or ends, the corner clears.
 | "The web browser is off." | Turn on **Web browser** in Settings. |
 | "Helpy could not start its web view." | Install or repair the Microsoft Edge WebView2 Runtime. |
 | A download message in Settings | Check your connection and choose **Try again**. GitHub limits how often it can be asked; wait a few minutes if it says so. |
-| No corner video after closing Helpy | Check that picture-in-picture is on, native in-game presentation is on, and the video is playing on its own page. |
