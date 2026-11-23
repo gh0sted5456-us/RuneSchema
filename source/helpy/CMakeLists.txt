@@ -49,6 +49,16 @@ target_include_directories(helpy_support_dependencies PUBLIC
 target_link_libraries(helpy_support_dependencies PUBLIC
   "${helpy_webview2_SOURCE_DIR}/build/native/x64/WebView2LoaderStatic.lib"
   shlwapi version ole32 oleaut32 advapi32)
+# miniz (MIT): unpacks the browser's ad blocker, which the player downloads only when they turn it on.
+FetchContent_Declare(helpy_miniz
+  URL https://github.com/richgel999/miniz/releases/download/3.0.2/miniz-3.0.2.zip
+  URL_HASH SHA256=ada38db0b703a56d3dd6d57bf84a9c5d664921d870d8fea4db153979fb5332c5
+  DOWNLOAD_EXTRACT_TIMESTAMP FALSE
+  SOURCE_SUBDIR unused)
+FetchContent_MakeAvailable(helpy_miniz)
+add_library(helpy_miniz STATIC "${helpy_miniz_SOURCE_DIR}/miniz.c")
+target_include_directories(helpy_miniz PUBLIC "${helpy_miniz_SOURCE_DIR}")
+target_compile_definitions(helpy_miniz PRIVATE _CRT_SECURE_NO_WARNINGS)
 
 set(HELPY_SUPPORT_DOCS "${CMAKE_CURRENT_SOURCE_DIR}/../../docs/experimental")
 set(HELPY_SUPPORT_RESOURCE "${CMAKE_CURRENT_BINARY_DIR}/HelpySupport.rc")
@@ -65,12 +75,12 @@ endforeach()
 file(GENERATE OUTPUT "${HELPY_SUPPORT_RESOURCE}" CONTENT "${HELPY_SUPPORT_RC}")
 set_source_files_properties("${HELPY_SUPPORT_RESOURCE}" PROPERTIES OBJECT_DEPENDS "${HELPY_SUPPORT_INPUTS}")
 set(HELPY_UI_SOURCES source/src/Generator/HelpyStandaloneWindow.cpp source/src/Generator/HelpyControllerDevice.cpp source/src/Generator/HelpySupportPage.cpp source/src/Generator/HelpyWebPane.cpp
-  source/src/Generator/ToolRequestState.cpp source/src/Generator/HelpyUpdates.cpp source/src/Generator/HelpyDownloads.cpp source/src/Generator/HelpyModCacheBuilder.cpp source/src/Generator/HelpyMapCache.cpp source/src/Generator/HelpyWikiIcons.cpp source/src/Core/ConfigFiles.cpp source/src/HelpyPaths.cpp ../raw/src/Core/ModOrderState.cpp)
+  source/src/Generator/ToolRequestState.cpp source/src/Generator/HelpyUpdates.cpp source/src/Generator/HelpyDownloads.cpp source/src/Generator/HelpyModCacheBuilder.cpp source/src/Generator/HelpyMapCache.cpp source/src/Generator/HelpyWikiIcons.cpp source/src/Generator/HelpyBrowser.cpp source/src/Core/HelpyZip.cpp source/src/Core/ConfigFiles.cpp source/src/HelpyPaths.cpp ../raw/src/Core/ModOrderState.cpp)
 set_source_files_properties(source/src/Generator/HelpyStandaloneWindow.cpp PROPERTIES COMPILE_OPTIONS /bigobj)
 add_library(helpy_ui STATIC ${HELPY_UI_SOURCES})
 target_include_directories(helpy_ui PUBLIC ../raw/include)
 target_compile_definitions(helpy_ui PRIVATE RUNESCHEMA_PLUGIN_CLIENT=1)
-target_link_libraries(helpy_ui PUBLIC helpy_support_dependencies SDL3::SDL3 helpy_imgui d3d11 dxgi dcomp d3dcompiler dwmapi shell32 windowscodecs ole32 winhttp bcrypt pdh winmm windowsapp)
+target_link_libraries(helpy_ui PUBLIC helpy_support_dependencies helpy_miniz SDL3::SDL3 helpy_imgui d3d11 dxgi dcomp d3dcompiler dwmapi shell32 windowscodecs ole32 winhttp bcrypt pdh winmm windowsapp)
 if(NOT TARGET safetyhook)
   include(FetchContent)
   FetchContent_Declare(safetyhook GIT_REPOSITORY https://github.com/cursey/safetyhook.git GIT_TAG 8a975dee560c424329dcb0e151f3649fa4b19146)
@@ -289,6 +299,10 @@ add_executable(helpy-delivery-gate-contract source/tests/helpy-delivery-gate-con
 add_test(NAME helpy-delivery-gate-contract COMMAND helpy-delivery-gate-contract "${CMAKE_CURRENT_SOURCE_DIR}/..")
 add_executable(helpy-web-pane-contract source/tests/helpy-web-pane-contract.cpp)
 add_test(NAME helpy-web-pane-contract COMMAND helpy-web-pane-contract "${CMAKE_CURRENT_SOURCE_DIR}/..")
+add_executable(helpy-browser source/tests/helpy-browser.cpp source/src/Core/HelpyZip.cpp)
+target_link_libraries(helpy-browser PRIVATE helpy_miniz)
+target_compile_options(helpy-browser PRIVATE /UNDEBUG)
+add_test(NAME helpy-browser COMMAND helpy-browser)
 foreach(header IN ITEMS HelpyDeliveryFlags HelpyFlagSignature)
   add_test(NAME helpy-${header}-parity COMMAND "${CMAKE_COMMAND}" -E compare_files "${CMAKE_CURRENT_SOURCE_DIR}/source/include/Core/${header}.h" "${CMAKE_CURRENT_SOURCE_DIR}/../raw/include/Core/${header}.h")
 endforeach()

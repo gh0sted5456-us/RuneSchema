@@ -15,6 +15,9 @@
     "Dragonwilds Wiki in Helpy": "experimental/HELPY-WIKI.md"
   },
   {
+    "Web browser in Helpy": "experimental/HELPY-BROWSER.md"
+  },
+  {
     "Install & compatibility": [
       {
         "Install or update": "experimental/INSTALLATION.md"

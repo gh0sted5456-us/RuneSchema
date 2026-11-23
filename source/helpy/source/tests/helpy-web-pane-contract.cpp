@@ -34,6 +34,28 @@ int main(int argc,char** argv){
         const auto forward=At(pane,"void Forward(Pane& pane");
         Check(At(pane,"WM_MOUSEWHEEL",forward)>forward&&At(pane,"WM_CHAR",forward)>forward&&pane.find("SetForegroundWindow",forward)==std::string::npos,"Input is posted to the page without taking focus from the game");
         Check(pane.contains("Helpy draws the captured page")||pane.contains("Helpy draws the captured page."),"Texture mode is documented in place");
-        std::cout<<"Helpy web pane contract passed: modes, capture, drag follow, top navigation.\n";return 0;
+        // Helpy's browser: off by default, its own profile, web addresses only, ad blocker from Helpy's download only.
+        const auto theme=Read(root/"helpy/source/include/Generator/HelpyImGuiTheme.h");
+        Check(theme.contains("bool webBrowser{false},browserAdBlock{false},browserPictureInPicture{true};")&&theme.contains("runtime.value(\"webBrowser\",false)")&&theme.contains("runtime.value(\"browserAdBlock\",false)"),"The browser and its ad blocker are off until chosen");
+        const auto sync=At(window,"void SyncBrowser(){");
+        Check(At(window,"theme.webBrowser&&PluginRuntimeServices::ExternalDesktop&&!HelpyEnvironment::Server()",sync)>sync,"No browser on a server or without Helpy's desktop window");
+        Check(At(window,"HelpyBrowser::AdBlock(on&&theme.browserAdBlock)",sync)>sync&&At(window,"blocker.State==HelpyBrowser::Blocker::Ready?blocker.Folder",sync)>sync,"Only a verified, unpacked ad blocker is loaded");
+        Check(At(window,"HelpyPluginNavigation::Remove(BrowserOwner)",sync)>sync,"Turning the browser off removes its tab");
+        Check(At(window,"\"Browser\",\"B\",DrawBrowserTab",sync)>sync&&At(window,"uBlock Origin Lite by Raymond Hill and contributors (GPL-3.0)",sync)>sync,"The Browser tab credits uBlock Origin Lite under the \"i\"");
+        Check(pane.contains("(browser ? L\"web-browser\" : L\"plugin-browser\")")&&pane.contains("target.Extensions = browser && options"),"The browser has its own profile; only it can load extensions");
+        Check(pane.contains("return pane.Browser ? HelpyBrowserAddress::Web(Utf8(url))")&&pane.contains("if (pane->Browser) return S_OK; // Only web addresses"),"The browser opens only http and https addresses");
+        Check(pane.contains("put_IsPasswordAutosaveEnabled(FALSE)")&&pane.contains("put_IsGeneralAutofillEnabled(FALSE)"),"The browser never saves passwords or form data");
+        Check(pane.contains("args->put_Cancel(TRUE); }).Get(), &token);")&&pane.contains("COREWEBVIEW2_PERMISSION_STATE_DENY"),"Downloads and site permissions stay blocked");
+        Check(pane.contains("const auto wanted = state.Settings.Extension.wstring();")&&pane.contains("extensions->AddBrowserExtension(wanted.c_str()"),"The ad blocker comes only from Helpy's own download");
+        const auto installer=Read(root/"helpy/source/src/Generator/HelpyBrowser.cpp");
+        const auto install=At(installer,"View Install(View current) {");
+        Check(At(installer,"Sha256(zip) != release.Sha256",install)<At(installer,"HelpyZip::Extract(file, staging);",install),"The ad blocker is checked against its published SHA-256 before it is unpacked");
+        Check(At(installer,"std::filesystem::rename(staging, folder);",install)<At(installer,"installed.json",install),"Only a complete unpack is recorded as installed");
+        Check(At(installer,"if (!on) {")<At(installer,"if (State.State != Blocker::Ready) Start(false); // First use: download once."),"Nothing is downloaded while ad blocking is off");
+        // Picture-in-picture: the playing video stays captured and the HUD draws it.
+        Check(At(window,"m_nativeOverlay.NotificationsVisible()&&HelpyWebPane::PictureInPicture()?HelpyWebPane::Mode::Texture",mode)<At(window,"m_nativeOverlay.NotificationsVisible()?HelpyWebPane::Mode::Hidden",mode),"The HUD keeps a playing video captured");
+        Check(window.contains("passiveHud=notices||coordinates||minimap||starting||award||pictureInPicture")&&window.contains("HelpyWebPane::DrawPictureInPicture(ImGui::GetBackgroundDrawList()"),"The HUD shows the video while Helpy is closed");
+        Check(pane.contains("} else if (!wanted && state.Showing == Mode::Texture && Playing(*pane)) {"),"The browser stays captured off-screen while its video plays");
+        std::cout<<"Helpy web pane contract passed: modes, capture, drag follow, top navigation, browser, picture-in-picture.\n";return 0;
     }catch(const std::exception& error){std::cerr<<"FAIL: "<<error.what()<<'\n';return 1;}
 }

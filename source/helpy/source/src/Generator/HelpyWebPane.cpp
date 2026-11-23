@@ -1,6 +1,7 @@
 #include <unknwn.h> // Before C++/WinRT, so it can query classic COM interfaces.
 #include "Generator/HelpyWebPane.h"
 #include "Generator/HelpyImGuiTheme.h"
+#include "Core/HelpyBrowserAddress.h"
 #include "Core/HelpyWebOrigin.h"
 #include "Core/RuneSchemaDataRoot.h"
 #include "Runtime/HostServices.h"
@@ -22,8 +23,13 @@
 #include <array>
 #include <atomic>
 #include <climits>
+#include <chrono>
+#include <functional>
 #include <map>
 #include <memory>
+#include <optional>
+#include <vector>
+#include <nlohmann/json.hpp>
 
 namespace PS::HelpyWebPane {
 namespace {
@@ -32,6 +38,8 @@ using Microsoft::WRL::Callback;
 constexpr wchar_t ClassName[] = L"RuneSchema.Helpy.WebPane.v1";
 constexpr size_t MaxPanes = 4;
 constexpr LONG MinPixels = 64, MaxPixels = 4096;
+// The browser's slot among the pages; plugin routes never contain control characters.
+const std::string BrowserRoute = "\x01Helpy.browser";
 namespace WGC = winrt::Windows::Graphics::Capture;
 namespace WD3D = winrt::Windows::Graphics::DirectX::Direct3D11;
 
@@ -86,6 +94,18 @@ struct Pane {
     std::array<bool, 3> Buttons{};
     bool Hovered = false, KeyFocus = false;
     POINT Mouse{LONG_MIN, LONG_MIN};
+    // Helpy's browser: any web address, its own profile, an address bar and picture-in-picture.
+    bool Browser = false;
+    SIZE Pixels{};            // The page window's last size, kept for picture-in-picture.
+    std::array<char, HelpyBrowserAddress::MaxLength + 1> Address{};
+    std::wstring AddressShown;
+    struct { bool Playing = false; float X = 0, Y = 0, W = 0, H = 0; std::chrono::steady_clock::time_point Seen{}; } Video;
+    bool Polling = false, Editing = false;
+    std::chrono::steady_clock::time_point NextPoll{};
+};
+struct Environment {
+    ComPtr<ICoreWebView2Environment> Value;
+    bool Starting = false, Failed = false, Extensions = false;
 };
 struct State {
     HWND Owner{};
@@ -93,8 +113,11 @@ struct State {
     Mode Showing = Mode::Hidden;
     ID3D11Device* Device{};
     bool Registered = false;
-    ComPtr<ICoreWebView2Environment> Environment;
-    bool EnvironmentStarting = false, EnvironmentFailed = false;
+    Environment Pages, Browser; // Plugin pages and Helpy's browser keep separate profiles.
+    BrowserSettings Settings;
+    std::wstring Applied;      // The ad blocker folder loaded into the browser profile ("" = none).
+    bool AppliedOnce = false, ExtensionBusy = false;
+    std::string ExtensionStatus;
     std::map<std::string, std::shared_ptr<Pane>> Panes;
     std::string Requested;
     RECT Bounds{};       // Window mode: the workspace in Helpy's client coordinates.
@@ -111,8 +134,12 @@ std::atomic<LONG> OffsetX{0}, OffsetY{0};
 void OpenExternal(std::wstring_view url) {
     if (HelpyWebOrigin::External(url)) ShellExecuteW(state.Owner, L"open", std::wstring(url).c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 }
+Environment& EnvironmentFor(const Pane& pane) { return pane.Browser ? state.Browser : state.Pages; }
+bool Allowed(const Pane& pane, const std::wstring& url) {
+    return pane.Browser ? HelpyBrowserAddress::Web(Utf8(url)) : HelpyWebOrigin::Inside(std::wstring_view(url), std::wstring_view(pane.Origin));
+}
 void Go(Pane& pane, const std::wstring& url) {
-    if (!HelpyWebOrigin::Inside(std::wstring_view(url), std::wstring_view(pane.Origin))) return;
+    if (!Allowed(pane, url)) return;
     if (!pane.Page) { pane.Pending = url; return; }
     pane.Loading = true;
     if (FAILED(pane.Page->Navigate(url.c_str()))) { pane.Loading = false; pane.Failed = true; }
@@ -147,6 +174,92 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
     return DefWindowProcW(window, message, wParam, lParam);
 }
 
+// The ad blocker in the browser profile: whatever is installed there is removed, then Helpy's own
+// download is loaded (nothing when ad blocking is off). Runs again whenever the setting changes.
+void FinishExtension(const std::weak_ptr<Pane>& weak, const std::wstring& wanted, bool ok, bool changed = true) {
+    state.ExtensionBusy = false; state.Applied = wanted; state.AppliedOnce = true;
+    state.ExtensionStatus = wanted.empty() ? (ok ? "" : "Helpy couldn't remove the ad blocker from the browser profile.")
+        : ok ? "Ads are blocked in the browser." : "The ad blocker couldn't be loaded. Turn ad blocking off and on to download it again.";
+    if (const auto pane = weak.lock(); pane && pane->Page && ok && changed) pane->Page->Reload(); // Apply it to the open page.
+}
+void SyncExtension(const std::shared_ptr<Pane>& pane) {
+    if (!pane->Browser || !pane->Page || state.ExtensionBusy) return;
+    const auto wanted = state.Settings.Extension.wstring();
+    if (state.AppliedOnce && wanted == state.Applied) return;
+    ComPtr<ICoreWebView2_13> withProfile; ComPtr<ICoreWebView2Profile> profile; ComPtr<ICoreWebView2Profile7> extensions;
+    if (!state.Browser.Extensions || FAILED(pane->Page.As(&withProfile)) || FAILED(withProfile->get_Profile(&profile)) || !profile || FAILED(profile.As(&extensions))) {
+        state.Applied = wanted; state.AppliedOnce = true;
+        state.ExtensionStatus = wanted.empty() ? "" : "This WebView2 Runtime can't load the ad blocker. Update the Microsoft Edge WebView2 Runtime, then restart Helpy.";
+        return;
+    }
+    state.ExtensionBusy = true;
+    state.ExtensionStatus = wanted.empty() ? "Turning the ad blocker off..." : "Loading the ad blocker...";
+    const std::weak_ptr<Pane> weak = pane;
+    const auto add = [weak, extensions, wanted](bool removedAny) {
+        if (wanted.empty()) { FinishExtension(weak, wanted, true, removedAny); return; }
+        if (FAILED(extensions->AddBrowserExtension(wanted.c_str(), Callback<ICoreWebView2ProfileAddBrowserExtensionCompletedHandler>(
+            [weak, wanted](HRESULT status, ICoreWebView2BrowserExtension*) -> HRESULT { FinishExtension(weak, wanted, SUCCEEDED(status)); return S_OK; }).Get())))
+            FinishExtension(weak, wanted, false);
+    };
+    if (FAILED(extensions->GetBrowserExtensions(Callback<ICoreWebView2ProfileGetBrowserExtensionsCompletedHandler>(
+        [weak, wanted, add](HRESULT status, ICoreWebView2BrowserExtensionList* list) -> HRESULT {
+            std::vector<ComPtr<ICoreWebView2BrowserExtension>> installed;
+            UINT count = 0;
+            if (SUCCEEDED(status) && list && SUCCEEDED(list->get_Count(&count)))
+                for (UINT i = 0; i < count; ++i) { ComPtr<ICoreWebView2BrowserExtension> item; if (SUCCEEDED(list->GetValueAtIndex(i, &item)) && item) installed.push_back(item); }
+            if (installed.empty()) { add(false); return S_OK; }
+            const auto left = std::make_shared<size_t>(installed.size());
+            const auto removed = [left, add] { if (--*left == 0) add(true); };
+            for (const auto& item : installed)
+                if (FAILED(item->Remove(Callback<ICoreWebView2BrowserExtensionRemoveCompletedHandler>([removed](HRESULT) -> HRESULT { removed(); return S_OK; }).Get()))) removed();
+            return S_OK;
+        }).Get()))) FinishExtension(weak, wanted, false);
+}
+
+// Picture-in-picture: twice a second, where the largest playing video sits in the page, in pixels.
+// Reads layout only; videos inside another site's frame are not seen.
+constexpr wchar_t VideoScript[] = LR"JS((() => {
+  let best = null, area = 0;
+  for (const v of document.querySelectorAll('video')) {
+    if (v.paused || v.ended || v.readyState < 2) continue;
+    const r = v.getBoundingClientRect();
+    const x = Math.max(r.left, 0), y = Math.max(r.top, 0);
+    const w = Math.min(r.right, innerWidth) - x, h = Math.min(r.bottom, innerHeight) - y;
+    if (w >= 64 && h >= 36 && w * h > area) { area = w * h; best = [x, y, w, h]; }
+  }
+  const d = devicePixelRatio || 1;
+  return best ? { p: 1, x: best[0] * d, y: best[1] * d, w: best[2] * d, h: best[3] * d } : { p: 0 };
+})())JS";
+constexpr wchar_t PauseScript[] = L"document.querySelectorAll('video').forEach(v => v.pause())";
+void PollVideo(const std::shared_ptr<Pane>& pane) {
+    if (!state.Settings.PictureInPicture) { pane->Video.Playing = false; return; }
+    const auto now = std::chrono::steady_clock::now();
+    if (!pane->Page || pane->Polling || now < pane->NextPoll) return;
+    pane->NextPoll = now + std::chrono::milliseconds(500); pane->Polling = true;
+    const std::weak_ptr<Pane> weak = pane;
+    if (FAILED(pane->Page->ExecuteScript(VideoScript, Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
+        [weak](HRESULT status, LPCWSTR result) -> HRESULT {
+            const auto pane = weak.lock(); if (!pane) return S_OK;
+            pane->Polling = false;
+            auto& video = pane->Video;
+            try {
+                const auto json = nlohmann::json::parse(SUCCEEDED(status) && result ? Utf8(result) : std::string("{}"));
+                const auto number = [&](const char* key) { return std::clamp(json.value(key, 0.0), 0.0, double(MaxPixels) * 4); };
+                video.Playing = json.is_object() && json.value("p", 0) == 1;
+                if (video.Playing) { video.X = float(number("x")); video.Y = float(number("y")); video.W = float(number("w")); video.H = float(number("h")); video.Seen = std::chrono::steady_clock::now(); }
+            } catch (...) { video.Playing = false; }
+            return S_OK;
+        }).Get()))) pane->Polling = false;
+}
+bool Playing(const Pane& pane) {
+    return pane.Browser && state.Settings.Enabled && state.Settings.PictureInPicture && pane.Page && !pane.Failed && pane.Video.Playing
+        && std::chrono::steady_clock::now() - pane.Video.Seen < std::chrono::seconds(2);
+}
+std::shared_ptr<Pane> BrowserPane() {
+    const auto found = state.Panes.find(BrowserRoute);
+    return found == state.Panes.end() ? nullptr : found->second;
+}
+
 void Configure(const std::shared_ptr<Pane>& pane) {
     auto* page = pane->Page.Get();
     const std::weak_ptr<Pane> weak = pane;
@@ -159,6 +272,8 @@ void Configure(const std::shared_ptr<Pane>& pane) {
         settings->put_IsStatusBarEnabled(FALSE);
         settings->put_AreDefaultContextMenusEnabled(FALSE); // A separate window: never captured in the game overlay.
     }
+    ComPtr<ICoreWebView2Settings4> forms;
+    if (pane->Browser && settings && SUCCEEDED(settings.As(&forms))) { forms->put_IsPasswordAutosaveEnabled(FALSE); forms->put_IsGeneralAutofillEnabled(FALSE); }
     EventRegistrationToken token{};
     page->add_NavigationStarting(Callback<ICoreWebView2NavigationStartingEventHandler>(
         [weak](ICoreWebView2*, ICoreWebView2NavigationStartingEventArgs* args) -> HRESULT {
@@ -166,8 +281,9 @@ void Configure(const std::shared_ptr<Pane>& pane) {
             LPWSTR text = nullptr;
             if (FAILED(args->get_Uri(&text)) || !text) { args->put_Cancel(TRUE); return S_OK; }
             const std::wstring uri(text); CoTaskMemFree(text);
-            if (HelpyWebOrigin::Inside(std::wstring_view(uri), std::wstring_view(pane->Origin))) { pane->Loading = true; return S_OK; }
+            if (Allowed(*pane, uri) || (pane->Browser && uri == L"about:blank")) { pane->Loading = true; return S_OK; }
             args->put_Cancel(TRUE);
+            if (pane->Browser) return S_OK; // Only web addresses: no file:, javascript: or app links.
             BOOL user = FALSE;
             if (SUCCEEDED(args->get_IsUserInitiated(&user)) && user) OpenExternal(uri);
             return S_OK;
@@ -198,8 +314,8 @@ void Configure(const std::shared_ptr<Pane>& pane) {
             if (!user) return S_OK;
             LPWSTR text = nullptr; if (FAILED(args->get_Uri(&text)) || !text) return S_OK;
             const std::wstring uri(text); CoTaskMemFree(text);
-            if (HelpyWebOrigin::Inside(std::wstring_view(uri), std::wstring_view(pane->Origin))) Go(*pane, uri);
-            else OpenExternal(uri);
+            if (Allowed(*pane, uri)) Go(*pane, uri); // The browser opens links in its own page; popups need a click.
+            else if (!pane->Browser) OpenExternal(uri);
             return S_OK;
         }).Get(), &token);
     page->add_PermissionRequested(Callback<ICoreWebView2PermissionRequestedEventHandler>(
@@ -221,13 +337,15 @@ void Configure(const std::shared_ptr<Pane>& pane) {
         }).Get(), &token);
     Go(*pane, pane->Pending.empty() ? pane->Home : pane->Pending);
     pane->Pending.clear();
+    if (pane->Browser) SyncExtension(pane);
 }
 
 void CreateController(const std::shared_ptr<Pane>& pane) {
-    if (!state.Environment || !pane->Window || pane->Controller || pane->Starting) return;
+    auto& environment = EnvironmentFor(*pane);
+    if (!environment.Value || !pane->Window || pane->Controller || pane->Starting) return;
     pane->Starting = true;
     const std::weak_ptr<Pane> weak = pane;
-    if (FAILED(state.Environment->CreateCoreWebView2Controller(pane->Window,
+    if (FAILED(environment.Value->CreateCoreWebView2Controller(pane->Window,
         Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(
             [weak](HRESULT status, ICoreWebView2Controller* controller) -> HRESULT {
                 const auto pane = weak.lock();
@@ -245,27 +363,32 @@ void CreateController(const std::shared_ptr<Pane>& pane) {
             }).Get()))) { pane->Starting = false; pane->Failed = true; }
 }
 
-void StartEnvironment() {
-    if (state.Environment || state.EnvironmentStarting || state.EnvironmentFailed) return;
-    state.EnvironmentStarting = true;
+void StartEnvironment(bool browser) {
+    auto& target = browser ? state.Browser : state.Pages;
+    if (target.Value || target.Starting || target.Failed) return;
+    target.Starting = true;
     try {
-        const auto profile = HostServices::StateDirectory() / L"plugin-browser";
+        const auto profile = HostServices::StateDirectory() / (browser ? L"web-browser" : L"plugin-browser");
         RuneSchemaData::Safe(profile);
         std::filesystem::create_directories(profile);
         // Keep painting while hidden behind the game or off-screen (Texture mode captures it there).
         auto options = Microsoft::WRL::Make<CoreWebView2EnvironmentOptions>();
         if (options) options->put_AdditionalBrowserArguments(L"--disable-features=CalculateNativeWinOcclusion --disable-backgrounding-occluded-windows");
+        // The browser can load the ad blocker; it is only ever loaded from Helpy's own download.
+        ComPtr<ICoreWebView2EnvironmentOptions6> extensions;
+        target.Extensions = browser && options && SUCCEEDED(options.As(&extensions)) && SUCCEEDED(extensions->put_AreBrowserExtensionsEnabled(TRUE));
         const auto status = CreateCoreWebView2EnvironmentWithOptions(nullptr, profile.c_str(), options.Get(),
             Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
-                [](HRESULT status, ICoreWebView2Environment* environment) -> HRESULT {
-                    state.EnvironmentStarting = false;
-                    if (FAILED(status) || !environment) { state.EnvironmentFailed = true; return S_OK; }
-                    state.Environment = environment;
-                    for (auto& [_, pane] : state.Panes) if (pane->Window) CreateController(pane);
+                [browser](HRESULT status, ICoreWebView2Environment* environment) -> HRESULT {
+                    auto& target = browser ? state.Browser : state.Pages;
+                    target.Starting = false;
+                    if (FAILED(status) || !environment) { target.Failed = true; return S_OK; }
+                    target.Value = environment;
+                    for (auto& [_, pane] : state.Panes) if (pane->Window && pane->Browser == browser) CreateController(pane);
                     return S_OK;
                 }).Get());
-        if (FAILED(status)) { state.EnvironmentStarting = false; state.EnvironmentFailed = true; }
-    } catch (...) { state.EnvironmentStarting = false; state.EnvironmentFailed = true; }
+        if (FAILED(status)) { target.Starting = false; target.Failed = true; }
+    } catch (...) { target.Starting = false; target.Failed = true; }
 }
 
 bool EnsureWindow(const std::shared_ptr<Pane>& pane) {
@@ -301,8 +424,9 @@ void Hide(Pane& pane) {
 
 void Show(const std::shared_ptr<Pane>& pane, RECT screen, HWND order) {
     if (!EnsureWindow(pane)) { pane->Failed = true; return; }
-    StartEnvironment();
+    StartEnvironment(pane->Browser);
     CreateController(pane);
+    pane->Pixels = {screen.right - screen.left, screen.bottom - screen.top};
     const bool moved = !EqualRect(&screen, &pane->Placed);
     if (moved || !pane->Showing) {
         SetWindowPos(pane->Window, order, screen.left, screen.top, screen.right - screen.left, screen.bottom - screen.top,
@@ -469,7 +593,13 @@ Frame::~Frame() {
             // Off-screen and below everything: the game keeps focus; Helpy draws the captured page.
             Show(pane, Offscreen(state.Pixels), HWND_BOTTOM);
             if (pane->Showing && pane->Window) StartCapture(*pane);
+        } else if (!wanted && state.Showing == Mode::Texture && Playing(*pane)) {
+            // Picture-in-picture: the browser stays captured at its last size while its video plays.
+            const SIZE size = pane->Pixels.cx >= MinPixels && pane->Pixels.cy >= MinPixels ? pane->Pixels : SIZE{1280, 720};
+            Show(pane, Offscreen(size), HWND_BOTTOM);
+            if (pane->Showing && pane->Window) StartCapture(*pane);
         } else Hide(*pane);
+        if (pane->Browser) { PollVideo(pane); SyncExtension(pane); }
     }
     Visible.store(shown);
 }
@@ -482,40 +612,20 @@ void FollowOwner(HWND owner) {
     SetWindowPos(shown, nullptr, origin.x + OffsetX.load(), origin.y + OffsetY.load(), 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
 }
 
-int32_t Draw(const std::string& route, const RuneSchemaWebPageV1* page) {
-    if (!page || page->StructSize < sizeof(RuneSchemaWebPageV1) || !Text(page->Origin, 128) || !Text(page->Home, 2048)
-        || !HelpyWebOrigin::Valid(page->Origin) || !HelpyWebOrigin::Inside(std::string_view(page->Home), std::string_view(page->Origin))) {
-        ImGui::TextWrapped("This plugin asked for a web page Helpy cannot open.");
-        return RS_WEB_FAILED;
-    }
-    auto& slot = state.Panes[route];
-    if (slot && Utf8(slot->Origin) != page->Origin) { Destroy(*slot); slot.reset(); }
-    if (!slot) {
-        if (state.Panes.size() > MaxPanes) {
-            auto oldest = state.Panes.end();
-            for (auto it = state.Panes.begin(); it != state.Panes.end(); ++it)
-                if (it->first != route && (oldest == state.Panes.end() || it->second->LastUsed < oldest->second->LastUsed)) oldest = it;
-            if (oldest != state.Panes.end()) { if (oldest->second) Destroy(*oldest->second); state.Panes.erase(oldest); }
-        }
-        auto& created = state.Panes[route];
-        created = std::make_shared<Pane>(); created->Route = route; created->Origin = Wide(page->Origin);
-        return Draw(route, page);
-    }
-    auto& pane = *slot;
-    pane.Home = Wide(page->Home); pane.LastUsed = state.Frame;
-    if (page->NavigateId && page->NavigateId != pane.NavigateId && Text(page->Navigate, 2048)
-        && HelpyWebOrigin::Inside(std::string_view(page->Navigate), std::string_view(page->Origin))) {
-        pane.NavigateId = page->NavigateId;
-        Go(pane, Wide(page->Navigate));
-    }
+namespace {
+// Shared by plugin pages and the browser.
+std::optional<int32_t> Unavailable(const Pane& pane) {
     if (state.Showing == Mode::Hidden) {
         Fallback(pane, "This page can't be shown here. Open Helpy, or open this page in your browser.");
         return RS_WEB_UNAVAILABLE;
     }
-    if (state.EnvironmentFailed) {
+    if (EnvironmentFor(pane).Failed) {
         Fallback(pane, "Helpy could not start its web view. Install or repair the Microsoft Edge WebView2 Runtime, or open this page in your browser.");
         return RS_WEB_FAILED;
     }
+    return std::nullopt;
+}
+void Buttons(Pane& pane) {
     BOOL canBack = FALSE, canForward = FALSE;
     if (pane.Page) { pane.Page->get_CanGoBack(&canBack); pane.Page->get_CanGoForward(&canForward); }
     ImGui::BeginDisabled(!canBack);
@@ -530,11 +640,9 @@ int32_t Draw(const std::string& route, const RuneSchemaWebPageV1* page) {
         if (pane.Failed) { Destroy(pane); pane.Failed = false; pane.Pending = pane.Current.empty() ? pane.Home : pane.Current; }
         else if (pane.Page) pane.Page->Reload();
     }
-    ImGui::SameLine();
-    if (HelpyImGuiTheme::SoftButton("Open in browser")) OpenExternal(pane.Current.empty() ? pane.Home : pane.Current);
-    ImGui::SameLine();
-    if (pane.Loading || !pane.Page) ImGui::TextDisabled("Loading...");
-    else if (!pane.Title.empty()) ImGui::TextDisabled("%s", pane.Title.c_str());
+}
+// The page itself in the rest of the workspace: over Helpy's window, or the captured texture.
+int32_t Surface(Pane& pane, const std::string& route) {
     if (pane.Failed) {
         ImGui::TextWrapped("The page could not be shown. Check your connection, then choose Retry.");
         return RS_WEB_FAILED;
@@ -569,6 +677,121 @@ int32_t Draw(const std::string& route, const RuneSchemaWebPageV1* page) {
     ImGui::Dummy({std::max(1.f, size.x), std::max(1.f, size.y)});
     return pane.Ready && !pane.Loading ? RS_WEB_READY : RS_WEB_LOADING;
 }
+}
+
+int32_t Draw(const std::string& route, const RuneSchemaWebPageV1* page) {
+    if (!page || page->StructSize < sizeof(RuneSchemaWebPageV1) || !Text(page->Origin, 128) || !Text(page->Home, 2048)
+        || !HelpyWebOrigin::Valid(page->Origin) || !HelpyWebOrigin::Inside(std::string_view(page->Home), std::string_view(page->Origin))) {
+        ImGui::TextWrapped("This plugin asked for a web page Helpy cannot open.");
+        return RS_WEB_FAILED;
+    }
+    auto& slot = state.Panes[route];
+    if (slot && Utf8(slot->Origin) != page->Origin) { Destroy(*slot); slot.reset(); }
+    if (!slot) {
+        if (state.Panes.size() > MaxPanes) {
+            auto oldest = state.Panes.end();
+            for (auto it = state.Panes.begin(); it != state.Panes.end(); ++it)
+                if (it->first != route && it->first != BrowserRoute && (oldest == state.Panes.end() || it->second->LastUsed < oldest->second->LastUsed)) oldest = it;
+            if (oldest != state.Panes.end()) { if (oldest->second) Destroy(*oldest->second); state.Panes.erase(oldest); }
+        }
+        auto& created = state.Panes[route];
+        created = std::make_shared<Pane>(); created->Route = route; created->Origin = Wide(page->Origin);
+        return Draw(route, page);
+    }
+    auto& pane = *slot;
+    pane.Home = Wide(page->Home); pane.LastUsed = state.Frame;
+    if (page->NavigateId && page->NavigateId != pane.NavigateId && Text(page->Navigate, 2048)
+        && HelpyWebOrigin::Inside(std::string_view(page->Navigate), std::string_view(page->Origin))) {
+        pane.NavigateId = page->NavigateId;
+        Go(pane, Wide(page->Navigate));
+    }
+    if (const auto blocked = Unavailable(pane)) return *blocked;
+    Buttons(pane);
+    ImGui::SameLine();
+    if (HelpyImGuiTheme::SoftButton("Open in browser")) OpenExternal(pane.Current.empty() ? pane.Home : pane.Current);
+    ImGui::SameLine();
+    if (pane.Loading || !pane.Page) ImGui::TextDisabled("Loading...");
+    else if (!pane.Title.empty()) ImGui::TextDisabled("%s", pane.Title.c_str());
+    return Surface(pane, route);
+}
+
+void Browser(const BrowserSettings& settings) {
+    state.Settings = settings;
+    if (settings.Enabled) return;
+    if (const auto found = state.Panes.find(BrowserRoute); found != state.Panes.end()) {
+        if (found->second) Destroy(*found->second);
+        state.Panes.erase(found);
+    }
+    // Next time the browser opens, its profile is brought in line with the ad-block setting again.
+    state.AppliedOnce = false; state.ExtensionStatus.clear();
+}
+
+int32_t DrawBrowser() {
+    if (!state.Settings.Enabled) {
+        ImGui::TextWrapped("The web browser is off. Turn it on in Settings, under Web browser.");
+        return RS_WEB_UNAVAILABLE;
+    }
+    auto& slot = state.Panes[BrowserRoute];
+    if (!slot) { slot = std::make_shared<Pane>(); slot->Route = BrowserRoute; slot->Browser = true; slot->Home = Wide(HelpyBrowserAddress::Home); }
+    auto& pane = *slot;
+    pane.LastUsed = state.Frame;
+    if (const auto blocked = Unavailable(pane)) return *blocked;
+    Buttons(pane);
+    ImGui::SameLine();
+    // The address bar shows where the page is, unless the player is typing in it.
+    const auto& where = pane.Current.empty() ? pane.Home : pane.Current;
+    if (!pane.Editing && where != pane.AddressShown) {
+        const auto text = Utf8(where).substr(0, HelpyBrowserAddress::MaxLength);
+        std::fill(pane.Address.begin(), pane.Address.end(), '\0');
+        std::copy(text.begin(), text.end(), pane.Address.begin());
+        pane.AddressShown = where;
+    }
+    const float pause = pane.Video.Playing ? ImGui::CalcTextSize("Pause video").x + ImGui::GetStyle().FramePadding.x * 2 + ImGui::GetStyle().ItemSpacing.x : 0.f;
+    ImGui::SetNextItemWidth(std::max(120.f, ImGui::GetContentRegionAvail().x - pause));
+    if (ImGui::InputTextWithHint("##helpy-browser-address", "Search or type a web address", pane.Address.data(), pane.Address.size(),
+            ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll)) {
+        if (const auto url = HelpyBrowserAddress::Resolve(pane.Address.data()); !url.empty()) { Go(pane, Wide(url)); pane.AddressShown = Wide(url); }
+        pane.KeyFocus = false;
+    }
+    pane.Editing = ImGui::IsItemActive();
+    if (pane.Video.Playing) {
+        ImGui::SameLine();
+        if (HelpyImGuiTheme::SoftButton("Pause video") && pane.Page) { pane.Page->ExecuteScript(PauseScript, Callback<ICoreWebView2ExecuteScriptCompletedHandler>([](HRESULT, LPCWSTR) -> HRESULT { return S_OK; }).Get()); pane.Video.Playing = false; }
+    }
+    if (pane.Loading || !pane.Page) ImGui::TextDisabled("Loading...");
+    else ImGui::TextDisabled("%s", pane.Title.empty() ? " " : pane.Title.c_str());
+    return Surface(pane, BrowserRoute);
+}
+
+std::string BrowserExtensionStatus() { return state.Settings.Enabled ? state.ExtensionStatus : std::string{}; }
+
+bool PictureInPicture() {
+    const auto pane = BrowserPane();
+    if (!pane) return false;
+    PollVideo(pane); // Also while nothing renders (the game lost focus), so the video is found again.
+    return Playing(*pane);
+}
+float PictureInPictureAspect() {
+    const auto pane = BrowserPane();
+    if (!pane || pane->Video.W < 1 || pane->Video.H < 1) return 16.f / 9.f;
+    return std::clamp(pane->Video.W / pane->Video.H, .5f, 3.f);
+}
+bool DrawPictureInPicture(ImDrawList* draw, ImVec2 min, ImVec2 max) {
+    const auto pane = BrowserPane();
+    if (!draw || !pane || !Playing(*pane) || !pane->Capture) return false;
+    PollCapture(*pane);
+    const auto& shot = *pane->Capture;
+    if (shot.Failed || !shot.View || shot.Width < 1 || shot.Height < 1) return false;
+    const auto& video = pane->Video;
+    const ImVec2 uv0{std::clamp(video.X / float(shot.Width), 0.f, 1.f), std::clamp(video.Y / float(shot.Height), 0.f, 1.f)};
+    const ImVec2 uv1{std::clamp((video.X + video.W) / float(shot.Width), 0.f, 1.f), std::clamp((video.Y + video.H) / float(shot.Height), 0.f, 1.f)};
+    if (uv1.x - uv0.x < .01f || uv1.y - uv0.y < .01f) return false;
+    constexpr float rounding = 8.f;
+    draw->AddRectFilled({min.x - 3, min.y - 3}, {max.x + 3, max.y + 3}, IM_COL32(10, 9, 7, 230), rounding + 3);
+    draw->AddImageRounded(ImTextureRef(reinterpret_cast<ImTextureID>(shot.View.Get())), min, max, uv0, uv1, IM_COL32_WHITE, rounding);
+    draw->AddRect(min, max, ImGui::GetColorU32(ImGuiCol_Border), rounding, 0, 1.5f);
+    return true;
+}
 
 bool Owns(HWND window) {
     const auto shown = Visible.load();
@@ -579,8 +802,8 @@ void Close() {
     for (auto& [_, pane] : state.Panes) if (pane) Destroy(*pane);
     state.Panes.clear();
     state.CaptureDevice = nullptr; state.CaptureDeviceFor = nullptr;
-    state.Environment.Reset();
-    state.EnvironmentStarting = false;
+    state.Pages = {}; state.Browser = {};
+    state.Applied.clear(); state.AppliedOnce = state.ExtensionBusy = false; state.ExtensionStatus.clear();
     Visible.store(nullptr);
 }
 }

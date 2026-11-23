@@ -80,6 +80,8 @@ struct Theme {
     bool showGameFps{false};
     bool showCoordinates{false};
     bool showStartupProgress{true};
+    // Helpy's web browser tab, its uBlock Origin Lite ad blocker and picture-in-picture: off until chosen.
+    bool webBrowser{false},browserAdBlock{false},browserPictureInPicture{true};
     bool gameOverlay{true};
     bool nativeOverlay{true};
     int inputMode=0,controllerGlyphs=0,controllerShortcut=1;
@@ -356,7 +358,7 @@ inline nlohmann::json DocumentFrom(const Theme& t,int iconCacheMB) {
         {"mods",{{"manageExternalUE4SS",t.ue4ssManageExternal},{"compactView",t.modsCompact}}},
         {"updates",{{"automaticChecks",t.automaticUpdateChecks},{"artwork",t.updateArtwork},{"worldMap",t.updateWorldMap},{"mapFilters",t.updateMapFilters}}},
         {"preview",{{"scaleUsePortrait",t.scaleUsePortrait},{"scaleReferenceIcon",t.scaleReferenceIcon}}},
-        {"runtime",{{"timeUnit",t.runtimeTimeUnit},{"helpyFpsLimit",t.helpyFpsLimit},{"showFps",t.showFps},{"fpsRefreshMs",t.fpsRefreshMs},{"showGameFps",t.showGameFps},{"showCoordinates",t.showCoordinates},{"showStartupProgress",t.showStartupProgress},{"fpsHotkey",t.fpsHotkey},{"fpsControllerBinding",t.fpsControllerBinding},{"gameOverlay",t.gameOverlay},{"nativeOverlay",t.nativeOverlay},{"overlayOpacity",t.overlayOpacity},{"overlaySize",t.overlaySize},{"overlayUiScale",t.overlayUiScale}}},
+        {"runtime",{{"timeUnit",t.runtimeTimeUnit},{"helpyFpsLimit",t.helpyFpsLimit},{"showFps",t.showFps},{"fpsRefreshMs",t.fpsRefreshMs},{"showGameFps",t.showGameFps},{"showCoordinates",t.showCoordinates},{"showStartupProgress",t.showStartupProgress},{"webBrowser",t.webBrowser},{"browserAdBlock",t.browserAdBlock},{"browserPictureInPicture",t.browserPictureInPicture},{"fpsHotkey",t.fpsHotkey},{"fpsControllerBinding",t.fpsControllerBinding},{"gameOverlay",t.gameOverlay},{"nativeOverlay",t.nativeOverlay},{"overlayOpacity",t.overlayOpacity},{"overlaySize",t.overlaySize},{"overlayUiScale",t.overlayUiScale}}},
         {"background",{{"file",t.backgroundFile},{"strength",t.backgroundStrength}}},
         {"splash",{{"gameLogo",t.splashGameLogo},{"runtimeLogo",t.splashRuntimeLogo},{"rotateBackgrounds",t.splashBackgrounds},{"logoSeconds",t.splashLogoSeconds}}},
         {"liveLog",{{"colorRules",LiveLog::WriteColors(t.logColors)}}},
@@ -467,6 +469,8 @@ inline void Reload(bool createIfMissing=true) {
         next.showGameFps=runtime.value("showGameFps",false);
         next.showCoordinates=runtime.value("showCoordinates",false);
         next.showStartupProgress=runtime.value("showStartupProgress",true);
+        next.webBrowser=runtime.value("webBrowser",false);next.browserAdBlock=runtime.value("browserAdBlock",false);
+        next.browserPictureInPicture=runtime.value("browserPictureInPicture",true);
         next.gameOverlay=runtime.value("gameOverlay",true);
         next.nativeOverlay=runtime.value("nativeOverlay",true);
         const auto input=doc.value("input",nlohmann::json::object());next.inputMode=ReadInt(input,"mode",0,0,2);next.controllerGlyphs=ReadInt(input,"glyphs",0,0,4);next.controllerShortcut=ReadInt(input,"shortcut",1,0,2);
