@@ -24,7 +24,7 @@ class Surface {
     ComPtr<ID3D11Texture2D> Copy;ComPtr<ID3D11ShaderResourceView> View;
     ComPtr<ID3D11Fence> Ready,Done;
     std::string Nonce,FrameNonce,Owner,Status;uint32_t AppPid{};uint64_t Completed{},Started{},LastBind{},FrameAt{};
-    bool Launched=false,Bound=false;std::array<bool,256> Keys{};std::array<bool,5> Buttons{};
+    bool Launched=false,Bound=false,Shown=false;std::array<bool,256> Keys{};std::array<bool,5> Buttons{};
     void CloseFrame() {
         if(Page){InterlockedExchange(&Page->Visible,0);InterlockedExchange(&Page->Bound,0);UnmapViewOfFile(Page);Page=nullptr;}
         if(FrameMapping){CloseHandle(FrameMapping);FrameMapping=nullptr;}
@@ -33,7 +33,7 @@ class Surface {
     }
     void Reset() {
         CloseFrame();if(Session){InterlockedExchange(&Session->Visible,0);UnmapViewOfFile(Session);Session=nullptr;}
-        if(Mapping){CloseHandle(Mapping);Mapping=nullptr;}Device.Reset();Context.Reset();Owner.clear();Nonce.clear();Status.clear();Launched=Bound=false;
+        if(Mapping){CloseHandle(Mapping);Mapping=nullptr;}Device.Reset();Context.Reset();Owner.clear();Nonce.clear();Status.clear();Launched=Bound=Shown=false;
     }
     void Create(const std::string& route) {
         Reset();Owner=route;Started=FrameAt=GetTickCount64();
@@ -79,11 +79,13 @@ class Surface {
 public:
     ~Surface(){Reset();}
     bool Interactive()const{return Page&&View&&Completed;}
+    const std::string& Route()const{return Owner;}
     int32_t Draw(const std::string& route,const RuneSchemaCompanionV1& app) {
         if(!Current.Window||!Current.Device||!Current.Context)return RS_PLUGIN_FAILED;
         if(Owner!=route||!Session)Create(route);
         if(HudFrames::Read(Session->ReturnRequested)){Reset();Current.ReturnHome=true;return RS_PLUGIN_OK;}
-        const auto size=ImGui::GetContentRegionAvail();InterlockedExchange(&Session->RequestedWidth,std::clamp(LONG(size.x),160L,LONG(HudFrames::MaxWidth)));InterlockedExchange(&Session->RequestedHeight,std::clamp(LONG(size.y),120L,LONG(HudFrames::MaxHeight)));InterlockedExchange(&Session->Visible,1);InterlockedExchange64(&Session->HostHeartbeat,LONG64(GetTickCount64()));
+        const auto size=ImGui::GetContentRegionAvail();const LONG wantWidth=std::clamp(LONG(size.x),160L,LONG(HudFrames::MaxWidth)),wantHeight=std::clamp(LONG(size.y),120L,LONG(HudFrames::MaxHeight));
+        InterlockedExchange(&Session->RequestedWidth,wantWidth);InterlockedExchange(&Session->RequestedHeight,wantHeight);InterlockedExchange(&Session->Visible,1);InterlockedExchange64(&Session->HostHeartbeat,LONG64(GetTickCount64()));
         Wire::Frame frame;if(Wire::ReadFrame(*Session,frame)) {
             if(FrameNonce!=frame.Nonce||AppPid!=frame.AppPid)Open(frame);
             if(WaitForSingleObject(Process,0)!=WAIT_TIMEOUT)throw std::runtime_error("Grand Exchange closed. Return to Helpy and reopen it.");
@@ -92,7 +94,9 @@ public:
         }
         const auto now=GetTickCount64();
         if(now-FrameAt>20000)throw std::runtime_error("The companion stopped drawing; return to Helpy and reopen it");
-        if(View&&Completed){const auto at=ImGui::GetCursorScreenPos();ImGui::Image(ImTextureRef(reinterpret_cast<ImTextureID>(View.Get())),size);Input(at,size);return RS_PLUGIN_OK;}
+        // The first picture waits for a frame at the size asked for, so a frame from GE's own window size never shows.
+        if(View&&Completed&&!Shown&&Page&&LONG(Page->Width)==wantWidth&&LONG(Page->Height)==wantHeight)Shown=true;
+        if(View&&Completed&&Shown){const auto at=ImGui::GetCursorScreenPos();ImGui::Image(ImTextureRef(reinterpret_cast<ImTextureID>(View.Get())),size);Input(at,size);return RS_PLUGIN_OK;}
         if(!Bound&&now-LastBind>=250){LastBind=now;const auto window=FindWindowW(app.WindowClass,app.WindowTitle);
             if(window){Wire::BindRequest request;request.HostPid=GetCurrentProcessId();strcpy_s(request.Nonce,Nonce.c_str());COPYDATASTRUCT data{Wire::BindMessage,sizeof(request),&request};DWORD_PTR result{};
                 if(!SendMessageTimeoutW(window,WM_COPYDATA,reinterpret_cast<WPARAM>(Current.Window),reinterpret_cast<LPARAM>(&data),SMTO_ABORTIFHUNG|SMTO_BLOCK,100,&result)||!result)throw std::runtime_error("The companion needs a matching build with Helpy workspace support");Bound=true;}
@@ -108,4 +112,7 @@ inline int32_t RS_PLUGIN_CALL Draw(void*,const RuneSchemaCompanionV1* app) {
 }
 inline void RS_PLUGIN_CALL Return(void*){Current.ReturnHome=true;Active.reset();}
 inline bool CapturesInput(){return !ActiveRoute.empty()&&Active&&Active->Interactive();}
+// While a companion's workspace is open, Helpy's window is shown at full opacity: Window opacity and
+// overlay opacity fade the whole window, which would let the desktop show through the companion's opaque panels.
+inline bool Opaque(){return !ActiveRoute.empty()&&Active&&Active->Route()==ActiveRoute;}
 }

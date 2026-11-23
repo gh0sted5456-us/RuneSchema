@@ -59,6 +59,13 @@ int main(int argc,char** argv){
         Check(window.contains("HelpyWebPane::Suspend();")&&pane.contains("void Suspend()"),"Hiding Helpy releases page capture even when rendering stops");
         Check(window.contains("theme.webBrowser&&!theme.browserAdBlock&&HelpyWebPane::BrowserExtensionFailed()")&&window.contains("HelpyWebPane::RetryBrowserExtension();"),"Removal failures remain visible and retryable when blocking is off");
         Check(!pane.contains("VideoScript")&&!pane.contains("PollVideo")&&!window.contains("PictureInPicture")&&!theme.contains("browserPictureInPicture"),"PiP and video polling are removed");
-        std::cout<<"Helpy web pane contract passed: modes, capture, drag follow, top navigation, browser lifecycle.\n";return 0;
+        // Companion workspaces (Grand Exchange): Helpy's window-wide fade never applies while one is open,
+        // and the first picture waits for a frame at the size Helpy asked for.
+        const auto companion=Read(root/"helpy/source/include/Generator/HelpyCompanionSurface.h");
+        Check(window.contains("const float presentationOpacity=opaque||(overlay&&composition&&composition->Active())?1.f:")&&window.contains("&m_composition,HelpyCompanionSurface::Opaque());"),"A companion workspace shows at full window opacity");
+        Check(window.contains("OwnsWindow(foreground),HelpyCompanionSurface::Opaque()?1.f:HelpyImGuiTheme::Current.overlayOpacity"),"A companion workspace shows at full overlay opacity");
+        Check(companion.contains("inline bool Opaque(){return !ActiveRoute.empty()&&Active&&Active->Route()==ActiveRoute;}"),"Full opacity only while that companion's route is open");
+        Check(At(companion,"if(View&&Completed&&!Shown&&Page&&LONG(Page->Width)==wantWidth&&LONG(Page->Height)==wantHeight)Shown=true;")<At(companion,"if(View&&Completed&&Shown){const auto at="),"The first companion picture waits for the requested size");
+        std::cout<<"Helpy web pane contract passed: modes, capture, drag follow, top navigation, browser lifecycle, companion opacity.\n";return 0;
     }catch(const std::exception& error){std::cerr<<"FAIL: "<<error.what()<<'\n';return 1;}
 }

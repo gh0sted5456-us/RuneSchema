@@ -1473,13 +1473,13 @@ void RenderSplash(const HelpyImGuiTheme::Theme& theme){
     if(SplashExit.Active&&SplashExit.At(now,animate!=FALSE).Finished){SplashEntered=true;CurrentPage=Page::Home;HomeRevealStarted=animate?now:now-HelpySplash::RevealSeconds;}
 }
 
-void ApplyCaptionTheme(HWND window,const HelpyImGuiTheme::Theme& theme,bool force=false,bool overlay=false,HelpyCompositionSurface* composition=nullptr) {
+void ApplyCaptionTheme(HWND window,const HelpyImGuiTheme::Theme& theme,bool force=false,bool overlay=false,HelpyCompositionSurface* composition=nullptr,bool opaque=false) {
     const auto rgb=[](const ImVec4& color){return RGB(static_cast<BYTE>(color.x*255),static_cast<BYTE>(color.y*255),static_cast<BYTE>(color.z*255));};
     const BOOL dark=(theme.window.x+theme.window.y+theme.window.z)<1.5f;
     const COLORREF caption=rgb(theme.window),text=rgb(theme.text),border=rgb(theme.border);
     struct Caption {COLORREF Color,Text,Border;BYTE Opacity;BOOL Dark;bool operator==(const Caption&)const=default;};
     static std::unordered_map<HWND,Caption> captions;
-    const float presentationOpacity=overlay&&composition&&composition->Active()?1.f:overlay?std::clamp(theme.overlayOpacity,.60f,1.f):HelpyBackgrounds::Opaque()?1.0f:std::clamp(theme.windowOpacity,0.60f,1.0f);
+    const float presentationOpacity=opaque||(overlay&&composition&&composition->Active())?1.f:overlay?std::clamp(theme.overlayOpacity,.60f,1.f):HelpyBackgrounds::Opaque()?1.0f:std::clamp(theme.windowOpacity,0.60f,1.0f);
     const auto opacity=static_cast<BYTE>(presentationOpacity*255);
     const Caption next{caption,text,border,opacity,dark};
     if(composition&&composition->Active())composition->Opacity(presentationOpacity);
@@ -2655,7 +2655,7 @@ void HelpyStandaloneWindow::SyncGameOverlay(bool opening){
     }
     const auto foreground=GetForegroundWindow();
     m_gameOverlay.Update(m_hwnd,GameWindow(m_gameWindow)?m_gameWindow:nullptr,enabled,opening||(m_visible.load()&&!IsIconic(m_hwnd)),
-        OwnsWindow(foreground),HelpyImGuiTheme::Current.overlayOpacity,HelpyImGuiTheme::Current.overlaySize);
+        OwnsWindow(foreground),HelpyCompanionSurface::Opaque()?1.f:HelpyImGuiTheme::Current.overlayOpacity,HelpyImGuiTheme::Current.overlaySize);
     companions(m_gameOverlay.Focused());
 }
 void HelpyStandaloneWindow::ThreadMain() {
@@ -5759,7 +5759,7 @@ void HelpyStandaloneWindow::RenderFrame() {
 #if !defined(HELPY_PREVIEW)
     HelpyIconPacks::PollPackaged();
 #endif
-    ApplyCaptionTheme(m_hwnd,HelpyImGuiTheme::Current,false,m_gameOverlay.Active(),&m_composition);
+    ApplyCaptionTheme(m_hwnd,HelpyImGuiTheme::Current,false,m_gameOverlay.Active(),&m_composition,HelpyCompanionSurface::Opaque());
     PlayerPortraitPicker::Pump();SpawnBrowserSettings::Pump();
     PlayerInventoryPanel::BindRecipient=[] {
         using namespace PlayerInventoryPanel;
