@@ -37,6 +37,7 @@
 #include "Core/HelpyActivity.h"
 #include "Core/HelpyRemoteAccess.h"
 #include "Core/IconCacheBuild.h"
+#include "Core/GrandExchangeItems.h"
 #include "Generator/AssetSearch.h"
 #include "Generator/HelpyRuntimePreferences.h"
 #include "Utility/NativeFunctionHook.h"
@@ -50,6 +51,9 @@
 #include "Core/ItemDelivery.h"
 #include "Generator/HelpyGrantBatch.h"
 #include "Runtime/HelpyDeliveryGate.h"
+#include "Core/HelpyItemDestroy.h"
+#include "Runtime/ItemDestroyService.h"
+#include "Runtime/RuneSchemaPluginApi.h"
 #include "Loader/WorldSaveIdentity.h"
 #include "Unreal/Property/FEnumProperty.hpp"
 using namespace DragonWilds::SpawnRuntime;
@@ -498,8 +502,8 @@ namespace DragonWilds {
         {
             m_playerDamageReceivedFunction->UnregisterHook(m_playerDamageReceivedCallbackId);
         }
-        if (m_activityObserver != Hook::ERROR_ID) Hook::UnregisterCallback(m_activityObserver);
-        if (m_respawnObserver != Hook::ERROR_ID) Hook::UnregisterCallback(m_respawnObserver);
+        PS::ProcessEventDispatch::Remove(m_activityObserver);
+        PS::ProcessEventDispatch::Remove(m_respawnObserver);
         m_observedActivities.clear();
         for (const auto& hook : m_playerActivityHooks)
         {
@@ -1908,18 +1912,16 @@ namespace DragonWilds {
             for (const auto& event : rule.Nameplate.Events)
                 addProcessEventPath(event["Function"].get<std::string>());
 
-        if (m_respawnObserver == Hook::ERROR_ID && std::any_of(m_playerRules.begin(),m_playerRules.end(),
+        if (!m_respawnObserver && std::any_of(m_playerRules.begin(),m_playerRules.end(),
             [](const auto& rule){return !rule.VisualEffect.empty() && rule.VisualEffectTrigger=="Respawn";})) {
-            Hook::FCallbackOptions options{};
-            options.OwnerModName=TEXT("RuneSchema"); options.HookName=TEXT("ConfirmedPlayerRespawn");
             const auto ownerThread=std::this_thread::get_id();
-            m_respawnObserver=Hook::RegisterProcessEventPreCallback(
+            // Routed by name through the shared ProcessEvent dispatcher: only Multicast_Respawn reaches this.
+            m_respawnObserver=PS::ProcessEventDispatch::Add(PS::ProcessEventDispatch::Phase::Pre,
+                {TEXT("Multicast_Respawn")},"ConfirmedPlayerRespawn",
                 [this,ownerThread](Hook::TCallbackIterationData<void>&,UObject* source,UFunction* function,void*) {
                     if(std::this_thread::get_id()!=ownerThread || !m_readyWorld || !source || !function) return;
                     try {
-                        static const FName respawn(TEXT("Multicast_Respawn"),FNAME_Add);
-                        if(function->GetFName()!=respawn
-                            || to_string(function->GetPathName())!="/Script/Dominion.PlayerRespawnComponent:Multicast_Respawn") return;
+                        if(to_string(function->GetPathName())!="/Script/Dominion.PlayerRespawnComponent:Multicast_Respawn") return;
                         auto* pawn=ResolvePlayerPawnFromActivity(source);
                         if(!pawn || pawn->GetWorld()!=m_readyWorld || !PlayerGhost::IsDead(pawn)) return;
                         if(std::any_of(m_pendingRespawns.begin(),m_pendingRespawns.end(),[pawn](const auto& p){return p.Pawn.Get()==pawn;})) return;
@@ -1942,16 +1944,20 @@ namespace DragonWilds {
                             m_pendingRespawns.push_back({PS::WeakObject(pawn),
                                 PS::WeakObject(playerState),playerId,30.0,false});
                     } catch(...) {}
-                },options);
-            if(m_respawnObserver==Hook::ERROR_ID)
+                });
+            if(!m_respawnObserver)
                 PS::Log<LogLevel::Warning>(TEXT("Timed respawn observation unavailable.\n"));
         }
-        if (m_activityObserver == Hook::ERROR_ID) {
-            Hook::FCallbackOptions options{};
-            options.OwnerModName = TEXT("RuneSchema");
-            options.HookName = TEXT("PlayerActivityObservation");
+        {
+            // Routed by name through the shared ProcessEvent dispatcher. The activity names follow the
+            // player rules, so the route is rebuilt on every setup rather than registered once.
+            PS::ProcessEventDispatch::Remove(m_activityObserver);
+            std::vector<FName> activityNames{FName(TEXT("OnEnterTimeFrameDynamic_Event"),FNAME_Add),
+                FName(TEXT("OnExitTimeFrameDynamic_Event"),FNAME_Add)};
+            activityNames.insert(activityNames.end(),m_playerProcessEventActivityNames.begin(),m_playerProcessEventActivityNames.end());
             const auto ownerThread = std::this_thread::get_id();
-            m_activityObserver = Hook::RegisterProcessEventPostCallback(
+            m_activityObserver = PS::ProcessEventDispatch::Add(PS::ProcessEventDispatch::Phase::Post,
+                std::move(activityNames), "PlayerActivityObservation",
                 [this, ownerThread](Hook::TCallbackIterationData<void>&, UObject* source, UFunction* function, void* parameters) {
                     if (std::this_thread::get_id() != ownerThread || !m_readyWorld || !source || !function) return;
                     try {
@@ -2027,8 +2033,8 @@ namespace DragonWilds {
                         } else m_observedActivities.push_back({PS::WeakObject(pawn), path,
                             ClassifyPlayerAttackActivity(source), nlohmann::json::object()});
                     } catch (...) {}
-                }, options);
-            if (m_activityObserver == Hook::ERROR_ID) {
+                });
+            if (!m_activityObserver) {
                 PS::LogStructuredFallback<LogLevel::Warning>(
                     PS::StructuredDiagnosticB3C::Report("RS-SPAWN-011","Warning","Partial","SpawnLoader",
                     "Activity observer unavailable","XP and tool-swing icon observations are disabled.",{}, {},"PlayerActivityObserver","Validation"),
@@ -2037,7 +2043,7 @@ namespace DragonWilds {
         }
         const auto registerActivityHook = [this](const TCHAR* functionPath,
             const std::function<std::string(UObject*)>& classify) {
-            if (to_string(functionPath) == ToolAttackEvent) return m_activityObserver != Hook::ERROR_ID;
+            if (to_string(functionPath) == ToolAttackEvent) return static_cast<bool>(m_activityObserver);
             auto* function = UECustom::UObjectGlobals::StaticFindObject<UFunction*>(
                 nullptr, nullptr, functionPath);
             if (!function) return false;

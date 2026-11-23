@@ -4,6 +4,8 @@
 #include "InputBindings.h"
 #include "Core/RuneSchemaDataRoot.h"
 #include "imgui.h"
+#include "imgui_internal.h"
+#include <utility>
 #include "Generator/HelpyFocusHighlight.h"
 #include "Generator/HelpyControllerPanes.h"
 #include "Generator/HelpyTextInput.h"
@@ -78,6 +80,8 @@ struct Theme {
     bool showGameFps{false};
     bool showCoordinates{false};
     bool showStartupProgress{true};
+    // Helpy's web browser tab, its uBlock Origin Lite ad blocker and picture-in-picture: off until chosen.
+    bool webBrowser{false},browserAdBlock{false};
     bool gameOverlay{true};
     bool nativeOverlay{true};
     int inputMode=0,controllerGlyphs=0,controllerShortcut=1;
@@ -101,8 +105,7 @@ struct Theme {
     bool resourceDiagnostics{true},gpuResourceDiagnostics{true},ue4ssDiagnostics{true},playTimeReminders{true},startupResourceAlerts{false};
     int resourceCpuThreshold{90},resourceMemoryThreshold{90},resourceGpuThreshold{98},ue4ssLogBudget{100},ue4ssOverlapSeconds{5};
     bool updateArtwork{true},updateWorldMap{true},updateMapFilters{true};
-    int previewQuality{2}; // Economy 256px / Balanced 384px / Detail 512px.
-    bool previewAnimate{false},previewDetails{false},scaleUsePortrait{true};
+    bool scaleUsePortrait{true};
     std::string scaleReferenceIcon;
     HelpyNavigation::Workspaces workspaces;
     float itemResultHeight{320.0f},aiResultHeight{320.0f};
@@ -132,12 +135,38 @@ struct Theme {
 };
 
 inline Theme Current{};
-inline void CenterNextWindow(){
+// Helpy's canvas: the window surface it draws its pages in. Dialogs and drag cards stay
+// inside it instead of the whole viewport, which in the game overlay is the game screen.
+inline ImVec2 CanvasMin{},CanvasSize{};
+inline void SetCanvas(ImVec2 min,ImVec2 size){CanvasMin=min;CanvasSize=size;}
+inline std::pair<ImVec2,ImVec2> Canvas(){
     const auto* viewport=ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(viewport->GetWorkCenter(),ImGuiCond_Appearing,{.5f,.5f});
+    if(CanvasSize.x<1||CanvasSize.y<1)return {viewport->WorkPos,viewport->WorkSize};
+    return {CanvasMin,CanvasSize};
+}
+inline void CenterNextWindow(){
+    const auto [min,size]=Canvas();
+    ImGui::SetNextWindowPos({min.x+size.x*.5f,min.y+size.y*.5f},ImGuiCond_Appearing,{.5f,.5f});
+}
+// A popup belongs to the page that submits it. One no longer submitted (its page closed or
+// changed) would otherwise stay open and reappear later as a stray dialog, and would keep
+// IsPopupOpen() true for every other control. Call once per frame after NewFrame.
+inline void CloseOrphanedPopups(){
+    auto& g=*ImGui::GetCurrentContext();
+    for(int i=0;i<g.OpenPopupStack.Size;++i){
+        const auto& popup=g.OpenPopupStack[i];
+        const bool drawn=popup.Window&&popup.Window->LastFrameActive>=g.FrameCount-1;
+        const bool opening=!popup.Window&&popup.OpenFrameCount>=g.FrameCount-1;
+        if(!drawn&&!opening){ImGui::ClosePopupToLevel(i,true);return;}
+    }
+}
+// Hiding Helpy ends every dialog, menu and drag it had open.
+inline void CloseTransientUi(){
+    if(ImGui::GetCurrentContext()->OpenPopupStack.Size)ImGui::ClosePopupToLevel(0,true);
+    if(ImGui::GetDragDropPayload())ImGui::ClearDragDrop();
 }
 inline bool BeginCenteredModal(const char* name,bool* open,ImGuiWindowFlags flags){
-    CenterNextWindow();const auto* viewport=ImGui::GetMainViewport();const auto area=viewport->WorkSize;
+    CenterNextWindow();const auto [origin,area]=Canvas();
     const ImVec2 margin{std::min(Current.X(12),std::max(0.f,(area.x-1)*.5f)),std::min(Current.Y(12),std::max(0.f,(area.y-1)*.5f))};
     const ImVec2 limit{std::max(1.f,area.x-margin.x*2),std::max(1.f,area.y-margin.y*2)};
     auto& next=ImGui::GetCurrentContext()->NextWindowData;
@@ -152,9 +181,9 @@ inline bool BeginCenteredModal(const char* name,bool* open,ImGuiWindowFlags flag
         ImGui::SetNextWindowSizeConstraints(minimum,maximum);
     }
     if(const auto* window=ImGui::FindWindowByName(name);window&&window->WasActive&&ImGui::IsPopupOpen(name)){
-        const ImVec2 minimum{viewport->WorkPos.x+margin.x,viewport->WorkPos.y+margin.y};
-        const ImVec2 maximum{std::max(minimum.x,viewport->WorkPos.x+area.x-margin.x-std::min(window->Size.x,limit.x)),
-                             std::max(minimum.y,viewport->WorkPos.y+area.y-margin.y-std::min(window->Size.y,limit.y))};
+        const ImVec2 minimum{origin.x+margin.x,origin.y+margin.y};
+        const ImVec2 maximum{std::max(minimum.x,origin.x+area.x-margin.x-std::min(window->Size.x,limit.x)),
+                             std::max(minimum.y,origin.y+area.y-margin.y-std::min(window->Size.y,limit.y))};
         const ImVec2 position{std::clamp(window->Pos.x,minimum.x,maximum.x),std::clamp(window->Pos.y,minimum.y,maximum.y)};
         if(position.x!=window->Pos.x||position.y!=window->Pos.y)ImGui::SetNextWindowPos(position,ImGuiCond_Always);
     }
@@ -186,16 +215,16 @@ inline void DetailsTextColored(const ImVec4& color,const char* format,...){char 
 // In particular a tooltip opened inside a narrow table cell otherwise feeds
 // its previous width back into the next frame until paths wrap character-wise.
 inline void BeginDetailsTooltip(ImVec2 anchorMin,ImVec2 anchorMax,float logicalWidth=300.0f,bool followMouse=true) {
-    const auto* viewport=ImGui::GetMainViewport();const auto area=viewport->WorkSize;
+    const auto [origin,area]=Canvas();
     const float margin=Current.X(8),gap=Current.Y(6);
     const float width=std::max(1.0f,std::min(Current.X(logicalWidth),area.x-Current.X(24)));
-    const float left=viewport->WorkPos.x+margin,right=std::max(left,viewport->WorkPos.x+area.x-margin-width);
+    const float left=origin.x+margin,right=std::max(left,origin.x+area.x-margin-width);
     const bool pointer=followMouse&&ImGui::IsMousePosValid()&&ImGui::IsMouseHoveringRect(anchorMin,anchorMax,false);
     if(pointer){anchorMin=ImGui::GetIO().MousePos;anchorMax={anchorMin.x+Current.X(12),anchorMin.y+Current.Y(12)};}
     float x=(anchorMin.x+anchorMax.x-width)*.5f;
-    if(pointer){x=anchorMax.x+gap;if(x+width>viewport->WorkPos.x+area.x-margin)x=anchorMin.x-gap-width;}
+    if(pointer){x=anchorMax.x+gap;if(x+width>origin.x+area.x-margin)x=anchorMin.x-gap-width;}
     x=std::clamp(x,left,right);
-    const float top=viewport->WorkPos.y+gap,bottom=std::max(top,viewport->WorkPos.y+area.y-gap);
+    const float top=origin.y+gap,bottom=std::max(top,origin.y+area.y-gap);
     const float below=std::max(1.f,bottom-anchorMax.y-gap),above=std::max(1.f,anchorMin.y-gap-top);
     const bool flip=below<std::min(Current.Y(180),above);
     const float height=std::min(std::max(1.0f,area.y-Current.Y(24)),flip?above:below);
@@ -328,8 +357,8 @@ inline nlohmann::json DocumentFrom(const Theme& t,int iconCacheMB) {
         {"authoring",{{"autoInstallDotNet",t.autoInstallAuthoringDotNet}}},
         {"mods",{{"manageExternalUE4SS",t.ue4ssManageExternal},{"compactView",t.modsCompact}}},
         {"updates",{{"automaticChecks",t.automaticUpdateChecks},{"artwork",t.updateArtwork},{"worldMap",t.updateWorldMap},{"mapFilters",t.updateMapFilters}}},
-        {"preview",{{"quality",t.previewQuality},{"animation",t.previewAnimate},{"details",t.previewDetails},{"scaleUsePortrait",t.scaleUsePortrait},{"scaleReferenceIcon",t.scaleReferenceIcon}}},
-        {"runtime",{{"timeUnit",t.runtimeTimeUnit},{"helpyFpsLimit",t.helpyFpsLimit},{"showFps",t.showFps},{"fpsRefreshMs",t.fpsRefreshMs},{"showGameFps",t.showGameFps},{"showCoordinates",t.showCoordinates},{"showStartupProgress",t.showStartupProgress},{"fpsHotkey",t.fpsHotkey},{"fpsControllerBinding",t.fpsControllerBinding},{"gameOverlay",t.gameOverlay},{"nativeOverlay",t.nativeOverlay},{"overlayOpacity",t.overlayOpacity},{"overlaySize",t.overlaySize},{"overlayUiScale",t.overlayUiScale}}},
+        {"preview",{{"scaleUsePortrait",t.scaleUsePortrait},{"scaleReferenceIcon",t.scaleReferenceIcon}}},
+        {"runtime",{{"timeUnit",t.runtimeTimeUnit},{"helpyFpsLimit",t.helpyFpsLimit},{"showFps",t.showFps},{"fpsRefreshMs",t.fpsRefreshMs},{"showGameFps",t.showGameFps},{"showCoordinates",t.showCoordinates},{"showStartupProgress",t.showStartupProgress},{"webBrowser",t.webBrowser},{"browserAdBlock",t.browserAdBlock},{"fpsHotkey",t.fpsHotkey},{"fpsControllerBinding",t.fpsControllerBinding},{"gameOverlay",t.gameOverlay},{"nativeOverlay",t.nativeOverlay},{"overlayOpacity",t.overlayOpacity},{"overlaySize",t.overlaySize},{"overlayUiScale",t.overlayUiScale}}},
         {"background",{{"file",t.backgroundFile},{"strength",t.backgroundStrength}}},
         {"splash",{{"gameLogo",t.splashGameLogo},{"runtimeLogo",t.splashRuntimeLogo},{"rotateBackgrounds",t.splashBackgrounds},{"logoSeconds",t.splashLogoSeconds}}},
         {"liveLog",{{"colorRules",LiveLog::WriteColors(t.logColors)}}},
@@ -421,7 +450,7 @@ inline void Reload(bool createIfMissing=true) {
         next.dpiAware=display.value("dpiAware",true);next.userScale=ReadFloat(display,"userScale",1.18f,0.60f,2.50f);
         next.fontScale=ReadFloat(display,"fontScale",1.34f,0.70f,1.75f);next.density=ReadFloat(display,"density",1.14f,0.65f,1.50f);try{next.fontFamily=display.value("fontFamily",std::string("Segoe UI"));}catch(...){next.fontFamily="Segoe UI";}next.textBold=display.value("textBold",false);next.verboseTooltips=display.value("verboseTooltips",false);next.tooltipDelay=ReadFloat(display,"tooltipDelay",next.tooltipDelay,0.0f,2.0f);
         const auto workspaces=doc.value("workspaces",nlohmann::json::object());next.workspaces={workspaces.value("authoring",false),workspaces.value("tools",false),workspaces.value("liveLog",false),workspaces.value("saveEditor",false),workspaces.value("serverTools",false),workspaces.value("journal",true),false,workspaces.value("clone",false),workspaces.value("recipes",false)};
-        const auto preview=doc.value("preview",nlohmann::json::object());next.previewQuality=ReadInt(preview,"quality",2,0,2);next.previewAnimate=preview.value("animation",false);next.previewDetails=preview.value("details",false);next.scaleUsePortrait=preview.value("scaleUsePortrait",true);next.scaleReferenceIcon=preview.value("scaleReferenceIcon",std::string{});
+        const auto preview=doc.value("preview",nlohmann::json::object());next.scaleUsePortrait=preview.value("scaleUsePortrait",true);next.scaleReferenceIcon=preview.value("scaleReferenceIcon",std::string{});
         const auto views=doc.value("views",nlohmann::json::object());next.advancedMode=views.value("advancedMode",false);next.itemGridView=views.value("itemGrid",true);next.itemInternalNames=views.value("itemInternalNames",false);next.aiGridView=views.value("aiGrid",false);next.itemResultHeight=ReadFloat(views,"itemResultHeight",320.0f,180.0f,900.0f);next.aiResultHeight=ReadFloat(views,"aiResultHeight",320.0f,180.0f,900.0f);try{const auto value=views.value("itemCategory",std::string("All"));if(value=="All"||value=="Weapons"||value=="Armor"||value=="Consumables"||value=="Ammo"||value=="Resources"||value=="Tools"||value=="Building"||value=="Quest"||value=="Misc")next.itemCategory=value;}catch(...){}
         try{const auto value=views.value("itemSource",std::string("all"));const auto kind=ItemSource::Decode(value);if(value==ItemSource::Token(kind)||(ContentSource::Valid(value)&&value==HelpyCacheSources::Lower(value)))next.itemSource=value;}catch(...){}
         next.itemBayBrowseRatio=ReadFloat(views,"itemBayBrowseRatio",0.74f,0.25f,0.90f);
@@ -440,6 +469,7 @@ inline void Reload(bool createIfMissing=true) {
         next.showGameFps=runtime.value("showGameFps",false);
         next.showCoordinates=runtime.value("showCoordinates",false);
         next.showStartupProgress=runtime.value("showStartupProgress",true);
+        next.webBrowser=runtime.value("webBrowser",false);next.browserAdBlock=runtime.value("browserAdBlock",false);
         next.gameOverlay=runtime.value("gameOverlay",true);
         next.nativeOverlay=runtime.value("nativeOverlay",true);
         const auto input=doc.value("input",nlohmann::json::object());next.inputMode=ReadInt(input,"mode",0,0,2);next.controllerGlyphs=ReadInt(input,"glyphs",0,0,4);next.controllerShortcut=ReadInt(input,"shortcut",1,0,2);

@@ -90,7 +90,7 @@ inline Json Read(const std::filesystem::path& root,bool orderEnabled){
                 else if(ModFolderLayout::IsContentDirectoryName(name))row["Loaders"].push_back("RuneSchema: "+name);
             }
             row["HasCache"]=std::filesystem::is_directory(folder/"cache");
-            if(std::error_code ignored;std::filesystem::is_regular_file(folder/"cache"/"achievements.json",ignored))row["HasAchievements"]=true;
+            if(std::error_code ignored;std::filesystem::is_regular_file(folder/"achievements.json",ignored)||std::filesystem::is_regular_file(folder/"cache"/"achievements.json",ignored))row["HasAchievements"]=true;
         }output.push_back(std::move(row));
     }
     return {{"Ok",true},{"OrderEnabled",orderEnabled},{"ExpectedExists",before.Exists},{"ExpectedContents",before.Contents},{"Rows",std::move(output)}};

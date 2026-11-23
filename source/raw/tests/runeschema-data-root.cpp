@@ -1,6 +1,7 @@
 #include "Core/RuneSchemaDataRoot.h"
 #include "Core/ConfigFiles.h"
 #include <iostream>
+#undef NDEBUG
 #include <cassert>
 #include <chrono>
 #include <fstream>
@@ -38,9 +39,10 @@ int main(int argc,char** argv)try{
     assert(R::SharedDirectory(next,"runeschema.profile")==next/"core/runeschema.profile");
     assert(PS::ConfigFiles::Read(next/"runeschema.profile/profile.json")=="current profile");
     assert(R::SharedDirectory(next,"health")==next/"core/health"&&!fs::exists(next/"core/health"));
+    assert(R::SharedDirectory(next,"grandexchange")==next/"core/grandexchange"&&!fs::exists(next/"core/grandexchange"));
     for(const auto* platform:{"STEAM","GAMEPASS","EPIC","SERVER"}){
         const auto legacy=next/"cache"/platform/"mappings/keep.usmap";write(legacy,platform);
-        const auto destination=next/R::RuntimeKey(platform)/"cache/mappings";
+        const auto destination=R::PlatformDirectory(next,platform)/"cache/mappings";
         assert(R::MappingDirectory(next,platform)==destination&&!fs::exists(destination));
         assert(PS::ConfigFiles::Read(legacy)==platform);
     }
@@ -52,8 +54,27 @@ int main(int argc,char** argv)try{
     const auto characters=next/"core/runeschema.profile/characters";
     error.clear();fs::create_directory_symlink(outside,characters,error);
     if(!error){assert(R::CharacterCopiesDirectory(next)==outside);fs::remove(characters);}
-    fs::create_directories(next/"steam/cache");const auto cacheLink=next/"steam/cache/mappings";
+    fs::create_directories(next/"Win64/cache");const auto cacheLink=next/"Win64/cache/mappings";
     error.clear();fs::create_directory_symlink(outside,cacheLink,error);
     if(!error){failed=false;try{R::MappingDirectory(next,"steam");}catch(...){failed=true;}assert(failed);fs::remove(cacheLink);}
+    {
+        // One-time move to core plus Win64 / WinGDK / Server, keeping every byte and never replacing new folders.
+        const auto moved=root/"migrate";
+        write(moved/"HELPY/ui.jsonc","theme");write(moved/"runeschema.profile/profile.json","profile");write(moved/"health/mods-steam.json","health");
+        write(moved/"steam/cache/keep.json","steam");write(moved/"epic/cache/keep.json","epic");write(moved/"gamepass/notifications.json","gamepass");write(moved/"server/runtime/keep.json","server");
+        assert(R::PlatformDirectory(moved,"gamepass")==moved/"gamepass"&&R::PlatformDirectory(moved,"steam")==moved/"steam");
+        R::Migrate(moved);
+        assert(PS::ConfigFiles::Read(moved/"core/HELPY/ui.jsonc")=="theme"&&!fs::exists(moved/"HELPY"));
+        assert(PS::ConfigFiles::Read(moved/"core/runeschema.profile/profile.json")=="profile"&&PS::ConfigFiles::Read(moved/"core/health/mods-steam.json")=="health");
+        assert(PS::ConfigFiles::Read(moved/"Win64/cache/keep.json")=="steam"&&PS::ConfigFiles::Read(moved/"WinGDK/notifications.json")=="gamepass");
+        assert(R::ActualName(moved,L"Server")==L"Server"&&PS::ConfigFiles::Read(moved/"Server/runtime/keep.json")=="server");
+        // Epic shares Win64; with Steam already there it is left in place and used where it is.
+        assert(PS::ConfigFiles::Read(moved/"epic/cache/keep.json")=="epic"&&R::PlatformDirectory(moved,"epic")==moved/"Win64");
+        assert(R::PlatformDirectory(moved,"gamepass")==moved/"WinGDK"&&R::SharedDirectory(moved,"HELPY")==moved/"core/HELPY");
+        R::Migrate(moved);assert(R::ActualName(moved,L"Server")==L"Server");
+        // An established core folder is never replaced by a stale flat copy.
+        write(moved/"HELPY/ui.jsonc","stale");R::Migrate(moved);
+        assert(PS::ConfigFiles::Read(moved/"core/HELPY/ui.jsonc")=="theme"&&PS::ConfigFiles::Read(moved/"HELPY/ui.jsonc")=="stale");
+    }
     assert(root.filename().string().starts_with("runeschema-data-"));fs::remove_all(root);
 }catch(const std::exception& error){std::cerr<<error.what()<<"\n";return 1;}

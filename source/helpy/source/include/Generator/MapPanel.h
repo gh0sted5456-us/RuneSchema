@@ -355,6 +355,7 @@ inline void PlacePopup(){
     SpawnToolsPanel::RefreshSnapshot(Data.Kind);auto& window=LazyCatalog::For(Data.Kind);
     if(!window.Started&&!window.Pending){Data.SearchWanted=true;Data.SearchDue={};}
     ImGui::SetNextItemWidth(-1);const bool enter=HelpyTextInput::InputTextWithHint("##map-spawn-search","Iron ore node... (Enter to search)",Data.Search,sizeof(Data.Search),ImGuiInputTextFlags_EnterReturnsTrue);
+    if(ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)&&!ImGui::IsItemActive())PS::HelpyImGuiTheme::Tooltip(SpawnCatalogSearch::SyntaxHelp);
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::MapSearchField=HelpyPreviewHooks::LastRect();
 #endif
@@ -362,16 +363,19 @@ inline void PlacePopup(){
     HelpyImGuiTheme::CenterRow(ImGui::CalcTextSize("Search").x+ImGui::GetStyle().FramePadding.x*2+radioWidth("Search as I type")+ImGui::GetStyle().ItemSpacing.x);
     const bool search=ImGui::Button("Search");ImGui::SameLine();HelpyImGuiTheme::Toggle("Search as I type",&Data.LiveSearch);
     if(enter||search){Data.SearchWanted=true;Data.SearchDue={};}
-    const auto query=std::string(Data.Search)+(Data.SpawnType==1?" ore node":Data.SpawnType==2?" tree":"");
+    // The type words narrow the whole search, so an OR inside it is grouped first.
+    const std::string suffix=Data.SpawnType==1?" ore node":Data.SpawnType==2?" tree":"";
+    const auto query=suffix.empty()||!*Data.Search?std::string(Data.Search)+suffix:"("+std::string(Data.Search)+")"+suffix;
     if(Data.SearchWanted&&Clock::now()>=Data.SearchDue){LazyCatalog::Search(Data.Kind,query);Data.SearchWanted=false;}
     HelpyImGuiTheme::BeginPanel("##spawn-results",ImVec2(0,t.Y(130)),true);
     size_t matches=0;
+    const SpawnCatalogSearch::Query match(query);
     if(!Data.SearchWanted&&window.Query==query)for(const auto& row:window.Rows){
-        const auto type=ItemPresentation::Text(row,"Type");if(type!=(Data.Kind==2?"Resource":"AI")||!SpawnCatalogSearch::Matches(row,query))continue;
+        const auto type=ItemPresentation::Text(row,"Type");if(type!=(Data.Kind==2?"Resource":"AI")||!match(row))continue;
         ++matches;const auto key=ItemPresentation::Text(row,"Key");ImGui::PushID(key.c_str());
         if(ImGui::Selectable(ItemPresentation::Text(row,"Name").c_str(),ItemPresentation::Text(Data.Definition,"Key")==key))Data.Definition=row;ImGui::PopID();
     }
-    if(!matches)ImGui::TextWrapped("%s",window.Pending||Data.SearchWanted?"Searching native actors...":"No matching actors in this slice.");
+    if(!matches)ImGui::TextWrapped("%s",window.Pending||Data.SearchWanted?"Searching native actors...":"No matching actors in this slice. Try fewer words, or OR between names.");
     if(window.HasMore&&!window.Pending&&!Data.SearchWanted&&ImGui::SmallButton("Load more results"))LazyCatalog::More(Data.Kind);
     PS::HelpyImGuiTheme::EndPanel();
     if(!Data.Definition.empty())ImGui::TextWrapped("Selected: %s",ItemPresentation::Text(Data.Definition,"Name").c_str());

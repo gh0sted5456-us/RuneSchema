@@ -94,7 +94,7 @@ inline void CachePreferences(){
     if(HelpyImGuiTheme::Status.starts_with("[RS-CFG-003]"))ImGui::TextWrapped("%s",HelpyImGuiTheme::Status.c_str());
 }
 inline int QuickSection=0;
-inline std::function<void()> ModMenuSettings,TopicSettings;
+inline std::function<void()> ModMenuSettings,TopicSettings,BrowserSettings;
 inline void QuickSettings(){
     HelpyFeatureSettings::Load();constexpr std::array allLabels{"Display","Startup","Cache","Performance","Saves","HUD","Controllers","Topics","Help","Mod Menu 2"};
     const auto labels=std::span(allLabels).first(HelpyFeatureSettings::Key&&ModMenuSettings?10:9);
@@ -164,6 +164,7 @@ inline void QuickSettings(){
     if(HelpyImGuiTheme::Toggle("Show game startup indicator",&theme.showStartupProgress))HelpyImGuiTheme::SaveCurrent();
     hint("Alternates the Dragonwilds and RuneSchema logos with a centered loading bar during startup. Uses actual RuneSchema stages and stops once the game reaches its menu/world and registration has completed. Unknown remaining work uses an animated bar instead of an invented percentage. Requires Start Helpy with Dragonwilds.");
     ImGui::EndDisabled();
+    if(BrowserSettings){ImGui::SeparatorText("Web browser");BrowserSettings();}
 
     }
     if(QuickSection==1){

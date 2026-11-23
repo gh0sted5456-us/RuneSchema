@@ -2,6 +2,7 @@
 #include "Core/CacheBundleIO.h"
 #pragma once
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <cwctype>
 #include <filesystem>
@@ -22,10 +23,16 @@ struct Plugin {
     bool Enabled=true,Required=false,MountPaks=true,ServerCompatible=false;
     bool PreferSharedRegistry=false;
     fs::path Root,DllRoot,PaksRoot,ScriptsRoot,EntryPoint;
-    std::vector<std::string> Capabilities,Connections;
+    // Host=helpy only: an optional in-game native half loaded by RuneSchema core
+    // (GameEntryPoint/GameCapabilities) and an opt-in RuneSchema content root.
+    fs::path GameEntryPoint,ContentRoot;
+    std::vector<std::string> Capabilities,Connections,GameCapabilities;
     std::vector<std::pair<std::string,std::string>> Dependencies;
 };
 struct OrderEntry { std::string Id;bool Enabled=true;size_t Position=0; };
+// Set for the whole process when the plugin-update lock could not be taken at startup:
+// Helpy/plugins children (the externally updated folders) are then never scanned.
+inline std::atomic<bool>& UpdatablePluginsBlocked(){static std::atomic<bool> value{false};return value;}
 inline std::vector<fs::path> PakDirectories(const Plugin& plugin) {
     std::vector<fs::path> result;if(!plugin.MountPaks)return result;std::error_code error;
     if(!fs::exists(plugin.PaksRoot,error))return result;
@@ -100,7 +107,10 @@ inline std::vector<Plugin> Discover(const fs::path& root,std::vector<std::string
     std::vector<Plugin> result;if(!fs::is_directory(root))return result;
     std::vector<fs::path> folders;
     const auto append=[&](const fs::path& base){if(!fs::is_directory(base)||fs::is_symlink(fs::symlink_status(base)))return;for(const auto& folder:fs::directory_iterator(base))if(folder.is_directory()&&!folder.is_symlink())folders.push_back(folder.path());};
-    if(runtime){append(root/"dlls/plugins");if(fs::is_directory(root/"Helpy")&&!fs::is_symlink(fs::symlink_status(root/"Helpy")))folders.push_back(root/"Helpy");append(root/"Helpy/plugins");append(root/"plugins");}else append(root);
+    if(runtime){append(root/"dlls/plugins");if(fs::is_directory(root/"Helpy")&&!fs::is_symlink(fs::symlink_status(root/"Helpy")))folders.push_back(root/"Helpy");
+        if(!UpdatablePluginsBlocked().load())append(root/"Helpy/plugins");
+        else if(diagnostics)diagnostics->push_back("Helpy/plugins: skipped for this session; the plugin update lock was unavailable at startup");
+        append(root/"plugins");}else append(root);
     std::unordered_set<std::string> ids;
     for(const auto& folder:folders) {
         const auto manifest=folder/"plugin.json";if(!fs::is_regular_file(manifest)||fs::is_symlink(fs::symlink_status(manifest)))continue;
@@ -143,6 +153,24 @@ inline std::vector<Plugin> Discover(const fs::path& root,std::vector<std::string
             if(entry.is_absolute()||entry.empty()||entry.has_parent_path()||entry.extension()!=L".dll")throw std::runtime_error("Plugin EntryPoint must be a DLL filename under dll/: "+plugin.Id);
             // A missing DLL does not hide the manifest or its PAKs.
             plugin.EntryPoint=plugin.DllRoot/entry;
+        }
+        if(data.contains("GameEntryPoint")) {
+            if(plugin.Host!="helpy")throw std::runtime_error("GameEntryPoint is only for Host helpy plugins; Host game uses EntryPoint: "+plugin.Id);
+            const auto entry=fs::path(data.at("GameEntryPoint").get<std::string>());
+            if(entry.is_absolute()||entry.empty()||entry.has_parent_path()||entry.extension()!=L".dll")throw std::runtime_error("Plugin GameEntryPoint must be a DLL filename under dll/: "+plugin.Id);
+            plugin.GameEntryPoint=plugin.DllRoot/entry;
+            if(!plugin.EntryPoint.empty()&&plugin.GameEntryPoint.filename()==plugin.EntryPoint.filename())throw std::runtime_error("GameEntryPoint must differ from the Helpy EntryPoint: "+plugin.Id);
+        }
+        if(data.contains("GameCapabilities")) {
+            if(plugin.GameEntryPoint.empty()||!data.at("GameCapabilities").is_array())throw std::runtime_error("GameCapabilities require a GameEntryPoint and an array: "+plugin.Id);
+            for(const auto& capability:data.at("GameCapabilities")){auto value=capability.get<std::string>();if(!Token(value))throw std::runtime_error("Invalid plugin game capability: "+plugin.Id);plugin.GameCapabilities.push_back(std::move(value));}
+        }
+        if(data.contains("Content")) {
+            if(!data.at("Content").is_boolean())throw std::runtime_error("Plugin Content must be true or false: "+plugin.Id);
+            if(data.at("Content").get<bool>()) {
+                if(plugin.Host!="helpy")throw std::runtime_error("Plugin Content is only for Host helpy plugins: "+plugin.Id);
+                plugin.ContentRoot=plugin.Root/"runeschema";
+            }
         }
         result.push_back(std::move(plugin));
         } catch(const std::exception& error) {
@@ -205,4 +233,39 @@ inline std::vector<Plugin> DiscoverOwned(const fs::path& runtime,const std::vect
     return result;
 }
 inline std::vector<Plugin> DiscoverRuntime(const fs::path& root,std::vector<std::string>* diagnostics=nullptr){return Discover(root,diagnostics,true);}
+// A Host=helpy plugin that declares "Content": true may carry an ordinary
+// RuneSchema content tree in <plugin>/runeschema (raw, registry, assets, ...).
+// It loads after ordinary and sister mods under the plugin Id. PAKs stay in the
+// plugin's own paks/<PackageName>/ folder, which core already mounts.
+// Helpy.exe may forward a frontend plugin's call to the game only for a service
+// that the same plugin's in-game half registered. Core and Helpy never route here.
+inline bool OwnedServiceAllowed(const std::string& caller,const std::string& service,const std::string& owner){
+    return Token(caller)&&Token(service)&&caller!="RuneSchema.Core"&&caller!="RuneSchema.Helpy"&&owner==caller;
+}
+struct ContentRootEntry { std::string Id; fs::path Path; };
+inline std::vector<ContentRootEntry> ContentRoots(const std::vector<Plugin>& plugins,const fs::path& modsRoot,std::vector<std::string>* diagnostics=nullptr){
+    std::vector<ContentRootEntry> result;std::unordered_set<std::string> seen;
+    const auto fold=[](std::string value){std::transform(value.begin(),value.end(),value.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});return value;};
+    for(const auto& plugin:plugins){
+        if(plugin.ContentRoot.empty()||!plugin.Enabled||plugin.Host!="helpy")continue;
+        const auto reject=[&](const std::string& why){if(diagnostics)diagnostics->push_back(plugin.Id+": plugin content skipped: "+why);};
+        try{
+            std::error_code error;const auto status=fs::symlink_status(plugin.ContentRoot,error);
+            if(error||!fs::is_directory(status)){reject("runeschema/ folder is missing");continue;}
+            if(fs::is_symlink(status)){reject("runeschema/ must not be a link");continue;}
+            if(!seen.insert(fold(plugin.Id)).second){reject("duplicate plugin content identity");continue;}
+            if(!modsRoot.empty()&&fs::is_directory(modsRoot/plugin.Id,error)){reject("an ordinary RuneSchema mod with this name takes precedence");continue;}
+            bool linked=false,paks=false;
+            for(auto entry=fs::recursive_directory_iterator(plugin.ContentRoot,fs::directory_options::none,error);!error&&entry!=fs::recursive_directory_iterator();entry.increment(error)){
+                if(entry->is_symlink()){linked=true;break;}
+                if(entry.depth()==0&&entry->is_directory()&&fold(entry->path().filename().string())=="paks")paks=true;
+            }
+            if(error){reject("runeschema/ could not be enumerated");continue;}
+            if(linked){reject("links are not allowed under runeschema/");continue;}
+            if(paks){reject("put PAK containers in the plugin's paks/<PackageName>/ folder, not runeschema/paks");continue;}
+            result.push_back({plugin.Id,plugin.ContentRoot});
+        }catch(const std::exception& failure){reject(failure.what());}
+    }
+    return result;
+}
 }

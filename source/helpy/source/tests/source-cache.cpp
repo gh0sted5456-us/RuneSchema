@@ -184,7 +184,15 @@ int main(int argc,char** argv)try{namespace fs=std::filesystem;using namespace P
     assert(PS::HelpyCacheSources::Snapshot().ContentRevision==contentRevision);
     {auto stable=Current;stable.Authoritative=true;stable.Key="0123456789abcdef";stable.SourceKeys["game"]="0123456789abcdef";stable.PlanRevision=referenced.Revision;stable.ContentRevision=contentRevision;
         {std::lock_guard lock(PublishedMutex);Published=Document(stable);}assert(ForClient().value("Ready",false)&&ForClient().value("CheckingChanges",false));
-        PS::HelpyCacheSources::Declare("NewMod","/NewMount/Items/X.X");assert(!ForClient().value("Ready",true));}
+        {// A client holding the current stamp gets a short reply; any change to Published or the plan breaks the stamp.
+            const auto full=ForClient();const auto stamp=full.value("Stamp",std::string{});assert(!stamp.empty()&&full.contains("Sources"));
+            const auto brief=ForClient(stamp);assert(brief.value("Unchanged",false)&&brief.value("Ready",false)&&!brief.contains("Sources")&&brief["Stamp"]==stamp);
+            assert(!ForClient("stale").value("Unchanged",false)&&ForClient("stale").contains("Sources"));
+            {std::lock_guard lock(PublishedMutex);Published=Document(stable);++PublishedGeneration;}
+            assert(!ForClient(stamp).value("Unchanged",false)&&ForClient(stamp).value("Stamp",std::string{})!=stamp);}
+        PS::HelpyCacheSources::Declare("NewMod","/NewMount/Items/X.X");assert(!ForClient().value("Ready",true));
+        // An unready reply is never "Unchanged", even for the stamp it carries.
+        assert(!ForClient(ForClient().value("Stamp",std::string{})).value("Unchanged",false));}
     // An unchanged fingerprint must still advance a metadata-only revision;
     // otherwise ForClient remains unready forever and strands cached browsing.
     Current={};Current.Key="0123456789abcdef";Current.Authoritative=true;Current.SourceKeys["game"]="0123456789abcdef";
@@ -194,6 +202,22 @@ int main(int argc,char** argv)try{namespace fs=std::filesystem;using namespace P
     assert(!Worker.valid()&&Next-std::chrono::steady_clock::now()>std::chrono::seconds(50));
     {auto remote=Document(Current);remote["PlanRevision"]=Current.PlanRevision+1;remote["ContentRevision"]=Current.ContentRevision+1;
         assert(!AcceptRemote(remote));assert(Current.PlanRevision==remote["PlanRevision"]&&Current.ContentRevision==remote["ContentRevision"]);
+    }
+    {// Remote poll: a stamped manifest is accepted once; "Unchanged" replies keep it without re-parsing.
+        auto manifest=Document(Current);manifest["Ready"]=true;manifest["Stamp"]="boot:1";int calls=0;std::string sent;
+        RemoteStamp.clear();
+        RemoteSnapshot=[&](nlohmann::json& out){++calls;sent=RemoteStamp;
+            out=sent=="boot:1"?nlohmann::json{{"Ready",true},{"Unchanged",true},{"Stamp","boot:1"}}:manifest;return true;};
+        Next={};(void)Poll(root);assert(calls==1&&sent.empty()&&RemoteStamp=="boot:1");
+        const auto key=Current.Key;const auto revision=Revision;
+        Next={};assert(!Poll(root));assert(calls==2&&sent=="boot:1"&&Current.Key==key&&Revision==revision&&RemoteStamp=="boot:1");
+        // "Unchanged" for a stamp we do not hold drops ours and asks again at once.
+        RemoteSnapshot=[&](nlohmann::json& out){++calls;out={{"Ready",true},{"Unchanged",true},{"Stamp","other"}};return true;};
+        Next={};assert(!Poll(root));assert(calls==3&&RemoteStamp.empty()&&Next==std::chrono::steady_clock::time_point{});
+        // An older core sends no stamp: every reply is a full manifest.
+        RemoteSnapshot=[&](nlohmann::json& out){++calls;out=manifest;out.erase("Stamp");return true;};
+        Next={};(void)Poll(root);assert(calls==4&&RemoteStamp.empty());
+        RemoteSnapshot={};RemoteStamp.clear();
     }
     Shutdown();
     {auto partial=Current;partial.Authoritative=true;partial.Complete=false;assert(!Document(partial).value("Ready",true));

@@ -584,8 +584,6 @@ local function loadSchema(folderName, dirPath)
                 m.helpy.tabs[#m.helpy.tabs+1]={name=tab.name:sub(1,80),keys=keys}
             end
         end end
-        local p=extension.preview
-        if type(p)=="table" and type(p.channelVariable)=="string" and #p.channelVariable<=192 and p.channelVariable:match("^[%w_.%-]+$") then m.helpy.preview={channelVariable=p.channelVariable} end
     end
     local ro = doc.runsOn                                      -- 2.0: the mod's own runsOn word (a setting's wins)
     if ro == "yours" or ro == "host" or ro == "server" or ro == "both" then m.runsOn = ro end
@@ -670,7 +668,7 @@ local function publish()
     local pages=setmetatable({},{__json_array=true})
     for _,m in ipairs(mods) do
         pages[#pages+1]={Id=m.id,Name=m.name,Author=m.author,Version=m.version,Description=m.description,
-            Settings=m.settings,Values=m.values,Errors=m.errors,Off=m.off,RunsOn=m.runsOn,Revision=m.rev,Helpy=m.helpy,PreviewChannel=m.previewChannel,TemplateContext=m.templateContext}
+            Settings=m.settings,Values=m.values,Errors=m.errors,Off=m.off,RunsOn=m.runsOn,Revision=m.rev,Helpy=m.helpy,TemplateContext=m.templateContext}
         share("ModMenu.health."..m.id,m.off and "off" or "unknown")
     end
     exchange("publish",{Snapshot={Pages=pages,OpenSequence=openN,OpenId=openId,OpenRow=openRow,Status=lastStatus,DiscoveryWarning=discoveryWarning}})
@@ -789,9 +787,6 @@ local function tick()
     end
     local m=modsById[sent["ModMenu.page"]]
     if m and m.helpy and m.helpy.templates then local context=templateContext(m);if context~=m.templateContext then m.templateContext=context;publish()end end
-    if m and m.helpy and type(m.helpy.preview)=="table" and type(m.helpy.preview.channelVariable)=="string" then
-        local name=m.helpy.preview.channelVariable;if #name<=192 then local channel=ModRef:GetSharedVariable(name);if type(channel)=="string" and #channel<=128 and channel~=m.previewChannel then m.previewChannel=channel;publish() end end
-    end
 end
 local step
 local function schedule(delay)

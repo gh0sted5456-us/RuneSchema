@@ -1,6 +1,7 @@
 #pragma once
 #include "Core/ConfigFiles.h"
 #include "Core/HelpyShortcut.h"
+#include "HelpySettingsFile.h"
 #include "InputBindings.h"
 #include <memory>
 #include <atomic>
@@ -27,7 +28,9 @@ inline std::filesystem::path File;
 inline nlohmann::json Document=nlohmann::json::object();
 inline void Configure(const std::filesystem::path& pluginRoot) {
     std::lock_guard lock(Mutex);
-    File=pluginRoot/"settings"/"settings.jsonc";Loaded=false;Writable=true;Enabled=true;AutoOpen=false;StartWithGame=true;MinimizeOnClose=true;ExitWithGame=true;ApplyHotkey("F2");ExpectedContents.clear();Status.clear();Document=nlohmann::json::object();
+    // Helpy's own preferences live in AppData core/HELPY. An older mod-side copy is adopted once.
+    try{File=HelpySettingsFile::Adopt(pluginRoot);}catch(...){File=HelpySettingsFile::Legacy(pluginRoot);}
+    Loaded=false;Writable=true;Enabled=true;AutoOpen=false;StartWithGame=true;MinimizeOnClose=true;ExitWithGame=true;ApplyHotkey("F2");ExpectedContents.clear();Status.clear();Document=nlohmann::json::object();
 }
 inline void EnsureLoaded() {
     std::lock_guard lock(Mutex);if(Loaded)return;Loaded=true;

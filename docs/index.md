@@ -14,18 +14,18 @@ hide:
   <h1 id="rs-home-title">Your mods.<br>Your world.</h1>
   <p>A shared runtime for Dragonwilds mods. Install content, create something new, or bring your community together.</p>
   <div class="rs-actions">
-    <a class="md-button md-button--primary" href="INSTALLATION/">Install stable <span aria-hidden="true">→</span></a>
-    <a class="rs-text-link" href="experimental/PRE-RELEASE/">Pre-release &amp; pending changelog</a>
+    <a class="md-button md-button--primary" href="INSTALLATION/">Installation <span aria-hidden="true">→</span></a>
+    <a class="rs-text-link" href="experimental/PRE-RELEASE/">Changes and experimental status</a>
     <a class="rs-text-link" href="MOD-HOSTS-AND-GETTING-STARTED/">What is RuneSchema? <span aria-hidden="true">↗</span></a>
   </div>
 </section>
 
 <div class="rs-hub-links rs-versions" aria-label="Choose a release">
   <a href="CURRENT-RELEASE/">Stable · 0.8.0.3 <span aria-hidden="true">→</span>
-    <small>The stable download, released changes and installation guides.</small>
+    <small>Current source, release status and installation guides.</small>
   </a>
   <a href="experimental/PRE-RELEASE/">Pre-release · 0.9.0.1 <span aria-hidden="true">→</span>
-    <small>Preview Helpy achievements and the threading update. Read the changelog and setup guide.</small>
+    <small>Consolidated changes and remaining experimental capabilities.</small>
   </a>
 </div>
 

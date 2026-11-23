@@ -61,6 +61,10 @@ The loader recognizes this manifest contract:
 | `Dependencies` | no | Object of plugin ID to expected version, at most 32 entries. Missing or differently versioned optional dependencies are reported without stopping the plugin attempt. |
 | `Required` | legacy | Accepted for compatibility but does not override an explicit disable. Plugins remain optional to RuneSchema core. |
 | `MountPaks` | no | Defaults to `true`. Set `false` for DLL-only plugins; any stale `paks/` content is ignored. |
+| `Host` | no | `game` (default) loads `EntryPoint` in the game; `helpy` loads it in Helpy.exe. |
+| `GameEntryPoint` | no | `Host: "helpy"` only. DLL filename directly under `dll/`, different from `EntryPoint`. RuneSchema core loads it in the game with the same exports and plugin identity. |
+| `GameCapabilities` | no | Requires `GameEntryPoint`. Tokens the in-game half must register; `Capabilities` stays the Helpy-side list. |
+| `Content` | no | `Host: "helpy"` only. `true` enrolls `<plugin>/runeschema/` as RuneSchema content under the plugin `Id`. |
 
 `PackagedRoot` is rejected. PAKs use the fixed
 `paks/<PackageName>/<same-name>.pak/.ucas/.utoc` layout, and every container
@@ -73,6 +77,140 @@ preserved unless a declared dependency requires its provider to load first.
 Unlisted plugins are appended deterministically; dependency cycles use the
 preferred order as the best-effort fallback. A DLL failure does not prevent a
 complete PAK triplet from being discovered and mounted.
+
+### Dedicated Helpy plugins
+
+A Helpy plugin can ship as one folder under `Helpy/plugins/<Id>/`:
+
+```text
+Helpy/plugins/<Id>/
+  plugin.json        Host "helpy", EntryPoint, optional GameEntryPoint, Content
+  dll/               Helpy UI DLL and optional in-game DLL
+  paks/<Package>/    complete .pak/.ucas/.utoc triplets, mounted by core
+  runeschema/        optional raw/, registry/, assets/ ... (no paks/ here)
+```
+
+RuneSchema core is required: it mounts the PAKs, loads the in-game half and
+starts Helpy. `runeschema/` loads after ordinary and UE4SS sister mods. An
+ordinary RuneSchema mod or sister mod with the same name takes precedence, and
+links or a `runeschema/paks` folder skip the content. The Helpy UI DLL and the
+in-game DLL must report the manifest `Id` and `Version`.
+
+The Helpy UI half reaches its in-game half with `CallService`. When the service
+is not registered in Helpy.exe and the game is connected, Helpy forwards the call
+over its desktop pipe. The game answers only if the plugin's own in-game half
+registered that service; otherwise the result is `RS_PLUGIN_NOT_FOUND`. Nothing
+is queued or replayed while the game is offline. Service callbacks run on the
+pipe thread: return quickly and queue engine work to the game thread.
+
+#### Interrupted plugin activation
+
+An external updater that replaces `Helpy/plugins/<Id>` as a whole folder keeps its
+staging and previous copies in `Helpy/plugin-updates/<Id>/`, which is never
+scanned for plugins. Before any plugin scan, RuneSchema core and Helpy.exe read
+`Helpy/plugin-updates/<Id>/activation.json`:
+
+```json
+{
+  "Schema": "runeschema.plugin-activation/1",
+  "Id": "<Id>",
+  "State": "Swapping",
+  "Staged": "staging",
+  "Previous": "previous",
+  "Version": "<staged plugin.json Version>",
+  "PreviousVersion": "<previous plugin.json Version>"
+}
+```
+
+They act only when `State` is `Swapping` and `Helpy/plugins/<Id>` is definitely
+absent. If the staged folder's `plugin.json` has the same `Id` and `Version`, it
+is renamed into place (`RecoveredForward`). Otherwise a matching previous folder
+is renamed back (`RecoveredBack`). Otherwise nothing moves and the plugin stays
+absent. `Staged` and `Previous` are plain folder names inside the record's
+folder. Recovery never deletes files, logs `[PLUGIN-ACTIVATION]`, and is safe to
+repeat. It does not verify file hashes: write `Swapping` only after the staged
+tree is fully verified.
+
+Both processes hold the session mutex `Local\RuneSchema.PluginActivation`
+from recovery through their plugin scan and load. The game releases it before
+it starts Helpy.exe. An activator holds the same mutex while it rechecks host
+processes and swaps folders. If a host cannot take the mutex within 15 seconds
+it fails closed: `Helpy/plugins` is not scanned in that process for the rest of
+the session (no DLLs, PAKs or content from it), while core plugins and Helpy
+itself still start.
+
+### Owned plugin events
+
+A loaded in-game half of a `Host: "helpy"` plugin can notify its own Helpy-side
+half without polling:
+
+```cpp
+host->CallService("GrandExchange", "helpy.plugin.event",
+    R"({"Event":"VaultOpened","Payload":{"CharacterGuid":"...","Revision":42},"Open":"GrandExchange.exchange"})",
+    nullptr, 0, &size);
+```
+
+- `Event` is a token of at most 64 characters. `Payload` is an optional JSON
+  object of at most 16 KiB. `Open` is optional and must be one of the caller's
+  own routes (`<Id>.<route>`).
+- Core tags the event with the caller and a per-owner `Sequence` and queues it
+  on Helpy's existing desktop push channel. Results: `RS_PLUGIN_OK` queued;
+  `RS_PLUGIN_NOT_FOUND` when the caller is not a loaded `Host: "helpy"` game half
+  or Helpy is not attached; `RS_PLUGIN_FAILED` over the per-owner rate (bursts
+  of 16, refilling 8 per second: coalesce and send the latest state);
+  `RS_PLUGIN_INVALID_ARGUMENT` for a malformed event. The call never blocks.
+- Helpy.exe calls only the owner's own `<Id>.events` service, registered by the
+  Helpy-side DLL. That name is reserved for its owner. The callback receives
+  `{"Owner","Event","Sequence","Payload"[,"Open"]}` on Helpy's bridge worker
+  thread; return quickly.
+- `Open` selects that route only if the same owner registered it, and brings
+  the Helpy window forward. It never authorizes or performs an action.
+- If Helpy's push queue was reset, every `<Id>.events` service receives
+  `{"Event":"EventsLost"}`: resynchronize from the in-game half (for example by
+  `Revision`). `helpy.plugin.event` cannot be registered by a plugin.
+
+
+### Item snapshot (read-only)
+
+`runeschema.item.snapshot` is a core service that returns a lossless record of one live item
+instance. It reads; it never creates, moves or changes an item.
+
+```cpp
+host->CallService("GrandExchange", "runeschema.item.snapshot",
+    R"({"Player":"<character GUID>","Scope":"Inventory","Slot":12,
+        "Instance":"<item instance GUID>","Item":"/Game/.../DA_CopperOre.DA_CopperOre"})",
+    buffer, capacity, &size);
+```
+
+- **Request.** Exactly these five fields. `Scope` is `Inventory`, `Personal` or `Loadout`.
+  `Slot` is 0..1023. `Instance` and `Item` must match the item in that slot, or nothing is read.
+  Unknown fields are refused.
+- **Where.** Call it on the game thread, in an authoritative world (single player, a listen host or
+  a dedicated server). It is reachable only from in-game plugins, not over Helpy's desktop pipe, and
+  no plugin can register its name.
+- **What is captured.** Every `SaveGame` property on the item's class chain, including properties
+  that are also `Transient` (listed in `TransientFields`, kept as evidence). Each value is Unreal's
+  property text, accepted only when it imports back `Identical` to the live value. `FDateTime` uses
+  an exact codec, `native-datetime-le64/1` (its 8 bytes as 16 lower-case hex digits, little-endian,
+  inside Unreal's tick range), because its text export truncates ticks.
+- **Refused as a whole.** An object reference in any saved field, a multi-element or out-of-extent
+  field, a value that doesn't round-trip, more than 128 fields, or a missing `Count`, `Guid` or
+  `Durability`. There is no raw-memory fallback.
+- **Reply.** `{"Schema":"runeschema.item-snapshot/1","Ok":true,"Item","Class","SourceInstance",
+  "Layout","Fields":[{"Name","Owner","Type","CppType","Codec","Value"[,"Transient"][,"Identity"]}],
+  "IdentityFields","TransientFields","Digest","StateDigest","Observed"}`.
+  - `Layout` hashes each field's name, owner, reflected type, C++ type, nested shape (struct
+    members, enums, container elements), codec and transient flag. Values are not part of it.
+  - `Digest` covers the item, class, layout and every value. `StateDigest` leaves out the identity
+    field (`Guid`), so two instances with the same state compare equal.
+  - `Observed.InMemory` is `true`: this is the live object, not a save receipt.
+- **Refusal.** `{"Schema","Ok":false,"Phase","Error"}` with result `RS_PLUGIN_OK`. Phases: `Request`,
+  `Thread`, `Player`, `Authority`, `Container`, `Slot`, `Instance`, `Item`, `Layout`, `Value`,
+  `Native`. Malformed JSON returns `RS_PLUGIN_INVALID_ARGUMENT`.
+- **Buffer.** The usual sizing call (`RS_PLUGIN_BUFFER_TOO_SMALL` with `size`) is safe: it is a
+  read. The two calls are separate reads.
+
+Restore is a separate contract that isn't built.
 
 Required DLL exports:
 

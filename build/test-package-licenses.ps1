@@ -37,7 +37,7 @@ function Assert-Archive([string]$Path, [string]$Prefix) {
         try { $consolidated = $reader.ReadToEnd() } finally { $reader.Dispose() }
         foreach ($name in @('LICENSE', 'AUTHORS.md', 'LICENSING.md', 'CONTRIBUTING.md', 'THIRD_PARTY_NOTICES.md',
             'licenses/PalSchema-MIT.txt', 'licenses/UE4SS-MIT.txt', 'licenses/nlohmann-json-MIT.txt', 'licenses/SDL3-zlib.txt', 'licenses/ModMenu-MIT.txt',
-            'licenses/WebView2-Loader.txt', 'licenses/WebView2-NOTICE.txt', 'licenses/MD4C-MIT.txt')) {
+            'licenses/WebView2-Loader.txt', 'licenses/WebView2-NOTICE.txt', 'licenses/MD4C-MIT.txt', 'licenses/MINIZ-MIT.txt')) {
             $expected = (Get-Content -LiteralPath (Join-Path $repository $name) -Raw).Trim()
             Assert-True ($consolidated.Contains($expected)) "Consolidated document omits complete source text: $name"
         }

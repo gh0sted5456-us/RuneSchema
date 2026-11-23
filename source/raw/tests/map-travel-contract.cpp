@@ -47,5 +47,13 @@ int main(int argc,char** argv){try{
     Check(ui.contains("SpawnToolRequests::SubmitMapGround")&&ui.contains("milliseconds(120)")&&tools.contains("milliseconds(150)")&&ui.contains("ground unavailable"),"Hover Z must be debounced, independently requested and honest about unloaded ground");
     Check(ui.contains("request[\"TargetLocation\"][\"Z\"]")&&travel.contains("groundHint.value_or(origin.Z())")&&travel.contains("job.GroundProbe.Resolve"),"Measured Z must guide streaming but never bypass runtime ground verification");
     Check(travel.contains("job.TerrainIgnored.push_back")&&travel.contains("LandingProbe::Yield")&&travel.contains("milliseconds(2)")&&travel.contains("job.GroundProbe={}"),"Terrain discovery and footprint checks must yield and discard samples when readiness changes");
-    Check(travel.contains("if(groundContractFailed)throw;")&&travel.contains("[HELPY][MAP-TRAVEL]")&&travel.contains("\"bShowLoadingScreen\",false"),"Broken native contracts must stop with evidence and prepared travel must not request another loading overlay");
+    Check(travel.contains("if(groundContractFailed)throw;")&&travel.contains("[HELPY][MAP-TRAVEL]"),"Broken native contracts must stop with evidence");
+    Check(travel.contains("{\"bShowLoadingScreen\",true}")&&!travel.contains("\"bShowLoadingScreen\",false")&&!travel.contains("\"bShowLoadingScreen\",job.")
+        &&travel.contains("job.LongJump=named||PS::MapTravel::LongJump(")&&travel.find("job.LongJump=named")<travel.find("teleport.Invoke()"),
+        "Every journey uses the native loading screen, so region-aware mods settle behind it; LongJump only informs listeners");
+    {const auto before=travel.find("TEXT(\"RuneSchemaBeforeTravel\")"),commit=travel.find("job.Gate.Commit(ToolMapTravelTime())"),invoke=travel.find("teleport.Invoke()");
+        const auto finish=travel.find("void ToolMapTravelFinish("),after=travel.find("TEXT(\"RuneSchemaAfterTravel\")"),reset=travel.find("ToolMapTravelReset();PS::SpawnToolRequests::Publish");
+        Check(before!=std::string::npos&&commit<before&&before<invoke&&finish<after&&after<reset&&travel.contains("bRuneSchemaTravelListener")
+            &&travel.contains("ToolMapTravelMaxListeners=64")&&travel.contains("A travel listener changed the player before departure"),
+            "Opted-in mods hear BeforeTravel after commit and before native departure, AfterTravel on every finish, and cannot silently invalidate the journey");}
 }catch(const std::exception& error){std::cerr<<error.what()<<"\n";return 1;}}

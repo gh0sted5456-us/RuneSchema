@@ -25,6 +25,24 @@ namespace RC::Unreal {
 }
 
 namespace DragonWilds::PropertyHelper {
+    // While a scope is alive on the current thread, object references written by
+    // CopyJsonValueToContainer resolve each distinct path once instead of once
+    // per write. Use it only around one synchronous batch (a loader pass). Entries
+    // are weak handles, and every hit is still checked against the property type.
+    class ReferenceCacheScope {
+    public:
+        struct State;
+        ReferenceCacheScope();
+        ~ReferenceCacheScope();
+        ReferenceCacheScope(const ReferenceCacheScope&) = delete;
+        ReferenceCacheScope& operator=(const ReferenceCacheScope&) = delete;
+        std::size_t Hits() const noexcept;
+        std::size_t Lookups() const noexcept;
+    private:
+        State* m_state;
+        State* m_before;
+    };
+
     void CopyJsonValueToContainer(void* Container, RC::Unreal::FProperty* Property, const nlohmann::json& Value);
 
     nlohmann::json BuildAppendValue(RC::Unreal::FProperty* Property, const nlohmann::json& Items);

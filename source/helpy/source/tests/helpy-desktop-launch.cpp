@@ -44,7 +44,7 @@ int main(int argc,char** argv)try{
     assert(Application(root)==root/"Helpy/Helpy.exe"&&InstanceName(root)==name);
     assert(RuntimePaths::ModFromBinary(Application(root))==root);
     assert(HelpyDesktop::Enabled(root));
-    const auto settings=root/"Helpy/settings/settings.jsonc";
+    const auto settings=HelpySettingsFile::Location(root/"Helpy");
     const auto comment="//"+std::string(80*1024,' ')+"\n";
     ConfigFiles::Write(settings,comment+R"({"enabled":false})");
     assert(!HelpyDesktop::Enabled(root));

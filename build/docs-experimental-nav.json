@@ -6,9 +6,6 @@
     "Pre-release & pending changelog": "experimental/PRE-RELEASE.md"
   },
   {
-    "Runtime folder layout": "experimental/RUNTIME-LAYOUT.md"
-  },
-  {
     "Install & compatibility": [
       {
         "Install or update": "experimental/INSTALLATION.md"
@@ -27,7 +24,7 @@
   {
     "Helpy & controllers": [
       {
-        "Desktop, overlay & settings": "experimental/HELPY-STANDALONE.md"
+        "Character sheet (in development)": "experimental/CHARACTER-SHEET.md"
       },
       {
         "Native overlay": "experimental/NATIVE-OVERLAY.md"
@@ -37,9 +34,6 @@
       },
       {
         "Bindings & mod HUDs (in development)": "experimental/CONTROLLER-HUD-BINDINGS.md"
-      },
-      {
-        "Mod Menu 2 & HUD layout": "experimental/MOD-MENU-2-AND-HUD.md"
       },
       {
         "Save recovery": "experimental/SAVE-RECOVERY.md"
@@ -163,5 +157,11 @@
   },
   {
     "Cooked world components": "experimental/WORLD-COMPONENTS.md"
+  },
+  {
+    "Exact item destroy (in development)": "experimental/ITEM-DESTROY.md"
+  },
+  {
+    "Plugin server requests and item grants (in development)": "experimental/PLUGIN-SERVER-REQUESTS.md"
   }
 ]

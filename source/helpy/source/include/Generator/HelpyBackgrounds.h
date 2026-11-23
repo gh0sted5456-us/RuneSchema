@@ -31,7 +31,7 @@ inline std::vector<ID3D11ShaderResourceView*> Retired;
 inline bool Listed=false,DraftReady=false,Preview=false,SettingsVisible=false;
 inline float DraftStrength=.12f;
 inline size_t Uploads=0;
-inline std::filesystem::path Folder(){return HelpyPaths::PluginRoot()/"assets"/"backgrounds";}
+inline std::filesystem::path Folder(){return HelpyPaths::BackgroundsFolder();}
 inline std::filesystem::path Resolve(const std::string& name){
     const auto custom=Folder()/std::filesystem::u8path(name);std::error_code error;if(std::filesystem::is_regular_file(custom,error))return custom;
     if(name=="RuneSchema.png")return HelpyPaths::Asset("RuneSchema.png");

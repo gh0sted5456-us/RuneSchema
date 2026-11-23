@@ -117,3 +117,5 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 - Microsoft WebView2 Loader, SDK 1.0.3405.78. The loader uses the machine's
   WebView2 Runtime. See licenses/WebView2-Loader.txt and licenses/WebView2-NOTICE.txt.
 - MD4C 0.5.2, MIT. Parses the bundled support guide. See licenses/MD4C-MIT.txt.
+- miniz 3.0.2, MIT. Unpacks the browser ad blocker the player chooses to download. See licenses/MINIZ-MIT.txt.
+- uBlock Origin Lite, GPL-3.0, by Raymond Hill and contributors. Not included: Helpy downloads it from https://github.com/uBlockOrigin/uBOL-home only when the player turns on ad blocking, and does not modify it.

@@ -22,4 +22,14 @@ int main(){
     assert(SpawnCatalogSearch::Matches(ore,"iron ore node")&&SpawnCatalogSearch::Matches(ore,"IRON nodes"));assert(!SpawnCatalogSearch::Matches(ore,"copper node"));
     assert(!SpawnCatalogSearch::Matches({{"Name","Iron ore"},{"Type","Item"}},"iron ore node"));
     assert(SpawnCatalogSearch::Matches({{"Name","Goblin"},{"Type","AI"}},"goblin enemies"));
+    // Boolean syntax, shared with the Item Bay. Plain words keep the original matching.
+    const nlohmann::json goblin={{"Name","Goblin Archer"},{"Type","AI"},{"Class","/Game/AI/BP_GoblinArcher.BP_GoblinArcher_C"}},wolf={{"Name","Wolf"},{"Type","AI"}};
+    assert(SpawnCatalogSearch::Matches(goblin,"goblin OR wolf")&&SpawnCatalogSearch::Matches(wolf,"goblins | wolf"));
+    assert(!SpawnCatalogSearch::Matches(goblin,"goblin -archer")&&SpawnCatalogSearch::Matches(wolf,"NOT archer enemies"));
+    assert(SpawnCatalogSearch::Matches(goblin,"\"goblin archer\"")&&!SpawnCatalogSearch::Matches(goblin,"\"archer goblin\""));
+    assert(SpawnCatalogSearch::Matches(ore,"(iron OR copper) ore node")&&!SpawnCatalogSearch::Matches(ore,"(tin OR copper) ore node"));
+    assert(SpawnCatalogSearch::Matches(ore,"bp_ironnode")&&SpawnCatalogSearch::Matches(ore,"(bp_ironnode)"));
+    assert(SpawnCatalogSearch::Matches(wolf,"wolf OR")&&SpawnCatalogSearch::Matches(wolf,"(wolf")&&SpawnCatalogSearch::Query("").Empty());
+    // Lower-case "or" and "not" are ordinary words, as before.
+    assert(!SpawnCatalogSearch::Matches(wolf,"wolf or goblin"));
 }

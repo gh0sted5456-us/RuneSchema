@@ -23,7 +23,8 @@
 namespace PS::GameplayEventFeed {
 using Json = nlohmann::json;
 
-// Native functions observed for every player. Mods may add their own Blueprint functions (kind "custom").
+// Native functions observed for every player. Mods may add their own Blueprint functions (kind "custom"),
+// or report events directly through RuneSchema_ReportModEventV1 (kind "report", carrying the mod's Owner).
 inline constexpr std::string_view CraftFunction = "/Script/Dominion.InventoryController:Server_CraftRecipe";
 inline constexpr std::string_view RecipesUnlockedFunction = "/Script/Dominion.ProgressComponent:Client_OnRecipesUnlocked";
 inline constexpr std::string_view BuildingsUnlockedFunction = "/Script/Dominion.ProgressComponent:Client_OnBuildingsUnlocked";
@@ -34,14 +35,18 @@ inline constexpr std::string_view BuildFunction = "/Script/Dominion.BuildModeCom
 inline constexpr std::string_view UseItemFunction = "/Script/Dominion.InventoryController:Server_UseItemFromInventory";
 inline constexpr std::array<std::string_view, 8> NativeFunctions{CraftFunction, RecipesUnlockedFunction, BuildingsUnlockedFunction,
     QuestUpdatedFunction, SkillXPFunction, RespawnFunction, BuildFunction, UseItemFunction};
-inline constexpr std::array<std::string_view, 10> Kinds{"kill", "craft", "recipe-unlocked", "building-unlocked", "quest-updated",
-    "skill-xp", "death", "building-placed", "item-used", "custom"};
+inline constexpr std::array<std::string_view, 11> Kinds{"kill", "craft", "recipe-unlocked", "building-unlocked", "quest-updated",
+    "skill-xp", "death", "building-placed", "item-used", "custom", "report"};
 // Reads are capped so one reply stays well under the 8 KiB first-try buffer most of the time.
 inline constexpr size_t Capacity = 1024, MaximumRead = 64, MaximumWatch = 64, MaximumParameters = 1024;
+// Raw parametersJson accepted by RuneSchema_ReportModEventV1 before parsing; the parsed object is then held
+// to MaximumParameters like captured parameters.
+inline constexpr size_t MaximumReportInput = 4096;
 
 struct Event {
     uint64_t Sequence = 0;
     std::string Kind, Subject;
+    std::string Owner; // "report" only: the reporting mod, "mods/<folder>" or "ue4ss/<folder>", lower-case.
     double Amount = 1, Value = 0;
     Json Parameters = Json::object();
     uint64_t Time = 0; // Unix seconds.
@@ -116,9 +121,42 @@ inline Event Kill(std::string victimClass) {
     Event event; event.Kind = "kill"; event.Subject = Path(victimClass, false) ? std::move(victimClass) : std::string{}; return event;
 }
 
+// Mod-reported events. Owner is the mod's achievement owner exactly as Helpy forms it: "mods/<folder>" for a
+// RuneSchema mod or "ue4ss/<folder>" for a UE4SS mod; matched case-insensitively and stored lower-case.
+// A name uses the achievement id alphabet. Returns nothing when any input is invalid.
+inline std::optional<std::string> ReportOwner(std::string_view owner) {
+    std::string_view prefix;
+    for (const std::string_view candidate : {std::string_view("mods/"), std::string_view("ue4ss/")})
+        if (owner.size() > candidate.size() && std::equal(candidate.begin(), candidate.end(), owner.begin(),
+            [](char a, char b) { return a == char(std::tolower(static_cast<unsigned char>(b))); })) { prefix = candidate; break; }
+    if (prefix.empty() || owner.size() > 160) return std::nullopt;
+    const auto folder = owner.substr(prefix.size());
+    if (folder == "." || folder == ".." || folder.front() == ' ' || folder.back() == ' '
+        || std::any_of(folder.begin(), folder.end(), [](unsigned char c) { return c < 32 || c == 127 || c == '/' || c == '\\' || c == ':'; })) return std::nullopt;
+    std::string result(owner);
+    for (auto& c : result) c = char(std::tolower(static_cast<unsigned char>(c)));
+    return result;
+}
+inline bool ReportName(std::string_view name) {
+    return !name.empty() && name.size() <= 64 && std::all_of(name.begin(), name.end(), [](unsigned char c) { return std::isalnum(c) || c == '-' || c == '_' || c == '.'; });
+}
+inline std::optional<Event> Report(std::string_view owner, std::string_view name, double amount, double value, std::string_view parameters = {}) {
+    const auto normalized = ReportOwner(owner);
+    if (!normalized || !ReportName(name) || !std::isfinite(amount) || amount <= 0 || amount > 1e9 || !std::isfinite(value)) return std::nullopt;
+    Event event; event.Kind = "report"; event.Owner = *normalized; event.Subject = std::string(name); event.Amount = amount; event.Value = value;
+    if (!parameters.empty()) {
+        if (parameters.size() > MaximumReportInput) return std::nullopt;
+        Json parsed = Json::parse(parameters, nullptr, false);
+        if (parsed.is_discarded() || !parsed.is_object()) return std::nullopt;
+        event.Parameters = Detail::Bounded(std::move(parsed));
+    }
+    return event;
+}
+
 inline Json ToJson(const Event& event) {
     Json result{{"Sequence", event.Sequence}, {"Kind", event.Kind}, {"Amount", event.Amount}, {"Time", event.Time}};
     if (!event.Subject.empty()) result["Subject"] = event.Subject;
+    if (!event.Owner.empty()) result["Owner"] = event.Owner;
     if (event.Value != 0) result["Value"] = event.Value;
     if (!event.Parameters.empty()) result["Parameters"] = event.Parameters;
     return result;
@@ -172,6 +210,29 @@ public:
     void Clear() { std::lock_guard lock(m_gate); m_events.clear(); }
 };
 inline Feed Current;
+
+// RuneSchema_ReportModEventV1 (dllmain.cpp) forwards here. Callable from any thread; never throws.
+// Returns RS_MOD_OK (0), RS_MOD_INVALID_ARGUMENT (1) or RS_MOD_FAILED (6), as in shared/RuneSchemaModApi.h.
+inline constexpr int32_t ReportOk = 0, ReportInvalidArgument = 1, ReportFailed = 6;
+inline int32_t ReportV1(Feed& feed, const char* owner, const char* name, double amount, double value, const char* parametersJson) noexcept {
+    try {
+        if (!owner || !name) return ReportInvalidArgument;
+        // Bounded scans: an unterminated or oversized string is rejected without reading past the limit.
+        const auto bounded = [](const char* text, size_t limit) -> std::optional<std::string_view> {
+            size_t size = 0; while (size <= limit && text[size]) ++size;
+            if (size > limit) return std::nullopt;
+            return std::string_view(text, size);
+        };
+        const auto ownerText = bounded(owner, 160), nameText = bounded(name, 64);
+        std::optional<std::string_view> parameters = std::string_view{};
+        if (parametersJson) parameters = bounded(parametersJson, MaximumReportInput);
+        if (!ownerText || !nameText || !parameters) return ReportInvalidArgument;
+        auto event = Report(*ownerText, *nameText, amount, value, *parameters);
+        if (!event) return ReportInvalidArgument;
+        feed.Push(std::move(*event));
+        return ReportOk;
+    } catch (...) { return ReportFailed; }
+}
 
 // Service handler: {"Action":"GameplayEvents","Cursor":n,"Watch":[...]?} -> Since(cursor) plus accepted watches.
 inline Json Service(const Json& request, Feed& feed = Current) {

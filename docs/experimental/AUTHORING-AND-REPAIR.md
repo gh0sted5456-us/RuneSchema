@@ -90,4 +90,4 @@ User mods, settings, saves and caches are outside its replacement scope.
 
 If a matching release package has not been published, repair reports that and
 leaves the installation alone. It does not substitute the latest stable build
-for an experimental version. See [repair details](HELPY-STANDALONE.md#repair-runeschema).
+for an experimental version. See [repair details](../HELPY-STANDALONE.md#repair-runeschema).

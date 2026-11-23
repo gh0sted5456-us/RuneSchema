@@ -8,6 +8,7 @@
 #include "Core/RuneSchemaDataRoot.h"
 #include "Core/PakDiscovery.h"
 #include "Runtime/PakLoader.h"
+#include "Runtime/PluginHost.h"
 #include "Core/NativePersistencePolicy.h"
 #include "Core/ModIdentity.h"
 #include "Core/ModManager.h"
@@ -104,6 +105,8 @@ namespace fs = std::filesystem;
 
 namespace {
     std::vector<PS::SisterContent::Root> SisterContentRoots;
+    // Host=helpy plugins that opt in with "Content": true (Helpy/plugins/<Id>/runeschema).
+    std::vector<PS::SisterContent::Root> PluginContentRoots;
     PS::CleanupNotice::WorldReceipt WorldCleanupReceipt;
     PS::WeakObjectHandle WorldCleanupReceiptWorld;
     // Each world is handled independently. The complete live building registry
@@ -955,6 +958,7 @@ namespace DragonWilds {
         PS::NetworkIdentityBootstrap::Stop();
         PS::ServerFilterStartup::Stop();
         m_worldComponents.Stop();
+        PS::PluginHost::SetServerTransport({});
         m_registryBridge.Stop();
         m_dataRegistrar.Shutdown();
         m_characterEntryRecovery.Shutdown();
@@ -990,6 +994,29 @@ namespace DragonWilds {
                 PS::Log<LogLevel::Warning>(STR("[SISTER-CONTENT][SKIPPED] Discovery failed: {}.\n"),
                     PS::ToWideSafe(error.what()));
             }
+        }
+        PluginContentRoots.clear();
+        try {
+            const auto runeSchemaRoot=fs::path(PS::HostServices::WorkingDirectory())/"Mods"/"RuneSchema";
+            std::vector<std::string> notes;
+            const auto plugins=PS::PluginCatalog::DiscoverRuntime(runeSchemaRoot);
+            for (const auto& entry : PS::PluginCatalog::ContentRoots(plugins, GetModsPath(), &notes)) {
+                const auto key=PS::ModFolderLayout::FoldAscii(entry.Id);
+                if (std::any_of(SisterContentRoots.begin(), SisterContentRoots.end(), [&](const auto& sister) {
+                        return PS::ModFolderLayout::FoldAscii(RC::to_string(sister.Name)) == key; })) {
+                    notes.push_back(entry.Id + ": plugin content skipped: a UE4SS sister mod already owns this identity");
+                    continue;
+                }
+                PluginContentRoots.push_back({fs::path(entry.Id).native(), entry.Path});
+                PS::Log<LogLevel::Normal>(STR("[PLUGIN-CONTENT][REGISTERED] {}: {}\n"),
+                    PS::ToWideSafe(entry.Id), entry.Path.native());
+            }
+            for (const auto& note : notes)
+                PS::Log<LogLevel::Warning>(STR("[PLUGIN-CONTENT][SKIPPED] {}.\n"), PS::ToWideSafe(note));
+        } catch (const std::exception& error) {
+            PluginContentRoots.clear();
+            PS::Log<LogLevel::Warning>(STR("[PLUGIN-CONTENT][SKIPPED] Discovery failed: {}.\n"),
+                PS::ToWideSafe(error.what()));
         }
         const auto& settings=PS::PSConfig::Get()->GetSettings();
         if (PS::NativePersistencePolicy::BypassRequested(PS::Storefront::IsDedicatedServer(),
@@ -1142,6 +1169,7 @@ namespace DragonWilds {
         const auto visit = [&](const auto& load) {
             for (const auto& name : m_orderedMods) load(modsPath / name, name);
             for (const auto& root : SisterContentRoots) load(root.Content, root.Name);
+            for (const auto& root : PluginContentRoots) load(root.Content, root.Name);
         };
         if (!m_orderResolved) {
             std::vector<RC::StringType> discovered;
@@ -1591,6 +1619,14 @@ namespace DragonWilds {
         m_spawnLoader->IsEventActive=[npcService](RC::Unreal::UWorld* world,const std::string& event){
             return npcService->EventService().Running(event,world);
         };
+        // runeschema.server.request: plugin requests travel on the same owning-player bridge as Helpy's.
+        m_registryBridge.PluginRequest=[](RC::Unreal::UObject* pawn,const std::string& plugin,const std::string& action,const std::string& payload){
+            return PS::PluginHost::HandleRemotePluginRequest(pawn,plugin,action,payload);
+        };
+        m_registryBridge.PluginResult=[](int64_t revision,const std::string& plugin,const std::string& payload){PS::PluginHost::DeliverPluginResult(revision,plugin,payload);};
+        PS::PluginHost::SetServerTransport([this](const std::string& plugin,const std::string& action,const std::string& payload){
+            return m_registryBridge.RequestPluginAction(plugin,action,payload);
+        });
         m_registryBridge.AuthorityChannel=[service=m_spawnLoader](RC::Unreal::UObject* player,const std::string& channel,
             const std::string&,const std::string& action,const std::string& payload){
             if(channel!="helpy.authority")throw std::runtime_error("Unsupported RuneSchema authority channel");
@@ -1824,6 +1860,7 @@ namespace DragonWilds {
         PS::NetworkIdentityBootstrap::Stop();
         PS::ServerFilterStartup::Stop();
         m_worldComponents.Stop();
+        PS::PluginHost::SetServerTransport({});
         m_registryBridge.Stop();
         m_dataRegistrar.Shutdown();
         m_characterEntryRecovery.Shutdown();
@@ -2196,6 +2233,9 @@ namespace DragonWilds {
                     root.Name, PS::ToWideSafe(error.what()));
             }
         }
+        // Plugin content shares the plugin's PAKs (mounted with the plugin roots above).
+        for (const auto& root : PluginContentRoots)
+            (void)PS::MountedModRegistryOwners::Remember(RC::to_string(root.Name));
         for (const auto& paks : PS::PakLoader::Roots()) {
             if (!PS::PakLoader::AlreadyRegistered(paks, nativeRoots)
                 && !PS::PakLoader::AlreadyRegistered(paks, pakRoots))

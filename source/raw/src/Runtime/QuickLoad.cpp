@@ -26,6 +26,7 @@
 #include <set>
 #include <atomic>
 #include <TlHelp32.h>
+#include "Runtime/ProcessEventDispatch.h"
 namespace PS::QuickLoad {
 using namespace RC;using namespace RC::Unreal;using Json=nlohmann::json;
 namespace AH=DragonWilds::ActorHelper;namespace C=DragonWilds::ReflectedContract;
@@ -33,7 +34,8 @@ namespace {
 std::mutex mutex;QuickLoadSettings::Config config;std::string status="Vanilla Load selected.";
 Json characters=Json::array(),worlds=Json::array();std::atomic<bool> refresh=true;bool requested=false,finished=false,shift=false,early=false;
 uint64_t started=0;QuickLaunchStartup::Gate frontend;WeakObjectHandle menuWorld,currentController;SafetyHookInline loadingHook;void* selectCharacter=nullptr;
-Hook::GlobalCallbackId mapHook=Hook::ERROR_ID,tickHook=Hook::ERROR_ID,possessHook=Hook::ERROR_ID;
+Hook::GlobalCallbackId mapHook=Hook::ERROR_ID,tickHook=Hook::ERROR_ID;
+PS::ProcessEventDispatch::Route possessHook; // Routed by name: only HandlePossessedPawnChanged reaches it.
 void SetStatus(const std::string& value){std::lock_guard lock(mutex);if(status==value)return;status=value;PS::Log<LogLevel::Normal>(STR("[QUICK-LOAD] {}\n"),PS::ToWideSafe(value));}
 bool ShiftInGame(){DWORD process=0;GetWindowThreadProcessId(GetForegroundWindow(),&process);return process==GetCurrentProcessId()&&(GetAsyncKeyState(VK_SHIFT)&0x8000);}
 bool StandaloneEnabledOrLoaded(){
@@ -170,7 +172,7 @@ void Initialize(){
         if(mapHook==Hook::ERROR_ID)PS::Log<LogLevel::Warning>(STR("[SAVE-ENTRY][SESSION-POLICY][HOOK-UNAVAILABLE] Server world startup is unchanged; tolerant policy will be retried at character loading.\n"));
         return;
     }
-    options.HookName=TEXT("QuickLoadPossession");possessHook=Hook::RegisterProcessEventPostCallback([](auto&,UObject*,UFunction* fn,void* params){
+    possessHook=PS::ProcessEventDispatch::Add(PS::ProcessEventDispatch::Phase::Post,{TEXT("HandlePossessedPawnChanged")},"QuickLoadPossession",[](Hook::TCallbackIterationData<void>&,UObject*,UFunction* fn,void* params){
         if(!requested||!fn||!params)return;
         static const FName possession(TEXT("HandlePossessedPawnChanged"),FNAME_Find);
         if(fn->GetFName()!=possession||fn->GetPathName()!=TEXT("/Script/Dominion.SkillPerkComponent:HandlePossessedPawnChanged"))return;
@@ -178,7 +180,7 @@ void Initialize(){
             auto* controller=AH::GetObjectRef(pawn,TEXT("Controller"));if(!controller||Controller(pawn->GetWorld())!=controller||AH::GetObjectRef(controller,TEXT("Pawn"))!=pawn)return;
             WorldSlot(controller,config.WorldName);Finish(false,"Native character possession observed; camera fade cleared.",controller);
         }catch(const std::exception& e){Finish(true,std::string("Possession handoff failed: ")+e.what());}
-    },options);
+    });
     options.HookName=TEXT("QuickLoadStatus");tickHook=Hook::RegisterEngineTickPostCallback([](auto&,auto*,float,bool){
         const bool read=refresh.exchange(false);const bool armed=loadingHook&&!finished&&config.Enabled;
         const bool startup=GameFrameRate::StartupProbe.exchange(false);
@@ -195,9 +197,9 @@ void Initialize(){
             }
         }catch(const std::exception& e){if(start)Finish(true,std::string("Quick Start stopped: ")+e.what());else SetStatus(std::string("Native save choices unavailable: ")+e.what());}
     },options);
-    if(mapHook==Hook::ERROR_ID||tickHook==Hook::ERROR_ID||possessHook==Hook::ERROR_ID)Finish(true,"Native lifecycle callbacks unavailable; automatic loading disabled.");
+    if(mapHook==Hook::ERROR_ID||tickHook==Hook::ERROR_ID||!possessHook)Finish(true,"Native lifecycle callbacks unavailable; automatic loading disabled.");
 }
-void Shutdown()noexcept{NativePersistenceRecovery::ReleaseSessionPolicy(currentController.Get());loadingHook.reset();for(auto id:{mapHook,tickHook,possessHook})if(id!=Hook::ERROR_ID)Hook::UnregisterCallback(id);mapHook=tickHook=possessHook=Hook::ERROR_ID;}
+void Shutdown()noexcept{NativePersistenceRecovery::ReleaseSessionPolicy(currentController.Get());loadingHook.reset();for(auto id:{mapHook,tickHook})if(id!=Hook::ERROR_ID)Hook::UnregisterCallback(id);mapHook=tickHook=Hook::ERROR_ID;PS::ProcessEventDispatch::Remove(possessHook);}
 Json Read(){std::lock_guard lock(mutex);refresh=true;auto result=QuickLaunchConfiguration::Read(HostServices::SettingsDirectory());
     if(!result.value("Ok",false))return result;
     result["Characters"]=characters;result["Worlds"]=worlds;result["Status"]=status;

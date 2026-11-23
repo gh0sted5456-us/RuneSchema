@@ -186,6 +186,11 @@ inline void ResolvePaneNavigation(){
     if(Selection.Controller&&HelpyControllerPanes::Move())return;
     if(!Selection.Controller||!context.NavWindow||!context.NavMoveScoringItems||(context.NavMoveFlags&(ImGuiNavMoveFlags_IsTabbing|ImGuiNavMoveFlags_AlsoScoreVisibleSet)))return;
     auto& local=context.NavMoveResultLocal;const auto& other=HelpyImGuiTheme::PaneNavigationSource==context.NavWindow?HelpyImGuiTheme::PaneNavigationBest:context.NavMoveResultOther;
+    if(InSection()&&context.NavInputSource==ImGuiInputSource_Gamepad){
+        const auto* root=context.NavWindow->RootWindowForNav;
+        if(local.ID&&local.Window->RootWindowForNav!=root)local.Clear();
+        if(context.NavMoveResultOther.ID&&context.NavMoveResultOther.Window->RootWindowForNav!=root)context.NavMoveResultOther.Clear();
+    }
     // ImGui compares a direct flattened child; Helpy's content can be several panes deep.
     if(other.ID&&other.Window->RootWindowForNav==context.NavWindow->RootWindowForNav&&ImGui::IsWindowChildOf(other.Window,context.NavWindow,false)&&
         HelpyImGuiTheme::Nearer(other,local))local=other;

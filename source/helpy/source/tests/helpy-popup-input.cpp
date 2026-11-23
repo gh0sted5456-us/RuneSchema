@@ -6,9 +6,10 @@
 #include <iostream>
 #include <iterator>
 #include <stdexcept>
+#include <source_location>
 #include <string>
 #include <filesystem>
-static void Require(bool value){if(!value)throw std::runtime_error("Helpy popup input regression");}
+static void Require(bool value,std::source_location at=std::source_location::current()){if(!value)throw std::runtime_error("Helpy popup input regression at line "+std::to_string(at.line()));}
 static std::string Read(const char* path){std::ifstream input(path);Require(input.good());return {std::istreambuf_iterator<char>(input),{}};}
 int main(int argc,char** argv)try{
     {
@@ -97,5 +98,5 @@ int main(int argc,char** argv)try{
     Require(source.find("if(m_visible.load()&&GetForegroundWindow()!=m_gameWindow)ClosePopup()")==std::string::npos);
     const auto bridge=Read((std::filesystem::path(argv[1]).parent_path().parent_path().parent_path()/"plugins/helpy/HelpyNativeOverlayBridge.cpp").string().c_str());
     for(const auto* input:{"GetRawInputBuffer","GetAsyncKeyState","GetKeyboardState","GetKeyState","XInputGetState","WM_APPCOMMAND","ReleaseHeldGameInput","CapturesInput"})Require(bridge.find(input)!=std::string::npos);
-    Require(bridge.find("&state.RawBuffer,&state.SwapGl")!=std::string::npos); // Raw capture must unload with the other input hooks.
+    Require(bridge.find("&state.RawBuffer,&state.RawData,&state.SwapGl")!=std::string::npos); // Raw capture must unload with the other input hooks.
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}

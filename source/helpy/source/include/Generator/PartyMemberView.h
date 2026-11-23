@@ -3,7 +3,6 @@
 #include "Core/PartyStats.h"
 #include "Core/PartyCardLayout.h"
 #include "Generator/AchievementsPanel.h"
-#include "Core/ItemPreviewRequest.h"
 #include <functional>
 #include <algorithm>
 #include "Generator/ItemIconCache.h"
@@ -116,7 +115,7 @@ inline bool GearRow(const nlohmann::json& row,ImVec2 start,float width,int64_t n
             const bool over=ImGui::IsItemHovered()&&ImGui::IsMouseHoveringRect(a,b);
             ImGui::PushID(int(line.First+col));
             if(over){hovered=true;EquipmentDetails(item,now);if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)&&RestoreGear)RestoreGear(row,item);if(ImGui::IsMouseReleased(ImGuiMouseButton_Right)){GearContext=true;ImGui::OpenPopup("##equipped-item-actions");}}
-            if(ImGui::BeginPopup("##equipped-item-actions")){GearContext=true;ImGui::TextUnformatted(ItemPresentation::Name(item).c_str());if(ImGui::MenuItem("Preview",nullptr,false,ItemPreviewRequest::Valid(item)))ItemPreviewRequest::Show(item);if(ImGui::MenuItem("Restore durability",nullptr,false,bool(RestoreGear)))RestoreGear(row,item);if(ImGui::MenuItem("Change gear…",nullptr,false,bool(ChangeGear)))ChangeGear(row,item);ImGui::EndPopup();}ImGui::PopID();
+            if(ImGui::BeginPopup("##equipped-item-actions")){GearContext=true;ImGui::TextUnformatted(ItemPresentation::Name(item).c_str());if(ImGui::MenuItem("Restore durability",nullptr,false,bool(RestoreGear)))RestoreGear(row,item);if(ImGui::MenuItem("Change gear…",nullptr,false,bool(ChangeGear)))ChangeGear(row,item);ImGui::EndPopup();}ImGui::PopID();
         }++lineIndex;
     }return hovered;
 }

@@ -9,6 +9,7 @@ void HelpyStandaloneWindow::RememberPlacement(HWND window){
 bool HelpyStandaloneWindow::OwnsWindow(HWND window)const{
     if(!window)return false;
     if(window==m_publishedWindow.load()||window==m_publishedBayWindow.load()||window==m_publishedCacheWindow.load())return true;
+    if(HelpyWebPane::Owns(window))return true; // a plugin web page over Helpy's workspace
     for(const auto& published:m_publishedWorkspaces)if(window==published.load())return true;return false;
 }
 void HelpyStandaloneWindow::DestroyWorkspacePanel(size_t index){

@@ -5,6 +5,7 @@
 #include "Generator/HelpyStartupProgress.h"
 #include "Runtime/HelpyUpdates.h"
 #include "Core/HelpyHotfixInfo.h"
+#include "Core/HelpyPluginNavigation.h"
 #include <ctime>
 
 namespace PS::NotificationsPanel {
@@ -67,6 +68,13 @@ inline bool BuildEnabled(){
     const bool ok=HelpyModCacheBuilder::StartEnabled(fs::u8path(ModsPanel::Snapshot.at("Root").get<std::string>()),ModsPanel::Snapshot.at("Rows"),HelpyImGuiTheme::Current.autoInstallAuthoringDotNet);
     if(ok)CacheBuilderPanel::FocusInstalled(ModsPanel::Snapshot,Json::object());return ok;
 }
+// Rebuilds every cache Helpy reads items and pictures from: the game's files, then each
+// enabled mod. When the batch ends, the item catalog is reloaded from the new caches.
+inline bool FullResync(){
+    if(Busy()||ModsPanel::Dirty||ModsPanel::SnapshotGeneration!=SpawnToolRequests::CurrentGeneration()||!ModsPanel::Snapshot.contains("Root"))return false;
+    const bool ok=HelpyModCacheBuilder::StartFullResync(HostServices::ModDirectory(),HostServices::CacheDirectory(),GameStamp(),ModsPanel::Snapshot.at("Rows"),HelpyImGuiTheme::Current.autoInstallAuthoringDotNet);
+    if(ok)CacheBuilderPanel::Requested=true;return ok;
+}
 inline void Act(const HelpyNotifications::Notice& notice){
     if(notice.Action=="hotfix"){
         const auto release=HelpyHotfixInfo::Select(Json::array({HelpyUpdates::Current().Hotfix}),HelpyEnvironment::RuneSchemaVersion);
@@ -84,6 +92,7 @@ inline void Act(const HelpyNotifications::Notice& notice){
 inline void Jobs(){
     // Keep explicit jobs moving in the tray; no idle engine indexing is started here.
     HelpyIconPacks::Poll();
+    if(!HelpyIconPacks::Busy()&&!HelpyIconPacks::Building()&&ImportJob.empty()&&HelpyModCacheBuilder::TakeFinishedBatch()){auto& list=LazyCatalog::For(0);list.Cache.clear();if(list.Started)LazyCatalog::Retry(0);}
     if(!ImportJob.empty()&&!HelpyIconPacks::Busy()){
         const bool success=HelpyIconPacks::LastOperationOK;
         if(success){Inbox.Built(ImportSource,ImportVersion,ImportVanilla);if(!ImportFingerprint.empty())Inbox.Built(ImportSource,"files:"+ImportFingerprint,false);}
@@ -140,11 +149,14 @@ inline void Prompt(){
         ImGui::BeginDisabled(Busy());if(HelpyImGuiTheme::SoftButton("Resync vanilla files")){
             if(HelpyModCacheBuilder::StartVanilla(HostServices::ModDirectory(),HostServices::CacheDirectory(),GameStamp(),HelpyImGuiTheme::Current.autoInstallAuthoringDotNet)){CacheBuilderPanel::Requested=true;ImGui::CloseCurrentPopup();}
             else Status=HelpyModCacheBuilder::Current().Stage;
-        }ImGui::EndDisabled();HelpyMenu::NextControl("Later");if(HelpyImGuiTheme::SoftButton("Later"))ImGui::CloseCurrentPopup();ImGui::EndPopup();
+        }ImGui::EndDisabled();
+        ImGui::BeginDisabled(Busy()||ModsPanel::Dirty||!ModsPanel::Snapshot.contains("Root"));HelpyMenu::NextControl("Full resync");
+        if(HelpyImGuiTheme::SoftButton("Full resync: game and all enabled mods")){if(FullResync())ImGui::CloseCurrentPopup();else Status=HelpyModCacheBuilder::Current().Stage;}ImGui::EndDisabled();
+        HelpyMenu::NextControl("Later");if(HelpyImGuiTheme::SoftButton("Later"))ImGui::CloseCurrentPopup();ImGui::EndPopup();
     }
 }
 inline void Render(){
-    static int category=0;constexpr std::array labels{"Updates","Cache jobs","History"};HelpyMenu::Categories("notifications",labels,category);
+    static int category=0;constexpr std::array labels{"Updates","Cache jobs","Plugins","History"};HelpyMenu::Categories("notifications",labels,category);
     if(HelpyMenu::BeginBody("Notification details",category)){
         ImGui::TextWrapped("See stable RuneSchema releases, game changes, and updates for enabled mods.");
         const auto columns=std::clamp(int(ImGui::GetContentRegionAvail().x/HelpyImGuiTheme::Current.X(172)),1,3);
@@ -168,7 +180,8 @@ inline void Render(){
         }
         if(!Status.empty())ImGui::TextWrapped("%s",Status.c_str());if(!Loaded)ImGui::TextDisabled("Loading notification history...");
         size_t shown=0;for(auto it=Inbox.Notices.rbegin();it!=Inbox.Notices.rend();++it){const auto& n=*it;const bool update=n.Kind=="mod-update"||n.Kind=="game-update"||n.Kind=="hotfix"||n.Kind=="schema-update";
-            if(category!=2&&(n.Dismissed||n.Resolved||!n.Active||update!=(category==0)))continue;++shown;ImGui::PushID(n.Id.c_str());ImGui::Separator();
+            const int group=update?0:n.Kind=="plugin"?2:1;
+            if(category!=3&&(n.Dismissed||n.Resolved||!n.Active||group!=category))continue;++shown;ImGui::PushID(n.Id.c_str());ImGui::Separator();
             ImGui::TextColored(n.Read?HelpyImGuiTheme::Current.text:HelpyImGuiTheme::Current.accent,"%s",n.Title.c_str());ImGui::TextWrapped("%s",n.Detail.c_str());
             if(n.Resolved)ImGui::TextDisabled("Updated");else if(!n.Active)ImGui::TextDisabled("Source disabled, missing, or superseded");
             const bool release=n.Kind=="schema-update";
@@ -184,10 +197,12 @@ inline void Render(){
             }
             if(ImGui::BeginTable("Notification buttons",columns,ImGuiTableFlags_SizingStretchSame)){
                 if(!release&&n.Active&&!n.Resolved&&!n.Action.empty()){ImGui::TableNextColumn();ImGui::BeginDisabled(Busy()||ModsPanel::Dirty);if(HelpyImGuiTheme::SoftButton(n.Action=="hotfix"?"Review hotfix":n.Action=="build-mod"?"Create / update cache":"Resync vanilla files",{-1,0}))Act(n);ImGui::EndDisabled();}
+                // A plugin notice opens only one of its own plugin's Helpy routes.
+                if(n.Kind=="plugin"&&!n.Route.empty()){ImGui::TableNextColumn();if(HelpyImGuiTheme::SoftButton("Open",{-1,0})){Inbox.Read(n.Id);if(HelpyPluginNavigation::RequestOpen(n.Source,n.Route)!=RS_PLUGIN_OK)Status="That plugin is not loaded right now.";}}
                 ImGui::TableNextColumn();ImGui::BeginDisabled(n.Read);if(HelpyImGuiTheme::SoftButton("Mark read",{-1,0}))Inbox.Read(n.Id);ImGui::EndDisabled();
                 if(!n.Dismissed){ImGui::TableNextColumn();if(HelpyImGuiTheme::SoftButton("Dismiss",{-1,0}))Inbox.Dismiss(n.Id);}ImGui::EndTable();
             }ImGui::PopID();
-        }if(!shown)ImGui::TextDisabled(category==0?"No pending updates.":category==1?"No cache jobs yet.":"Your notification history is empty.");
+        }if(!shown)ImGui::TextDisabled(category==0?"No pending updates.":category==1?"No cache jobs yet.":category==2?"No plugin notices yet.":"Your notification history is empty.");
     }HelpyMenu::EndBody();
 }
 }

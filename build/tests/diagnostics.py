@@ -36,6 +36,16 @@ class Diagnostics(unittest.TestCase):
             "QuestOwnerConflict", "RegistryDeferred", "RegistryMismatch", "WearableUnenrolled",
             "SlowWork", "CatalogUnavailable", "PlacementPending", "Unclassified"])
 
+    def test_generated_build_outputs_are_not_audited(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".cache") as folder:
+            root = Path(folder)
+            generated = root / "build" / "generated"
+            generated.mkdir(parents=True)
+            (generated / "third-party.cpp").write_bytes(b"\xff RS-UNKNOWN-999")
+            production = root / "build" / "package.ps1"
+            production.write_text("# production script", encoding="utf-8")
+            self.assertEqual(list(audit.source_files(root)), [production])
+
     def test_all_production_codes_are_documented(self):
         result = audit.audit()
         catalogue = json.loads((ROOT / "resources/diagnostics/codes.json").read_text(encoding="utf-8"))

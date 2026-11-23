@@ -28,6 +28,19 @@
 #include "Runtime/NetworkStatus.h"
 #include "Runtime/MultiplayerPolicy.h"
 #include "Runtime/MultiplayerRuntime.h"
+#include "Runtime/PluginEvents.h"
+#include "Runtime/ItemSnapshotService.h"
+#include "Core/ItemSnapshot.h"
+#include "Core/ItemDestroy.h"
+#include "Runtime/ItemDestroyService.h"
+#include "Core/ItemGrant.h"
+#include "Runtime/ItemGrantService.h"
+#include "Runtime/HelpyDeliveryGate.h"
+#include "Core/PluginServerRequest.h"
+#include "Runtime/NetworkContext.h"
+#include "Runtime/NetworkRole.h"
+#include "SDK/Helper/ActorHelper.h"
+#include "SDK/Helper/PlayerStatus.h"
 #include "Runtime/GameFrameRate.h"
 #include "Core/HelpySourceCache.h"
 #include "Core/HelpyCacheOwnership.h"
@@ -58,6 +71,21 @@ struct Service { std::string Owner;RuneSchemaServiceFn Callback{};void* Context{
 struct Loaded { PluginCatalog::Plugin Manifest;HMODULE Module{};void* Instance{};RuneSchemaPluginShutdownFn Shutdown{};RuneSchemaPluginPhaseFn UiInit{};RuneSchemaPluginPhaseFn UnrealInit{};bool UnrealReady=false; };
 std::mutex Gate;std::unordered_map<std::string,Service> Services;std::unordered_map<std::string,std::string> Capabilities;
 std::unordered_map<std::string,std::string> ActiveConnections;
+// Owned plugin events: loaded Host=helpy game halves (guarded by Gate) and the push target.
+std::unordered_set<std::string> HelpyGameHalves;
+std::unordered_set<std::string> DestroyCallers;
+// Capabilities each loaded game-side plugin declared in its manifest (guarded by Gate). Declaring
+// item.grant or server.request is the installer's consent; several plugins may declare them.
+std::unordered_map<std::string,std::unordered_set<std::string>> DeclaredCapabilities;
+bool Declared(const char* caller,std::string_view capability){
+    std::scoped_lock lock(Gate);const auto found=DeclaredCapabilities.find(caller);
+    return found!=DeclaredCapabilities.end()&&found->second.contains(std::string(capability));
+}
+// runeschema.server.request: the bridge transport and the answers this game is waiting for.
+std::mutex ServerRequestGate;PluginHost::ServerTransport ServerSend;PluginServerRequest::Pending ServerPending;
+// The server request whose "<Id>.server" callback is running on this thread, for item.grant.
+thread_local const PluginServerRequest::Serving* CurrentServing=nullptr;
+std::mutex EventGate;HelpyDesktop::Server* EventDesktop=nullptr;std::unordered_map<std::string,PluginEvents::Bucket> EventBuckets;
 thread_local const char* ActiveOwner=nullptr;
 std::atomic<bool> DesktopBridgeReady=false;
 bool Token(const char* value){return value&&PluginCatalog::Token(value);}
@@ -174,7 +202,10 @@ int32_t RS_PLUGIN_CALL CoreTools(void*,const char* requestJson,char* response,ui
             result["BypassStatus"]=DragonWilds::CharacterEntryRecovery::StatusText();
         }
         else if(action=="QuestCatalog")result=QuestPresentationCatalog::Read(request);
-        else if(action=="IconCacheSources")result=HelpySourceCache::ForClient();
+        else if(action=="IconCacheSources"){
+            const auto known=request.contains("Known")&&request["Known"].is_string()?request["Known"].get<std::string>():std::string{};
+            result=HelpySourceCache::ForClient(known.size()<=128?known:std::string{});
+        }
         else if(action=="IconCacheOwnership")result=HelpyCacheOwnership::Page(HelpySourceCache::OwnershipSnapshot(),request);
         else if(action=="IconCacheBuildRead")result=IconCacheBuild::Read(request.value("IncludeManifest",false));
         else if(action=="IconCacheBuildStart"||action=="IconCacheRefreshStart"){
@@ -285,12 +316,122 @@ int32_t RS_PLUGIN_CALL RegisterCapability(const char* plugin,const char* capabil
     return inserted||it->second==plugin?RS_PLUGIN_OK:RS_PLUGIN_DUPLICATE;
 }
 int32_t RS_PLUGIN_CALL RegisterService(const char* plugin,const char* name,RuneSchemaServiceFn callback,void* context) {
-    if(!Token(plugin)||!Token(name)||!callback||!ActiveOwner||std::string_view(plugin)!=ActiveOwner)return RS_PLUGIN_INVALID_ARGUMENT;
+    if(!Token(plugin)||!Token(name)||!callback||!ActiveOwner||std::string_view(plugin)!=ActiveOwner||std::string_view(name)==PluginEvents::Service||std::string_view(name)==ItemSnapshot::Service||std::string_view(name)==ItemDestroy::Service
+        ||std::string_view(name)==ItemGrant::Service||std::string_view(name)==PluginServerRequest::Service)return RS_PLUGIN_INVALID_ARGUMENT;
+    // "<Id>.server" and "<Id>.server-result" belong to plugin <Id> only.
+    const std::string_view text(name);
+    for(const std::string_view suffix:{std::string_view(".server"),std::string_view(".server-result")})
+        if(text.ends_with(suffix)&&text.substr(0,text.size()-suffix.size())!=plugin)return RS_PLUGIN_INVALID_ARGUMENT;
     std::scoped_lock lock(Gate);return Services.emplace(name,Service{plugin,callback,context}).second?RS_PLUGIN_OK:RS_PLUGIN_DUPLICATE;
+}
+// runeschema.server.request, server side: the sender is the controller RuneSchema found, never the payload.
+static nlohmann::json ServePluginRequest(RC::Unreal::UObject* controller,bool remote,const std::string& plugin,const PluginServerRequest::Request& request,const PluginServerRequest::Deliveries& sender={}){
+    namespace P=PluginServerRequest;
+    const auto character=ItemSnapshot::NormalizeGuid(PlayerStatusRuntime::CharacterGuid(DragonWilds::ActorHelper::GetObjectRef(controller,TEXT("PlayerState"))));
+    if(character.empty())return P::Result(request.Action,request.Id,false,nlohmann::json("The sending character is not initialized yet."),P::NotReady);
+    Service service;
+    {std::scoped_lock lock(Gate);const auto found=Services.find(P::ServerService(plugin));
+        if(found==Services.end()||found->second.Owner!=plugin)return P::Result(request.Action,request.Id,false,nlohmann::json(plugin+" is not installed on this server."),P::NotInstalled);
+        service=found->second;}
+    const auto call=P::ServerCall(plugin,request,character,remote).dump();
+    std::string reply(P::MaxReplyBytes,'\0');uint32_t size=0;int32_t code=RS_PLUGIN_FAILED;
+    // Core services the server half calls during this callback see which request it is serving.
+    const P::Serving serving{plugin,character,remote,sender};
+    struct ServingScope{const P::Serving* previous;explicit ServingScope(const P::Serving* now):previous(CurrentServing){CurrentServing=now;}~ServingScope(){CurrentServing=previous;}};
+    try{ServingScope scope(&serving);code=service.Callback(service.Context,call.c_str(),reply.data(),static_cast<uint32_t>(reply.size()),&size);}catch(...){code=RS_PLUGIN_FAILED;}
+    if(code==RS_PLUGIN_BUFFER_TOO_SMALL)return P::Result(request.Action,request.Id,false,nlohmann::json("The server's reply exceeded the transport limit."));
+    if(code!=RS_PLUGIN_OK||!size||size>reply.size())return P::Result(request.Action,request.Id,false,nlohmann::json("The server's "+plugin+" refused the request (code "+std::to_string(code)+")."));
+    if(reply[size-1]=='\0')--size;reply.resize(size);
+    const auto value=nlohmann::json::parse(reply,nullptr,false);
+    if(!value.is_object())return P::Result(request.Action,request.Id,false,nlohmann::json("The server's "+plugin+" returned an invalid reply."));
+    return P::Result(request.Action,request.Id,true,value);
+}
+static RC::Unreal::UObject* LocalController(){
+    using namespace RC::Unreal;
+    auto* type=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,TEXT("/Script/Dominion.DominionPlayerController"));
+    if(!type)return nullptr;TArray<UObject*> controllers;UECustom::UObjectGlobals::GetObjectsOfClass(type,controllers,true);
+    for(auto* candidate:controllers){
+        if(!candidate||candidate->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed|RF_FinishDestroyed))||!candidate->GetWorld())continue;
+        try{DragonWilds::ActorHelper::FunctionCall local(candidate,TEXT("/Script/Engine.Controller:IsLocalController"));local.Invoke();if(local.Result<bool>())return candidate;}catch(...){}
+    }
+    return nullptr;
+}
+// runeschema.server.request, sending side. Local (single player or host): the reply carries the result.
+// Remote: the reply carries the bridge revision and the result arrives at "<Plugin>.server-result".
+static int32_t ServerRequest(const char* caller,const char* request,char* response,uint32_t capacity,uint32_t* size){
+    namespace P=PluginServerRequest;
+    *size=0;
+    // A size probe sends nothing.
+    constexpr uint32_t Needed=4096;
+    if(!response||capacity<Needed){*size=Needed;return RS_PLUGIN_BUFFER_TOO_SMALL;}
+    {using namespace RC::Unreal;if(!IsInGameThread())return RS_PLUGIN_FAILED;}
+    P::Request parsed;
+    try{parsed=P::Parse(nlohmann::json::parse(request));}catch(...){return RS_PLUGIN_INVALID_ARGUMENT;}
+    auto* controller=LocalController();
+    if(!controller)return RS_PLUGIN_NOT_FOUND;
+    nlohmann::json reply;
+    if(Network::OwnsGameplay(Network::Detect(controller).Mode))reply={{"Local",true},{"Result",ServePluginRequest(controller,false,caller,parsed)}};
+    else{
+        std::scoped_lock lock(ServerRequestGate);
+        if(!ServerSend)return RS_PLUGIN_NOT_FOUND;
+        if(ServerPending.Full(P::Pending::Clock::now()))return RS_PLUGIN_FAILED;
+        // This PC's own delivery flags for its character, with the caller's own pause exempt:
+        // the server cannot read them, and a grant while serving this request needs them open.
+        P::Deliveries sender{true,false,"unknown"};
+        try{
+            const auto character=PlayerStatusRuntime::CharacterGuid(DragonWilds::ActorHelper::GetObjectRef(controller,TEXT("PlayerState")));
+            const auto block=HelpyDeliveryGate::Assess(character,"",ItemGrant::OwnPauseMod(caller));
+            if(!block)sender={true,true,""};
+            else sender.By=block->User?std::string("helpy"):block->Id.empty()?std::string("unknown"):block->Mod;
+        }catch(...){}
+        const auto revision=ServerSend(caller,parsed.Action,P::Wire(parsed,sender).dump());
+        if(revision<=0)return RS_PLUGIN_NOT_FOUND;
+        ServerPending.Add(revision,{caller,parsed.Action,parsed.Id,P::Pending::Clock::now()});
+        reply={{"Local",false},{"Revision",revision}};
+    }
+    return JsonResponse(reply,response,capacity,size);
+}
+// helpy.plugin.event: queue an owner-tagged event for the caller's own Helpy-side half.
+// Nonblocking: OK = queued; NOT_FOUND = not a Host=helpy game half or Helpy is not attached;
+// FAILED = over the per-owner rate (coalesce and retry later); INVALID_ARGUMENT = bad request.
+static int32_t PluginEvent(const char* caller,const char* request,uint32_t* size) {
+    *size=0;
+    {std::scoped_lock lock(Gate);if(!HelpyGameHalves.contains(caller))return RS_PLUGIN_NOT_FOUND;}
+    try{
+        std::scoped_lock lock(EventGate);if(!EventDesktop)return RS_PLUGIN_NOT_FOUND;
+        auto& bucket=EventBuckets[caller];auto probe=bucket;
+        if(!PluginEvents::Take(probe,GetTickCount64()))return RS_PLUGIN_FAILED;
+        const auto event=PluginEvents::Build(caller,request,probe.Sequence).dump();
+        if(!EventDesktop->TryPush(event))return RS_PLUGIN_NOT_FOUND;
+        bucket=probe;return RS_PLUGIN_OK;
+    }catch(const std::exception&){return RS_PLUGIN_INVALID_ARGUMENT;}
 }
 int32_t RS_PLUGIN_CALL CallService(const char* caller,const char* name,const char* request,char* response,uint32_t capacity,uint32_t* size) {
     if(!Token(caller)||!Token(name)||!request||!size||capacity>RUNESCHEMA_PLUGIN_MAX_MESSAGE
         ||(!response&&capacity)||strnlen_s(request,RUNESCHEMA_PLUGIN_MAX_MESSAGE+1)>RUNESCHEMA_PLUGIN_MAX_MESSAGE)return RS_PLUGIN_INVALID_ARGUMENT;
+    if(std::string_view(name)==PluginEvents::Service)return PluginEvent(caller,request,size);
+    // Core-owned and read-only; game thread, authoritative world. Not reachable over the desktop pipe.
+    if(std::string_view(name)==ItemSnapshot::Service)return ItemSnapshotService::Call(request,response,capacity,size);
+    // Core-owned grant into one inventory; the caller must declare item.grant in its manifest.
+    if(std::string_view(name)==ItemGrant::Service)return ItemGrantService::Call(caller,Declared(caller,ItemGrant::Capability),CurrentServing,request,response,capacity,size);
+    if(std::string_view(name)==PluginServerRequest::Service){
+        if(!Declared(caller,PluginServerRequest::Capability))return RS_PLUGIN_INVALID_ARGUMENT;
+        return ServerRequest(caller,request,response,capacity,size);
+    }
+    if(std::string_view(name)==ItemDestroy::Service){
+        bool permitted=false;{std::scoped_lock lock(Gate);const auto cap=Capabilities.find(std::string(ItemDestroy::Capability));permitted=DestroyCallers.contains(caller)&&cap!=Capabilities.end()&&cap->second==caller;}
+        // A remote player's character only while serving that player's own request (PluginServerRequest::RequireSender).
+        if(permitted&&response&&capacity>=ItemDestroy::MinCapacity){
+            std::string target;
+            try{const auto input=nlohmann::json::parse(request);if(input.is_object()&&input.contains("Player")&&input["Player"].is_string())target=ItemSnapshot::NormalizeGuid(input["Player"].get<std::string>());}catch(...){}
+            if(!target.empty())try{
+                std::string local;
+                {using namespace RC::Unreal;if(IsInGameThread())if(auto* own=LocalController())local=ItemSnapshot::NormalizeGuid(PlayerStatusRuntime::CharacterGuid(DragonWilds::ActorHelper::GetObjectRef(own,TEXT("PlayerState"))));}
+                PluginServerRequest::RequireSender(caller,CurrentServing,target,!local.empty()&&local==target);
+            }catch(const std::exception& error){return JsonResponse(ItemDestroy::Refusal("Target",error.what()),response,capacity,size);}
+        }
+        return ItemDestroyService::Call(caller,permitted,request,response,capacity,size);
+    }
     std::unique_lock policyLock(MultiplayerPolicyLifetime,std::defer_lock);
     if(std::string_view(name)==MultiplayerPolicy::Service){
         if(std::string_view(caller)!="RuneSchema.Core")return RS_PLUGIN_INVALID_ARGUMENT;
@@ -298,6 +439,19 @@ int32_t RS_PLUGIN_CALL CallService(const char* caller,const char* name,const cha
     }
     Service service;{std::scoped_lock lock(Gate);const auto found=Services.find(name);if(found==Services.end())return RS_PLUGIN_NOT_FOUND;service=found->second;}
     try{return service.Callback(service.Context,request,response,capacity,size);}catch(...){return RS_PLUGIN_FAILED;}
+}
+// Desktop pipe: a Helpy frontend plugin calls a service owned by its own in-game half.
+static nlohmann::json OwnedServiceCall(const nlohmann::json& request) {
+    const auto caller=request.value("Caller",std::string{}),name=request.value("Service",std::string{});
+    const auto input=request.value("Input",std::string{});const auto capacity=request.value("Capacity",uint32_t{});
+    if(capacity>RUNESCHEMA_PLUGIN_MAX_MESSAGE||input.size()>RUNESCHEMA_PLUGIN_MAX_MESSAGE||input.find('\0')!=std::string::npos)return {{"Code",RS_PLUGIN_INVALID_ARGUMENT}};
+    Service service;{std::scoped_lock lock(Gate);const auto found=Services.find(name);
+        if(found==Services.end()||!PluginCatalog::OwnedServiceAllowed(caller,name,found->second.Owner))return {{"Code",RS_PLUGIN_NOT_FOUND}};service=found->second;}
+    thread_local std::vector<char> output;if(output.size()<capacity)output.resize(capacity);uint32_t size=0;int32_t code=RS_PLUGIN_FAILED;
+    try{code=service.Callback(service.Context,input.c_str(),capacity?output.data():nullptr,capacity,&size);}catch(...){code=RS_PLUGIN_FAILED;}
+    nlohmann::json reply={{"Code",code},{"Size",size}};
+    if(code==RS_PLUGIN_OK&&size&&size<=capacity){auto length=size;if(output[length-1]=='\0')--length;reply["Output"]=std::string(output.data(),length);}
+    return reply;
 }
 void* RS_PLUGIN_CALL FindObject(void* objectClass,void* objectPackage,const wchar_t* name,int32_t exactClass) {
     if(!name)return nullptr;
@@ -378,14 +532,25 @@ void PluginHost::LoadOwned(const std::filesystem::path& root,const std::vector<s
     },options);
     if(m_state->OwnedInit==RC::Unreal::Hook::ERROR_ID)HostLog(RS_LOG_ERROR,"RuneSchema.Core","Mod-owned plugin initialization requires an available game-thread tick");
 }
-void PluginHost::LoadCatalog(const std::vector<PluginCatalog::Plugin>& manifests){
+void PluginHost::LoadCatalog(const std::vector<PluginCatalog::Plugin>& catalog){
+    // A Host=helpy plugin's UI DLL runs in Helpy.exe. Its optional GameEntryPoint is its
+    // in-game native half: same ABI and identity, checked against GameCapabilities.
+    // Catalog order is preserved; Helpy-only manifests stay listed and are skipped below.
+    std::vector<PluginCatalog::Plugin> manifests;manifests.reserve(catalog.size());
+    for(const auto& listed:catalog) {
+        manifests.push_back(listed);
+        if(listed.Host=="helpy"&&!listed.GameEntryPoint.empty()) {
+            auto& gameHalf=manifests.back();gameHalf.Host="game";gameHalf.EntryPoint=listed.GameEntryPoint;
+            gameHalf.Capabilities=listed.GameCapabilities;gameHalf.Connections.clear();
+        }
+    }
     for(const auto& manifest:manifests) {
         if(!manifest.Enabled||manifest.Host!="game")continue;
         auto identity=manifest.Id;std::transform(identity.begin(),identity.end(),identity.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
         if(!m_state->SelectedIds.insert(identity).second){m_state->Messages.push_back(manifest.Id+": duplicate plugin identity rejected");continue;}
         // The desktop bridge and networking policy are available on dedicated hosts.
         if(Storefront::IsDedicatedServer()&&manifest.Id!="RuneSchema.Helpy"&&manifest.Id!="RSNetworking"
-            &&!(manifest.ServerCompatible&&!manifest.ModOwner.empty()))continue;
+            &&!(manifest.ServerCompatible&&(!manifest.ModOwner.empty()||!manifest.GameEntryPoint.empty())))continue;
         std::vector<std::filesystem::path> packages;
         try{packages=PluginCatalog::PakDirectories(manifest);}
         catch(const std::exception& error){
@@ -458,6 +623,9 @@ void PluginHost::LoadCatalog(const std::vector<PluginCatalog::Plugin>& manifests
         const auto uiInit=reinterpret_cast<RuneSchemaPluginPhaseFn>(GetProcAddress(module,"RuneSchemaPlugin_OnUiInit"));
         const auto unrealInit=reinterpret_cast<RuneSchemaPluginPhaseFn>(GetProcAddress(module,"RuneSchemaPlugin_OnUnrealInit"));
         m_state->LoadedPlugins.push_back({manifest,module,instance,shutdown,uiInit,unrealInit});
+        if(std::find(manifest.Capabilities.begin(),manifest.Capabilities.end(),ItemDestroy::Capability)!=manifest.Capabilities.end()){std::scoped_lock lock(Gate);DestroyCallers.insert(manifest.Id);}
+        {std::scoped_lock lock(Gate);auto& declared=DeclaredCapabilities[manifest.Id];declared.insert(manifest.Capabilities.begin(),manifest.Capabilities.end());}
+        if(!manifest.GameEntryPoint.empty()){std::scoped_lock lock(Gate);HelpyGameHalves.insert(manifest.Id);}
         m_state->Messages.push_back(manifest.Id+": loaded API 1");
     }
 }
@@ -471,6 +639,7 @@ void PluginHost::StartDesktop(){
     if(HelpyDesktop::Enabled(root)&&std::any_of(m_state->LoadedPlugins.begin(),m_state->LoadedPlugins.end(),[](const auto& plugin){return plugin.Manifest.Id=="RuneSchema.Helpy";})){
         try{if(!DesktopBridgeReady)DesktopBridgeReady=m_state->Desktop.Start(root,[](const nlohmann::json& request){
             if(request.value("Op",std::string{})=="Poll")return nlohmann::json{{"Code",RS_PLUGIN_OK}};
+            if(request.value("Op",std::string{})=="Service")return OwnedServiceCall(request);
             if(request.value("Op",std::string{})!="Call"||!request.contains("Request")||!request["Request"].is_object())return nlohmann::json{{"Code",RS_PLUGIN_INVALID_ARGUMENT}};
             const auto capacity=request.value("Capacity",uint32_t{});if(capacity>RUNESCHEMA_PLUGIN_MAX_MESSAGE)return nlohmann::json{{"Code",RS_PLUGIN_INVALID_ARGUMENT}};
             const auto input=request["Request"].dump();if(input.size()>RUNESCHEMA_PLUGIN_MAX_MESSAGE)return nlohmann::json{{"Code",RS_PLUGIN_INVALID_ARGUMENT}};
@@ -480,6 +649,7 @@ void PluginHost::StartDesktop(){
             if(code==RS_PLUGIN_OK&&size&&size<=output.size()){if(output[size-1]=='\0')--size;reply["Body"]=nlohmann::json::parse(output.data(),output.data()+size);}
             return reply;
         },[]{HelpyActivity::Visible=false;HelpyActivity::CaptureInput=false;});}catch(...){m_state->Desktop.Stop();DesktopBridgeReady=false;}
+        if(DesktopBridgeReady){std::scoped_lock lock(EventGate);EventDesktop=&m_state->Desktop;}
         if(!DesktopBridgeReady)HostLog(RS_LOG_WARNING,"RuneSchema.Helpy","[RS-UI-002] Helpy game bridge unavailable; the application can still browse its cache offline.");
         else try{(void)Call("RuneSchema.Core","helpy.desktop.launch","{}");}catch(...){} // Older bridges launch at their normal Unreal-init phase.
     }
@@ -522,6 +692,8 @@ void PluginHost::Shutdown() noexcept {
     if(m_state)m_state->UnrealReady.store(false,std::memory_order_release);
     if(m_state&&m_state->OwnedInit!=RC::Unreal::Hook::ERROR_ID){RC::Unreal::Hook::UnregisterCallback(m_state->OwnedInit);m_state->OwnedInit=RC::Unreal::Hook::ERROR_ID;}
     ModLocalServices::Stop();
+    {std::scoped_lock lock(EventGate);EventDesktop=nullptr;EventBuckets.clear();}
+    {std::scoped_lock lock(Gate);HelpyGameHalves.clear();}
     if(m_state)m_state->Desktop.Stop();DesktopBridgeReady=false;
     HelpyActivity::Visible=false;HelpyActivity::CaptureInput=false;HelpyActivity::HudCaptureInput=false;HelpySourceCache::Requested=false;HelpySourceCache::Shutdown();
     AssetSearch::ShutdownItemCatalog();
@@ -533,7 +705,7 @@ void PluginHost::Shutdown() noexcept {
         if(iterator->Manifest.Id=="RSNetworking")policyLock.lock();
         if(!ModLocalServices::Drop(iterator->Manifest.Id))continue;
         if(iterator->Shutdown)try{iterator->Shutdown(iterator->Instance);}catch(...){}
-        {std::scoped_lock lock(Gate);std::erase_if(Services,[&](const auto& value){return value.second.Owner==iterator->Manifest.Id;});std::erase_if(Capabilities,[&](const auto& value){return value.second==iterator->Manifest.Id;});std::erase_if(ActiveConnections,[&](const auto& value){return value.second==iterator->Manifest.Id;});}
+        {std::scoped_lock lock(Gate);DestroyCallers.erase(iterator->Manifest.Id);DeclaredCapabilities.erase(iterator->Manifest.Id);std::erase_if(Services,[&](const auto& value){return value.second.Owner==iterator->Manifest.Id;});std::erase_if(Capabilities,[&](const auto& value){return value.second==iterator->Manifest.Id;});std::erase_if(ActiveConnections,[&](const auto& value){return value.second==iterator->Manifest.Id;});}
         if(iterator->Module)FreeLibrary(iterator->Module);
     }
     m_state->LoadedPlugins.clear();m_state->SelectedIds.clear();
@@ -548,6 +720,41 @@ std::string PluginHost::Call(const std::string& caller,const std::string& servic
     std::string response(size,'\0');result=CallService(caller.c_str(),service.c_str(),request.c_str(),response.data(),size,&size);
     if(result!=RS_PLUGIN_OK||!size||size>response.size())throw std::runtime_error("Plugin service failed: "+service);
     if(response[size-1]=='\0')--size;response.resize(size);return response;
+}
+void PluginHost::SetServerTransport(ServerTransport transport){std::scoped_lock lock(ServerRequestGate);ServerSend=std::move(transport);}
+std::string PluginHost::HandleRemotePluginRequest(RC::Unreal::UObject* pawn,const std::string& plugin,const std::string& action,const std::string& payload){
+    namespace P=PluginServerRequest;
+    std::string id;
+    try{
+        if(!P::Token(plugin,128)||!PluginCatalog::Token(plugin))throw std::runtime_error("Invalid plugin id.");
+        const auto wire=nlohmann::json::parse(payload);
+        if(wire.is_object()&&wire.contains("Request")&&wire["Request"].is_string())id=wire["Request"].get<std::string>().substr(0,36);
+        if(!wire.is_object()||wire.size()>3)throw std::runtime_error("Invalid plugin request.");
+        for(const auto& [key,value]:wire.items())if(key!="Request"&&key!="Body"&&key!="Deliveries")throw std::runtime_error("Invalid plugin request.");
+        const auto request=P::Parse({{"Action",action},{"Request",wire.value("Request",std::string{})},{"Body",wire.value("Body",nlohmann::json::object())}});
+        const auto deliveries=wire.find("Deliveries");
+        const auto sender=P::ParseDeliveries(deliveries==wire.end()?nullptr:&*deliveries);
+        auto* controller=pawn?DragonWilds::ActorHelper::GetObjectRef(pawn,TEXT("Controller")):nullptr;
+        if(!controller||controller->GetWorld()!=pawn->GetWorld()||DragonWilds::ActorHelper::GetObjectRef(controller,TEXT("Pawn"))!=pawn)
+            throw std::runtime_error("Plugin requests need the sender's current owned character.");
+        return ServePluginRequest(controller,true,plugin,request,sender).dump();
+    }catch(const std::exception& error){
+        return P::Result(P::Token(action,64)?action:std::string("invalid"),id,false,nlohmann::json(std::string(error.what())),P::Invalid).dump();
+    }
+}
+void PluginHost::DeliverPluginResult(int64_t revision,const std::string& plugin,const std::string& payload){
+    namespace P=PluginServerRequest;
+    try{
+        const auto result=nlohmann::json::parse(payload);
+        if(!result.is_object()||!result.contains("Request")||!result["Request"].is_string())return;
+        {std::scoped_lock lock(ServerRequestGate);
+            if(!ServerPending.Take(revision,plugin,result["Request"].get<std::string>(),P::Pending::Clock::now()))return;}
+        Service service;
+        {std::scoped_lock lock(Gate);const auto found=Services.find(P::ResultService(plugin));
+            if(found==Services.end()||found->second.Owner!=plugin)return;service=found->second;}
+        const auto text=result.dump();uint32_t ignored=0;
+        try{service.Callback(service.Context,text.c_str(),nullptr,0,&ignored);}catch(...){}
+    }catch(...){}
 }
 std::vector<std::string> PluginHost::Diagnostics() const{return m_state?m_state->Messages:std::vector<std::string>{};}
 }

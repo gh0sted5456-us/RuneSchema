@@ -5,10 +5,12 @@
 #include <set>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include "Loader/DragonWildsModLoaderBase.h"
 #include "nlohmann/json.hpp"
 #include "Unreal/Hooks.hpp"
+#include "Runtime/ProcessEventDispatch.h"
 
 namespace RC::Unreal { class UWorld; }
 
@@ -70,9 +72,10 @@ namespace DragonWilds {
         std::vector<PendingAsset> m_pendingPatches;
         std::vector<PendingObjectPatch> m_pendingObjectPatches;
         std::vector<PendingObjectPatch> m_retainedObjectPatches;
-        RC::Unreal::Hook::GlobalCallbackId m_characterMenuPatchHook = RC::Unreal::Hook::ERROR_ID;
+        PS::ProcessEventDispatch::Route m_characterMenuPatchHook;
         bool m_replayingCharacterMenuPatches = false;
         std::vector<RC::Unreal::UObject*> m_createdAssets;
+        std::unordered_set<RC::Unreal::UObject*> m_createdAssetSet; // same objects, for membership checks
         std::unordered_map<RC::StringType, RC::Unreal::UObject*> m_createdAssetsByTarget;
         RC::Unreal::UClass* m_dataAssetClass = nullptr;
         RC::Unreal::UClass* m_itemDataClass = nullptr;

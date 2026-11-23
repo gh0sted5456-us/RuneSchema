@@ -51,6 +51,7 @@
 #include "SDK/Structs/Custom/FScriptArrayHelper.h"
 #include "SDK/Structs/Custom/FScriptMapHelper.h"
 #include "SDK/Helper/PropertyHelper.h"
+#include <chrono>
 #include "Utility/JsonHelpers.h"
 #include "Utility/ConsumeQueue.h"
 #include "Utility/Logging.h"
@@ -911,11 +912,7 @@ namespace DragonWilds {
 
     DragonWildsAssetModLoader::~DragonWildsAssetModLoader()
     {
-        if (m_characterMenuPatchHook != Hook::ERROR_ID)
-        {
-            Hook::UnregisterCallback(m_characterMenuPatchHook);
-            m_characterMenuPatchHook = Hook::ERROR_ID;
-        }
+        PS::ProcessEventDispatch::Remove(m_characterMenuPatchHook);
         if(AuthoringInstance==this)AuthoringInstance=nullptr;
         std::scoped_lock lock{m_mutex};
         m_pendingAssets.clear();
@@ -924,7 +921,7 @@ namespace DragonWilds {
         m_retainedObjectPatches.clear();
         m_createdAssetsByTarget.clear();
         PS::AssetAliases::Clear();
-        m_createdAssets.clear();
+        m_createdAssets.clear();m_createdAssetSet.clear();
         PS::AssetProvenance::Clear();
         PS::AssetMetadata::Clear();
     }
@@ -1231,16 +1228,13 @@ namespace DragonWilds {
 
     void DragonWildsAssetModLoader::RegisterCharacterMenuPatchReplay()
     {
-        if (m_characterMenuPatchHook != Hook::ERROR_ID) return;
-        Hook::FCallbackOptions options{};
-        options.OwnerModName = TEXT("RuneSchema");
-        options.HookName = TEXT("CharacterMenuAssetPatchReplay");
-        m_characterMenuPatchHook = Hook::RegisterProcessEventPreCallback(
+        if (m_characterMenuPatchHook) return;
+        // Routed by name through the shared ProcessEvent dispatcher: only Construct and BP_OnOpen reach this.
+        m_characterMenuPatchHook = PS::ProcessEventDispatch::Add(PS::ProcessEventDispatch::Phase::Pre,
+            {TEXT("Construct"), TEXT("BP_OnOpen")}, "CharacterMenuAssetPatchReplay",
             [this](Hook::TCallbackIterationData<void>&, UObject* source, UFunction* function, void*)
             {
                 if (!source || !function || !source->GetClassPrivate() || m_replayingCharacterMenuPatches) return;
-                static const FName construct(TEXT("Construct"),FNAME_Add),open(TEXT("BP_OnOpen"),FNAME_Add);
-                const auto name=function->GetFName();if(name!=construct&&name!=open)return;
                 const auto classPath = RC::to_string(source->GetClassPrivate()->GetPathName());
                 if (classPath.find("WBP_CharacterOptionSelect_C") == std::string::npos) return;
                 const auto functionPath = RC::to_string(function->GetPathName());
@@ -1253,8 +1247,8 @@ namespace DragonWilds {
                         PS::ToWideSafe(error.what()));
                 }
                 m_replayingCharacterMenuPatches = false;
-            }, options);
-        if (m_characterMenuPatchHook == Hook::ERROR_ID)
+            });
+        if (!m_characterMenuPatchHook)
             PS::Log<LogLevel::Warning>(TEXT("[LOADER:assets][PARTIAL][CHARACTER-MENU] Pre-open replay is unavailable; other asset edits remain active.\n"));
         else
             PS::Log<LogLevel::Normal>(TEXT("[LOADER:assets][OK][CHARACTER-MENU] Pre-open replay enabled.\n"));
@@ -3132,7 +3126,7 @@ namespace DragonWilds {
             throw std::runtime_error("Generated cancellation binding conflicts with an existing item");
         auto* subsystem=FindItemSubsystem();
         auto* object=Resolve(pending);bool created=false;
-        if(object && std::find(m_createdAssets.begin(),m_createdAssets.end(),object)==m_createdAssets.end())
+        if(object && !m_createdAssetSet.contains(object))
             throw std::runtime_error("Generated cancellation path is occupied by another asset");
         if(!object){object=CreateFromClone(pending,subsystem);created=object!=nullptr;}
         if(!object || !IsReadyForPatch(object) || !IsSupportedTarget(object))throw std::runtime_error("Cancellation scroll is not ready");
@@ -3157,6 +3151,9 @@ namespace DragonWilds {
 
         std::map<RC::StringType, BatchResult> batchResults;
         std::scoped_lock lock{m_mutex};
+        // Assets repeat the same icon, mesh and table references; resolve each once per pass.
+        DragonWilds::PropertyHelper::ReferenceCacheScope objectReferences;
+        const auto passStarted=std::chrono::steady_clock::now();const auto pendingCount=m_pendingAssets.size();
 
         // Helpy may clone another installed runtime item. Its parent must be
         // created/registered first even when JSON filenames put the child first.
@@ -3203,8 +3200,7 @@ namespace DragonWilds {
             {
                 object = Resolve(*it);
                 if (object && isClone
-                    && std::find(m_createdAssets.begin(), m_createdAssets.end(), object)
-                        == m_createdAssets.end())
+                    && !m_createdAssetSet.contains(object))
                     throw std::runtime_error(
                         "the clone target collides with an existing loaded asset");
                 if (!object && isClone) {
@@ -3297,6 +3293,8 @@ namespace DragonWilds {
         if(!batchResults.empty())
             PS::LoaderSummary("assets", totalCreated+totalUpdated,
                 totalCreated,totalUpdated,0,totalErrors);
+        const auto passMs=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-passStarted).count();
+        if(passMs>=250)PS::Log<LogLevel::Normal>(STR("[PERF][ASSETS] pass={} ms | pending={} | references={} cached of {}.\n"),passMs,pendingCount,objectReferences.Hits(),objectReferences.Lookups());
     }
 
     void DragonWildsAssetModLoader::ReportUnresolvedAssets()
@@ -3437,7 +3435,7 @@ namespace DragonWilds {
         if (!package)
             throw std::runtime_error("failed to create the runtime clone package");
         package->SetRootSet();
-        m_createdAssets.push_back(package);
+        m_createdAssets.push_back(package);m_createdAssetSet.insert(package);
 
         FStaticConstructObjectParameters params(source->GetClassPrivate(), package);
         params.Name = FName(objectName, FNAME_Add);
@@ -3478,7 +3476,7 @@ namespace DragonWilds {
         }
 
         created->SetRootSet();
-        m_createdAssets.push_back(created);
+        m_createdAssets.push_back(created);m_createdAssetSet.insert(created);
         m_createdAssetsByTarget[pendingAsset.Target] = created;
         m_createdAssetsByTarget[runtimePath] = created;
         return created;

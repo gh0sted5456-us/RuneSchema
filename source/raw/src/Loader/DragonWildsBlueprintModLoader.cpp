@@ -577,7 +577,8 @@ namespace DragonWilds {
     {
         if(!type)return NAME_None;
         if(const auto found=m_runtimeOwnerClassPaths.find(type);found!=m_runtimeOwnerClassPaths.end()&&found->second.Type.Get()==type)return found->second.Path;
-        if(m_runtimeOwnerClassPaths.size()>=512)m_runtimeOwnerClassPaths.clear();
+        // Widget hierarchies seen through ProcessEvent span thousands of classes; a small cap rebuilt paths constantly.
+        if(m_runtimeOwnerClassPaths.size()>=8192)m_runtimeOwnerClassPaths.clear();
         const auto path=FName(type->GetPathName(),FNAME_Find);
         m_runtimeOwnerClassPaths.insert_or_assign(type,RuntimeOwnerClassPath{PS::WeakObjectHandle(type),path});return path;
     }
@@ -954,6 +955,40 @@ namespace DragonWilds {
             current = current->GetOuterPrivate();
         }
         return nullptr;
+    }
+
+    void DragonWildsBlueprintModLoader::CollectRuntimeWidgetOwners(
+        UObject* source,
+        RuntimeWidgetOwnerList& owners)
+    {
+        if (m_runtimeWidgetOwnerClasses.empty()) return;
+        // Classes already matched nearer the source; a farther outer of the
+        // same class is not that class's owner (same result as one
+        // FindRuntimeWidgetOwner walk per class).
+        FName matched[34];
+        size_t matchedCount = 0;
+        const auto claim = [&](const FName& key) {
+            if (key == NAME_None || !m_runtimeWidgetOwnerClasses.contains(key)) return false;
+            for (size_t index = 0; index < matchedCount; ++index) if (matched[index] == key) return false;
+            if (matchedCount < std::size(matched)) matched[matchedCount++] = key;
+            return true;
+        };
+        const bool paths = !m_runtimeWidgetPathOwners.empty();
+        UObject* current = source;
+        for (int depth = 0; current && depth < 16 && matchedCount < m_runtimeWidgetOwnerClasses.size(); ++depth)
+        {
+            if (auto* type = current->GetClassPrivate())
+            {
+                bool owner = claim(type->GetNamePrivate());
+                if (paths)
+                {
+                    const auto path = RuntimeWidgetOwnerClassPath(type);
+                    if (m_runtimeWidgetPathOwners.contains(path) && claim(path)) owner = true;
+                }
+                if (owner) owners.Add(current);
+            }
+            current = current->GetOuterPrivate();
+        }
     }
 
     bool DragonWildsBlueprintModLoader::RuntimeWidgetSelectorMatches(
@@ -1769,7 +1804,8 @@ namespace DragonWilds {
         if (!m_runtimeWidgetAnyEvent && (!function || !m_runtimeWidgetEvents.contains(eventName)))
             return;
 
-        std::unordered_set<UObject*> ownersToRefresh;
+        // Fixed buffer: this runs for every matching ProcessEvent, so no allocation.
+        RuntimeWidgetOwnerList ownersToRefresh;
 
         if (const auto observed = m_runtimeWidgetObservedTargets.find(source);
             observed != m_runtimeWidgetObservedTargets.end())
@@ -1777,24 +1813,21 @@ namespace DragonWilds {
             auto* trackedTarget = observed->second.Target.Get();
             auto* trackedOwner = observed->second.Owner.Get();
             if (trackedTarget == source && trackedOwner)
-                ownersToRefresh.emplace(trackedOwner);
+                ownersToRefresh.Add(trackedOwner);
             else
                 m_runtimeWidgetObservedTargets.erase(observed);
         }
 
-        for (const auto& ownerClass : m_runtimeWidgetOwnerClasses)
-        {
-            // A native widget can be collapsed before it emits any useful
-            // ProcessEvent traffic of its own. Once an event originates
-            // anywhere inside the matching live owner hierarchy, refresh the
-            // owner's runtime rules and let exact path/$Find resolution decide
-            // whether the target exists. Re-entry is still guarded per rule.
-            if (auto* owner = FindRuntimeWidgetOwner(source, ownerClass))
-                ownersToRefresh.emplace(owner);
-        }
+        // A native widget can be collapsed before it emits any useful
+        // ProcessEvent traffic of its own. Once an event originates
+        // anywhere inside the matching live owner hierarchy, refresh the
+        // owner's runtime rules and let exact path/$Find resolution decide
+        // whether the target exists. Re-entry is still guarded per rule.
+        CollectRuntimeWidgetOwners(source, ownersToRefresh);
 
-        for (auto* owner : ownersToRefresh)
+        for (size_t ownerIndex = 0; ownerIndex < ownersToRefresh.Count; ++ownerIndex)
         {
+            auto* owner = ownersToRefresh.Items[ownerIndex];
             auto* type = owner ? owner->GetClassPrivate() : nullptr;
             if (!type) continue;
             const auto ownerName = type->GetNamePrivate();

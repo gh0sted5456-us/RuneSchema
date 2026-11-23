@@ -46,7 +46,8 @@ host=true;tick('{"Op":"set","Id":"Example","Key":"ServerLimit","Value":20,"Expec
 assert(written==beforeWrites+1 and shared["ModMenu.Example.ServerLimit"]==20)
 tick('{"Op":"page","Id":"Example","Rect":"view:10,20,800,600"}')
 shared["Example.preview"]="Local\\RuneSchema.CharacterPreview.123.JBBB";tick()
-assert(example().PreviewChannel==shared["Example.preview"] and shared["ModMenu.rect"]=="view:10,20,800,600")
+-- Character previews are retired: a declared preview channel is ignored.
+assert(example().PreviewChannel==nil and example().Helpy.preview==nil and shared["ModMenu.rect"]=="view:10,20,800,600")
 config=config:gsub("Shape = 30","Shape = 31");beforeWrites=written
 tick('{"Op":"set","Id":"Example","Key":"Shape","Value":35,"Expected":30}')
 assert(written==beforeWrites and config:find("Shape = 31",1,true))

@@ -71,8 +71,9 @@ int main(int argc,char** argv)try{
     const auto journal=Read(root/"src/Loader/DragonWildsJournalModLoader.cpp"),assets=Read(root/"src/Loader/DragonWildsAssetModLoader.cpp");
     const auto journalStart=journal.find("void DragonWildsJournalModLoader::ObserveAcquisition(");
     Check(journal.find("const auto name=function->GetFName()",journalStart)<journal.find("const auto path=function->GetPathName()",journalStart),"Journal must reject unrelated event names before allocating paths");
-    const auto assetStart=assets.find("m_characterMenuPatchHook = Hook::RegisterProcessEventPreCallback");
-    Check(assets.find("const auto name=function->GetFName()",assetStart)<assets.find("const auto classPath =",assetStart),"Character-menu observer must filter event names before class paths");
+    // The character-menu observer is routed by name through the shared ProcessEvent dispatcher.
+    const auto assetStart=assets.find("m_characterMenuPatchHook = PS::ProcessEventDispatch::Add(");
+    Check(assetStart!=std::string::npos&&assets.find("{TEXT(\"Construct\"), TEXT(\"BP_OnOpen\")}",assetStart)<assets.find("const auto classPath =",assetStart),"Character-menu observer must filter event names before class paths");
     Check(event.contains("const auto name = function->GetFName();")&&!event.contains("const auto name = function->GetName();"),"Player activity observer must use cached names");
     const auto cached=thumbnail.substr(thumbnail.find("std::optional<nlohmann::json> Cached("),thumbnail.find("nlohmann::json Render(")-thumbnail.find("std::optional<nlohmann::json> Cached("));
     Check(cached.find("last_write_time")==std::string::npos&&cached.find("ActiveCapture")==std::string::npos&&cached.find("MaintainCache")==std::string::npos,"Read-only cache checks must not reset captures or rewrite cache timestamps");

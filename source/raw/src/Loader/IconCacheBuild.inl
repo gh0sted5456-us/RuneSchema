@@ -25,6 +25,7 @@ struct BulkIconCacheJob {
     bool Refresh=false;
     size_t ObjectAt=0,ObjectTotal=0,MetadataAt=0,At=0,Hits=0,Captured=0,Failed=0;
     std::vector<PS::CookedAssets::Record> Metadata;
+    std::future<std::vector<std::pair<std::string,std::string>>> ExchangeIcons;
     size_t MetadataTotal=0,MetadataWindowAt=0;uint64_t MetadataRevision=0;
     std::map<std::string,std::set<std::string>> Found;std::vector<Icon> Icons;
     std::map<std::string,std::string> FrozenKeys;
@@ -94,6 +95,16 @@ struct BulkIconCacheJob {
             ItemPage=nlohmann::json::array();ItemPageAt=0;ItemPageLast=false;
             ItemCensusKey.clear();RefreshedIcons.clear();ItemIcons.clear();
             PS::HelpySourceCache::Requested=true;
+            ExchangeIcons=std::async(std::launch::async,[] {
+                const auto file=PS::RuneSchemaData::SharedDirectory("grandexchange")/"items.index.json";
+                PS::RuneSchemaData::Safe(file);
+                if(!std::filesystem::exists(file))return std::vector<std::pair<std::string,std::string>>{};
+                constexpr size_t limit=16*1024*1024;
+                std::ifstream in(file,std::ios::binary);if(!in)throw std::runtime_error("Cannot read Grand Exchange item index");
+                std::string text(limit+1,'\0');in.read(text.data(),text.size());text.resize(static_cast<size_t>(in.gcount()));
+                if(in.bad()||text.size()>limit)throw std::runtime_error("Grand Exchange item index exceeds 16 MiB");
+                return PS::GrandExchangeItems::Icons(nlohmann::json::parse(text));
+            });
         }
         if(!Active)return;
         try {
@@ -106,6 +117,14 @@ struct BulkIconCacheJob {
                 Stage="Waiting for registered sources";Publish();return;
             }
             if(!Prepared) {
+                if(ExchangeIcons.valid()) {
+                    if(ExchangeIcons.wait_for(std::chrono::seconds(0))!=std::future_status::ready){Stage="Reading Grand Exchange icons";Publish();return;}
+                    for(const auto& [asset,icon]:ExchangeIcons.get()) {
+                        if(!plan.Registered.contains(PS::HelpyCacheSources::Source(asset)))continue;
+                        PS::HelpyCacheSources::Reference(asset,icon);
+                        Add(icon,PS::ContentSource::Origins(asset,plan));
+                    }
+                }
                 const auto choices=PS::ContentSource::Choices(plan);
                 if(!Source.empty()&&!choices.contains(Source))throw std::runtime_error("The selected source is not currently registered.");
                 if(!Item.empty()){

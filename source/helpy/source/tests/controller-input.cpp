@@ -118,7 +118,7 @@ int main()try{using namespace PS::HelpyInputMode;Selection selected;selected.Upd
             constexpr std::array labels{"First","Second","Third"};int category=0,tab=0;ImGuiID content=0;XINPUT_GAMEPAD menuPad{};ImGui::FocusWindow(nullptr);
             const auto menuFrame=[&]{PS::HelpyControllerInput::Feed(menuPad);ImGui::NewFrame();ImGui::SetNextWindowPos({0,0});ImGui::SetNextWindowSize({800,600});ImGui::Begin("controller two-pane menu");
                 PS::HelpyMenu::Categories("controller-categories",labels,category);if(PS::HelpyMenu::BeginBody("controller-menu-body",category)){
-                    PS::HelpyMenu::Tabs("controller-tabs",labels,tab);
+                    PS::HelpyMenu::Tabs("controller-tabs",labels,tab,false);
                     if(PS::HelpyImGuiTheme::BeginScroll("controller-content",{0,300})){
                         ImGui::Button("Content action");content=ImGui::GetItemID();
                     }PS::HelpyImGuiTheme::EndScroll(PS::HelpyImGuiTheme::Current);
@@ -127,14 +127,14 @@ int main()try{using namespace PS::HelpyInputMode;Selection selected;selected.Upd
             menuFrame();menuFrame();Check(GImGui->NavId&&GImGui->NavIdIsAlive);
             menuPad.wButtons=XINPUT_GAMEPAD_DPAD_DOWN;menuFrame();menuPad={};menuFrame();menuPad.wButtons=XINPUT_GAMEPAD_A;menuFrame();menuPad={};menuFrame();Check(category==1);
             menuPad.wButtons=XINPUT_GAMEPAD_DPAD_RIGHT;menuFrame();menuPad={};menuFrame();
-            for(int step=0;step<3&&GImGui->NavId!=content;++step){menuPad.wButtons=XINPUT_GAMEPAD_DPAD_DOWN;menuFrame();menuPad={};menuFrame();}
+            for(int step=0;step<3&&GImGui->NavId!=content;++step){menuPad.wButtons=XINPUT_GAMEPAD_A;menuFrame();menuPad={};menuFrame();}
             if(GImGui->NavId!=content)std::cerr<<"Nested content unreachable: "<<(GImGui->NavWindow?GImGui->NavWindow->Name:"none")<<" id="<<GImGui->NavId<<" expected="<<content<<'\n';
             Check(GImGui->NavId==content);
             menuPad.wButtons=XINPUT_GAMEPAD_DPAD_UP;menuFrame();menuPad={};menuFrame();Check(GImGui->NavId!=content);
             category=0;ImGui::FocusWindow(nullptr);menuFrame();menuFrame();menuPad.wButtons=XINPUT_GAMEPAD_DPAD_DOWN;menuFrame();menuPad={};menuFrame();
             menuPad.wButtons=XINPUT_GAMEPAD_DPAD_DOWN;menuFrame();menuPad={};menuFrame();
             menuPad.wButtons=XINPUT_GAMEPAD_A;menuFrame();menuPad={};menuFrame();
-            for(int step=0;step<3&&GImGui->NavId!=content;++step){menuPad.wButtons=XINPUT_GAMEPAD_DPAD_DOWN;menuFrame();menuPad={};menuFrame();}Check(GImGui->NavId==content);
+            for(int step=0;step<3&&GImGui->NavId!=content;++step){menuPad.wButtons=XINPUT_GAMEPAD_A;menuFrame();menuPad={};menuFrame();}Check(GImGui->NavId==content);
             ImGui::FocusWindow(nullptr);int section=0;ImGuiID nestedControl=0;
             const auto nestedFrame=[&]{PS::HelpyControllerInput::Feed(menuPad);ImGui::NewFrame();ImGui::SetNextWindowPos({0,0});ImGui::SetNextWindowSize({800,600});ImGui::Begin("nested section headers");
                 PS::HelpyMenu::Tabs("outer-tabs",labels,tab);ImGui::Button("Cart");

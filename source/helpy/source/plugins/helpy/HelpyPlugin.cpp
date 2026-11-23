@@ -329,7 +329,8 @@ void SyncHost(State* state,bool force=false,bool metadata=false) {
 void ConfigureTransport(State* state) {
         PS::RuneSchemaSettingsPanel::Remote=[state](const nlohmann::json& request,nlohmann::json& result){return CallCore(state,request,result);};
         PS::HelpyIconPacks::RemoteBuild=[state](const nlohmann::json& request,nlohmann::json& result){return CallCore(state,request,result);};
-        PS::HelpySourceCache::RemoteSnapshot=[state](nlohmann::json& result){return CallCore(state,{{"Action","IconCacheSources"}},result);};
+        PS::HelpySourceCache::RemoteStamp.clear();
+        PS::HelpySourceCache::RemoteSnapshot=[state](nlohmann::json& result){return CallCore(state,{{"Action","IconCacheSources"},{"Known",PS::HelpySourceCache::RemoteStamp}},result);};
         PS::ItemIconCache::RemoteResetAccounting=[state]{nlohmann::json ignored;CallCore(state,{{"Action","IconCacheResetAccounting"}},ignored);};
         PS::AuthoringClient::Remote=[state](const nlohmann::json& request,nlohmann::json& reply){return CallCore(state,request,reply);};
         PS::SpawnToolRequests::RemoteMapGroundSubmit=[state](nlohmann::json request){nlohmann::json result;return CallCore(state,{{"Action","MapGroundSubmit"},{"Request",std::move(request)}},result)&&result.value("Accepted",false);};
@@ -443,7 +444,7 @@ extern "C" __declspec(dllexport) void RS_PLUGIN_CALL RuneSchemaPlugin_Shutdown(v
     PS::RuneSchemaSettingsPanel::Remote={};
     PS::AuthoringClient::Clear();
     PS::HelpySourceCache::Shutdown();
-    PS::HelpySourceCache::RemoteSnapshot={};PS::ItemIconCache::RemoteResetAccounting={};
+    PS::HelpySourceCache::RemoteSnapshot={};PS::HelpySourceCache::RemoteStamp.clear();PS::ItemIconCache::RemoteResetAccounting={};
     PS::HelpyIconPacks::RemoteBuild={};PS::HelpyIconPacks::BuildState=nlohmann::json::object();
     PS::ItemIconCache::ClearRemote();PS::LazyCatalog::ClearRemote();PS::SpawnToolRequests::ClearRemote();
     delete state;

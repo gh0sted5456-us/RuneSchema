@@ -3,13 +3,12 @@
 Choose a channel before installing. Keep the core, Helpy and bundled plugins
 from the same package; install the appropriate stock UE4SS separately.
 
-| Channel | Version | Download and notes |
+| Source channel | Version | Status |
 | --- | --- | --- |
-| Stable | **0.8.0.3** | [Download ZIP](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.0.3/RuneSchema-0.8.0.3.zip) · [Released changes and verification](RELEASE-0.8.0.3.md) |
-| Pre-release | **1.0.0** | [Download ZIP](https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.8.1.0-pre.20261114.3/RuneSchema-0.8.1.0-preview-20261114.3.zip) · [Changes since 0.8.0.3](experimental/PRE-RELEASE.md) |
+| Main | **0.9.0.7** | [Source](https://github.com/gh0sted5456-us/RuneSchema/tree/main) · [Consolidated changes](RELEASE-0.9.0.7.md) |
+| Published downloads | Existing releases | [GitHub downloads](https://github.com/gh0sted5456-us/RuneSchema/releases) |
 
-The **RuneSchema 1.0.0 Pre Release** download is the complete runtime package for Dragonwilds CL260223.
-GitHub's **Source code** archives are for development.
+The matching 0.9.0.7 runtime is packaged locally. This source promotion does not publish a new GitHub release; earlier downloadable releases keep their original versions and files. GitHub source archives are for development.
 
 ## What changed
 
@@ -18,8 +17,7 @@ nested Lua discovery for Mod Menu, item-family improvements, FPS controls and
 registry refinements. Read the [stable changelog](CHANGELOG-0.8.0.3.md).
 
 New Helpy, cache, controller, server and HUD changes are listed on the
-[pre-release page](experimental/PRE-RELEASE.md#changes-since-0803). Those changes
-remain there until stable promotion; the normal guides describe stable behavior.
+[pre-release page](experimental/PRE-RELEASE.md#changes-since-0803). See the [0.9.0.7 main notes](RELEASE-0.9.0.7.md) and the promoted Helpy guides; experimental services retain their own limits.
 
 Close the game and choose **Exit Helpy** before replacing files. Preserve your
 settings, mods, AppData profiles/caches and important saves. See

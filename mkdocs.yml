@@ -95,8 +95,15 @@ nav:
       - Overview: users/index.md
       - Download: CURRENT-RELEASE.md
       - Install: INSTALLATION.md
+      - Runtime folders: RUNTIME-LAYOUT.md
+      - 0.9.0.7 changes: RELEASE-0.9.0.7.md
       - Manage mods: users/manage-mods.md
       - Helpy:
+          - Desktop, overlay and settings: HELPY-STANDALONE.md
+          - Mod Menu 2 and HUD: MOD-MENU-2-AND-HUD.md
+          - Dragonwilds Wiki: HELPY-WIKI.md
+          - Web browser: HELPY-BROWSER.md
+          - Grand Exchange integration: GRAND-EXCHANGE.md
           - Workspaces and mappings: HELPY-SCHEMA-WORKSPACES.md
           - Profiles: HELPY-PROFILES.md
           - Inventory marks: HELPY-INVENTORY-EXTENSIONS.md

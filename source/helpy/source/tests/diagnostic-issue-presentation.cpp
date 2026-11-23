@@ -38,6 +38,41 @@ int main(){
     assert(rows.size()==5&&rows[1].Issue==gb&&rows[1].Child);
     rows=DiagnosticIssuePresentation::Rows(store,sorted,false,{});
     assert(rows.size()==5);
+    {
+        // RowsView returns the same rows as Rows() and rebuilds only when an input changes.
+        const auto same=[&](const std::vector<DiagnosticIssuePresentation::Row>& left,
+                            const std::vector<DiagnosticIssuePresentation::Row>& right){
+            if(left.size()!=right.size())return false;
+            for(std::size_t i=0;i<left.size();++i)
+                if(left[i].Issue!=right[i].Issue||left[i].Related!=right[i].Related||left[i].Child!=right[i].Child)return false;
+            return true;
+        };
+        DiagnosticIssueFilters::View view;
+        DiagnosticIssuePresentation::RowsView cache;
+        std::unordered_set<std::uint64_t> expanded;
+        view.Update(store,"",true,false,2,0);
+        assert(same(cache.Update(store,view,true,expanded),DiagnosticIssuePresentation::Rows(store,view.Groups,true,expanded)));
+        assert(cache.Rebuilds==1);
+        const auto collapsed=cache.Items.size();
+        view.Update(store,"",true,false,2,0);
+        cache.Update(store,view,true,expanded);
+        assert(cache.Rebuilds==1&&view.Rebuilds==1);
+        expanded.insert(a);expanded.insert(b);
+        assert(same(cache.Update(store,view,true,expanded),DiagnosticIssuePresentation::Rows(store,view.Groups,true,expanded)));
+        assert(cache.Rebuilds==2&&cache.Items.size()==collapsed+1);
+        assert(same(cache.Update(store,view,false,expanded),DiagnosticIssuePresentation::Rows(store,view.Groups,false,expanded)));
+        assert(cache.Rebuilds==3);
+        expanded.clear();
+        cache.Update(store,view,false,expanded);
+        assert(cache.Rebuilds==3); // The expanded set only matters while clustering.
+        view.Update(store,"transaction",true,false,2,0);
+        assert(same(cache.Update(store,view,false,expanded),DiagnosticIssuePresentation::Rows(store,view.Groups,false,expanded)));
+        assert(cache.Rebuilds==4);
+        assert(store.AcceptStructured(Make("six","ModC","transaction-3","RS-BP-001","/Game/F")));
+        view.Update(store,"",true,false,2,0);
+        assert(same(cache.Update(store,view,true,expanded),DiagnosticIssuePresentation::Rows(store,view.Groups,true,expanded)));
+        assert(cache.Rebuilds==5);
+    }
     LiveLog::Entry legacy{};
     legacy.Id=100;legacy.Text="[WARNING] [SAVE-CLEANUP] independent recovery warning";
     legacy.Severity=LiveLog::Level::Warning;
@@ -48,6 +83,6 @@ int main(){
     const auto saved=DiagnosticCenterHistory::Snapshot(store,"s-ui-b5");
     DiagnosticCenterModel::Store restored;
     assert(DiagnosticCenterHistory::Restore(saved,restored));
-    assert(restored.Groups().size()==6);
+    assert(restored.Groups().size()==7);
     assert(DiagnosticIssuePresentation::Related(restored,a).size()==1);
 }

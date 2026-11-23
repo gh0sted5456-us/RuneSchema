@@ -16,6 +16,7 @@
 #include "Generator/RecipeStudioPanel.h"
 #include "Core/HelpyKitFiles.h"
 #include "Core/CartDeliveryBatch.h"
+#include "Generator/DeliveryStatus.h"
 #include "Generator/PlayerBadges.h"
 #include "Generator/PartyMemberView.h"
 #include "Generator/CatalogProgressView.h"
@@ -141,11 +142,48 @@ inline bool SubmitNextCartRecipient(uint64_t id){
     CartRequestedAt=std::chrono::steady_clock::now();
     ItemGridPicker::CartStatus="Giving the cart to player "+std::to_string(CartBatch.Completed()+1)+" of "+std::to_string(CartBatch.Total())+"...";return true;
 }
+// Helpy delivery flags, checked before anything is queued; the core checks again when it
+// delivers. Only the player's own character can be refused.
+inline std::optional<std::string> DeliveryRefusal(const nlohmann::json& snapshot,const std::vector<std::string>& paths){
+    const auto local=DeliveryStatus::LocalGuid(snapshot);if(local.empty())return std::nullopt;
+    for(const auto& path:paths)if(const auto* player=CurrentCartPlayer(snapshot,path)){
+        const auto status=DeliveryStatus::For(ItemPresentation::Text(*player,"Guid"),local,true);
+        if(status.Block)return DeliveryStatus::Refusal(*status.Block,ItemPresentation::Text(*player,"Name"));
+    }return std::nullopt;
+}
+inline std::string DeliveryNoticeError;
+// Shown under a recipient picker when deliveries to the player's own character are off or
+// paused, with the fix when it is the player's own switch.
+inline void DeliveryNotice(const nlohmann::json& snapshot,const nlohmann::json& player){
+    const auto guid=ItemPresentation::Text(player,"Guid");
+    const auto status=DeliveryStatus::For(guid,DeliveryStatus::LocalGuid(snapshot));
+    if(!status.Own)return;
+    const auto& theme=HelpyImGuiTheme::Current;auto name=ItemPresentation::Text(player,"Name");if(name.empty())name="your character";
+    ImGui::PushID(("delivery-notice:"+guid).c_str());
+    if(status.Block){
+        const auto headline=status.Block->User?"Helpy deliveries are off for "+name+".":status.Block->ModName+" has paused Helpy deliveries to "+name+".";
+        ImGui::PushStyleColor(ImGuiCol_Text,theme.warning);ImGui::TextWrapped("%s",headline.c_str());ImGui::PopStyleColor();
+        if(status.Block->User){if(HelpyImGuiTheme::SoftButton("Turn deliveries on"))DeliveryStatus::TurnOn(guid,name,DeliveryNoticeError);}
+        else{
+            if(!status.Block->Message.empty())ImGui::TextWrapped("%s",status.Block->Message.c_str());
+            ImGui::TextDisabled("Only %s can lift it, or stop honouring it in Settings > Deliveries.",status.Block->ModName.c_str());
+        }
+        if(!DeliveryNoticeError.empty())ImGui::TextWrapped("%s",DeliveryNoticeError.c_str());
+    }else{
+        DeliveryNoticeError.clear();
+        if(!status.WorldMods.empty()){
+            std::string mods;for(const auto& mod:status.WorldMods){if(!mods.empty())mods+=", ";mods+=mod;}
+            ImGui::TextDisabled("%s may pause deliveries in some worlds; the game checks this one when you give.",mods.c_str());
+        }
+    }
+    ImGui::PopID();
+}
 inline bool GiveDirectItems(nlohmann::json items,const std::string& player){
     SyncCartWorld();
     if(DirectGiveId){ItemGridPicker::CartStatus="A direct item delivery is already queued or running. No second click is needed.";return false;}
     if(ItemGridPicker::SharedCart.Delivery()){ItemGridPicker::CartStatus="Wait for the current cart delivery to finish before giving items directly.";return false;}
     if(!CurrentCartPlayer(UiSnapshot,player)){ItemGridPicker::CartStatus="Choose a current player before giving items.";return false;}
+    if(const auto refusal=DeliveryRefusal(UiSnapshot,{player})){ItemGridPicker::CartStatus=*refusal;return false;}
     if(!SpawnToolRequests::IsAvailable()||!items.is_array()||items.empty()){ItemGridPicker::CartStatus="Direct delivery is unavailable; nothing was submitted.";return false;}
     DirectGiveId=++CartSequence;DirectGiveGeneration=SpawnToolRequests::CurrentGeneration();DirectGiveSubmitted=false;
     DirectGiveRequest={{"Action","GiveItems"},{"_Source","HelpySharedItemBay"},{"_RequestId",DirectGiveId},{"Player",player},{"Items",std::move(items)}};
@@ -217,6 +255,7 @@ inline void RenderQuickSend(){
 #if defined(HELPY_PREVIEW)
     HelpyPreviewHooks::QuickSendPlayer=HelpyPreviewHooks::LastRect();
 #endif
+    if(chosen)DeliveryNotice(UiSnapshot,*chosen);
     if(!current)ImGui::TextWrapped("The world changed. Close this panel and select the item again.");
     else if(!SpawnToolRequests::IsAvailable())ImGui::TextWrapped("Connect to a game to send this item.");
     if(!QuickSend.Error.empty())ImGui::TextWrapped("%s",QuickSend.Error.c_str());
@@ -425,6 +464,7 @@ inline bool RenderCartRecipient(const nlohmann::json& result) {
         ImGui::SameLine();ImGui::TextWrapped("%s",player.Name.c_str());ImGui::PopID();
     }PS::HelpyImGuiTheme::EndPanel();}
     if(!remove.empty())changed=RemoveCartRecipient(remove)||changed;
+    for(const auto& player:EffectiveCartRecipients())if(const auto* row=CurrentCartPlayer(result,player.Path))DeliveryNotice(result,*row);
     if(EffectiveCartRecipients().size()>1)ImGui::TextDisabled("Same quantities for each player.");
     ImGui::EndDisabled();return changed;
 }
@@ -456,6 +496,10 @@ inline void RenderCartDock(ImVec2 size,const std::function<void()>& recipient) {
     const bool live=SpawnToolRequests::IsAvailable()&&(!PluginRuntimeServices::ExternalDesktop||PluginRuntimeServices::GameProcessId.load());
     const auto deliver=[&](int mode,bool selectedOnly=false){
         const auto recipients=EffectiveCartRecipients();if(recipients.empty()||!live||delivering||DirectGiveId||empty||CartNeedsReview)return;
+        // Refuse up front: a paused recipient inside a batch would leave its entries unconfirmed
+        // and hold the whole cart for review.
+        {std::vector<std::string> paths;for(const auto& recipient:recipients)paths.push_back(recipient.Path);
+         if(const auto refusal=DeliveryRefusal(UiSnapshot,paths)){ItemGridPicker::CartStatus=*refusal+(recipients.size()>1?" Remove that player from the recipients to give to the others.":"");return;}}
         auto items=cart.Payload(mode,selectedOnly);if(items.empty())return;
         const auto request=++CartSequence;
         try{CartBatch.Begin(items,recipients,equipOnReceipt);if(!cart.BeginDelivery(request,mode,selectedOnly))return;

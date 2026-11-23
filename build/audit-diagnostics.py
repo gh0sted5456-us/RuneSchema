@@ -53,7 +53,9 @@ def source_files(root):
         folder = root / scope
         if not folder.exists():
             continue
-        for path in sorted(folder.rglob("*")):
+        # Build outputs live beside the top-level project scripts; they are not production emitters.
+        paths = folder.glob("*") if scope == "build" else folder.rglob("*")
+        for path in sorted(paths):
             if path.suffix.lower() not in suffixes or any(part in {"tests", "vendor", ".cache", "__pycache__"} for part in path.relative_to(folder).parts):
                 continue
             if path.name in {"DiagnosticCodes.h", "BridgeReasonCodes.h", "StructuredDiagnosticRegistry.h", "StructuredDiagnosticAdvice.h", "generate-diagnostics.py", "audit-diagnostics.py"}:

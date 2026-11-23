@@ -1,4 +1,6 @@
 #include "Runtime/HelpyPluginHost.h"
+#include "Core/HelpyBranding.h"
+#include "Core/HelpyGameProcess.h"
 #include <nlohmann/json.hpp>
 #include <atomic>
 #include <fstream>
@@ -50,7 +52,7 @@ int main(int argc,char** argv)try{
  const auto appdata=fixture/"local";fs::create_directories(appdata);
  Check(SetEnvironmentVariableW(L"LOCALAPPDATA",appdata.c_str()),"Could not route disposable AppData");
  const auto root=fixture/"Mods/RuneSchema";Runtime=root;
- const auto plugin=root/"Helpy/plugins/RuneSchema.ModMenu2";Write(plugin/"plugin.json",R"({"Id":"RuneSchema.ModMenu2","Version":"0.8.1.0","Host":"helpy","EntryPoint":"RuneSchema.ModMenu2.dll"})");fs::create_directories(plugin/"dll");fs::copy_file(fs::u8path(argv[1]),plugin/"dll/RuneSchema.ModMenu2.dll");
+ const auto plugin=root/"Helpy/plugins/RuneSchema.ModMenu2";Write(plugin/"plugin.json",Json{{"Id","RuneSchema.ModMenu2"},{"Version",PS::HelpyBranding::Version},{"Host","helpy"},{"EntryPoint","RuneSchema.ModMenu2.dll"}}.dump());fs::create_directories(plugin/"dll");fs::copy_file(fs::u8path(argv[1]),plugin/"dll/RuneSchema.ModMenu2.dll");
  RuneSchemaHostApi host{sizeof(RuneSchemaHostApi),RUNESCHEMA_PLUGIN_API_VERSION,Log,Capability,Register,Call};
  const auto remove=[](const std::string& owner){std::erase_if(Services,[&](const auto& item){return item.second.Owner==owner;});};
  Plugins.Load(root,&host,remove);Check(Services.contains("helpy.mod-menu2")&&Plugins.Authorized("RuneSchema.ModMenu2"),"Helpy frontend did not load");Check(!Plugins.CanRegister("RuneSchema.ModMenu2"),"Registration stayed open after initialization");
@@ -61,6 +63,10 @@ int main(int argc,char** argv)try{
  Tick(1);Sleep(5);Check(!Writes,"Queue capacity probe sent a command");Check(Exchange({{"Op","queue"},{"Command",command}}).at("Accepted"),"Command enqueue failed");
  for(unsigned i=0;i<200&&!Writes;++i){Tick(1);Sleep(2);}Check(Writes==1,"Command lost or duplicated");{std::lock_guard lock(Data);Check(LastWrite==command,"Native plugin changed the command payload");}
  for(unsigned i=0;i<20;++i){Tick(1);Sleep(2);}Check(Writes==1,"Read/poll retried a mutation");
+ if(!PS::HelpyGameProcess::GameStopped()){
+  Plugins.Shutdown();Check(Services.empty(),"Shutdown retained live callbacks");
+  std::cout<<"Offline edit checks require all Dragonwilds processes to be closed; live synthetic service checks passed.\n";return 77;
+ }
  const auto weather=fixture/"Mods/Weather";
  Write(weather/"modmenu.txt",R"({"id":"Weather","config":{"format":"json","file":"Settings.json"},"settings":[
   {"type":"toggle","key":"Enabled","default":false},

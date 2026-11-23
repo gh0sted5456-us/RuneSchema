@@ -142,11 +142,11 @@ int main()try{
         rail.Toggle(collapsed,pinned,true);rail.TogglePin(collapsed,pinned);if(pinned||!rail.Collapsed(collapsed,pinned,true)||rail.Collapsed(collapsed,pinned,false))throw std::runtime_error("Input changes must restore the user's mouse navigation preference");}
     std::set<std::string_view> titles;
     for(auto page:Pages){
-        if(!Visible(page,{true,true,true,true,true,true,true})||std::string_view(Description(page)).empty())throw std::runtime_error("Enabled workspace is unreachable or unexplained");
+        if(!Visible(page,{true,true,true,true,true,true,true,true,true})||std::string_view(Description(page)).empty())throw std::runtime_error("Enabled workspace is unreachable or unexplained");
         titles.insert(Title(page));
     }
-    const std::set<std::string_view> expected{"Home","Players","Clone","Recipes","Spawns","World","Journal","Tools","Settings","Authoring","Diagnostics","Server / Co-op","Character","Mods","Profile","Report a bug","Save Recovery","Notifications","Mod Menu 2"};
-    if(!Visible(Page::Creation)||TopLevel(Page::Creation)||TopLevel(Page::Recipes)||TopLevel(Page::SaveEditor)||TopLevel(Page::Spawns)||TopLevel(Page::Journal))throw std::runtime_error("Nested workflows must stay reachable without duplicate sidebar entries");
+    const std::set<std::string_view> expected{"Home","Items","Clone","Recipes","Spawns","World","Journal","Tools","Settings","Authoring","Diagnostics","Server / Co-op","Character","Mods","Profile","Report a bug","Save Recovery","Notifications","Mod Menu 2"};
+    if(Visible(Page::Creation)||TopLevel(Page::Creation)||TopLevel(Page::Recipes)||TopLevel(Page::SaveEditor)||TopLevel(Page::Spawns)||TopLevel(Page::Journal))throw std::runtime_error("Nested workflows must stay reachable without duplicate sidebar entries");
     if(SidebarPages.size()!=11||!TopLevel(Page::Notifications)||!Visible(Page::Notifications)||!TopLevel(Page::SaveRecovery)||!Visible(Page::SaveRecovery)||!TopLevel(Page::BugReport)||!Visible(Page::BugReport)||std::find(SidebarPages.begin(),SidebarPages.end(),Page::BugReport)==SidebarPages.end()||!TopLevel(Page::Mods)||!Visible(Page::Mods)||PlayerTabs.size()!=3||ProfileTabs.size()!=2||Parent(Page::SaveEditor)!=Page::Profile||WorldTabs.size()!=3||ToolTabs.size()!=2||Parent(Page::Authoring)!=Page::Tools||TopLevel(Page::Authoring)||std::string_view(TabTitle(Page::Items))!="Items"||std::string_view(TabTitle(Page::Map))!="Map")throw std::runtime_error("Bug reports and Mods must be top-level while Players, World and Tools retain nested workflow tabs");
     if(!Visible(Page::Tools,{true,false})||!Visible(Page::Authoring,{true,false})||Visible(Page::Authoring,{false,true}))throw std::runtime_error("Legacy authoring-only settings must expose Tools without enabling Authoring for tools-only users");
     for(auto page:SidebarPages)if(!TopLevel(page))throw std::runtime_error("Sidebar contains a nested workflow");

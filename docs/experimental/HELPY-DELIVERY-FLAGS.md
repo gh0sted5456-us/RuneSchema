@@ -12,7 +12,8 @@ promote_to: HELPY-DELIVERY-FLAGS.md
 Helpy deliveries you make to your own character are **on by default**. They can be turned off
 for a character in two ways:
 
-- **By you.** In **Settings > Deliveries**, turn off *Allow Helpy deliveries to* a character.
+- **By you.** In **Settings > Deliveries**, or on the **Deliveries** page of the
+  [character sheet](CHARACTER-SHEET.md), turn off *Allow Helpy deliveries to* a character.
 - **By a mod.** A mod writes a signed **flag** into a folder Helpy maintains, pausing deliveries
   to a character or a world it manages. The first user is the Grand Exchange, a trading app for
   Dragonwilds: while a character trades there, Helpy deliveries to it would let players spawn
@@ -31,6 +32,7 @@ RuneSchema checks the flags where items are granted, not only in Helpy's interfa
 | Clone Creator with *Give* | Before the clone is granted |
 | Character editor: adding an item or raising a stack | Before the draft changes |
 | A host delivering to another connected player | Never |
+| A plugin's server half granting to a player while serving that player's own request ([plugin server requests](PLUGIN-SERVER-REQUESTS.md)) | On the authoritative game against its own flags, and against the flags the player's game reported. That plugin's own pause is skipped; every other pause applies |
 
 A refused delivery shows the mod's message, or *"{mod name} has paused Helpy deliveries to this
 character."* A character you turned off shows *"You turned off Helpy deliveries for this character
@@ -44,6 +46,25 @@ If a pause exists for any character on this PC and Helpy can't identify the char
 is for (for example while the character is still loading), the delivery is refused rather than
 guessed.
 
+## In the Item Bay
+
+The Item Bay checks the same flags before anything is queued, so a paused delivery is explained
+where you choose the recipient instead of arriving later as an error:
+
+- Under the cart recipient and in *Send to player*, your own character shows *Helpy deliveries are
+  off for {name}* with a **Turn deliveries on** button, or *{mod name} has paused Helpy deliveries
+  to {name}* with the mod's message. Only the mod can lift its pause, or you can stop honouring it
+  in Settings > Deliveries.
+- A mod with a world pause in force shows *{mod name} may pause deliveries in some worlds*. The
+  Item Bay doesn't know which world save is loaded, so the game makes that check when you give.
+- Give, Send item and Deliver re-read the flags first and refuse with the same reason, before
+  anything is sent. A cart with several recipients is refused whole while your paused character
+  is one of them; remove that recipient to give to the others.
+- Other players are never gated by your flags.
+
+The character sheet's *Inventory & loadout* tab shows the same status in its *Helpy deliveries*
+header, with the per-character switch inside.
+
 ## Settings > Deliveries
 
 - **Your characters.** Your current character, and any character you turned off, each with an
@@ -51,6 +72,9 @@ guessed.
 - **Pauses set by mods.** Each registered mod, whether its key is verified, the flags currently in
   force (character or world, and the mod's message), and how many flags failed their signature
   check.
+- **Temporary lifts.** A lift with `until` shows as *Allowed until {date} by {mod name}* under the
+  mod, and under the character when your own switch is on. After it lapses, the pause is listed
+  again with *Its temporary lift ended {date}*. Dates are in this PC's local time.
 - **Let this mod pause deliveries.** On by default, per mod. Turning it off is recorded in
   `helpy-state.json`, so the mod can see it; the Grand Exchange treats such a character as not
   enrolled. Only the mod can lift its own flags.
@@ -105,8 +129,12 @@ all):
 - `sig` is a DER ECDSA P-256 / SHA-256 signature over the whole statement text, prefix included,
   checked against the mod's registered key. Non-minimal DER is rejected.
 - A statement whose `mod` doesn't match its folder is ignored. Flags other than
-  `noPlayerDeliveries` are ignored. `message` is at most 300 characters.
+  `noPlayerDeliveries` and `deliveryPauseException` are ignored. `message` is at most 300 characters.
 - Up to 64 mod folders are read.
+- `until` (optional, unix seconds) on an `on: false` statement makes the lift temporary: it lapses
+  by itself. See [Temporary lifts](#temporary-lifts).
+- `deliveryPauseException` exempts one character from that mod's own pauses. See
+  [Character exceptions](#character-exceptions).
 
 **`helpy-state.json`** (version 1):
 
@@ -121,6 +149,78 @@ all):
 - `mods.<id>.allowPause` is `false` when the player chose not to honour that mod.
 - `events` keeps the last 64 changes: `key-pinned`, `key-reset`, `user-deliveries-on/off`,
   `mod-pause-allowed/declined`.
+
+## Temporary lifts
+
+A mod can lift its own pause for a while and have it come back by itself. The first use is the
+Grand Exchange's **tester passes**. Its operator gives a trusted tester a pass, which the Bazaar
+checks against its own signature, the tester's account, an expiry and a revocation list. While the
+pass lasts, that tester's characters may take Helpy deliveries, so the operator can test freely.
+The Bazaar signs the lift with the pass's expiry:
+
+```json
+{"mod": "grandexchange", "target": "character", "id": "5A3F0C21B6D84E7F9A1C2B3D4E5F6071",
+ "flag": "noPlayerDeliveries", "on": false, "until": 1802592000, "seq": 4, "at": 1800000000,
+ "message": "Tester pass: Helpy can deliver to this character until 2027-02-15."}
+```
+
+How the reader treats it:
+
+1. `until` is optional. When present it must be a positive whole number of unix seconds; any other
+   value (0, negative, a string, a fraction) makes the whole statement invalid and it counts as
+   rejected, so a malformed lift never stands in for an unlimited one. On an `on: true` statement a
+   valid `until` is ignored.
+2. The winner is chosen as before (highest `seq`, pause wins ties). If it is an `on: false` with an
+   `until` and the PC's clock has reached `until`, it is treated as a pause. Its message is the
+   mod's message from its newest `on: true` statement for that target, or the default *"{mod name}
+   has paused Helpy deliveries to this {target}."*
+3. The gate reads the flags folder on every delivery, so a lift ends at `until` without Helpy
+   restarting.
+4. The PC's clock is used. Winding it back only stretches a pass the server already chose to give,
+   and the Bazaar marks every deposit from that character as a tester's.
+5. A player who declined the mod's pauses is still not blocked when a lift lapses.
+
+Revoking a pass early is an ordinary newer `on: true` statement with a higher `seq`, which the
+Grand Exchange app writes on its next sync.
+
+The Grand Exchange already signs the same values in its enrollment tokens (`helpyPlayerDeliveries:
+"allowed"`, `helpyAllowedUntil`, `tester: true`; its `docs/handoff/HELPY-ENROLLMENT.md`). When its
+app writes flags, they go into the statement above.
+
+## Character exceptions
+
+A world pause applies to every character in that world. A mod that wants one character to keep
+Helpy deliveries there, without lifting the world pause for everyone else, signs a **character
+exception**. The first use is the Grand Exchange's *Allow trusted Helpy access*: the Bazaar operator
+allows an account, and the Bazaar signs an exception for each of that account's enrolled characters.
+
+```json
+{"mod": "grandexchange", "target": "character", "id": "5A3F0C21B6D84E7F9A1C2B3D4E5F6071",
+ "flag": "deliveryPauseException", "on": true, "seq": 41, "at": 1800000000, "until": 1800604800,
+ "message": "Trusted Helpy access."}
+```
+
+What an exception does, and doesn't do:
+
+- **Scope.** The character is exempt from **that mod's** `noPlayerDeliveries` pauses only: its pause
+  on the character, and its pause on any world. Other mods' pauses still apply. Other characters
+  in the same world, including other accounts' characters, stay paused.
+- **The player's own switch still wins.** A character you turned off in Settings > Deliveries stays
+  off.
+- **Always a lease.** `on: true` needs both `at` and `until` (positive unix seconds), with `until`
+  after `at` and at most 30 days after it. A statement without them, longer than 30 days, or with
+  `target: "world"` is invalid and counts as rejected. The exception ends by itself at `until` by
+  this PC's clock, and the mod's pauses apply again. The mod renews it by signing a newer statement,
+  for example whenever the app syncs.
+- **Revocation.** A newer `on: false` exception statement (no `until` needed) ends it at once.
+  Ordering is per mod, character and flag, as for pauses: the highest `seq` wins, and **on equal
+  `seq` the revocation wins**. A replayed or reordered older allowance can never override a newer
+  revocation. Use one increasing `seq` for every exception statement the mod signs.
+- **What it lifts.** Only the delivery flag gate. Server authority is unchanged: a client still needs
+  the server's Helpy permission (saved access, allowlist or world PIN, *client item grants*, and the
+  per-request item limit). Deliveries a host makes to another player are still never paused.
+- **Unknown character.** If Helpy can't identify the character, an exception can't be applied, so
+  the delivery is refused as before while any character pause exists on this PC.
 
 ## Why signatures and not shared encryption
 

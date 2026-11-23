@@ -78,7 +78,7 @@ inline std::vector<Badge> ForRow(const nlohmann::json& row) {
         }
     }
     if (row.value("HasAchievements", false))
-        badges.push_back({"achievements", "Achievements", "Includes Helpy achievements (cache/achievements.json). Earn points on your profile.", Category::Story, 999});
+        badges.push_back({"achievements", "Achievements", "Includes Helpy achievements (achievements.json). Earn points on your profile.", Category::Story, 999});
     if (row.value("HasCache", false))
         badges.push_back({"cache", "Helpy cache", "Ships a cache folder with item names and icons for offline browsing.", Category::Packaging, 1000});
     std::stable_sort(badges.begin(), badges.end(), [](const Badge& left, const Badge& right) { return left.Order < right.Order; });

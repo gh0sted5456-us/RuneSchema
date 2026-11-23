@@ -1189,9 +1189,7 @@ namespace DragonWilds {
         if (m_characterJsonHook != Hook::ERROR_ID)
             Hook::UnregisterCallback(m_characterJsonHook);
         m_characterJsonHook = Hook::ERROR_ID;
-        if (m_combatLifecycleHook != Hook::ERROR_ID)
-            Hook::UnregisterCallback(m_combatLifecycleHook);
-        m_combatLifecycleHook = Hook::ERROR_ID;
+        PS::ProcessEventDispatch::Remove(m_combatLifecycleHook);
         m_registryCandidateFingerprint.clear();
         m_registryCandidatePasses = 0;
         for (auto* attack : m_ownedAdditionalWeaponAttackRoots)
@@ -1281,10 +1279,12 @@ namespace DragonWilds {
             && (combat.additionalWeapons
                 || combat.manifestMelee || combat.rangedEquipment))
         {
-            Hook::FCallbackOptions combatOptions{};
-            combatOptions.OwnerModName = TEXT("RuneSchema");
-            combatOptions.HookName = TEXT("CombatComponentWorldReady");
-            m_combatLifecycleHook = Hook::RegisterProcessEventPostCallback(
+            // Routed by name through the shared ProcessEvent dispatcher; IsCombatComponentReadyFunction
+            // still checks the full path.
+            PS::ProcessEventDispatch::Remove(m_combatLifecycleHook);
+            m_combatLifecycleHook = PS::ProcessEventDispatch::Add(PS::ProcessEventDispatch::Phase::Post,
+                {TEXT("ClientRestart"), TEXT("OnInventoryLoadedFromSave"), TEXT("OnPersonalInventoryLoadedFromSave")},
+                "CombatComponentWorldReady",
                 [this](Hook::TCallbackIterationData<void>&, UObject* source,
                     UFunction* function, void*) {
                     if (!source || m_initialCombatFallbackAttempted
@@ -1299,8 +1299,8 @@ namespace DragonWilds {
                     // nested or later lifecycle callback cannot re-enter it.
                     m_initialCombatFallbackAttempted = true;
                     BootstrapCombatRegistries(world);
-                }, combatOptions);
-            if (m_combatLifecycleHook != Hook::ERROR_ID)
+                });
+            if (m_combatLifecycleHook)
                 PS::Log<LogLevel::Normal>(STR(
                     "[LIFECYCLE][COMBAT-COMPONENT][READY] One-shot first-world melee and ranged fallback installed.\n"));
             else

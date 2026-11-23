@@ -21,6 +21,9 @@
 #include "Utility/Logging.h"
 #include "Loader/DefinitionRegistry.h"
 #include "Loader/VirtualDefinitionId.h"
+#include "SDK/WeakObjectHandle.h"
+#include <cstdint>
+#include <unordered_map>
 
 using namespace RC;
 using namespace RC::Unreal;
@@ -433,6 +436,33 @@ namespace DragonWilds {
         FMemory::Memcpy(Data, &resolvedClass, sizeof(resolvedClass));
     }
 
+    struct PropertyHelper::ReferenceCacheScope::State {
+        std::unordered_map<RC::StringType, PS::WeakObjectHandle> Objects;
+        std::size_t Hits = 0, Lookups = 0;
+    };
+    namespace {
+        thread_local PropertyHelper::ReferenceCacheScope::State* ActiveReferenceCache = nullptr;
+        RC::Unreal::UObject* CachedReference(const RC::StringType& key)
+        {
+            auto* cache = ActiveReferenceCache;
+            if (!cache) return nullptr;
+            ++cache->Lookups;
+            const auto found = cache->Objects.find(key);
+            auto* object = found == cache->Objects.end() ? nullptr : found->second.Get();
+            if (object) ++cache->Hits;
+            return object;
+        }
+        void RememberReference(const RC::StringType& key, RC::Unreal::UObject* object)
+        {
+            if (auto* cache = ActiveReferenceCache; cache && object)
+                cache->Objects.insert_or_assign(key, PS::WeakObjectHandle(object));
+        }
+    }
+    PropertyHelper::ReferenceCacheScope::ReferenceCacheScope() : m_state(new State), m_before(ActiveReferenceCache) { ActiveReferenceCache = m_state; }
+    PropertyHelper::ReferenceCacheScope::~ReferenceCacheScope() { ActiveReferenceCache = m_before; delete m_state; }
+    std::size_t PropertyHelper::ReferenceCacheScope::Hits() const noexcept { return m_state->Hits; }
+    std::size_t PropertyHelper::ReferenceCacheScope::Lookups() const noexcept { return m_state->Lookups; }
+
     void PropertyHelper::SetObjectPropertyValueFromJsonValue(void* Data, RC::Unreal::FObjectProperty* Property, const nlohmann::json& Value)
     {
         if (Value.is_null())
@@ -538,16 +568,29 @@ namespace DragonWilds {
             }
             if (!referencedObject && !objectPath.empty())
             {
-                referencedObject = UECustom::UObjectGlobals::StaticFindObject(
-                    nullptr, nullptr, objectPath.c_str(), false);
-
+                referencedObject = CachedReference(objectPath);
                 if (!referencedObject)
                 {
-                    auto softObject = UECustom::TSoftObjectPtr<UObject>(UECustom::FSoftObjectPath(objectPath));
-                    referencedObject = UECustom::UKismetSystemLibrary::LoadAsset_Blocking(softObject);
+                    referencedObject = UECustom::UObjectGlobals::StaticFindObject(
+                        nullptr, nullptr, objectPath.c_str(), false);
+
+                    if (!referencedObject)
+                    {
+                        auto softObject = UECustom::TSoftObjectPtr<UObject>(UECustom::FSoftObjectPath(objectPath));
+                        referencedObject = UECustom::UKismetSystemLibrary::LoadAsset_Blocking(softObject);
+                    }
+                    RememberReference(objectPath, referencedObject);
                 }
             }
 
+            // The relocated-name fallback walks every live object; within a
+            // batch, remember each name it settles for this property class.
+            RC::StringType relocatedKey;
+            if (!referencedObject && !objectName.empty() && ActiveReferenceCache)
+            {
+                relocatedKey = objectName + TEXT("|") + RC::to_generic_string(std::to_string(reinterpret_cast<std::uintptr_t>(Property->GetPropertyClass().Get())));
+                referencedObject = CachedReference(relocatedKey);
+            }
             if (!referencedObject && !objectName.empty())
             {
                 const FName targetName(objectName,FNAME_Add);
@@ -569,6 +612,7 @@ namespace DragonWilds {
                     throw std::runtime_error(std::format(
                         "Ambiguous relocated object reference for property {}",
                         GetPropertyNameAsUTF8String(Property)));
+                if (!relocatedKey.empty()) RememberReference(relocatedKey, referencedObject);
             }
 
             if (!referencedObject)

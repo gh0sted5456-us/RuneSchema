@@ -12,6 +12,8 @@ namespace {
         std::string Phase;
         std::string LastGroundError;
         size_t Candidate=0;
+        // Travel notices: mods that opted in, and whether BeforeTravel was sent (AfterTravel must follow).
+        std::vector<PS::WeakObjectHandle> Listeners;bool Notified=false,LongJump=false;
     };
     std::optional<ToolMapTravelJob> g_mapTravel;
     std::int64_t ToolMapTravelTime(){return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();}
@@ -36,6 +38,64 @@ namespace {
         }
         g_mapTravel.reset();
     }
+    // Optional travel notices for mods (docs/HELPY-MAP-TRAVEL.md, "Travel notices"). An object opts
+    // in with a true bool bRuneSchemaTravelListener: the GameState, the travelling pawn, its controller,
+    // or a component on one of them. At most 64 listeners; weak handles, so a listener may go away.
+    constexpr size_t ToolMapTravelMaxListeners=64;
+    std::vector<PS::WeakObjectHandle> ToolMapTravelListeners(UWorld* world,UObject* controller,UObject* pawn){
+        std::vector<PS::WeakObjectHandle> found;
+        auto* componentType=ActorHelper::ResolveClass(TEXT("/Script/Engine.ActorComponent"));
+        const auto consider=[&](UObject* object){
+            if(found.size()>=ToolMapTravelMaxListeners||!ToolMapTravelAlive(object)||object->GetWorld()!=world)return;
+            auto* flag=CastField<FBoolProperty>(PropertyHelper::GetPropertyByName(object->GetClassPrivate(),TEXT("bRuneSchemaTravelListener")));
+            if(!flag||flag->GetArrayDim()!=1||!flag->GetPropertyValue(flag->ContainerPtrToValuePtr<void>(object)))return;
+            if(std::any_of(found.begin(),found.end(),[&](const PS::WeakObjectHandle& handle){return handle.Get()==object;}))return;
+            found.emplace_back(object);
+        };
+        const auto withComponents=[&](UObject* owner){
+            if(!ToolMapTravelAlive(owner))return;
+            consider(owner);
+            if(componentType&&owner->IsA<AActor>())for(auto* component:static_cast<AActor*>(owner)->GetComponentsByClass(componentType))consider(component);
+        };
+        withComponents(ActorHelper::GetObjectRef(world,TEXT("GameState")));
+        withComponents(controller);withComponents(pawn);
+        return found;
+    }
+    // Exactly (Player: Actor, Destination: Vector, <flag>: bool), no return, not a network event.
+    // nullptr when the listener doesn't implement it; throws when it does but with another shape.
+    UFunction* ToolMapTravelNoticeFunction(UObject* listener,const TCHAR* name,const TCHAR* flag){
+        auto* function=listener->GetFunctionByNameInChain(name);if(!function)return nullptr;
+        auto* actorType=ActorHelper::ResolveClass(TEXT("/Script/Engine.Actor"));
+        bool valid=actorType&&!function->HasAnyFunctionFlags(FUNC_Net)&&!function->GetReturnProperty();size_t count=0;
+        try{DragonWilds::ReflectedContract::Frame(function);}catch(...){valid=false;}
+        for(auto* property:TFieldRange<FProperty>(function,EFieldIterationFlags::Default))if(property->HasAnyPropertyFlags(CPF_Parm)){
+            ++count;
+            valid&=DragonWilds::ReflectedContract::Input(property,function)&&!property->HasAnyPropertyFlags(CPF_OutParm|CPF_ReturnParm|CPF_ReferenceParm);
+            const auto fname=property->GetFName();
+            if(fname==FName(TEXT("Player"),FNAME_Add)){auto* object=CastField<FObjectPropertyBase>(property);valid&=object&&property->GetElementSize()==sizeof(UObject*)&&object->GetPropertyClass().Get()==actorType;}
+            else if(fname==FName(TEXT("Destination"),FNAME_Add)){auto* vector=CastField<FStructProperty>(property);valid&=vector&&vector->GetStruct()&&vector->GetStruct()->GetPathName()==TEXT("/Script/CoreUObject.Vector");}
+            else if(fname==FName(flag,FNAME_Add))valid&=CastField<FBoolProperty>(property)&&property->GetElementSize()==1;
+            else valid=false;
+        }
+        if(!valid||count!=3)throw std::runtime_error("expects (Player: Actor, Destination: Vector, "+RC::to_string(RC::StringType(flag))+": Boolean) with no return value");
+        return function;
+    }
+    // Snapshot of weak identities: one listener may destroy itself or another. Failures are logged and
+    // never stop or undo the journey.
+    void ToolMapTravelNotify(const std::vector<PS::WeakObjectHandle>& listeners,UObject* world,const TCHAR* name,const TCHAR* flag,UObject* pawn,const PS::MapLanding::Position& at,bool value){
+        for(const auto& handle:listeners){
+            auto* listener=handle.Get();
+            if(!ToolMapTravelAlive(listener)||!ToolMapTravelAlive(world)||listener->GetWorld()!=world)continue;
+            try{
+                auto* function=ToolMapTravelNoticeFunction(listener,name,flag);if(!function)continue;
+                ActorHelper::FunctionCall(listener,function).Arg(TEXT("Player"),static_cast<UObject*>(ToolMapTravelAlive(pawn)?pawn:nullptr))
+                    .Arg(TEXT("Destination"),FVector(at.X,at.Y,at.Z)).Arg(flag,value).Invoke();
+            }catch(const std::exception& error){
+                PS::Log<LogLevel::Warning>(STR("[HELPY][MAP-TRAVEL] travel listener {} {} skipped: {}\n"),
+                    PS::ToWideSafe(ToolMapTravelAlive(listener)?RC::to_string(listener->GetClassPrivate()->GetPathName()):std::string("(gone)")),name,PS::ToWideSafe(error.what()));
+            }
+        }
+    }
     void ToolMapTravelFinish(const std::string& status,bool arrived=false){
         auto result=PS::SpawnToolRequests::Read();result["Status"]=status;
         if(g_mapTravel){
@@ -43,6 +103,11 @@ namespace {
                 ToolMapTravelTime()-g_mapTravel->Gate.Began,PS::ToWideSafe(status));
             else PS::Log<LogLevel::Warning>(STR("[HELPY][MAP-TRAVEL] stopped committed={} elapsed_ms={} status={}\n"),
                 g_mapTravel->Gate.Committed,ToolMapTravelTime()-g_mapTravel->Gate.Began,PS::ToWideSafe(status));
+        }
+        // Every BeforeTravel gets its AfterTravel, whether or not the player arrived.
+        if(g_mapTravel&&g_mapTravel->Notified){
+            g_mapTravel->Notified=false;const auto listeners=g_mapTravel->Listeners;const auto landing=g_mapTravel->Landing;
+            ToolMapTravelNotify(listeners,g_mapTravel->World.Get(),TEXT("RuneSchemaAfterTravel"),TEXT("Arrived"),g_mapTravel->Pawn.Get(),landing,arrived);
         }
         if(arrived&&g_mapTravel)if(auto* pawn=g_mapTravel->Pawn.Get();ToolMapTravelAlive(pawn)){
             const auto at=ActorHelper::GetActorLocation(static_cast<AActor*>(pawn));
@@ -233,6 +298,11 @@ namespace {
             if(ToolMapTravelTeleporting(pawn)){ToolMapTravelFinish("Another native journey started while preparing this destination; no additional teleport issued.");return true;}
             auto* service=job.Service.Get();if(!ToolMapTravelAlive(service))throw std::runtime_error("Native teleport service changed before departure");
             const bool named=job.AuthoredFloor.has_value();
+            // Every journey uses the game's loading screen, so streaming and region changes (weather,
+            // environment, mod systems) settle behind it instead of in front of the player. LongJump only
+            // tells travel listeners whether this is a long (300 m or more) or nearby hop.
+            const auto origin=ActorHelper::GetActorLocation(pawn);
+            job.LongJump=named||PS::MapTravel::LongJump({origin.X(),origin.Y(),origin.Z()},job.Landing);
             ActorHelper::FunctionCall teleport(service,ToolMapTravelContract(service,named));
             teleport.Arg(TEXT("PlayerCharacter"),pawn);
             if(named){
@@ -245,10 +315,24 @@ namespace {
                 ActorHelper::FunctionCall rotation(pawn,TEXT("/Script/Engine.Actor:K2_GetActorRotation"));rotation.Invoke();
                 const auto facing=rotation.Result<FRotator>();
                 teleport.JsonArg(TEXT("TeleportParams"),{{"LocationName","None"},{"TargetLocation",{{"X",job.Landing.X},{"Y",job.Landing.Y},{"Z",job.Landing.Z}}},
-                    {"TargetRotation",{{"Pitch",facing.GetPitch()},{"Yaw",facing.GetYaw()},{"Roll",facing.GetRoll()}}},{"bShowLoadingScreen",false},{"bNoCheck",false},{"bIsATest",false},{"TeleportationType","Teleport"},
+                    {"TargetRotation",{{"Pitch",facing.GetPitch()},{"Yaw",facing.GetYaw()},{"Roll",facing.GetRoll()}}},{"bShowLoadingScreen",true},{"bNoCheck",false},{"bIsATest",false},{"TeleportationType","Teleport"},
                     {"bVFXOnTeleportStart",true},{"bVFXOnTeleportEnd",true},{"bDropAnyLoadoutExclusiveEquipment",false}});
             }
             if(!job.Gate.Commit(ToolMapTravelTime()))throw std::runtime_error("Map travel preparation expired before departure");
+            // Opted-in mods hear about the jump before it starts; Finish sends the matching AfterTravel.
+            job.Listeners=ToolMapTravelListeners(activeWorld,controller,pawn);
+            PS::ConsolidatedLog<LogLevel::Normal>(STR("[RuneSchema] [HELPY][MAP-TRAVEL] departing long_jump={} loading_screen=true listeners={}\n"),
+                job.LongJump,job.Listeners.size());
+            if(!job.Listeners.empty()){
+                job.Notified=true;
+                ToolMapTravelNotify(job.Listeners,activeWorld,TEXT("RuneSchemaBeforeTravel"),TEXT("LongJump"),pawn,job.Landing,job.LongJump);
+                // A listener runs game code: confirm nothing it did invalidated the journey.
+                if(!g_mapTravel)return true;
+                if(!ToolMapTravelAlive(pawn)||!ToolMapTravelAlive(controller)||ActorHelper::GetObjectRef(controller,TEXT("Pawn"))!=pawn
+                    ||!ToolMapTravelAlive(service)||ToolMapTravelTeleporting(pawn)){
+                    ToolMapTravelFinish("A travel listener changed the player before departure; no teleport was issued.");return true;
+                }
+            }
             // The unbound dynamic result delegate is a valid zero-initialized
             // native delegate. Completion is verified from pawn state/location,
             // never inferred from this acceptance Boolean alone.

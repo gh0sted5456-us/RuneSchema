@@ -543,7 +543,9 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
     if(query.size()>512)throw std::runtime_error("Catalog query and filter controls exceed 512 characters.");
     if(fieldSet!="BasicRow"&&fieldSet!="Detail")throw std::runtime_error("Unsupported item catalog field projection.");
     scanBudget=std::clamp<std::size_t>(scanBudget,128,8192);timeBudgetMicros=std::clamp<std::uint64_t>(timeBudgetMicros,100,5000);
-    json rows=json::array();std::vector<std::string> queryTokens;std::string categoryFilter,searchQuery=query;
+    // The game-thread budget covers the whole slice, including roster refreshes below.
+    const auto sliceStart=std::chrono::steady_clock::now();
+    json rows=json::array();ItemSearchExpression::Expression queryTokens;std::string categoryFilter,searchQuery=query;
     const auto sourceFilter=ItemSource::TakeFilter(searchQuery);
     const auto providerFilter=ItemSource::TakeProvider(searchQuery);
     const auto sourcePlan=HelpySourceCache::ItemPlan();const auto nativePlugins=HelpySourceCache::NativePluginRoots();
@@ -551,11 +553,10 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
     if(searchQuery.starts_with(categoryPrefix)){const auto split=searchQuery.find(' ');categoryFilter=AssetTemplate::Fold(searchQuery.substr(categoryPrefix.size(),split==std::string::npos?std::string::npos:split-categoryPrefix.size()));searchQuery=split==std::string::npos?std::string{}:searchQuery.substr(split+1);}
     const auto familyFilter=ItemFamily::TakeFilter(searchQuery);
     if(searchQuery.size()>256)throw std::runtime_error("Catalog search text exceeds 256 characters.");
-    if(!searchQuery.empty()){std::istringstream words(searchQuery);std::string word;while(words>>word){word=AssetTemplate::Fold(std::move(word));if(!word.empty())queryTokens.push_back(std::move(word));}}
-    const auto matchesFolded=[&](std::string_view text){
-        return std::all_of(queryTokens.begin(),queryTokens.end(),[&](const auto& token){return text.find(token)!=text.npos;});
-    };
-    const auto matchesTokens=[&](std::string candidate){return queryTokens.empty()||matchesFolded(AssetTemplate::Fold(std::move(candidate)));};
+    // Same boolean syntax as Helpy (OR, NOT/-, parentheses, "phrases"); terms fold exactly like the candidate text.
+    queryTokens=ItemSearchExpression::Expression::Parse(searchQuery,[](std::string word){return AssetTemplate::Fold(std::move(word));});
+    const auto matchesFolded=[&](std::string_view text){return queryTokens.Matches(text);};
+    const auto matchesTokens=[&](std::string candidate){return queryTokens.Empty()||matchesFolded(AssetTemplate::Fold(std::move(candidate)));};
     auto* itemType=Class("assets");if(!itemType)throw std::runtime_error("ItemData class is not ready.");
     const auto objectCount=FUObjectArray::GetNumElements();
     if(objectCount<0||objectCount>4'000'000)throw std::runtime_error("Global object roster exceeds the safe catalog bound.");
@@ -596,10 +597,18 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
         std::unordered_set<std::string> known;for(const auto& record:mountedItems)known.insert(F2Catalog::Lower(record.path));
         for(const auto& candidate:ContainerItemMetadata())if(known.insert(F2Catalog::Lower(candidate.path)).second)
             mountedItems.push_back({candidate.path,candidate.name,{}});
-        mountedHints.clear();mountedHints.resize(mountedItems.size());
+        // Keep the name/search cache when the refreshed roster is unchanged (the usual 30 s case).
+        static std::vector<std::string> hintedPaths;
+        const bool sameRoster=hintedPaths.size()==mountedItems.size()&&mountedHints.size()==mountedItems.size()
+            &&std::equal(hintedPaths.begin(),hintedPaths.end(),mountedItems.begin(),[](const auto& path,const auto& record){return path==record.path;});
+        if(!sameRoster){
+            mountedHints.clear();mountedHints.resize(mountedItems.size());
+            hintedPaths.clear();hintedPaths.reserve(mountedItems.size());
+            for(const auto& record:mountedItems)hintedPaths.push_back(record.path);
+        }
         if(!mountedReady)nextMetadataRefresh=now+std::chrono::seconds(2);
     }
-    const bool mountedFirst=!queryTokens.empty()||!familyFilter.empty()||!providerFilter.empty();
+    const bool mountedFirst=!queryTokens.Empty()||!familyFilter.empty()||!providerFilter.empty();
     static const std::vector<std::string> noPriority;
     const auto& priorityPaths=mountedFirst?noPriority:PriorityItemPaths();
     const std::unordered_set<std::string> prioritySet(priorityPaths.begin(),priorityPaths.end());
@@ -613,8 +622,24 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
             nextLoadedRefresh=now+std::chrono::seconds(2);
             TArray<UObject*> items;UECustom::UObjectGlobals::GetObjectsOfClass(itemType,items,true);
             if(items.Num()<0||items.Num()>AlphabeticalItemCatalog::Cache::MaxRows)throw std::runtime_error("Native item class index exceeds its safe bound");
-            indexedItems.clear();indexedItems.reserve(items.Num());indexedPaths.clear();
-            for(auto* item:items)if(Usable(item)){indexedItems.emplace_back(item);indexedPaths.emplace(to_string(item->GetPathName()),indexedItems.back());}
+            // Same scope and the same live objects: skip rebuilding a path string for every loaded item.
+            // A weak handle that no longer resolves to the listed object (including a reused address) forces a rebuild.
+            static std::vector<UObject*> indexedRaw;
+            bool unchanged=scope==indexedScope&&static_cast<std::size_t>(items.Num())==indexedRaw.size();
+            for(int32 index=0;unchanged&&index<items.Num();++index)unchanged=items[index]==indexedRaw[static_cast<std::size_t>(index)];
+            if(unchanged){
+                std::size_t usable=0;
+                for(auto* item:items)if(Usable(item)){
+                    if(usable>=indexedItems.size()||indexedItems[usable].Get()!=item){unchanged=false;break;}
+                    ++usable;
+                }
+                unchanged=unchanged&&usable==indexedItems.size();
+            }
+            if(!unchanged){
+                indexedRaw.clear();indexedRaw.reserve(static_cast<std::size_t>(items.Num()));for(auto* item:items)indexedRaw.push_back(item);
+                indexedItems.clear();indexedItems.reserve(items.Num());indexedPaths.clear();
+                for(auto* item:items)if(Usable(item)){indexedItems.emplace_back(item);indexedPaths.emplace(to_string(item->GetPathName()),indexedItems.back());}
+            }
             indexedScope=scope;
         }
     }
@@ -627,7 +652,7 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
         return {{"Rows",std::move(rows)},{"NextOffset",0},{"Start",0},{"HasMore",false},{"Scanned",0},{"MountedMetadataReady",mountedReady}};
     }
     const std::size_t start=randomOrder?static_cast<std::size_t>(startSeed%total):0;
-    std::size_t visited=std::min(offset,total),scanned=0;const auto begin=std::chrono::steady_clock::now();
+    std::size_t visited=std::min(offset,total),scanned=0;const auto begin=sliceStart;
     while(visited<total&&rows.size()<limit&&scanned<scanBudget) {
         if(scanned>0&&std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-begin).count()>=static_cast<long long>(timeBudgetMicros))break;
         const std::size_t index=randomOrder?(start+visited)%total:visited;
@@ -671,7 +696,7 @@ json ItemWindow(const std::string& query,std::size_t offset,std::size_t limit,st
         if(segment==1&&prioritySet.contains(path))continue;
         const auto internal=CheapText(object,"InternalName");const auto name=CachedItemName(object);const auto tags=ItemTags(object);const auto broadCategory=HelpyBroadItemCategory(object,path,name,internal,tags);
         if(!categoryFilter.empty()&&AssetTemplate::Fold(broadCategory)!=categoryFilter)continue;
-        if(!queryTokens.empty()&&!matchesTokens(path+" "+internal+" "+name+" "+tags+" "+broadCategory+" "+to_string(object->GetClassPrivate()->GetName())))continue;
+        if(!queryTokens.Empty()&&!matchesTokens(path+" "+internal+" "+name+" "+tags+" "+broadCategory+" "+to_string(object->GetClassPrivate()->GetName())))continue;
         const auto provenance=AssetProvenance::Lookup(object);const auto declared=AssetMetadata::Lookup(object);
         const bool runtimeClone=provenance.is_object()&&provenance.value("Confirmed",false);
         auto source=ItemSource::Describe(path,sourcePlan,nativePlugins,

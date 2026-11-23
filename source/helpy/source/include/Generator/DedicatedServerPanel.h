@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/RsmkResources.h"
 #include "Generator/HelpyTextInput.h"
 #include "Core/DedicatedServerIni.h"
 #include "Core/HelpyEnvironment.h"
@@ -62,7 +63,7 @@ inline void Render(){
     if(Category==2)HelpyImGuiTheme::Toggle("Reveal sensitive values locally",&ShowSecrets);
     if(Category==3)ImGui::TextWrapped("Passwords are masked by default; raw player/admin records stay redacted. Only OwnerId, ServerName, DefaultWorldName, AdminPassword and WorldPassword are editable. Other keys are preserved, not assumed supported.");
     if(!Staged.empty()){
-        if(ImGui::Button("Copy offline apply command")){const auto script=HelpyPaths::Asset("Apply-DedicatedServerSettings.ps1");const auto command="powershell.exe -NoProfile -File \""+script.string()+"\" -Changes \""+Staged.string()+"\"";ImGui::SetClipboardText(command.c_str());}
+        if(ImGui::Button("Copy offline apply command")){try{const auto script=HelpyPaths::BuiltInScript(IDR_DEDICATED_SETTINGS,"Apply-DedicatedServerSettings.ps1");const auto command="powershell.exe -NoProfile -File \""+script.string()+"\" -Changes \""+Staged.string()+"\"";ImGui::SetClipboardText(command.c_str());}catch(const std::exception& error){Status=error.what();}}
         ImGui::TextWrapped("Staged file: %s",Staged.string().c_str());
     }
     if(ImGui::CollapsingHeader("Native permissions reference")){

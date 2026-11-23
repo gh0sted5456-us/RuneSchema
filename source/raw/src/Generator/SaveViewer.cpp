@@ -12,10 +12,11 @@
 #include "Core/AuthoringCleanupPreview.h"
 #include "Core/CharacterSaveEditor.h"
 #include "Core/XboxCharacterSaves.h"
-#include "Generator/CharacterPreview.h"
+#include "Generator/CharacterNativeData.h"
 #include "Core/HelpyCacheSources.h"
 #include "Runtime/HostServices.h"
 #include "Runtime/Storefront.h"
+#include "Runtime/J4SSavesBridge.h"
 #include <imgui.h>
 #include <set>
 #include "SDK/Helper/ActorHelper.h"

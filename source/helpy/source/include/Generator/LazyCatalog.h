@@ -94,6 +94,14 @@ inline const json& BrowseRows(){
     const auto& state=For(0);
     return state.Query.empty()&&!state.Rows.empty()?state.Rows:state.BrowsePreview;
 }
+// Every item row already observed for this runtime: the browse rows, the current search's rows,
+// then each cached query window. Gear and slot pickers read this, so an Item Bay search cannot
+// shrink them to the browse preview or hide items learned from earlier searches.
+template<class Visit> void ForEachKnownItem(uint64_t generation,Visit&& visit){
+    const auto& state=For(0);if(state.RuntimeGeneration!=generation)return;
+    visit(BrowseRows());if(!state.Query.empty())visit(state.Rows);
+    for(const auto& [query,window]:state.Cache)if(window.Generation==generation)visit(window.Rows);
+}
 inline const char* KeyFor(int category){return category==0?"Items":"Definitions";}
 inline std::string RandomIdentity(const json& row) {
     if(!row.is_object())return {};

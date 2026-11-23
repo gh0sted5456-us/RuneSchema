@@ -152,8 +152,7 @@ namespace DragonWilds {
     DragonWildsJournalModLoader::~DragonWildsJournalModLoader()
     {
         std::erase(PresentationInstances,this);
-        if(m_acquisitionCallbackId!=Hook::ERROR_ID)
-            Hook::UnregisterCallback(m_acquisitionCallbackId);
+        PS::ProcessEventDispatch::Remove(m_acquisitionCallbackId);
     }
 
     nlohmann::json DragonWildsJournalModLoader::PresentationOwnership(UObject* entry) {
@@ -1161,15 +1160,15 @@ namespace DragonWilds {
 
     void DragonWildsJournalModLoader::RegisterAcquisitionHook()
     {
-        if(m_acquisitionCallbackId!=Hook::ERROR_ID || (m_acquisitionUnlocks.empty()&&m_unlock.empty()))return;
-        Hook::FCallbackOptions options{};
-        options.OwnerModName=TEXT("RuneSchema");
-        options.HookName=m_loreOnly?TEXT("RuneSchemaLoreAcquisition"):TEXT("RuneSchemaJournalAcquisition");
-        m_acquisitionCallbackId=Hook::RegisterProcessEventPostCallback(
+        if(m_acquisitionCallbackId || (m_acquisitionUnlocks.empty()&&m_unlock.empty()))return;
+        // Routed by name through the shared ProcessEvent dispatcher; ObserveAcquisition still checks the full path.
+        m_acquisitionCallbackId=PS::ProcessEventDispatch::Add(PS::ProcessEventDispatch::Phase::Post,
+            {TEXT("OnInventoryChanged_BrokenItemFTUE"),TEXT("OnReceiveInventoryChanged"),TEXT("OnRep_HasLoadedFromSave")},
+            m_loreOnly?"RuneSchemaLoreAcquisition":"RuneSchemaJournalAcquisition",
             [this](Hook::TCallbackIterationData<void>&,UObject* source,UFunction* function,void*) {
                 try {ObserveAcquisition(source,function);} catch(...) {}
-            },options);
-        if(m_acquisitionCallbackId==Hook::ERROR_ID) {
+            });
+        if(!m_acquisitionCallbackId) {
             PS::LogStructuredFallback<LogLevel::Warning>(
                 PS::StructuredDiagnosticB3C::Report("RS-JRN-014","Warning","Partial","JournalLoader",
                 "Journal acquisition observer unavailable","Automatic item-acquisition unlock observation could not be registered.",{}, {},GetModFolderType(),"Validation"),

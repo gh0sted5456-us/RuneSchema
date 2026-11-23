@@ -404,7 +404,7 @@ loading path as the main remaining recipe cost.
   results without automatically replaying the mutation. Inspect the inventory
   or player position before retrying an unconfirmed operation.
 
-See [server access setup](HELPY-STANDALONE.md#server-access-with-a-world-pin).
+See [server access setup](../HELPY-STANDALONE.md#server-access-with-a-world-pin).
 Authenticated production client/server delivery and travel still require a
 live acceptance pass; the feature is opt-in in this experimental build.
 

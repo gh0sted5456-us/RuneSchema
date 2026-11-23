@@ -3,6 +3,7 @@
 #include "Core/HelpyBrowsePolicy.h"
 #include <cassert>
 #include <thread>
+#include <set>
 int main(){
     using namespace PS::LazyCatalog;
     const auto resetFixture=[] {for(auto& state:Windows){const auto cancel=state.CancelGeneration;state=State{};state.CancelGeneration=cancel;}};
@@ -233,5 +234,16 @@ int main(){
         bool refused=false;try{(void)PS::HelpyBrowsePolicy::Read(invalid);}catch(const std::exception& e){refused=std::string(e.what()).find("RS-CFG-001")!=std::string::npos;}assert(refused);
     }
     PS::HelpyRuntimePreferences::CacheFirst=true;PS::HelpyRuntimePreferences::PassiveRefresh=true;
+    {   // Slot and gear pickers see every known item, not the browse preview an Item Bay search leaves.
+        resetFixture();auto& state=For(0);state.Started=true;state.HasMore=false;state.RuntimeGeneration=10;
+        for(int i=0;i<100;++i)state.Rows.push_back({{"Path","/Game/Item"+std::to_string(i)},{"Name","Item "+std::to_string(i)}});
+        state.Query="";SaveCache(0);state.BrowsePreview=json::array();
+        for(size_t i=0;i<size_t(InitialRows);++i)state.BrowsePreview.push_back(state.Rows[i]);
+        state.Query="sword";state.Rows=json::array({{{"Path","/Game/Sword"},{"Name","Sword"}}});
+        std::set<std::string> known;ForEachKnownItem(10,[&](const json& rows){for(const auto& row:rows)known.insert(row.at("Path").get<std::string>());});
+        assert(BrowseRows().size()==size_t(InitialRows));assert(known.size()==101&&known.contains("/Game/Sword")&&known.contains("/Game/Item99"));
+        size_t other=0;ForEachKnownItem(11,[&](const json& rows){other+=rows.size();});assert(other==0);
+        resetFixture();
+    }
     ClearRemote();
 }

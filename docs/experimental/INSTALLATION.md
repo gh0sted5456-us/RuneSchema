@@ -4,7 +4,7 @@ promote_to: INSTALLATION.md
 ---
 
 !!! info "Folder layout during testing"
-    The [complete prerelease](PRE-RELEASE.md) uses the [new runtime layout](RUNTIME-LAYOUT.md): Helpy under `Helpy`, core plugins under `dlls/plugins` and Helpy plugins under `Helpy/plugins`. Legacy layouts remain supported.
+    The [complete prerelease](PRE-RELEASE.md) uses the [new runtime layout](../RUNTIME-LAYOUT.md): Helpy under `Helpy`, core plugins under `dlls/plugins` and Helpy plugins under `Helpy/plugins`. Legacy layouts remain supported.
 
 
 !!! info "RuneSchema 1.0.0 Pre Release"
@@ -21,7 +21,7 @@ New to the framework? Start with [what RuneSchema is, what its files do, and
 how to make an add-on](../MOD-HOSTS-AND-GETTING-STARTED.md).
 
 Using Vortex? See [installer layouts and triplet troubleshooting](VORTEX-INSTALLATION.md).
-The [standalone Helpy app](HELPY-STANDALONE.md) and its matching game bridge are
+The [standalone Helpy app](../HELPY-STANDALONE.md) and its matching game bridge are
 included in this experimental package. Keep them with the matching core DLL.
 
 ## Before installation

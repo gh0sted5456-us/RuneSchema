@@ -8,11 +8,12 @@ IDR_RUNESCHEMA_REPAIR RCDATA "../../../../resources/tools/repair-runeschema.ps1"
 IDR_MOD_MENU_LICENSE RCDATA "../../../../licenses/ModMenu-MIT.txt"
 IDR_LOADING_WHEEL RCDATA "../../../../resources/helpy-ui/v1/loading-ring.png"
 IDR_SCORNED_ART RCDATA "../../../../resources/map-atlas/Scorned-Art.png"
+IDR_DEDICATED_SETTINGS RCDATA "../../../plugins/RuneSchema.Helpy/assets/Apply-DedicatedServerSettings.ps1"
 #endif
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 0,9,0,2
- PRODUCTVERSION 0,9,0,2
+ FILEVERSION 0,9,0,7
+ PRODUCTVERSION 0,9,0,7
  FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
  FILEFLAGS 0
  FILEOS VOS_NT_WINDOWS32
@@ -29,9 +30,9 @@ BEGIN
   BEGIN
    VALUE "CompanyName", "RuneSchema Community Team"
    VALUE "FileDescription", "RuneSchema Helpy"
-   VALUE "FileVersion", "0.9.0.2"
+   VALUE "FileVersion", "0.9.0.7"
    VALUE "ProductName", "RuneSchema Helpy"
-   VALUE "ProductVersion", "0.9.0.2"
+   VALUE "ProductVersion", "0.9.0.7"
    VALUE "LegalCopyright", "Copyright (c) 2026 RSDW Modding Community"
   END
  END

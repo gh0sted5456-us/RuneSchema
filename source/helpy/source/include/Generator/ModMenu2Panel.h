@@ -8,7 +8,6 @@
 #include "Generator/HelpyMenu.h"
 #include "Generator/RuneSchemaSettingsPanel.h"
 #include "Generator/RuntimeConnectionPanel.h"
-#include "Generator/CharacterPreviewPanel.h"
 #include "Core/ProcessExitFuture.h"
 #include "Core/ModMenuGate.h"
 #include "Core/ModMenuLicense.h"
@@ -22,7 +21,7 @@ inline uint64_t Revision=~uint64_t{},OpenSequence=0;inline uint32_t Pid=0;inline
 inline bool LicenseSelected=false;
 inline std::string Status,SelectedId,Compatibility,FocusRow;inline Clock::time_point Next{};
 inline std::function<void()> OpenUeMods;
-inline std::string PreviewChannel,InputOwner,PublishedPage,PublishedRect;inline Clock::time_point PreviewRetry{};
+inline std::string InputOwner,PublishedPage,PublishedRect;
 struct Draft {Json Value;uint64_t Revision;bool Pending=false;};inline std::map<std::string,Draft> Inputs;
 inline bool Queue(Json request){if(request.value("Op",std::string{})=="page")for(auto& pending:Commands)if(pending.value("Op",std::string{})=="page"){pending=std::move(request);Next={};return true;}if(Commands.size()<32){Commands.push_back(std::move(request));Next={};return true;}Status="Wait for queued Mod Menu changes to finish.";return false;}
 inline bool Backend(const Json& request,Json& reply){
@@ -55,9 +54,8 @@ inline void Poll(bool visible){
     Available=reply.value("Available",false);Offline=reply.value("Offline",false);Status=reply.value("Status",Status);
     if(reply.contains("Snapshot")){Snapshot=reply.at("Snapshot");Revision=reply.at("Revision").get<uint64_t>();const auto sequence=Snapshot.value("OpenSequence",uint64_t{});if(sequence!=OpenSequence&&sequence){OpenSequence=sequence;SelectedId=Snapshot.value("OpenId",std::string{});FocusRow=Snapshot.value("OpenRow",std::string{});LicenseSelected=false;OpenRequested=true;}}
 }
-inline void ClosePreview(){if(!PreviewChannel.empty()&&CharacterPreviewPanel::Channel.Name()==PreviewChannel)CharacterPreviewPanel::Close();PreviewChannel.clear();}
-inline void Visibility(bool visible,const std::string& rect={}){visible=visible&&!LicenseSelected;if(!visible)ClosePreview();const auto id=visible?SelectedId:std::string{},bounds=visible?rect:std::string{};if(Available&&!Offline&&(PublishedPage!=id||PublishedRect!=bounds)){Queue({{"Op","page"},{"Id",id},{"Rect",bounds}});PublishedPage=id;PublishedRect=bounds;}}
-inline void Shutdown(){ClosePreview();Commands.clear();try{Json ignored;Backend({{"Op","close"}},ignored);}catch(...){}PublishedPage.clear();PublishedRect.clear();}
+inline void Visibility(bool visible,const std::string& rect={}){visible=visible&&!LicenseSelected;const auto id=visible?SelectedId:std::string{},bounds=visible?rect:std::string{};if(Available&&!Offline&&(PublishedPage!=id||PublishedRect!=bounds)){Queue({{"Op","page"},{"Id",id},{"Rect",bounds}});PublishedPage=id;PublishedRect=bounds;}}
+inline void Shutdown(){Commands.clear();try{Json ignored;Backend({{"Op","close"}},ignored);}catch(...){}PublishedPage.clear();PublishedRect.clear();}
 inline void Settings(){
     HelpyFeatureSettings::Load();auto& settings=HelpyFeatureSettings::Menu;ImGui::TextWrapped("Based off Maxxfilth's Mod Menu, adapted natively for RuneSchema. The original MIT license is included with RuneSchema.");
     if(!Status.empty())ImGui::TextWrapped("%s",Status.c_str());
@@ -128,7 +126,7 @@ inline void Render(){
             if(!ready)Settings();else{if(HelpyImGuiTheme::SoftButton("Refresh configurable mods"))Queue({{"Op","refresh"}});ImGui::TextWrapped("No supported modmenu.json or modmenu.txt pages are registered yet.");}
         }HelpyMenu::EndBody();return;
     }
-    const auto& page=pages.at(selected);SelectedId=page.at("Id").get<std::string>();if(before!=selected)Visibility(true);if(InputOwner!=SelectedId){ModMenuTemplatePanel::Reset();Inputs.clear();ClosePreview();InputOwner=SelectedId;tab=0;}
+    const auto& page=pages.at(selected);SelectedId=page.at("Id").get<std::string>();if(before!=selected)Visibility(true);if(InputOwner!=SelectedId){ModMenuTemplatePanel::Reset();Inputs.clear();InputOwner=SelectedId;tab=0;}
     if(HelpyMenu::BeginBody("Mod Menu 2 settings",selected)){
         ImGui::SeparatorText(page.at("Name").get_ref<const std::string&>().c_str());if(page.contains("Description")&&page["Description"].is_string())ImGui::TextWrapped("%s",page["Description"].get_ref<const std::string&>().c_str());if(page.contains("Off")&&page["Off"].is_string())ImGui::TextWrapped("%s",page["Off"].get_ref<const std::string&>().c_str());
         if(page.contains("Helpy")&&page["Helpy"].contains("templates")&&(!Offline||page.contains("TemplateContext"))){
@@ -141,15 +139,9 @@ inline void Render(){
         if(HelpyMenu::BeginMore("mod-menu-page")){if(ImGui::MenuItem("Refresh"))Queue({{"Op","refresh"}});if(ImGui::MenuItem("Reset page"))Queue({{"Op","reset"},{"Id",SelectedId}});ImGui::EndPopup();}if(Snapshot.contains("Status"))ImGui::TextWrapped("%s",Snapshot["Status"].get_ref<const std::string&>().c_str());
         if(page.contains("Errors")&&page["Errors"].is_array())for(const auto& error:page["Errors"])ImGui::TextColored(theme.warning,"%s",error.get_ref<const std::string&>().c_str());
         const auto extension=page.value("Helpy",Json::object());const auto tabs=extension.value("tabs",Json::array());std::vector<const char*> labels;if(tabs.is_array())for(size_t i=0;i<tabs.size();++i){const auto& entry=tabs[i];labels.push_back(entry.at("name").get_ref<const std::string&>().c_str());if(!FocusRow.empty()){const auto& keys=entry.at("keys");if(std::find(keys.begin(),keys.end(),FocusRow)!=keys.end())tab=int(i);}}if(!labels.empty())HelpyMenu::Tabs("editor-groups",labels,tab,false);
-        const auto channel=page.value("PreviewChannel",std::string{});const bool preview=!Offline&&extension.value("layout",std::string{})=="character";const bool columns=preview&&ImGui::GetContentRegionAvail().x>theme.X(520)&&ImGui::BeginTable("character-editor",2,ImGuiTableFlags_Resizable|ImGuiTableFlags_SizingStretchProp);
-        if(columns){ImGui::TableSetupColumn("Controls",ImGuiTableColumnFlags_WidthStretch,1.1f);ImGui::TableSetupColumn("Character",ImGuiTableColumnFlags_WidthStretch,1.f);ImGui::TableNextColumn();}
         bool dialTable=false;int dialGroup=0;const auto endDials=[&]{if(dialTable){ImGui::EndTable();ImGui::PopID();dialTable=false;}};
         bool section=true;for(const auto& setting:page.at("Settings")){if(!labels.empty()&&setting.contains("key")){const auto& keys=tabs.at(tab).at("keys");if(std::find(keys.begin(),keys.end(),setting.at("key"))==keys.end())continue;}if(setting.value("type",std::string{})=="header"){endDials();const auto label=setting.value("label",std::string{});ImGui::PushID(setting.value("idx",0));ImGui::SetNextItemOpen(FocusRow.empty()?!setting.value("collapsed",false):true,FocusRow.empty()?ImGuiCond_Once:ImGuiCond_Always);section=ImGui::CollapsingHeader(label.c_str());ImGui::PopID();}else if(section){const bool dial=setting.value("presentation",std::string{})=="dial";if(!dial)endDials();if(dial&&!dialTable){ImGui::PushID(dialGroup++);dialTable=ImGui::BeginTable("dial-controls",std::clamp(int(ImGui::GetContentRegionAvail().x/theme.X(150)),1,4),ImGuiTableFlags_SizingStretchSame);if(!dialTable)ImGui::PopID();}if(dialTable)ImGui::TableNextColumn();const bool focus=!FocusRow.empty()&&setting.value("key",std::string{})==FocusRow;if(focus)ImGui::SetKeyboardFocusHere();Control(page,setting);if(focus){ImGui::SetScrollHereY(.3f);FocusRow.clear();}ImGui::Spacing();}}
         endDials();
-        if(preview){if(columns)ImGui::TableNextColumn();ImGui::SeparatorText("Character preview");if(!channel.empty()&&Clock::now()>=PreviewRetry&&(CharacterPreviewPanel::Channel.Name().empty()||CharacterPreviewPanel::Channel.Name()==PreviewChannel))try{if(channel!=PreviewChannel){CharacterPreviewPanel::Attach(channel);PreviewChannel=channel;}}catch(const std::exception& error){PreviewRetry=Clock::now()+std::chrono::seconds(1);Status=error.what();}
-            if(!PreviewChannel.empty()&&CharacterPreviewPanel::Channel.Name()==PreviewChannel)CharacterPreviewPanel::Draw(std::max(theme.Y(220),ImGui::GetContentRegionAvail().y-theme.Y(150)));
-            else ImGui::TextWrapped("The mod can provide a live preview through its Helpy preview channel. Its existing settings work independently.");}
-        if(columns)ImGui::EndTable();
         ModMenuTemplatePanel::Render(page,Available&&HelpyFeatureSettings::Menu.Enabled&&(!Offline||page.contains("TemplateContext")),[](Json command){return Queue(std::move(command));});
     }HelpyMenu::EndBody();
 }

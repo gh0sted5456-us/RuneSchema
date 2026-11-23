@@ -15,9 +15,8 @@ int main(){
     assert(Rejects([&]{HelpyAuthoring::Validate(request(99,1,"SaveEditorSlotItems",{{"Slot","Cape"},{"CacheFirst","yes"}}));}));
     assert(Rejects([&]{HelpyAuthoring::Validate(request(99,1,"SaveEditorSlotItems",{{"Slot","Cape"},{"Query",std::string(257,'x')}}));}));
     assert(Rejects([&]{HelpyAuthoring::Validate(request(99,1,"SaveEditorSlotItems",{{"Slot","Cape"},{"CacheFirst",true},{"Cursor",std::string(2049,'x')}}));}));
-    for(int quality=0;quality<3;++quality)assert(HelpyAuthoring::Validate(request(99,1,"SaveEditorRender",{{"View","Head"},{"Quality",quality}}))["Arguments"]["Quality"]==quality);
-    assert(Rejects([&]{HelpyAuthoring::Validate(request(99,1,"SaveEditorRender",{{"View","Head"},{"Quality",3}}));}));
-    assert(Rejects([&]{HelpyAuthoring::Validate(request(99,1,"SaveEditorRender",{{"View","Head"},{"Quality","high"}}));}));
+    assert(Rejects([&]{HelpyAuthoring::Validate(request(99,1,"SaveEditorRender",{{"View","Head"}}));}));
+    assert(Rejects([&]{HelpyAuthoring::Validate(request(99,1,"SaveEditorSections",{{"Store","yes"}}));}));
     host.Configure(true,false);assert(!host.Activate()["Accepted"].get<bool>());
     host.Configure(true,true);assert(!host.Submit(request(1,1))["Accepted"].get<bool>());
     assert(host.Activate()["Accepted"]&&!host.Active());assert(host.TickActivation());

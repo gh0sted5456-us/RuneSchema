@@ -36,29 +36,39 @@ void Run()noexcept{
         auto nextScan=std::chrono::steady_clock::time_point{},nextSave=nextScan;
         FILETIME started{},ended{},kernel{},user{};const bool processTime=GetProcessTimes(GetCurrentProcess(),&started,&ended,&kernel,&user)!=0;
         std::string storageError;
+        // The snapshot is rebuilt only when a counter, the mod list, a log's
+        // availability or the storage status changed since it was published.
+        bool publish=true;
         for(;;){
             {std::lock_guard lock(Mutex);if(Stop)break;}
             const auto now=std::chrono::steady_clock::now();
             if(now>=nextScan){
-                std::lock_guard gate(ModManager::Gate);rows=ModManager::Read(root,true).at("Rows");present.clear();
+                std::lock_guard gate(ModManager::Gate);rows=ModManager::Read(root,true).at("Rows");auto before=std::move(present);present.clear();
                 for(const auto& row:rows)if(row.value("Present",false))present.insert(row.at("Name").get<std::string>());
-                dirty|=ledger.Reconcile(present);nextScan=now+std::chrono::seconds(5);
+                {const bool reconciled=ledger.Reconcile(present);dirty|=reconciled;publish|=reconciled||before!=present;}nextScan=now+std::chrono::seconds(5);
                 const auto game=LiveLog::ResolveGameLog(root,local);
                 // Never replay an older play/storefront's game log into this session.
                 WIN32_FILE_ATTRIBUTE_DATA attributes{};
                 if(processTime&&GetFileAttributesExW(game.c_str(),GetFileExInfoStandard,&attributes)&&CompareFileTime(&attributes.ftLastWriteTime,&started)>=0&&GameLogMatchesProcess(game)){if(game!=paths[2]){paths[2]=game;cursors[2]={};}}
-                else{paths[2].clear();cursors[2]={};readable[2]=false;}
+                else{publish|=readable[2];paths[2].clear();cursors[2]={};readable[2]=false;}
             }
             for(size_t source=0;source<paths.size();++source){
-                if(paths[source].empty())continue;auto batch=LiveLog::Read(paths[source],cursors[source],false);cursors[source]=std::move(batch.Next);readable[source]=batch.Error.empty();
+                if(paths[source].empty())continue;auto batch=LiveLog::Read(paths[source],cursors[source],false);cursors[source]=std::move(batch.Next);publish|=readable[source]!=batch.Error.empty();readable[source]=batch.Error.empty();
                 for(const auto& line:batch.Lines){if(source==1&&line.find("[RuneSchema]")!=line.npos)continue; // Core messages already counted from RuneSchema.log.
-                    const auto entry=LiveLog::Parse(line);for(const auto& owner:present)dirty|=ledger.Observe(owner,entry,source==2?"Game":source==1?"UE4SS":"RuneSchema");}
+                    const auto entry=LiveLog::Parse(line);for(const auto& owner:present)if(ledger.Observe(owner,entry,source==2?"Game":source==1?"UE4SS":"RuneSchema")){dirty=true;publish=true;}}
             }
+            const auto errorBefore=storageError;
             if(dirty&&now>=nextSave){try{const auto text=ledger.Document().dump();if(text.size()>8*1024*1024)throw std::runtime_error("Mod-health history exceeds 8 MiB");ConfigFiles::Write(file,text);dirty=false;storageError.clear();}
                 catch(const std::exception& error){storageError=error.what();}nextSave=now+std::chrono::seconds(5);}
+            publish|=errorBefore!=storageError;
+            if(publish){
             nlohmann::json output={{"Ready",readable[0]||readable[1]},{"File",file.string()},{"GameLogAvailable",readable[2]},{"StorageError",storageError},{"Mods",nlohmann::json::object()}};
             for(const auto& owner:present)output["Mods"][owner]=ledger.Read(owner);
-            {std::unique_lock lock(Mutex);Snapshot=std::move(output);if(Wake.wait_for(lock,std::chrono::milliseconds(250),[]{return Stop;}))break;}
+            std::lock_guard lock(Mutex);Snapshot=std::move(output);publish=false;
+            }
+            // Logs are read in batches; once a second keeps the counters current
+            // for the Mods page without waking four times a second all session.
+            {std::unique_lock lock(Mutex);if(Wake.wait_for(lock,std::chrono::seconds(1),[]{return Stop;}))break;}
         }
         if(dirty){const auto text=ledger.Document().dump();if(text.size()<=8*1024*1024)ConfigFiles::Write(file,text);}
     }catch(const std::exception& error){std::lock_guard lock(Mutex);Snapshot={{"Ready",false},{"StorageError",error.what()}};}

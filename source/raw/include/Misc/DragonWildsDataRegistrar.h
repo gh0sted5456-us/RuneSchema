@@ -10,6 +10,7 @@
 #include <vector>
 #include "Unreal/NameTypes.hpp"
 #include "Unreal/Hooks.hpp"
+#include "Runtime/ProcessEventDispatch.h"
 #include "Core/PersistencePruner.h"
 #include "Core/NetworkIdentitySync.h"
 #include "SDK/WeakObjectHandle.h"
@@ -80,7 +81,7 @@ namespace DragonWilds {
         };
         std::map<std::string, NetworkSyncLane> m_networkSyncLanes;
         std::uint64_t m_nativePolicyAttempt=0;
-        RC::Unreal::Hook::GlobalCallbackId m_combatLifecycleHook = RC::Unreal::Hook::ERROR_ID;
+        PS::ProcessEventDispatch::Route m_combatLifecycleHook;
         bool m_initialized = false;
         bool m_preflightingCharacterJson = false;
         bool m_registrySummaryReported = false;

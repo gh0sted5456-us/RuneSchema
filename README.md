@@ -8,7 +8,7 @@ a staging cart, mod management, map tools and diagnostics.
 
 **[Documentation website](https://gh0sted5456-us.github.io/RuneSchema/)** ·
 **[Stable download](https://github.com/gh0sted5456-us/RuneSchema/releases/latest)** ·
-**[0.9.0.1 pre-release](https://github.com/gh0sted5456-us/RuneSchema/releases/tag/0.9.0.1-pre.20261117.1)** ·
+**[0.9.0.7 main notes](docs/RELEASE-0.9.0.7.md)** ·
 **[Report a bug](https://github.com/gh0sted5456-us/RuneSchema/issues/new/choose)**
 
 ## Get started

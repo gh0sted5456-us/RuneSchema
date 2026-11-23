@@ -56,9 +56,9 @@ inline bool Tab(const char* label,bool selected,float& used,float width,bool* do
     ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign,{.5f,.5f});
     const bool clicked=ImGui::Selectable(label,selected,ImGuiSelectableFlags_NoAutoClosePopups,{size,ImGui::GetFrameHeight()});
     if(selected)HelpyControllerInput::DefaultFocus(arriving);
-    if(down&&HelpyControllerInput::Selection.Controller&&HelpyControllerInput::NavigationSourceItem()&&
-        ImGui::IsKeyPressed(ImGuiKey_GamepadDpadDown,false)){
-        ImGui::NavMoveRequestCancel();*down=true;
+    if(HelpyControllerInput::Selection.Controller&&HelpyControllerInput::NavigationSourceItem()&&ImGui::IsKeyPressed(ImGuiKey_GamepadDpadDown,false)){
+        // Gamepad clipping can clear NavId before this move is cancelled.
+        ImGui::NavMoveRequestCancel();ImGui::SetFocusID(ImGui::GetItemID(),ImGui::GetCurrentWindow());ImGui::SetNavCursorVisible(true);if(down)*down=true;
     }
     const bool enter=clicked&&HelpyControllerInput::Selection.Controller&&ImGui::GetCurrentContext()->NavInputSource==ImGuiInputSource_Gamepad;if(enter)EnterContentFrame=ImGui::GetFrameCount();
     ImGui::PopStyleVar();ImGui::PopStyleColor(2);
@@ -74,9 +74,7 @@ template<class Labels> inline bool Tabs(const char* id,const Labels& labels,int&
         int(nav.NavMoveDir==ImGuiDir_Right)-int(nav.NavMoveDir==ImGuiDir_Left):0;
     const float width=std::max(1.f,ImGui::GetContentRegionAvail().x);ImGui::PushID(id);
     for(size_t i=0;i<labels.size();++i){
-        bool down=false;
-        if(Tab(labels[i],selected==int(i),used,width,&down)||down){changed|=selected!=int(i);selected=int(i);}
-        if(down)EnterContentFrame=ImGui::GetFrameCount();
+        if(Tab(labels[i],selected==int(i),used,width)){changed|=selected!=int(i);selected=int(i);}
         if(step){
             targets.push_back({ImGui::GetItemID(),nav.CurrentFocusScopeId,{ImGui::GetItemRectMin(),ImGui::GetItemRectMax()}});
             if(HelpyControllerInput::NavigationSourceItem())focus=int(i);

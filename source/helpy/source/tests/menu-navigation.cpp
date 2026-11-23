@@ -22,7 +22,7 @@ int main()try{
     for(mode=0;mode<2;++mode){
         selected=0;ImGui::ClearActiveID();frame();frame();focusSource();
         press(mode==0?ImGuiKey_GamepadDpadRight:ImGuiKey_GamepadDpadDown);
-        if(selected!=0||PS::HelpyControllerInput::InSection()&&ImGui::GetCurrentContext()->NavWindow->RootWindowForNav==body)throw std::runtime_error("D-pad entered another section without Confirm");
+        if(selected!=0||PS::HelpyControllerInput::InSection()&&ImGui::GetCurrentContext()->NavWindow->RootWindowForNav==body)throw std::runtime_error("D-pad entered another section without Confirm, mode="+std::to_string(mode)+" selected="+std::to_string(selected)+" window="+(GImGui->NavWindow?GImGui->NavWindow->Name:"none"));
         focusSource();press(ImGuiKey_GamepadFaceDown);
         auto& nav=*ImGui::GetCurrentContext();if(selected!=1||!nav.NavId||nav.NavWindow->RootWindowForNav!=body||toggled)throw std::runtime_error("Confirm failed to enter the selected section without editing it");
         for(int i=0;i<3;++i)press(ImGuiKey_GamepadDpadUp);

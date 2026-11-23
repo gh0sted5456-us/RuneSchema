@@ -89,6 +89,55 @@ function Resolve-CacheDotnet([string]$Stage) {
 }
 
 
+# The builder sources are generated from this script, so one compiled copy serves every job
+# until the sources or the SDK change. It is kept beside the job folders, keyed by a hash of
+# the sources and SDK version, with a manifest of the compiled files checked before each use.
+# Restore and compile, the slowest and least reliable steps, then run once instead of per mod.
+function Get-CompiledCacheBuilder([string]$Stage,[string]$Project) {
+    $sha=[Security.Cryptography.SHA256]::Create()
+    try{
+        $text=(& $script:DotnetCommand --version 2>$null | Out-String).Trim()+"`n"
+        foreach($file in (Get-ChildItem -LiteralPath $Stage -File | Where-Object {$_.Extension -in '.cs','.csproj','.json'} | Sort-Object Name)){$text+=$file.Name+"`n"+[IO.File]::ReadAllText($file.FullName)+"`n"}
+        $key=-join($sha.ComputeHash([Text.UTF8Encoding]::new($false).GetBytes($text))|ForEach-Object{$_.ToString('x2')})
+    }finally{$sha.Dispose()}
+    $root=if($ProgressFile){Join-Path ([IO.Path]::GetDirectoryName([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($ProgressFile)))) 'compiled'}else{$null}
+    $hashOf={param($path)(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash}
+    if($root){
+        $cached=Join-Path $root $key;$manifest=Join-Path $cached 'manifest.json'
+        if(Test-Path -LiteralPath $manifest -PathType Leaf){
+            try{
+                $entries=@(([IO.File]::ReadAllText($manifest)|ConvertFrom-Json).Files)
+                $intact=$entries.Count -gt 0
+                foreach($entry in $entries){$path=Join-Path $cached $entry.Name;$null=Assert-CachePath $path $cached;if(!(Test-Path -LiteralPath $path -PathType Leaf) -or (& $hashOf $path) -ne $entry.Hash){$intact=$false;break}}
+                if($intact -and (Test-Path -LiteralPath (Join-Path $cached 'HelpyCache.dll') -PathType Leaf)){Show-CacheProgress 'Using the compiled cache builder' 30;return (Join-Path $cached 'HelpyCache.dll')}
+            }catch{}
+            Write-Host 'Compiled cache builder failed its check; compiling it again.' -ForegroundColor Yellow
+        }
+    }
+    Show-CacheProgress 'Restoring the locked builder dependencies' 25
+    # A restore can fail on a transient package-feed error; one retry covers most of them.
+    for($attempt=1;$attempt -le 2;++$attempt){& $script:DotnetCommand restore $Project --locked-mode --verbosity quiet;if(!$LASTEXITCODE){break};if($attempt -eq 2){throw 'Dependency restore failed; current cache retained.'};Start-Sleep -Seconds 3}
+    Show-CacheProgress 'Compiling the cache builder' 30
+    & $script:DotnetCommand build $Project --no-restore --disable-build-servers --configuration Release -p:UseSharedCompilation=false --verbosity quiet;if($LASTEXITCODE){throw 'Builder compilation failed; current cache retained.'}
+    $bin=Join-Path $Stage 'bin/Release/net10.0'
+    if(!$root){return (Join-Path $bin 'HelpyCache.dll')}
+    try{
+        New-Item -ItemType Directory -Path $root -Force | Out-Null
+        $temporary=Join-Path $root ('.'+$key+'.'+[Guid]::NewGuid().ToString('N'));$null=Assert-CachePath $temporary $root
+        Copy-Item -LiteralPath $bin -Destination $temporary -Recurse
+        $files=@(Get-ChildItem -LiteralPath $temporary -File -Recurse | ForEach-Object {@{Name=$_.FullName.Substring($temporary.Length+1);Hash=(& $hashOf $_.FullName)}})
+        [IO.File]::WriteAllText((Join-Path $temporary 'manifest.json'),(@{Key=$key;Files=$files}|ConvertTo-Json -Depth 4),[Text.UTF8Encoding]::new($false))
+        $cached=Join-Path $root $key
+        if(Test-Path -LiteralPath $cached){Remove-Item -LiteralPath $cached -Recurse -Force}
+        Move-Item -LiteralPath $temporary -Destination $cached
+        # Older compiled builders are dropped; only the current sources are kept.
+        Get-ChildItem -LiteralPath $root -Directory | Where-Object {$_.Name -ne $key} | ForEach-Object {try{Remove-Item -LiteralPath $_.FullName -Recurse -Force}catch{}}
+        return (Join-Path $cached 'HelpyCache.dll')
+    }catch{
+        Write-Host "Compiled cache builder was not kept: $($_.Exception.Message)" -ForegroundColor Yellow
+        return (Join-Path $bin 'HelpyCache.dll')
+    }
+}
 function Assert-CachePath([string]$Path,[string]$Parent) {
     $resolved=[IO.Path]::GetFullPath($Path);$base=[IO.Path]::GetFullPath($Parent).TrimEnd('\')+'\'
     if(!$resolved.StartsWith($base,[StringComparison]::OrdinalIgnoreCase)){throw 'Cache staging path escaped its intended folder.'}
@@ -1473,11 +1522,7 @@ $builderSource=@'
 '@
 [IO.File]::WriteAllText((Join-Path $stage 'packages.lock.json'), $builderSource, [Text.UTF8Encoding]::new($false))
         $project=Join-Path $stage 'HelpyCache.csproj'
-        Show-CacheProgress 'Restoring the locked builder dependencies' 25
-        & $script:DotnetCommand restore $project --locked-mode --verbosity quiet;if($LASTEXITCODE){throw 'Dependency restore failed; current cache retained.'}
-        Show-CacheProgress 'Compiling the cache builder' 30
-        & $script:DotnetCommand build $project --no-restore --disable-build-servers --configuration Release -p:UseSharedCompilation=false --verbosity quiet;if($LASTEXITCODE){throw 'Builder compilation failed; current cache retained.'}
-        $builder=Join-Path $stage 'bin/Release/net10.0/HelpyCache.dll'
+        $builder=Get-CompiledCacheBuilder $stage $project
         $controlArguments=@();if($ControlFile){$controlArguments=@('--control-file',$ControlFile)}
         if($CreationRequest){
             Show-CacheProgress 'Preparing the mod without executing its code' 32
@@ -1504,7 +1549,7 @@ $builderSource=@'
         $providedMapping=$Mapping;if(!$providedMapping -and $plan.Mapping){$providedMapping=Join-Path $stage 'provided.usmap'}
         foreach($entry in @(@('--game',$Game),@('--mapping',$providedMapping),@('--oodle',$Oodle))){if($entry[1]){$arguments+=@($entry[0],$entry[1].Trim('"'))}}
         Show-CacheProgress 'Finding game files and preparing offline mappings automatically' 35
-        & $script:DotnetCommand (Join-Path $stage 'bin/Release/net10.0/HelpyCache.dll') @arguments | ForEach-Object {
+        & $script:DotnetCommand $builder @arguments | ForEach-Object {
             if($_ -match '^RS_PROGRESS\|([^|]+)\|(\d+)\|(\d+)$'){
                 $phase=$Matches[1];$fraction=[double]$Matches[2]/[Math]::Max(1.0,[double]$Matches[3])
                 $percent=switch($phase){'Hashing inputs'{35+15*$fraction};'Reading items'{50+20*$fraction};'Caching pictures'{70+20*$fraction};default{92}}

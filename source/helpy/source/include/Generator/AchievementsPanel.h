@@ -34,7 +34,7 @@ inline void Header() {
     if (!points && HelpyAchievements::Definitions.empty()) return;
     ImGui::TextColored(HelpyImGuiTheme::Current.accent, "%d achievement points", points);
     ImGui::SameLine(); ImGui::TextDisabled("\xC2\xB7 %zu unlocked", progress.UnlockedCount());
-    if (ImGui::IsItemHovered()) HelpyImGuiTheme::Tooltip("Earned from RuneSchema mods that include achievements. Shared with players on servers running RuneSchema and Helpy.");
+    if (ImGui::IsItemHovered()) HelpyImGuiTheme::Tooltip("Earned from mods that include achievements, UE4SS or RuneSchema. Shared with players on servers running RuneSchema and Helpy.");
 }
 inline void Bar(float fraction, float width, float height) {
     const auto& t = HelpyImGuiTheme::Current; auto* draw = ImGui::GetWindowDrawList(); const auto a = ImGui::GetCursorScreenPos();
@@ -47,8 +47,8 @@ inline void Render() {
     namespace A = ModAchievements;
     const auto& t = HelpyImGuiTheme::Current; const auto& progress = HelpyAchievements::Progress;
     if (!HelpyAchievements::Status.empty()) ImGui::TextWrapped("%s", HelpyAchievements::Status.c_str());
-    if (HelpyAchievements::Definitions.empty() && HelpyAchievements::Errors.empty()) {
-        ImGui::TextWrapped("None of your enabled mods include achievements yet. Mod authors add them with cache/achievements.json.");
+    if (HelpyAchievements::Available && HelpyAchievements::Definitions.empty() && HelpyAchievements::Errors.empty()) {
+        ImGui::TextWrapped("None of your enabled mods include achievements yet. Mod authors add an achievements.json to their mod folder, UE4SS or RuneSchema.");
     }
     ImGui::Checkbox("Show locked achievements", &ShowLocked);
     std::map<std::string, std::vector<const A::Definition*>> mods;
@@ -105,13 +105,14 @@ inline void OpenAll(const nlohmann::json& rows) {
 }
 inline void Requirements(const ModAchievements::Definition& definition) {
     constexpr std::array labels{"Defeat enemies", "Craft", "Unlock recipes", "Unlock buildings", "Update quests",
-        "Gain skill XP", "Die and respawn", "Place buildings", "Use items", "Trigger a mod event"};
+        "Gain skill XP", "Die and respawn", "Place buildings", "Use items", "Trigger a mod event", "Mod progress"};
     static_assert(labels.size() == ModAchievements::Events.size());
     ImGui::TextUnformatted(definition.Conditions.size() == 1 ? "Unlock requirement"
         : definition.Any ? "Meet any of these requirements" : "Meet all of these requirements");
     for (const auto& condition : definition.Conditions) {
         const auto event = std::find(ModAchievements::Events.begin(), ModAchievements::Events.end(), condition.Event);
-        if (condition.AtLeast > 0) ImGui::BulletText("Reach %.12g total XP", condition.AtLeast);
+        if (condition.AtLeast > 0 && condition.Event == "report") ImGui::BulletText("Reach %.12g", condition.AtLeast);
+        else if (condition.AtLeast > 0) ImGui::BulletText("Reach %.12g total XP", condition.AtLeast);
         else ImGui::BulletText("%s × %.9g", event != ModAchievements::Events.end()
             ? labels[static_cast<size_t>(event - ModAchievements::Events.begin())] : condition.Event.c_str(), condition.Count);
         if (!condition.Subject.empty()) ImGui::TextWrapped("%s", condition.Subject.c_str());
@@ -264,7 +265,7 @@ inline void RenderModWindow() {
         ModRequest = nullptr;
         try {
             ModRead = std::async(std::launch::async, [rows = std::move(rows)] {
-                return HelpyAchievements::Read(rows, true);
+                return HelpyAchievements::Read(rows, true, false);
             });
         } catch (const std::exception& error) { ModData.Errors[ModOwner] = error.what(); }
     }

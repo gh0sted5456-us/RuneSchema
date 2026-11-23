@@ -8,21 +8,40 @@
 #include "Unreal/Hooks.hpp"
 #include "Utility/Logging.h"
 #include "SDK/WeakObjectHandle.h"
+#include <windows.h>
+#include <atomic>
 #include <mutex>
 #include <optional>
 #include <nlohmann/json.hpp>
 
 namespace PS::Console {
+// rs wiki: ask the RuneSchema.Wiki plugin's in-game half to open the page in Helpy.
+inline std::string DispatchWiki(RC::Unreal::ULocalPlayer* player,std::wstring_view query){
+    std::string text;
+    if(!query.empty()){
+        const int size=WideCharToMultiByte(CP_UTF8,0,query.data(),static_cast<int>(query.size()),nullptr,0,nullptr,nullptr);
+        if(size<=0)return "That wiki search could not be read.";
+        text.resize(static_cast<size_t>(size));
+        WideCharToMultiByte(CP_UTF8,0,query.data(),static_cast<int>(query.size()),text.data(),size,nullptr,nullptr);
+    }
+    nlohmann::json result;
+    try{result=nlohmann::json::parse(PluginHost::Call("RuneSchema.Core","RuneSchema.Wiki.lookup",nlohmann::json{{"Query",text}}.dump()));}
+    catch(const std::exception&){return "The wiki needs Helpy running and the RuneSchema.Wiki plugin enabled.";}
+    if(!result.value("Opened",false))return result.value("Status",std::string("Helpy could not open the wiki."));
+    try{CloseConsole(player);}catch(...){} // let Helpy's overlay take focus
+    return result.value("Status",std::string("Opening the wiki in Helpy."));
+}
 class Commands {
     RC::Unreal::Hook::GlobalCallbackId Callback=RC::Unreal::Hook::ERROR_ID;
     RC::Unreal::Hook::GlobalCallbackId MenuTick=RC::Unreal::Hook::ERROR_ID;
     struct MenuRequest {WeakObjectHandle Player;Command Target;MenuAction Action;};
     std::mutex PendingGate;std::optional<MenuRequest> PendingMenu;
+    std::atomic<bool> MenuQueued=false; // Lets the per-frame tick skip the lock when nothing is queued.
 public:
     ~Commands(){Shutdown();}
     void Shutdown(){
         if(MenuTick!=RC::Unreal::Hook::ERROR_ID){RC::Unreal::Hook::UnregisterCallback(MenuTick);MenuTick=RC::Unreal::Hook::ERROR_ID;}
-        {std::lock_guard lock(PendingGate);PendingMenu.reset();}
+        {std::lock_guard lock(PendingGate);PendingMenu.reset();MenuQueued=false;}
         if(Callback!=RC::Unreal::Hook::ERROR_ID){
             RC::Unreal::Hook::UnregisterCallback(Callback);Callback=RC::Unreal::Hook::ERROR_ID;
         }
@@ -32,7 +51,8 @@ public:
         RC::Unreal::Hook::FCallbackOptions options{};
         options.OwnerModName=TEXT("RuneSchema");options.HookName=TEXT("RuneSchemaConsole");
         MenuTick=RC::Unreal::Hook::RegisterEngineTickPostCallback([this](auto&,auto*,float,bool){
-            std::optional<MenuRequest> pending;{std::lock_guard lock(PendingGate);pending=std::move(PendingMenu);PendingMenu.reset();}
+            if(!MenuQueued.load(std::memory_order_acquire))return;
+            std::optional<MenuRequest> pending;{std::lock_guard lock(PendingGate);pending=std::move(PendingMenu);PendingMenu.reset();MenuQueued=false;}
             if(!pending)return;
             try{
                 auto* player=pending->Player.Get();if(!player||!player->IsA<RC::Unreal::ULocalPlayer>())throw std::runtime_error("Menu player is no longer available");
@@ -54,6 +74,7 @@ public:
                 try{
                     if(command==Command::Help)reply=Help;
                     else if(command==Command::Mod)reply=ToWideSafe(DispatchMod(player,*ParseMod(std::wstring_view(input,length))));
+                    else if(command==Command::Wiki)reply=ToWideSafe(DispatchWiki(player,*ParseWiki(std::wstring_view(input,length))));
                     else if(command==Command::Invalid)reply=TEXT("Invalid RuneSchema command. Use: rs help");
                     else{
                         nlohmann::json result;
@@ -62,7 +83,7 @@ public:
                             {std::lock_guard lock(PendingGate);if(PendingMenu)throw std::runtime_error("A menu request is already queued");}
                             const auto pending=WeakObject(player);if(pending.Get()!=player)throw std::runtime_error("Cannot retain the menu player safely");
                             result=CloseConsole(player);
-                            {std::lock_guard lock(PendingGate);PendingMenu=MenuRequest{pending,command,RequestedMenuAction(std::wstring_view(input,length))};}
+                            {std::lock_guard lock(PendingGate);PendingMenu=MenuRequest{pending,command,RequestedMenuAction(std::wstring_view(input,length))};MenuQueued.store(true,std::memory_order_release);}
                             result["MenuQueued"]=true;result["Status"]="Console closure requested; native menu action queued after command return.";
                         }
                         else if(command==Command::CloseConsole)result=CloseConsole(player);

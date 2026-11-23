@@ -2,8 +2,8 @@
   "SchemaVersion": 1,
   "Id": "RSNetworking",
   "Name": "RSNetworking",
-  "Version": "0.9.0.2",
-  "BuiltForRuneSchema": "0.9.0.2",
+  "Version": "0.9.0.7",
+  "BuiltForRuneSchema": "0.9.0.7",
   "EntryPoint": "RuneSchema.Multiplayer.dll",
   "ConsoleMessage": "RuneSchema networking bridge content is available.",
   "Capabilities": [

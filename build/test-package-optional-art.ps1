@@ -19,16 +19,18 @@ try{
     $manifest=Get-Content -LiteralPath (Join-Path $repo 'resources/helpy-ui/v1/manifest.json') -Raw|ConvertFrom-Json
     $optional=@($manifest.Files|ForEach-Object {'assets/'+$_.Name})+@('assets/portraits/portrait-player.svg','assets/portraits/portrait-tree.svg','assets/portraits/portrait-stone.svg','assets/portraits/portrait-enemy.svg','assets/backgrounds/Dragonwilds.png','assets/backgrounds/RuneSchema.png')
     foreach($file in $optional){FixtureFile $file|Out-Null}
-    $kept=@('dll/RuneSchema.Helpy.dll','plugin.json','assets/Apply-DedicatedServerSettings.ps1','assets/RuneSchema.ico','settings/ui.jsonc')
+    $optional+=@('assets/Apply-DedicatedServerSettings.ps1','assets/RuneSchema.ico','assets/backgrounds/Backgrounds.txt','settings/ui.jsonc','settings/settings.jsonc','settings/item-groupings.example.json')
+    $kept=@('dll/RuneSchema.Helpy.dll','plugin.json')
     foreach($file in $kept){FixtureFile $file|Out-Null}
     & (Join-Path $PSScriptRoot 'package-optional-art.ps1') -PayloadRoot $plugin -StagingRoot $stage -RepositoryRoot $repo
     foreach($file in $optional){if(Test-Path -LiteralPath (Join-Path $plugin $file)){throw 'Optional artwork remained in payload'}}
     foreach($file in $kept){if(-not (Test-Path -LiteralPath (Join-Path $plugin $file))){throw 'Required runtime file removed'}}
+    foreach($folder in @('assets','settings')){if(Test-Path -LiteralPath (Join-Path $plugin $folder)){throw 'Empty AppData-owned folder remained in payload'}}
     & (Join-Path $PSScriptRoot 'package-optional-art.ps1') -PayloadRoot $plugin -StagingRoot $stage -RepositoryRoot $repo
     $rejected=$false
     try{& (Join-Path $PSScriptRoot 'package-optional-art.ps1') -PayloadRoot (Join-Path $repo 'source/plugins/RuneSchema.Helpy') -StagingRoot $stage -RepositoryRoot $repo}catch{$rejected=$true}
     if(-not $rejected){throw 'Source/installed-path safety guard failed'}
-    Write-Output 'PASS: managed banners/portraits/backgrounds excluded; DLLs/scripts/settings/ICO preserved; repeated calls and outside-staging rejection verified.'
+    Write-Output 'PASS: managed artwork and AppData-owned Helpy files excluded; DLLs and manifest preserved; repeated calls and outside-staging rejection verified.'
 }finally{
     $base=[IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd([char[]]'\/')
     $target=[IO.Path]::GetFullPath($fixture)

@@ -34,6 +34,7 @@
 #include "Loader/DialogueProgress.h"
 #include "SDK/WeakObjectHandle.h"
 #include "Unreal/Hooks.hpp"
+#include "Runtime/ProcessEventDispatch.h"
 
 namespace DragonWilds::Quests::Summons {class NativeKillCredit;}
 
@@ -409,7 +410,7 @@ namespace DragonWilds {
         RC::Unreal::Hook::GlobalCallbackId m_tickCallbackId = RC::Unreal::Hook::ERROR_ID;
         RC::Unreal::Hook::GlobalCallbackId m_worldTeardownCallbackId = RC::Unreal::Hook::ERROR_ID;
         RC::Unreal::Hook::GlobalCallbackId m_interactionCallbackId = RC::Unreal::Hook::ERROR_ID;
-        RC::Unreal::Hook::GlobalCallbackId m_summonCreditCallbackId = RC::Unreal::Hook::ERROR_ID;
+        PS::ProcessEventDispatch::Route m_summonCreditCallbackId;
         RC::Unreal::UFunction* m_cellShownFunction = nullptr;
         int32_t m_cellShownHookId = 0;
         uint64_t m_worldGeneration = 0;

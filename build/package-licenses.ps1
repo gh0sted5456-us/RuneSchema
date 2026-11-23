@@ -17,7 +17,7 @@ $RepositoryRoot = [IO.Path]::GetFullPath($RepositoryRoot)
 $required = @('LICENSE', 'AUTHORS.md', 'LICENSING.md', 'CONTRIBUTING.md', 'THIRD_PARTY_NOTICES.md',
     'licenses/PalSchema-MIT.txt', 'licenses/UE4SS-MIT.txt',
     'licenses/nlohmann-json-MIT.txt', 'licenses/SDL3-zlib.txt', 'licenses/ModMenu-MIT.txt',
-    'licenses/WebView2-Loader.txt', 'licenses/WebView2-NOTICE.txt', 'licenses/MD4C-MIT.txt')
+    'licenses/WebView2-Loader.txt', 'licenses/WebView2-NOTICE.txt', 'licenses/MD4C-MIT.txt', 'licenses/MINIZ-MIT.txt')
 foreach ($relative in $required) {
     $path = Join-Path $RepositoryRoot $relative
     if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or
@@ -213,7 +213,8 @@ function Write-ConsolidatedLicenseFile {
         @{ Name = 'Maxxfilth Mod Menu — MIT License'; File = 'ModMenu-MIT.txt'; Upstream = 'https://www.curseforge.com/runescape-dragonwilds/ue4ss-mods/mod-menu' },
         @{ Name = 'Microsoft WebView2 Loader — License'; File = 'WebView2-Loader.txt'; Upstream = 'https://www.nuget.org/packages/Microsoft.Web.WebView2/1.0.3405.78' },
         @{ Name = 'Microsoft WebView2 Loader — Notices'; File = 'WebView2-NOTICE.txt'; Upstream = 'https://www.nuget.org/packages/Microsoft.Web.WebView2/1.0.3405.78' },
-        @{ Name = 'MD4C — MIT License'; File = 'MD4C-MIT.txt'; Upstream = 'https://github.com/mity/md4c/tree/release-0.5.2' }
+        @{ Name = 'MD4C — MIT License'; File = 'MD4C-MIT.txt'; Upstream = 'https://github.com/mity/md4c/tree/release-0.5.2' },
+        @{ Name = 'miniz — MIT License'; File = 'MINIZ-MIT.txt'; Upstream = 'https://github.com/richgel999/miniz/releases/tag/3.0.2' }
     )
     foreach ($section in $sections) {
         $lines.Add('')

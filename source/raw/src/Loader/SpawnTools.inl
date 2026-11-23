@@ -110,8 +110,8 @@ namespace {
     std::string ToolWindowFold(std::string value) {
         std::ranges::transform(value,value.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});return value;
     }
-    bool ToolWindowMatches(const nlohmann::json& row,const std::string& query) {
-        return PS::SpawnCatalogSearch::Matches(row,query);
+    bool ToolWindowMatches(const nlohmann::json& row,const PS::SpawnCatalogSearch::Query& query) {
+        return query(row);
     }
     std::uint64_t ToolStableId(const std::string& value) {
         std::uint64_t hash=1469598103934665603ull;for(const unsigned char c:value){hash^=c;hash*=1099511628211ull;}return hash;
@@ -122,6 +122,7 @@ namespace {
         if(limit<1||limit>128)throw std::runtime_error("Catalog window limit must be 1..128 rows.");
         if(query.size()>256)throw std::runtime_error("Catalog search text exceeds 256 characters.");
         if(fieldSet!="BasicRow"&&fieldSet!="Detail")throw std::runtime_error("Unsupported definition catalog field projection.");
+        const PS::SpawnCatalogSearch::Query match(query); // Parsed once per window, not per row.
         scanBudget=std::clamp<std::size_t>(scanBudget,128,8192);timeBudgetMicros=std::clamp<std::uint64_t>(timeBudgetMicros,100,5000);
         nlohmann::json rows=nlohmann::json::array();std::set<std::string> authoredIdentities;
         for(const auto& row:authored)if(row.is_object())authoredIdentities.insert(row.value("Type",std::string{})+row.value("Class",std::string{}));
@@ -130,7 +131,7 @@ namespace {
         for(const auto& original:authored) {
             const auto current=raw++;if(current<offset)continue;if(exhausted())return {{"Rows",std::move(rows)},{"NextOffset",current},{"HasMore",true},{"Scanned",scanned},{"BudgetExhausted",true}};++scanned;
             if(!original.is_object())continue;auto row=original;const auto type=row.value("Type",std::string{});
-            const bool allowed=category==1?(type=="AI"||type=="NPC"):type=="Resource";if(!allowed||!ToolWindowMatches(row,query))continue;
+            const bool allowed=category==1?(type=="AI"||type=="NPC"):type=="Resource";if(!allowed||!ToolWindowMatches(row,match))continue;
             if(type=="AI"){
                 auto* native=ActorHelper::ResolveClass(TEXT("/Script/Dominion.DominionAICharacter"));
                 auto* loaded=UECustom::UObjectGlobals::StaticFindObject<UClass*>(nullptr,nullptr,RC::to_generic_string(row.value("Class",std::string{})).c_str(),false);
@@ -165,7 +166,7 @@ namespace {
             const auto path=RC::to_string(type->GetPathName()),kind=std::string(npc?"NPC":ai?"AI":"Resource");
             if(path.empty()||authoredIdentities.contains(kind+path))continue;
             nlohmann::json light={{"Key",std::string(npc?"@loaded-npc:":ai?"@loaded-ai:":"@loaded-resource:")+path},{"Name",ToolReadableName(path)},{"Class",path},{"Type",kind},{"StableId",ToolStableId(kind+":"+path)}};
-            if(!ToolWindowMatches(light,query))continue;
+            if(!ToolWindowMatches(light,match))continue;
             if(fieldSet=="Detail") {
                 auto detailed=ToolDefinitionRow(type,light["Key"].get<std::string>(),ai,npc?"NPC":"");detailed["StableId"]=light["StableId"];
                 rows.push_back(std::move(detailed));
@@ -260,7 +261,7 @@ void DragonWildsSpawnLoader::HandleNetworkHelpyMarks(UObject* player,const std::
 std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,const std::string& action,const std::string& payload) {
     if(!player || !player->GetWorld() || !GetGameMode(player->GetWorld()))
         throw std::runtime_error("Helpy authority request did not arrive in an authoritative world");
-    if(action!="GiveItems" && action!="MapTeleport" && action!="HelpyRemoteAccess" && action!="Spawn" && action!="Players" && action!="InventoryMarks" && action!="NativeServerAdmin")
+    if(action!="GiveItems" && action!="MapTeleport" && action!="HelpyRemoteAccess" && action!="Spawn" && action!="Players" && action!="InventoryMarks" && action!="NativeServerAdmin" && action!="DestroyItem")
         throw std::runtime_error("Helpy authority action is not permitted");
     if(payload.empty() || payload.size()>256*1024)
         throw std::runtime_error("Helpy authority payload exceeds the safe bound");
@@ -372,9 +373,16 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
     const bool savedAccess=PS::NativeServerAdminRuntime::HelpyAuthorized(controller,playerGuid);
     const bool pinAccess=PS::HelpyRemoteAccess::Server.Allowed(peerKey,worldKey,policy.allowPinAccess,policy.accessPin);
     const bool allowlisted=isAllowlisted();
+    if(action=="DestroyItem"){
+        // Saved access or the allowlist, never a PIN alone, and only the sender's own character.
+        if(payload.size()>4096)throw std::runtime_error("Destroy request exceeds its size limit");
+        PS::HelpyItemDestroy::Allow({true,savedAccess,allowlisted,pinAccess,true});
+        const auto body=PS::HelpyItemDestroy::Body(request);
+        if(body.Exact.Player!=PS::ItemSnapshot::NormalizeGuid(playerGuid))throw std::runtime_error("Through a server, Helpy destroys items only on your own character.");
+    }
     if(!savedAccess&&!allowlisted&&!(pinAccess&&(action=="GiveItems"||action=="MapTeleport")))
         throw std::runtime_error("Remote access denied. Connect with the server's world PIN in Settings > Server access, or ask for allowlist access.");
-    if((pinAccess||savedAccess)&&!allowlisted){
+    if((pinAccess||savedAccess)&&!allowlisted&&action!="DestroyItem"){
         const auto target=request.value("Player",std::string{});
         if((action!="Spawn"||!savedAccess)&&!PS::HelpyRemoteAccess::SelfRequest(action,target,playerGuid,RC::to_string(controller->GetPathName())))
             throw std::runtime_error("PIN access allows deliveries and teleportation only for your own character");
@@ -402,6 +410,8 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
         if(request.contains("TargetPlayer")||request.value("PartyPoint",false))
             throw std::runtime_error("Remote teleport requires a map position for your own character");
         (void)ToolMapTarget(player->GetWorld(),request);
+    } else if(action=="DestroyItem"){
+        // Checked above; the game-thread handler checks the live stack and the server's delivery flags.
     } else {
         if(!savedAccess&&!policy.allowClientTemporarySpawns)
             throw std::runtime_error("This server does not allow client Helpy temporary spawns");
@@ -426,12 +436,13 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
     const auto queuedId=request.at("_RequestId").get<uint64_t>();
     if(!PS::SpawnToolRequests::TrySubmit(std::move(request)))
         throw std::runtime_error("Helpy server command queue is busy; retry after the active command completes");
-    if(PublishHelpyResult&&bridgeRevision>0&&(action=="GiveItems"||action=="MapTeleport")){
+    if(PublishHelpyResult&&bridgeRevision>0&&(action=="GiveItems"||action=="MapTeleport"||action=="DestroyItem")){
         const auto reply=PublishHelpyResult;
         PS::SpawnToolRequests::SetNetworkCompletion(queuedId,[reply,peerIdentity,worldIdentity,bridgeRevision](const nlohmann::json& result){
             auto* owner=peerIdentity.Get();if(owner&&owner->GetWorld()==worldIdentity.Get())reply(owner,bridgeRevision,result);
         });
     }
+    if(action=="DestroyItem")return "Server accepted the destroy request for your own character.";
     return action=="GiveItems"?"Server accepted the bounded item request.":action=="MapTeleport"?"Server accepted the self-teleport request; native ground checks still apply.":"Server accepted the temporary spawn request.";
 }
 
@@ -1153,9 +1164,9 @@ void DragonWildsSpawnLoader::PumpSpawnTools(PS::WorkSlice& work) {
                     std::format("Catalogs overwritten: {} AI/resources, {} items, {} buildings ({} verified safe / {} blocked). {}",definitions.size(),items.size(),buildings.size(),safeBuildingCount,buildings.size()-safeBuildingCount,catalogDirectory.string())}});return;
         }
         if(!selected&&catalogWorld&&PS::Network::Detect(catalogWorld).Mode==PS::Network::Role::Client
-            &&(action=="GiveItems"||action=="Spawn"||action=="MapTeleport"||action=="HelpyRemoteAccess")) {
+            &&(action=="GiveItems"||action=="Spawn"||action=="MapTeleport"||action=="HelpyRemoteAccess"||action=="DestroyItem")) {
             if(request->dump().size()>4096)throw std::runtime_error("The server request exceeds the native bridge envelope. Split the cart into smaller deliveries; this request was not sent.");
-            if(action=="GiveItems"){
+            if(action=="GiveItems"||action=="DestroyItem"){
                 // A client checks this PC's Helpy delivery flags before asking the server; the server checks its own.
                 std::string own;
                 for(auto* controller:controllers){
@@ -1163,10 +1174,13 @@ void DragonWildsSpawnLoader::PumpSpawnTools(PS::WorkSlice& work) {
                     try{ActorHelper::FunctionCall local(controller,TEXT("/Script/Engine.Controller:IsLocalController"));local.Invoke();if(local.Result<bool>()){own=GetPlayerCharacterGuid(controller);break;}}catch(...){}
                 }
                 PS::HelpyDeliveryGate::Require(own,"");
+                // Through a server, Destroy acts only on this PC's own character.
+                if(action=="DestroyItem"&&PS::HelpyItemDestroy::Body(*request).Exact.Player!=PS::ItemSnapshot::NormalizeGuid(own))
+                    throw std::runtime_error("Through a server, Helpy destroys items only on your own character.");
             }
             if(!ForwardHelpyAuthority||!ForwardHelpyAuthority(action,request->dump()))
                 throw std::runtime_error("The owning-player RuneSchema authority bridge is unavailable");
-            if(action=="GiveItems"||action=="MapTeleport"){
+            if(action=="GiveItems"||action=="MapTeleport"||action=="DestroyItem"){
                 PS::SpawnToolRequests::Progress("Waiting for the server's validated result. No second click is needed.");return;
             }
             auto result=PS::SpawnToolRequests::Read();result["Status"]="Request submitted to server authority; the server will apply its Helpy permission policy.";
@@ -1189,6 +1203,29 @@ void DragonWildsSpawnLoader::PumpSpawnTools(PS::WorkSlice& work) {
             if(world!=m_readyWorld||request->value("Generation",uint64_t{})!=PS::SpawnToolRequests::CurrentGeneration()||request->value("PlayerGuid",std::string{}).empty()||request->value("PlayerGuid",std::string{})!=GetPlayerCharacterGuid(selected))throw std::runtime_error("Gear target/world changed; refresh the party member");
             const auto outcome=action=="RestorePlayerGear"?PS::PlayerGearActions::Restore(selected,*request):PS::PlayerGearActions::Change(selected,*request);
             PS::SpawnToolRequests::Publish({{"EquipmentAction",outcome},{"Status",outcome.at("Status")}});return;
+        }
+        if(action=="DestroyItem"){
+            // One whole confirmed stack through runeschema.item.destroy, as Helpy (a core caller).
+            const bool network=request->value("_Source",std::string{})=="HelpyNetwork";
+            if(world!=m_readyWorld)throw std::runtime_error("Destroy target is not in the current ready world");
+            if(!network&&request->value("Generation",uint64_t{})!=PS::SpawnToolRequests::CurrentGeneration())throw std::runtime_error("The world changed; refresh the inventory before destroying");
+            const auto body=PS::HelpyItemDestroy::Body(*request);
+            if(body.Exact.Player!=PS::ItemSnapshot::NormalizeGuid(GetPlayerCharacterGuid(selected)))throw std::runtime_error("Destroy target changed; refresh the inventory");
+            // The player's own character keeps the delivery gate. A host acting on another player does not.
+            bool own=network;
+            if(!own)try{ActorHelper::FunctionCall local(selected,TEXT("/Script/Engine.Controller:IsLocalController"));local.Invoke();own=local.Result<bool>();}catch(...){own=true;}
+            if(own){std::string place;try{place=WorldSaveIdentity::Guid(selected,"Helpy delivery flags");}catch(...){}
+                PS::HelpyDeliveryGate::Require(body.Exact.Player,place);}
+            const auto text=request->at("Destroy").dump();
+            std::string response(PS::ItemDestroy::MinCapacity,'\0');uint32_t size=0;
+            auto code=PS::ItemDestroyService::Call(PS::HelpyItemDestroy::Caller.data(),true,text.c_str(),response.data(),static_cast<uint32_t>(response.size()),&size);
+            if(code==RS_PLUGIN_BUFFER_TOO_SMALL&&size>response.size()&&size<=RUNESCHEMA_PLUGIN_MAX_MESSAGE){response.assign(size,'\0');
+                code=PS::ItemDestroyService::Call(PS::HelpyItemDestroy::Caller.data(),true,text.c_str(),response.data(),static_cast<uint32_t>(response.size()),&size);}
+            nlohmann::json reply;
+            if(code==RS_PLUGIN_OK&&size&&size<=response.size()){if(response[size-1]=='\0')--size;response.resize(size);reply=nlohmann::json::parse(response,nullptr,false);}
+            if(!reply.is_object())reply={{"State","Unknown"},{"Ok",false},{"Error","The destroy service returned no readable result (code "+std::to_string(code)+")."}};
+            const auto bounded=PS::HelpyItemDestroy::Bounded(reply,body);
+            PS::SpawnToolRequests::Publish({{"DestroyResult",bounded},{"Status",PS::HelpyItemDestroy::Status(bounded)}});return;
         }
         if(action=="InspectPlayerInventory"){
             if(world!=m_readyWorld)throw std::runtime_error("Inventory target is not in the current ready world");

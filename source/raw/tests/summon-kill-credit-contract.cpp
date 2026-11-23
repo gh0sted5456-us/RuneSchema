@@ -53,5 +53,7 @@ int main(int argc,char** argv) {
     require(native.find("FunctionCall ")==std::string::npos);
     require(loader.find("m_summonNativeCredit->Before(dispatch")!=std::string::npos);
     require(loader.find("m_summonNativeCredit->After(dispatch")!=std::string::npos);
-    require(loader.find("UnregisterCallback(m_summonCreditCallbackId)")!=std::string::npos);
+    // The pre-callback is routed by name through the shared ProcessEvent dispatcher and removed with the loader.
+    require(loader.find("PS::ProcessEventDispatch::Remove(m_summonCreditCallbackId)")!=std::string::npos);
+    require(loader.find("{TEXT(\"OnAIKilled\")},\"RuneSchemaSummonKillCredit\"")!=std::string::npos);
 }

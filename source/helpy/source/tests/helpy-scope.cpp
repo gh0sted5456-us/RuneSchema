@@ -20,7 +20,11 @@ int main(int argc,char** argv){
         "source/helpy/source/include/Runtime/HelpyNativeModule.h",
         "source/helpy/assets/SchemaVision","source/plugins/RuneSchema.Helpy/assets/SchemaVision"})
         assert(!std::filesystem::exists(root/retired));
-    for(const auto* retained:{"ItemPreviewPanel::Render", "MapPanel::Render", "PlayerInventoryPanel::Render"})assert(desktop.contains(retained));
+    for(const auto* retained:{"MapPanel::Render", "PlayerInventoryPanel::Render"})assert(desktop.contains(retained));
+    // The item and character previews are retired.
+    for(const auto* retired:{"ItemPreviewPanel","CharacterPreviewPanel","CharacterPreviewFrame"})assert(!desktop.contains(retired));
+    for(const auto* retired:{"source/helpy/source/include/Generator/ItemPreviewPanel.h","source/helpy/source/include/Generator/CharacterPreviewPanel.h",
+        "source/raw/include/Core/CharacterPreviewFrame.h","source/raw/src/Generator/CharacterPreview.cpp"})assert(!std::filesystem::exists(root/retired));
     const auto console=Read(root/"source/raw/include/Runtime/ConsoleMenu.h");
     for(const auto* retained:{"OpenWidgetIfClosed","CloseWidgetIfOpen","ToggleWidget","CloseConsole"})assert(console.contains(retained));
     assert(!desktop.contains("DrawHomeBackdrop("));

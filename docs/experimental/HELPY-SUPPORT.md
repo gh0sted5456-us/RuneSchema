@@ -84,7 +84,7 @@ Save Recovery records which mods were active at the time of a snapshot.
 World recovery is an opt-in setting.
 
 [Mod and loader controls](MOD-METADATA-AND-CONTROLS.md) ·
-[Mod Menu 2](MOD-MENU-2-AND-HUD.md) · [Save recovery](SAVE-RECOVERY.md)
+[Mod Menu 2](../MOD-MENU-2-AND-HUD.md) · [Save recovery](SAVE-RECOVERY.md)
 
 ## Find a setting
 

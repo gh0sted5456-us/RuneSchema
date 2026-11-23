@@ -1,20 +1,50 @@
 ---
 channel: experimental
-promote_to: RELEASE-1.0.0.md
+promote_to: RELEASE-0.9.0.7.md
 ---
 
-# RuneSchema 0.9.0.1 Pre Release
+# RuneSchema integration changelog
 
-<div class="rs-actions">
-  <a class="md-button md-button--primary" href="https://github.com/gh0sted5456-us/RuneSchema/releases/download/0.9.0.1-pre.20261117.1/RuneSchema-0.9.0.1-preview-20261117.1.zip">Download RuneSchema</a>
-  <a class="md-button" href="../INSTALLATION/">Installation</a>
-</div>
-
-This prerelease packages RuneSchema and Helpy for Dragonwilds CL260223. Install the pinned UE4SS build separately. Close the game and choose **Exit Helpy** before updating. Keep your settings, mods, saves, and activation keys.
+RuneSchema 0.9.0.7 has been promoted to main. See [the release notes](../RELEASE-0.9.0.7.md); remaining experimental guides keep their own acceptance limits. Existing published downloads remain unchanged.
 
 <span id="pending-changelog"></span>
 
 ## Changes since 0.8.0.3
+
+### 0.9.0.7: Wiki, plugin tiles, Grand Exchange support, character sheet · November 20–21
+
+This candidate collects everything since 0.9.0.3.
+
+**For players**
+
+- New `RuneSchema.Wiki` plugin: a **Wiki** tile that shows the real Dragonwilds wiki inside Helpy, including the native in-game overlay (captured into Helpy's panel, with clicks, scrolling and typing passed to the page). Plugin pages show Helpy's navigation as a bar across the top, so the wiki keeps its own left navigation. A page in Helpy's separate window now follows the window while you drag it. Type `rs wiki <name>` in the game console to open a page. See [Dragonwilds Wiki in Helpy](../HELPY-WIKI.md).
+- Helpy's optional web browser (off by default): a **Browser** tab beside the plugins with an address bar and its own profile. Turning on **Block ads** downloads uBlock Origin Lite from its official GitHub release, checks its SHA-256 and loads it into the browser only. Plugin tabs sit in the middle of the top bar, and the **i** shows each one's notice. See [Web browser in Helpy](../HELPY-BROWSER.md).
+- Plugin workspaces drawn by a companion app, such as Grand Exchange, now show at full opacity. Helpy's **Window opacity** and overlay opacity no longer let the desktop show through them, and Helpy shows its own "Opening..." message until the companion's first frame at the right size arrives.
+- Plugin entries such as Grand Exchange are tiles on Home with their own icon and description, and sidebar rows with their icon, instead of a plain button above the tiles.
+- Plugins can post into Helpy's notifications, with an in-game popup and an **Open** button for their own page. Notices appear under **Notifications → Plugins**; Grand Exchange can use this for sale alerts.
+- Grand Exchange opens as its own workspace inside Helpy, with **Return to Helpy**. See [Grand Exchange integration](../GRAND-EXCHANGE.md).
+- The character sheet has four pages (Inventory & loadout, Appearance, Skills, Save data) and one draft bar for Review & export and Discard changes. Add Item Bay items to the draft with a quantity. See [Character sheet](CHARACTER-SHEET.md).
+- The Item Bay shows why deliveries to your own character are off or paused by a mod, with **Turn deliveries on** for your own switch, and checks again before sending. See [Helpy delivery flags](HELPY-DELIVERY-FLAGS.md).
+- Item search understands `OR` / `|`, `-word` / `NOT`, parentheses and "phrases", in the Item Bay, gear pickers and spawn tools.
+
+**For mod and plugin authors**
+
+- A `Host: "helpy"` plugin can ship as one folder under `Helpy/plugins/<Id>`: an optional in-game half (`GameEntryPoint`), RuneSchema content (`Content: true`), and calls from its Helpy half to services its in-game half registered.
+- Owned plugin events (`helpy.plugin.event`) let an in-game half notify its own Helpy half and open its own route.
+- An interrupted plugin update is recovered before plugin discovery, and the externally updated plugin folders are not scanned if the update lock can't be taken.
+- New Helpy plugin UI: Home tile fields, a text box and host-owned web pages. Plugins can also post notices with `helpy.notify`. See [Navigation API](../GRAND-EXCHANGE.md#navigation-api) and [Plugin notices](../GRAND-EXCHANGE.md#plugin-notices).
+- A mod can sign a time-limited **character exception** to its own delivery pauses. See [Character exceptions](HELPY-DELIVERY-FLAGS.md#character-exceptions).
+- Core service `runeschema.item.snapshot`: a read-only, lossless record of one live item, for in-game plugin halves.
+- Plugin server requests (in development): a plugin's in-game half can ask the server it's on to run the same plugin's server half, which can put items into the sender's inventory, a storage component on their character, or a world chest with `runeschema.item.grant`. Grants to a player run only while serving that player's own request; the plugin's own Helpy delivery pause is skipped then, and the player's switch and other mods' pauses still apply. Grand Exchange uses this to deliver on any server that has it installed. See [Plugin server requests and item grants](PLUGIN-SERVER-REQUESTS.md).
+- Core service `runeschema.item.destroy` (in development): removes one exact whole stack through the game's own destroy call, for in-game plugin halves that declare `item.destroy`. Helpy's Inventory workbench uses it for **Destroy stack…**: confirmed twice, your own character keeps its delivery gate, and through a server it needs saved Helpy access or the allowlist and acts only on your own character. `item.destroy` and `item.snapshot` also reach a mod's own storage on the character (`Scope: "Owned"` with its ObjectIdentity), so Grand Exchange can take deposits from its storage on a server; a remote player's character only while serving that player's own request. Failed server-request answers carry a `Reason` (`NotInstalled`, `NotReady`, `Invalid`, `Refused`). See [Exact item destroy](ITEM-DESTROY.md).
+- Name-only engine hooks share one dispatcher, which cuts per-call overhead.
+
+### Helpy data in AppData, Achievements plugin · November 19
+
+- Helpy keeps its own files in `%LOCALAPPDATA%/RSDragonwilds/RuneSchema/core`: settings, theme, item groupings, downloaded artwork, your own backgrounds and fonts, and a copy of the licence bundle. The installed mod now holds only runtime files, plugin DLLs and the single licence bundle in `settings/licenses`.
+- Runtime folders are named for the game binaries: `Win64` for Steam and Epic, `WinGDK` for Game Pass, and `Server` for a dedicated server. The first start moves the older `steam`, `epic`, `gamepass`, `server`, `HELPY`, `runeschema.profile` and `health` folders once, without copying or deleting. A folder in use stays where it is until a later start. See [Runtime folders](../RUNTIME-LAYOUT.md).
+- The dedicated-server apply script is built into Helpy.exe and written to `core/HELPY/tools` when you copy the apply command.
+- Achievements are a Helpy plugin, `RuneSchema.Achievements`. It finds `achievements.json` in UE4SS mods as well as RuneSchema mods, so any mod can award achievements. Turning the plugin off in `plugins.txt` turns achievements off and keeps earned points. See [Mod achievements](../MOD-ACHIEVEMENTS.md).
 
 ### Item Bay search fixes · November 17
 

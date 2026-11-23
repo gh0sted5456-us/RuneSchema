@@ -10,6 +10,7 @@
 #include "Loader/DragonWildsModLoaderBase.h"
 #include "nlohmann/json.hpp"
 #include "Unreal/Hooks.hpp"
+#include "Runtime/ProcessEventDispatch.h"
 
 namespace RC::Unreal {
     class UClass;
@@ -88,7 +89,7 @@ namespace DragonWilds {
         struct AcquisitionUnlock { EntryHandle Item; RC::StringType EntryKey; };
         std::vector<AcquisitionUnlock> m_acquisitionUnlocks;
         std::unordered_map<std::string,std::unordered_map<RC::StringType,int32_t>> m_acquisitionBaselines;
-        RC::Unreal::Hook::GlobalCallbackId m_acquisitionCallbackId = RC::Unreal::Hook::ERROR_ID;
+        PS::ProcessEventDispatch::Route m_acquisitionCallbackId;
         bool m_observingAcquisition = false;
         std::unordered_map<std::string,uint64_t> m_automaticDelivery;
         std::unordered_set<std::string> m_reportedUnlockFailures;

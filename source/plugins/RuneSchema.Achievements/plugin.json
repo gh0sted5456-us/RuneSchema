@@ -1,0 +1,12 @@
+{
+  "SchemaVersion": 1,
+  "Id": "RuneSchema.Achievements",
+  "Name": "Helpy Achievements",
+  "Version": "0.9.0.7",
+  "BuiltForRuneSchema": "0.9.0.7",
+  "ApiVersion": 1,
+  "Host": "helpy",
+  "EntryPoint": "RuneSchema.Achievements.dll",
+  "MountPaks": false,
+  "Capabilities": ["helpy.achievements"]
+}

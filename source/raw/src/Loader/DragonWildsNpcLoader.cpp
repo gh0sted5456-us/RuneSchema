@@ -356,7 +356,7 @@ namespace DragonWilds {
 
     DragonWildsNpcLoader::~DragonWildsNpcLoader()
     {
-        if(m_summonCreditCallbackId!=Hook::ERROR_ID)Hook::UnregisterCallback(m_summonCreditCallbackId);
+        PS::ProcessEventDispatch::Remove(m_summonCreditCallbackId);
         if(HelpyInstance==this)HelpyInstance=nullptr;
         // Shutdown stays on the existing loader lifecycle. Native lifespan is an
         // additional fallback; do not call engine APIs from another thread.
@@ -558,17 +558,16 @@ namespace DragonWilds {
             return false;
         }
 
-        options.HookName=TEXT("RuneSchemaSummonKillCredit");
-        m_summonCreditCallbackId=Hook::RegisterProcessEventPreCallback(
+        // Routed by name through the shared ProcessEvent dispatcher: only OnAIKilled reaches this.
+        m_summonCreditCallbackId=PS::ProcessEventDispatch::Add(PS::ProcessEventDispatch::Phase::Pre,
+            {TEXT("OnAIKilled")},"RuneSchemaSummonKillCredit",
             [this](Hook::TCallbackIterationData<void>& dispatch,UObject* source,UFunction* function,void* parameters) {
-                static const FName killed(TEXT("OnAIKilled"),FNAME_Add);
-                if(m_gameThreadId.load(std::memory_order_relaxed)!=GetCurrentThreadId() || !function
-                    || function->GetFName()!=killed)return;
+                if(m_gameThreadId.load(std::memory_order_relaxed)!=GetCurrentThreadId() || !function)return;
                 try {m_summonNativeCredit->Before(dispatch,source,function,parameters,m_worldGeneration+1);}
                 catch(const std::exception& error){ErrorOnce("summon-kill-credit",PS::ToWideSafe(error.what()));}
                 catch(...) {}
-            },options);
-        if(m_summonCreditCallbackId==Hook::ERROR_ID)return false;
+            });
+        if(!m_summonCreditCallbackId)return false;
 
         m_actorObserverId=DragonWildsBlueprintModLoader::RegisterActorInitializedObserver(
             [this](AActor* actor){

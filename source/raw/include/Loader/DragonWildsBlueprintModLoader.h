@@ -14,6 +14,7 @@
 #include <unordered_set>
 #include <vector>
 #include <cstdint>
+#include <iterator>
 
 namespace UECustom {
     class UBlueprintGeneratedClass;
@@ -126,6 +127,19 @@ namespace DragonWilds {
         RC::Unreal::UObject* FindRuntimeWidgetOwner(
             RC::Unreal::UObject* source,
             const RC::Unreal::FName& ownerClass);
+        // Up to 16 outers plus the tracked target's owner: never overflows.
+        struct RuntimeWidgetOwnerList {
+            RC::Unreal::UObject* Items[24]{};
+            size_t Count = 0;
+            void Add(RC::Unreal::UObject* owner) {
+                if (!owner) return;
+                for (size_t index = 0; index < Count; ++index) if (Items[index] == owner) return;
+                if (Count < std::size(Items)) Items[Count++] = owner;
+            }
+        };
+        // One walk up the outer chain for every owner class: adds the nearest
+        // outer of each class in m_runtimeWidgetOwnerClasses.
+        void CollectRuntimeWidgetOwners(RC::Unreal::UObject* source, RuntimeWidgetOwnerList& owners);
         RC::Unreal::UObject* ResolveRuntimeWidgetTarget(
             RC::Unreal::UObject* owner,
             const RuntimeWidgetRule& rule);

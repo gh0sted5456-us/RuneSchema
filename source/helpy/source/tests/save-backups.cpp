@@ -36,7 +36,9 @@ int main(int argc,char** argv)try{
     ObserveMod("Fixture","Fixture mod","1.2");const auto file=Store(directory,old,guid,"Before cleanup",{{"Mods",ActiveMods()},{"LastPlayedUtc",Now()}});
     assert(Read(directory,guid,PS::CacheBundleIO::Hash(old))==old);
     assert(Store(directory,old,guid,"Automatic")==file);
-    auto rows=List(directory);assert(rows.size()==1&&rows[0].Reasons.size()==2&&rows[0].Mods[0]["Id"]=="Fixture"&&rows[0].Name=="Recovery fixture");
+    auto rows=List(directory);
+    if(rows.size()!=1||!rows[0].ValidMetadata)std::cerr<<"Backup rows: "<<rows.size()<<"; metadata: "<<PS::CacheBundleIO::Read(Metadata(file),512*1024)<<'\n';
+    assert(rows.size()==1&&rows[0].Reasons.size()==2&&rows[0].Mods[0]["Id"]=="Fixture"&&rows[0].Name=="Recovery fixture");
     auto entry=rows[0];assert(rejects([&]{Read(directory,"../escape",entry.Hash);}));
     assert(Context({{"Mods",Json::array({{{"Name",17}}})}}).at("Mods").is_null());
     assert(Context({{"Mods",ActiveMods()}}).at("Mods").size()==1);

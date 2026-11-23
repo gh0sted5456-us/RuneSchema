@@ -19,7 +19,7 @@ inline constexpr std::array Operations{
     "PlayerBuild","NameplateBuild","PresetsList","PresetSave","Preset","TraceProfilesList","TraceProfileSave","TraceProfileLoad",
     "TraceTarget","TraceBrowse","TraceSelect","PlayerTraceStart","PlayerTraceStop","PlayerTraceMarker","TraceStart","TraceStop","EventRuleBuild",
     "Target","Player","Browse","Object","SavedItems","SavedWorld","Clear","Imports","NpcPreview","NpcExport",
-    "CleanupInspect","CleanupPreview","CleanupExport","SaveEditorAppearance","SaveEditorAppearanceSet","SaveEditorRename","SaveEditorRender","SaveEditorRenderStop","SaveEditorAddItem","SaveEditorSkills","SaveEditorSkillSet","SaveEditorList","SaveEditorOpen","SaveEditorClose","SaveEditorBrowse","SaveEditorSet","SaveEditorPreview","SaveEditorExport","SaveEditorInventory","SaveEditorStack","SaveEditorRemoveItems","NiagaraAttach","NiagaraRemove","NiagaraInspect","NiagaraArmorStart","NiagaraArmorStop"};
+    "CleanupInspect","CleanupPreview","CleanupExport","SaveEditorAppearance","SaveEditorAppearanceSet","SaveEditorRename","SaveEditorSections","SaveEditorSectionBackup","SaveEditorSectionRestore","SaveEditorSectionClean","SaveEditorTransfer","SaveEditorAddItem","SaveEditorSkills","SaveEditorSkillSet","SaveEditorList","SaveEditorOpen","SaveEditorClose","SaveEditorBrowse","SaveEditorSet","SaveEditorPreview","SaveEditorExport","SaveEditorInventory","SaveEditorStack","SaveEditorRemoveItems","NiagaraAttach","NiagaraRemove","NiagaraInspect","NiagaraArmorStart","NiagaraArmorStop"};
 inline void Require(bool condition,const char* message){if(!condition)throw std::runtime_error(message);}
 inline std::string Text(const Json& data,const char* key,size_t maximum=4096,bool required=false){
     if(!data.contains(key)){Require(!required,"Required text is missing");return {};}
@@ -40,7 +40,6 @@ inline Json Validate(Json request){
     Require(std::find(Operations.begin(),Operations.end(),operation)!=Operations.end(),"Unsupported authoring operation");
     if(!request.contains("Arguments"))request["Arguments"]=Json::object();const auto& args=request["Arguments"];
     Require(args.is_object(),"Arguments must be an object");
-    if(operation=="SaveEditorRender"&&args.contains("Quality"))Require(args["Quality"].is_number_integer()&&args["Quality"].get<int>()>=0&&args["Quality"].get<int>()<=2,"Preview quality must be 0, 1 or 2");
     const bool cachedSlotQuery=operation=="SaveEditorSlotItems"&&args.contains("CacheFirst")&&args["CacheFirst"]==true;
     for(const auto* key:{"Loader","Name","Mod","Id","Path","Query","SelectedObject","Token","Player","Definition","State","Icon","Marker"})Text(args,key,key==std::string("Query")?(cachedSlotQuery?448:256):4096);
     for(const auto* key:{"Confirm","Offline","ReadValues","EraseProgress","PruneInvalid","IncludeLoadedTables","Extended","Jsonc","DelayCrosshair","UseProfileTarget"})if(args.contains(key))Require(args[key].is_boolean(),"Expected a boolean option");
@@ -61,7 +60,15 @@ inline Json Validate(Json request){
     if(operation=="SaveEditorAppearanceSet"){Text(args,"Field",64,true);Text(args,"Row",128,true);Require(args.contains("Revision")&&args["Revision"].is_number_unsigned(),"Current editor revision required");}
     if(operation=="SaveEditorRename"){Text(args,"Name",96,true);Require(args.contains("Revision")&&args["Revision"].is_number_unsigned(),"Current editor revision required");}
     if(operation=="SaveEditorSkillSet"){Text(args,"Id",128,true);Require(args.contains("Level")&&args["Level"].is_number_integer()&&args["Level"]>=1&&args["Level"]<=200,"Skill level must be 1..200");Require(args.contains("Revision")&&args["Revision"].is_number_unsigned(),"Current editor revision required");}
-    if(operation=="SaveEditorRender"){const auto view=Text(args,"View",8,true);Require(view=="Head"||view=="Body"||view=="Item","Invalid preview view");if(view=="Item")Text(args,"Path",1024,true);if(args.contains("Equipment")){Require(args["Equipment"].is_object()&&args["Equipment"].size()<=6,"Preview outfit exceeds its bound");for(const auto& [slot,path]:args["Equipment"].items()){Require(slot=="Head"||slot=="Body"||slot=="Legs"||slot=="Cape"||slot=="Trinket"||slot=="Necklace","Invalid native preview slot");Require(path.is_string()&&!path.get_ref<const std::string&>().empty()&&path.get_ref<const std::string&>().size()<=1024,"Invalid preview item path");}}}
+    if(operation=="SaveEditorSections"||operation=="SaveEditorSectionBackup"||operation=="SaveEditorSectionRestore"||operation=="SaveEditorSectionClean"){
+        Require(!args.contains("Store")||args["Store"].is_boolean(),"Invalid J4SSaves store option");
+        if(operation!="SaveEditorSections"){Require(args.contains("Owners")&&args["Owners"].is_array()&&!args["Owners"].empty()&&args["Owners"].size()<=4096,"Choose at least one save section");
+            for(const auto& owner:args["Owners"])Require(owner.is_string()&&!owner.get_ref<const std::string&>().empty()&&owner.get_ref<const std::string&>().size()<=96,"Invalid save section owner");}
+        if(operation=="SaveEditorSectionRestore")Text(args,"File",128,true);
+        if(operation=="SaveEditorSectionRestore"||operation=="SaveEditorSectionClean")Require(args.contains("Revision")&&args["Revision"].is_number_unsigned(),"Current editor revision required");
+    }
+    if(operation=="SaveEditorTransfer"){const auto target=Text(args,"Target",8,true);Require(target=="Steam"||target=="Xbox","Transfer to Steam or Xbox");
+        Require(!args.contains("Replace")||args["Replace"].is_boolean(),"Invalid replace option");if(args.contains("LiveCharacterGuid"))Text(args,"LiveCharacterGuid",36);}
     if(operation=="SaveEditorAddItem"){Text(args,"Path",1024,true);if(args.contains("Group"))Text(args,"Group",64,true);if(args.contains("Personal"))Require(args["Personal"].is_boolean(),"Invalid storage destination");Require(args.contains("Revision")&&args["Revision"].is_number_unsigned()&&args.value("Confirm",false),"Confirm the addition with the current editor revision");Require(args.contains("Count")&&args["Count"].is_number_integer()&&args["Count"]>=1&&args["Count"]<=10000,"Quantity must be 1..10000");}
     if(operation=="SaveEditorBrowse"||operation=="SaveEditorSet")Text(args,"Pointer",4096);
     if(args.contains("Offset"))Require(args["Offset"].is_number_unsigned()&&args["Offset"]<=262144,"Invalid page offset");

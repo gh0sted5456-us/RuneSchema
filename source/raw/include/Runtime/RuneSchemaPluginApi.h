@@ -38,6 +38,62 @@ struct RuneSchemaPluginDescriptor {
     const char* Version;
 };
 struct RuneSchemaModApiV1;
+// UI callbacks run on Helpy's UI thread. Strings and callbacks live until plugin unload.
+// Use host widgets so plugins do not depend on Helpy's private ImGui ABI.
+struct RuneSchemaCompanionV1 {
+    uint32_t StructSize;
+    const wchar_t* Executable;
+    const wchar_t* WindowClass;
+    const wchar_t* WindowTitle;
+};
+// A host-owned web page inside a plugin workspace (optional NavUi extension).
+// Navigation is confined to Origin; other links open in the player's browser
+// only when the player clicks them. The host denies permissions, downloads,
+// script dialogs, host objects and web messages.
+struct RuneSchemaWebPageV1 {
+    uint32_t StructSize;
+    const char* Origin;   // "https://host", no path; navigation stays on this origin
+    const char* Home;     // first page and the Home button, inside Origin
+    const char* Navigate; // optional page to open now, inside Origin
+    uint64_t NavigateId;  // open Navigate once per new nonzero id
+};
+enum RuneSchemaWebPageState : int32_t {
+    RS_WEB_UNAVAILABLE = 0, // no page here (for example the in-game native overlay); a fallback was drawn
+    RS_WEB_LOADING = 1,
+    RS_WEB_READY = 2,
+    RS_WEB_FAILED = 3
+};
+struct RuneSchemaNavUiV1 {
+    uint32_t StructSize;
+    void* Context;
+    void (RS_PLUGIN_CALL *Text)(void*,const char*);
+    int32_t (RS_PLUGIN_CALL *Button)(void*,const char*);
+    void (RS_PLUGIN_CALL *Separator)(void*);
+    // Optional append-only UI extension: one companion surface in this workspace.
+    int32_t (RS_PLUGIN_CALL *Companion)(void*,const RuneSchemaCompanionV1*);
+    void (RS_PLUGIN_CALL *ReturnHome)(void*);
+    // Optional append-only UI extension. InputText returns 1 when the player presses Enter.
+    // WebPage fills the rest of the workspace and returns a RuneSchemaWebPageState.
+    int32_t (RS_PLUGIN_CALL *InputText)(void*,const char* label,char* buffer,uint32_t capacity);
+    int32_t (RS_PLUGIN_CALL *WebPage)(void*,const RuneSchemaWebPageV1*);
+};
+using RuneSchemaNavDrawFn = int32_t (RS_PLUGIN_CALL *)(void*,const RuneSchemaNavUiV1*);
+struct RuneSchemaNavTabV1 {
+    uint32_t StructSize;
+    const char* Route; // stable, namespaced as <pluginId>.<route>
+    const char* Title;
+    const char* Icon; // short text/glyph for the collapsed sidebar
+    RuneSchemaNavDrawFn Draw;
+    void* Context;
+    // Optional append-only fields for the Home tile; read only when StructSize covers them.
+    const char* Description; // one line shown when the tile is focused
+    const char* IconImage;   // PNG file name in the plugin's own folder, at most 256x256
+    uint32_t IconFlags;      // RS_NAV_ICON_FULL_COLOR: draw the PNG as is instead of tinting it
+    // Optional, append-only: the plugin's legal or attribution notice, shown when the player hovers
+    // the "i" on the plugin top bar. UTF-8, at most 1200 bytes; line breaks allowed.
+    const char* Legal;
+};
+inline constexpr uint32_t RS_NAV_ICON_FULL_COLOR = 1;
 struct RuneSchemaHostApi {
     uint32_t StructSize;
     uint32_t ApiVersion;
@@ -60,6 +116,8 @@ struct RuneSchemaHostApi {
     void* (RS_PLUGIN_CALL *ResolveObjectIdentity)(int32_t index,int32_t serial);
     // Optional append-only API 1 extension; check StructSize and the pointer.
     const RuneSchemaModApiV1* (RS_PLUGIN_CALL *GetModApi)(const char* pluginId);
+    // Optional append-only API 1 extension. Available only in Host=helpy.
+    int32_t (RS_PLUGIN_CALL *RegisterNavTab)(const char* pluginId,const RuneSchemaNavTabV1* tab);
 };
 // Required exports: Query, Initialize, and Shutdown.
 using RuneSchemaPluginQueryFn = const RuneSchemaPluginDescriptor* (RS_PLUGIN_CALL *)();

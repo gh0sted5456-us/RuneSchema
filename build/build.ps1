@@ -9,7 +9,7 @@ $ErrorActionPreference = 'Stop'
 if ($ManagedUE4SSHost) {
     throw 'Custom UE4SS hosts are retired. RuneSchema must run on an unmodified UE4SS.dll; build a framework-only package instead.'
 }
-$Version = '0.9.0.2'
+$Version = '0.9.0.7'
 $BuildRoot = [IO.Path]::GetFullPath($PSScriptRoot)
 if (-not (Test-Path -LiteralPath (Join-Path $BuildRoot 'source\raw\CMakeLists.txt') -PathType Leaf)) {
     $BuildRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -462,7 +462,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         )
         $configureArgs += '-DRUNESCHEMA_BUILD_MANAGED_UE4SS_HOST=OFF'
         Ensure-CMakeConfigured $RawSource $build $configureArgs 'universal RuneSchema'
-        $targets = if ($OnlyPlugin) { @('RuneSchemaHelpyPlugin','RuneSchemaHudPlugin','HelpyDesktop','HelpyVulkanBootstrap','RuneSchemaModMenuPlugin','RuneSchemaDeveloperPlugin') } else { @('RuneSchema', 'RuneSchemaMultiplayerPlugin','RuneSchemaHelpyPlugin','RuneSchemaHudPlugin','HelpyDesktop','HelpyVulkanBootstrap','RuneSchemaModMenuPlugin','RuneSchemaDeveloperPlugin') }
+        $targets = if ($OnlyPlugin) { @('RuneSchemaHelpyPlugin','RuneSchemaHudPlugin','HelpyDesktop','HelpyVulkanBootstrap','RuneSchemaModMenuPlugin','RuneSchemaDeveloperPlugin','RuneSchemaAchievementsPlugin','RuneSchemaWikiPlugin','RuneSchemaWikiGamePlugin') } else { @('RuneSchema', 'RuneSchemaMultiplayerPlugin','RuneSchemaHelpyPlugin','RuneSchemaHudPlugin','HelpyDesktop','HelpyVulkanBootstrap','RuneSchemaModMenuPlugin','RuneSchemaDeveloperPlugin','RuneSchemaAchievementsPlugin','RuneSchemaWikiPlugin','RuneSchemaWikiGamePlugin') }
         Write-Host $(if ($OnlyPlugin) { '=== Compile Helpy plugin only (RuneSchema.dll is untouched) ===' } else { '=== Compile universal RuneSchema ===' }) -ForegroundColor Cyan
         Write-Host 'Ninja auto-regeneration is disabled; build.ps1 owns all CMake reconfiguration.' -ForegroundColor DarkGray
 
@@ -548,7 +548,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         Get-ChildItem -LiteralPath (Join-Path $SourceRoot 'plugins/RuneSchema.Helpy') -Force|ForEach-Object{Copy-Item -LiteralPath $_.FullName -Destination $payload -Recurse -Force}
         Copy-HelpyDlls $HelpyDll (Join-Path $payload 'dll')
         Copy-HudPlugin $HelpyDll (Join-Path $runtime 'plugins/RuneSchema.HUD')
-        foreach($id in @('RuneSchema.ModMenu2','RuneSchema.DeveloperTools')){Copy-HelpyFeaturePlugin $HelpyDll $id (Join-Path $runtime ('plugins/'+$id))}
+        foreach($id in @('RuneSchema.ModMenu2','RuneSchema.DeveloperTools','RuneSchema.Achievements','RuneSchema.Wiki')){Copy-HelpyFeaturePlugin $HelpyDll $id (Join-Path $runtime ('plugins/'+$id))}
         & (Join-Path $BuildRoot 'build/package-optional-art.ps1') -PayloadRoot $payload -StagingRoot $DistRoot -RepositoryRoot $BuildRoot
         . (Join-Path $PSScriptRoot 'runtime-layout.ps1')
         Set-RuneSchemaRuntimeLayout $runtime
@@ -570,6 +570,32 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         New-Item -ItemType Directory -Path (Join-Path $Destination 'dll') -Force|Out-Null
         Get-ChildItem -LiteralPath (Join-Path $SourceRoot ('plugins/'+$Id)) -File|ForEach-Object{Copy-Item -LiteralPath $_.FullName -Destination $Destination -Force}
         Copy-Item -LiteralPath $dll -Destination (Join-Path $Destination ('dll/'+$Id+'.dll')) -Force
+        # A Host=helpy plugin may declare an in-game half; it ships beside the Helpy DLL.
+        $declared=(Get-Content -LiteralPath (Join-Path $Destination 'plugin.json') -Raw|ConvertFrom-Json).GameEntryPoint
+        if($declared){
+            $game=Join-Path (Split-Path -Parent $HelpyDll) $declared
+            if(-not(Test-Path -LiteralPath $game -PathType Leaf)){throw "Matching in-game half is missing: $declared"}
+            Copy-Item -LiteralPath $game -Destination (Join-Path $Destination ('dll/'+$declared)) -Force
+        }
+        if($Id -eq 'RuneSchema.ModMenu2'){
+            Write-ModMenu2Key $Destination
+            # The key carries the full MIT text and the consolidated licence bundle has it too.
+            $copy=Join-Path $Destination 'ModMenu-MIT.txt';if(Test-Path -LiteralPath $copy -PathType Leaf){Remove-Item -LiteralPath $copy -Force}
+        }
+    }
+    # modmenu2.key = activation hash, a blank line, then the complete original MIT license.
+    # Both halves come from the repository, and the license must match the digest the
+    # runtime checks, so a changed notice fails the build instead of shipping a dead key.
+    function Write-ModMenu2Key([string]$Destination) {
+        $header=[IO.File]::ReadAllText((Join-Path $SourceRoot 'shared/ModMenu2Key.h'))
+        $hash=[regex]::Match($header,'Hash\[\]="([0-9a-f]{64})"').Groups[1].Value
+        $digest=[regex]::Match($header,'LicenseDigest\[\]="([0-9a-f]{64})"').Groups[1].Value
+        if(-not $hash -or -not $digest){throw 'ModMenu2Key.h no longer declares the activation hash and license digest'}
+        $license=[IO.File]::ReadAllText((Join-Path $BuildRoot 'licenses/ModMenu-MIT.txt')).Replace("`r",'').TrimStart([char]0xFEFF).TrimEnd("`n")
+        $sha=[Security.Cryptography.SHA256]::Create()
+        try{$actual=-join($sha.ComputeHash([Text.UTF8Encoding]::new($false).GetBytes($license))|ForEach-Object{$_.ToString('x2')})}finally{$sha.Dispose()}
+        if($actual -ne $digest){throw "licenses/ModMenu-MIT.txt does not match the Mod Menu 2 key digest ($actual)"}
+        [IO.File]::WriteAllText((Join-Path $Destination 'modmenu2.key'),$hash+"`n`n"+$license+"`n",[Text.UTF8Encoding]::new($false))
     }
     function Copy-HudPlugin([string]$HelpyDll,[string]$Destination) {
         $hud=Join-Path (Split-Path -Parent $HelpyDll) 'RuneSchema.HUD.dll'
@@ -722,7 +748,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         Copy-Item -LiteralPath (Join-Path (Split-Path -Parent $CoreDll) 'RuneSchema.UE4SS.Bridge.dll') -Destination $sisterPlugin -Force
         Copy-HelpyDlls $HelpyDll (Join-Path $payload 'plugins\RuneSchema.Helpy\dll')
         Copy-HudPlugin $HelpyDll (Join-Path $payload 'plugins\RuneSchema.HUD')
-        foreach($id in @('RuneSchema.ModMenu2','RuneSchema.DeveloperTools')){Copy-HelpyFeaturePlugin $HelpyDll $id (Join-Path $payload ('plugins/'+$id))}
+        foreach($id in @('RuneSchema.ModMenu2','RuneSchema.DeveloperTools','RuneSchema.Achievements','RuneSchema.Wiki')){Copy-HelpyFeaturePlugin $HelpyDll $id (Join-Path $payload ('plugins/'+$id))}
         . (Join-Path $PSScriptRoot "runtime-layout.ps1")
         Set-RuneSchemaRuntimeLayout $payload
         $report = foreach ($dll in Get-ChildItem -LiteralPath $payload -Filter '*.dll' -File -Recurse) {
@@ -808,7 +834,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
                 'time-of-day-contract','registry-patch-plan','cooked-pak-registry-manifest','registry-manifest-summary','network-identity-plan','registry-bridge-lifecycle-contract',
                 'presentation-transport-contract','summoning-authority-contract','cooked-registry-discovery-contract',
                 'json-document','asset-patch-v2-contract','helpy-instant-open',
-                'plugin-catalog-compatibility','recipe-placement-contract',
+                'plugin-catalog-compatibility','item-snapshot-contract','recipe-placement-contract',
                 'loader-folder-case','usmap-index','native-binding-resolution','identity-only-cleanup','persistence-diagnostic-ledger','native-persistence-policy','character-load-audit','quick-load-settings','quick-launch-contract','quick-launch-configuration','additional-logging',
                 'vendor-category-refresh-contract','storefront-lanes','state-storage-contract',
                 'equipment-storefront-lane','native-contract','journal-failure-isolation',

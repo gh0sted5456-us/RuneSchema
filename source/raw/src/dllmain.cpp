@@ -54,6 +54,7 @@
 #include "Utility/Logging.h"
 #include "Utility/StructuredDiagnostics.h"
 #include "Utility/StartupTrace.h"
+#include "Runtime/PluginActivation.h"
 #include "SDK/DragonWildsSignatures.h"
 #include "SDK/UnrealOffsets.h"
 
@@ -331,7 +332,14 @@ public:
         }
         {
             const auto pluginRoot=std::filesystem::path(PS::HostServices::WorkingDirectory())/"Mods"/"RuneSchema";
-            m_pluginHost.Load(pluginRoot);
+            {
+                // Hold the update lock through recovery and the plugin scan/load. Without it,
+                // Helpy/plugins is skipped for this session (fail closed); core plugins still load.
+                PS::PluginActivation::StartupLease lease(pluginRoot);
+                for(const auto& note:lease.Notes())
+                    PS::Log<LogLevel::Warning>(STR("[PLUGIN-ACTIVATION] {}.\n"),PS::ToWideSafe(note));
+                m_pluginHost.Load(pluginRoot);
+            }
             m_pluginHost.StartDesktop();
             for(const auto& message:m_pluginHost.Diagnostics())
                 PS::Log<LogLevel::Normal>(TEXT("Plugin host: {}\n"),PS::ToWideSafe(message.c_str()));
@@ -399,6 +407,8 @@ public:
             Hook::UnregisterCallback(m_apiExportCallbackId);
         if (m_toolsWorldCallbackId != Hook::ERROR_ID)
             Hook::UnregisterCallback(m_toolsWorldCallbackId);
+        // Shared ProcessEvent callbacks; loaders still remove their own routes when destroyed.
+        PS::ProcessEventDispatch::Shutdown();
         PS::PlayerTrace::Cancel();
         PS::AppearanceTrace::Cancel();
         PS::NiagaraTest::Unbind();
@@ -958,6 +968,8 @@ private:
         Hook::GlobalCallbackId m_toolsWorldCallbackId = Hook::ERROR_ID;
 };
 
+#include "Core/GameplayEventFeed.h"
+#include "Runtime/ProcessEventDispatch.h"
 #define RuneSchema_API __declspec(dllexport)
 BOOL APIENTRY DllMain(HMODULE,DWORD reason,LPVOID reserved) {
     if(reason==DLL_PROCESS_DETACH&&reserved)PS::ProcessExitInProgress.store(true,std::memory_order_relaxed);
@@ -968,6 +980,14 @@ extern "C"
     RuneSchema_API bool RuneSchema_RegisterPakLoaderRootV1(const wchar_t* path) noexcept
     {
         return PS::PakLoader::Register(path);
+    }
+
+    // Append-only, found with GetProcAddress (shared/RuneSchemaModApi.h: RuneSchemaReportModEventV1Fn).
+    // Pushes one local-player "report" event for Helpy mod achievements. Any thread; never throws.
+    RuneSchema_API int32_t RuneSchema_ReportModEventV1(const char* owner, const char* name, double amount, double value,
+                                                       const char* parametersJson) noexcept
+    {
+        return PS::GameplayEventFeed::ReportV1(PS::GameplayEventFeed::Current, owner, name, amount, value, parametersJson);
     }
 
     RuneSchema_API RC::CppUserModBase* start_mod()

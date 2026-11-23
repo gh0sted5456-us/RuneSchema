@@ -17,7 +17,7 @@ namespace PS::HelpyModCacheBuilder {
 namespace {
 namespace fs=std::filesystem;
 View State;HANDLE Process=nullptr;bool Imported=false,Creation=false,HotfixHandedOff=false;
-struct InstalledJob {fs::path Root,Folder;std::string Owner;};
+struct InstalledJob {fs::path Root,Folder;std::string Owner;bool Vanilla=false;fs::path Cache;std::string Version;};
 BatchView Batch;std::deque<InstalledJob> Queue;bool BatchInstallNet=false,Advancing=false;
 std::chrono::steady_clock::time_point Next{};
 bool Name(const std::string& value){return !value.empty()&&value.size()<=128&&value!="."&&value.find("..")==value.npos&&value.back()!='.'&&value.back()!=' '&&std::all_of(value.begin(),value.end(),[](unsigned char c){return std::isalnum(c)||c=='_'||c==' '||c=='.'||c=='-';});}
@@ -45,6 +45,15 @@ void Start(const fs::path& input,bool creation,bool installNet,const std::string
     STARTUPINFOW startup{sizeof(startup)};startup.dwFlags=STARTF_USESHOWWINDOW;startup.wShowWindow=SW_HIDE;PROCESS_INFORMATION process{};
     if(!CreateProcessW(executable.c_str(),command.data(),nullptr,nullptr,FALSE,CREATE_NO_WINDOW|BELOW_NORMAL_PRIORITY_CLASS,nullptr,State.Job.c_str(),&startup,&process))throw std::runtime_error("Could not start the PAK cache builder.");
     CloseHandle(process.hThread);Process=process.hProcess;Creation=creation;Imported=false;HotfixHandedOff=false;Next={};State.Running=true;State.State="Running";State.Stage=State.Repair?"Checking RuneSchema base files":"Checking authoring dependencies";State.Percent=0;
+}
+// Queues every enabled mod that has cooked inputs; the rest are recorded as skipped.
+void QueueEnabled(const fs::path& root,const nlohmann::json& rows){
+    for(const auto& row:rows)if(row.value("Enabled",false)){
+        ++Batch.Total;const auto owner=row.at("Name").get<std::string>();const auto loaders=row.value("Loaders",nlohmann::json::array());
+        if(!row.value("Present",false)||std::none_of(loaders.begin(),loaders.end(),[](const auto& value){return value=="Unreal PAK"||value=="LogicMods";})){
+            ++Batch.Skipped;Batch.Results.push_back(owner+": skipped — no installed cooked inputs");continue;
+        }Queue.push_back({root,fs::u8path(row.at("Folder").get<std::string>()),owner});
+    }
 }
 }
 const View& Current(){return State;}
@@ -75,7 +84,7 @@ bool StartInstalled(const fs::path& root,const fs::path& folder,const std::strin
     catch(const std::exception& error){State.State="Failed";State.Stage=error.what();return false;}
 }
 bool StartVanilla(const fs::path& root,const fs::path& cache,const std::string& version,bool installNet){
-    if(Process||Batch.Active)return false;
+    if(Process||(Batch.Active&&!Advancing))return false;
     try{RuneSchemaData::Safe(root);RuneSchemaData::Safe(cache);if(!fs::is_directory(root))throw std::runtime_error("The assigned installation is unavailable.");
         State={};State.Vanilla=true;State.Owner="Dragonwilds";State.SourceVersion=version;State.Cache=cache/"native-pak-cache";State.Output=State.Cache;State.Job=NewJob();Start(root,false,installNet,"Win64");return true;
     }catch(const std::exception& error){State.State="Failed";State.Stage=error.what();return false;}
@@ -86,15 +95,22 @@ bool StartEnabled(const fs::path& root,const nlohmann::json& rows,bool installNe
         if(!rows.is_array()||rows.size()>1024)throw std::runtime_error("Refresh Mods before queuing caches.");
         RuneSchemaData::Safe(root);if(!fs::is_directory(root))throw std::runtime_error("The assigned installation is unavailable.");
         Batch={};Queue.clear();BatchInstallNet=installNet;State={};
-        for(const auto& row:rows)if(row.value("Enabled",false)){
-            ++Batch.Total;const auto owner=row.at("Name").get<std::string>();const auto loaders=row.value("Loaders",nlohmann::json::array());
-            if(!row.value("Present",false)||std::none_of(loaders.begin(),loaders.end(),[](const auto& value){return value=="Unreal PAK"||value=="LogicMods";})){
-                ++Batch.Skipped;Batch.Results.push_back(owner+": skipped — no installed cooked inputs");continue;
-            }Queue.push_back({root,fs::u8path(row.at("Folder").get<std::string>()),owner});
-        }
+        QueueEnabled(root,rows);
         Batch.Active=!Queue.empty();State.Stage=Batch.Active?"Enabled mods queued; one cache build at a time.":"No enabled cooked inputs to build.";return true;
     }catch(const std::exception& error){Queue.clear();Batch.Active=false;State.State="Failed";State.Stage=error.what();return false;}
 }
+bool StartFullResync(const fs::path& root,const fs::path& cache,const std::string& version,const nlohmann::json& rows,bool installNet){
+    if(Process||Batch.Active)return false;
+    try{
+        if(!rows.is_array()||rows.size()>1024)throw std::runtime_error("Refresh Mods before a full resync.");
+        RuneSchemaData::Safe(root);RuneSchemaData::Safe(cache);if(!fs::is_directory(root))throw std::runtime_error("The assigned installation is unavailable.");
+        Batch={};Queue.clear();BatchInstallNet=installNet;State={};Batch.Full=true;
+        ++Batch.Total;Queue.push_back({root,{},"Dragonwilds",true,cache,version});
+        QueueEnabled(root,rows);
+        Batch.Active=true;State.Stage="Full resync queued: game files first, then each enabled mod.";return true;
+    }catch(const std::exception& error){Queue.clear();Batch.Active=false;State.State="Failed";State.Stage=error.what();return false;}
+}
+bool TakeFinishedBatch(){const bool finished=Batch.Finished;Batch.Finished=false;return finished;}
 bool StartCreation(const std::vector<fs::path>& inputs,const nlohmann::json& metadata,const std::string& platform,bool installNet){
     if(Process||Batch.Active)return false;
     try{
@@ -141,8 +157,9 @@ void Control(const std::string& action){
 void Poll(bool advance){
     if(!Process){
         if(Batch.Active&&!Batch.Paused&&advance&&(State.State!="Succeeded"||Imported)){
-            if(Queue.empty()){Batch.Active=false;State.Stage="Enabled mod cache batch finished. Review the results below.";return;}
-            auto job=std::move(Queue.front());Queue.pop_front();Advancing=true;const bool started=StartInstalled(job.Root,job.Folder,job.Owner,BatchInstallNet);Advancing=false;
+            if(Queue.empty()){Batch.Active=false;Batch.Finished=true;State.Stage=Batch.Full?"Full resync finished. Review the results below.":"Enabled mod cache batch finished. Review the results below.";return;}
+            auto job=std::move(Queue.front());Queue.pop_front();Advancing=true;
+            const bool started=job.Vanilla?StartVanilla(job.Root,job.Cache,job.Version,BatchInstallNet):StartInstalled(job.Root,job.Folder,job.Owner,BatchInstallNet);Advancing=false;
             if(!started){++Batch.Failed;Batch.Results.push_back(job.Owner+": failed — "+State.Stage);}
         }return;
     }

@@ -102,7 +102,15 @@ class File {
             for(;;){
                 Record record;bool hasRecord=false,stopping=false;
                 {std::unique_lock lock(m_gate);
-                 m_changed.wait_for(lock,std::chrono::milliseconds(200),[&]{return m_stopping||!m_queue.empty();});
+                 // Sleep until a record arrives or the next repeat window closes;
+                 // with nothing buffered there is no reason to wake at all.
+                 const auto ready=[&]{return m_stopping||!m_queue.empty();};
+                 if(buckets.empty())m_changed.wait(lock,ready);
+                 else{
+                     auto next=buckets.begin()->second.Expiry;
+                     for(const auto& [_,bucket]:buckets)if(bucket.Expiry<next)next=bucket.Expiry;
+                     m_changed.wait_until(lock,next,ready);
+                 }
                  if(!m_queue.empty()){
                      record=std::move(m_queue.front());m_queue.pop_front();hasRecord=true;
                  }
