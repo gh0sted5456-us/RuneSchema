@@ -30,12 +30,15 @@ int main() {
     Host::Current={host,device.Get(),context.Get(),false};Host::ActiveRoute="Fixture.exchange";
     RuneSchemaCompanionV1 app{sizeof(app),L"unused-synthetic-fixture",childClass.lpszClassName,L"Grand Exchange synthetic companion"};
     ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DeltaTime=1.f/60;io.BackendFlags|=ImGuiBackendFlags_RendererHasTextures;
-    PS::HudGpu::Producer producer;unsigned generation{};uint32_t width{},height{};bool image=false,mouse=false;
+    PS::HudGpu::Producer producer;unsigned generation{};uint32_t width{},height{};bool image=false,mouse=false,wrongSizeHidden=false;
+    assert(!Host::Opaque());
     const auto step=[&](ImVec2 dimensions,bool sendInput,bool publish) {
         io.DisplaySize=dimensions;io.AddMousePosEvent(100,100);io.AddMouseButtonEvent(0,sendInput);
         ImGui::NewFrame();ImGui::SetNextWindowPos({0,0});ImGui::SetNextWindowSize(dimensions);
         ImGui::Begin("host",nullptr,ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoMove);
         const auto status=Host::Draw(nullptr,&app);assert(status==RS_PLUGIN_OK||status==RS_PLUGIN_BUFFER_TOO_SMALL);
+        assert(Host::Opaque()!=Host::Current.ReturnHome);
+        if(generation==1){assert(!Host::CapturesInput());wrongSizeHidden=true;}
         if(Host::CapturesInput()) {
             image=true;
             auto* list=ImGui::GetWindowDrawList();ID3D11ShaderResourceView* view{};
@@ -50,7 +53,7 @@ int main() {
         if(!Session||Host::Current.ReturnHome)return;
         const auto nextWidth=uint32_t(Frames::Read(Session->RequestedWidth)),nextHeight=uint32_t(Frames::Read(Session->RequestedHeight));
         if(!producer.Page||nextWidth!=width||nextHeight!=height) {
-            width=nextWidth;height=nextHeight;char nonce[33]{};sprintf_s(nonce,"%032x",++generation);producer.Create(producerDevice.Get(),GetCurrentProcessId(),nonce,width,height);
+            width=nextWidth+(generation==0?16:0);height=nextHeight+(generation==0?16:0);char nonce[33]{};sprintf_s(nonce,"%032x",++generation);producer.Create(producerDevice.Get(),GetCurrentProcessId(),nonce,width,height);
             Wire::Frame frame;frame.AppPid=GetCurrentProcessId();frame.Width=width;frame.Height=height;strcpy_s(frame.Nonce,nonce);Wire::Publish(*Session,frame);
         }
         Frames::Input input;while(Frames::Pop(*producer.Page,input))if(input.Kind==Frames::InputKind::Button&&input.Code==WM_LBUTTONDOWN)mouse=true;
@@ -61,9 +64,10 @@ int main() {
         image=false;for(int i=0;i<8;++i)step(size,i>=5,true);assert(image);
         image=false;step(size,false,false);step(size,false,false);assert(image); // Retain the last picture between publications.
     }
-    assert(mouse&&generation==3);
-    InterlockedExchange(&Session->ReturnRequested,1);step({800,600},false,false);assert(Host::Current.ReturnHome);
+    assert(mouse&&generation==4&&wrongSizeHidden);
+    Host::ActiveRoute="Other.exchange";assert(!Host::Opaque());Host::ActiveRoute="Fixture.exchange";
+    InterlockedExchange(&Session->ReturnRequested,1);step({800,600},false,false);assert(Host::Current.ReturnHome&&!Host::CapturesInput()&&!Host::Opaque());
     Host::Active.reset();Host::ActiveRoute.clear();producer.Reset();UnmapViewOfFile(Session);CloseHandle(Mapping);Session=nullptr;
     ImGui::DestroyContext();DestroyWindow(child);DestroyWindow(host);
-    std::puts("companion GPU fixture passed: shared pixels, resize, retained frame, input and return");
+    std::puts("companion GPU fixture passed: shared pixels, first-size input gate, opacity scope, resize, retained frame, input and return");
 }

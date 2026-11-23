@@ -78,7 +78,7 @@ class Surface {
     }
 public:
     ~Surface(){Reset();}
-    bool Interactive()const{return Page&&View&&Completed;}
+    bool Interactive()const{return Page&&View&&Completed&&Shown;}
     const std::string& Route()const{return Owner;}
     int32_t Draw(const std::string& route,const RuneSchemaCompanionV1& app) {
         if(!Current.Window||!Current.Device||!Current.Context)return RS_PLUGIN_FAILED;
