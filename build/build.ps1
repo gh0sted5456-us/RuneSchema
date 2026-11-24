@@ -9,12 +9,12 @@ $ErrorActionPreference = 'Stop'
 if ($ManagedUE4SSHost) {
     throw 'Custom UE4SS hosts are retired. RuneSchema must run on an unmodified UE4SS.dll; build a framework-only package instead.'
 }
-$Version = '0.9.0.7'
+$Version = '0.9.0.7HF'
 $BuildRoot = [IO.Path]::GetFullPath($PSScriptRoot)
 if (-not (Test-Path -LiteralPath (Join-Path $BuildRoot 'source\raw\CMakeLists.txt') -PathType Leaf)) {
     $BuildRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 }
-$releaseVersionPattern = '^(?:\d+\.\d+\.\d+(?:\.\d+(?:[bem]|-alpha(?:\.\d+)?)?)?|1\.0\.0\.J0[0-9A-Z]{4})$'
+$releaseVersionPattern = '^(?:\d+\.\d+\.\d+(?:\.\d+(?:[bem]|HF|-alpha(?:\.\d+)?)?)?|1\.0\.0\.J0[0-9A-Z]{4})$'
 if ($Version -cnotmatch $releaseVersionPattern) {
     throw "Expected a RuneSchema version such as 0.9.0.2 or 1.0.0.J00001. $Version"
 }
@@ -587,6 +587,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
     # Both halves come from the repository, and the license must match the digest the
     # runtime checks, so a changed notice fails the build instead of shipping a dead key.
     function Write-ModMenu2Key([string]$Destination) {
+        if ($env:GITHUB_ACTIONS -eq 'true') { return }
         $header=[IO.File]::ReadAllText((Join-Path $SourceRoot 'shared/ModMenu2Key.h'))
         $hash=[regex]::Match($header,'Hash\[\]="([0-9a-f]{64})"').Groups[1].Value
         $digest=[regex]::Match($header,'LicenseDigest\[\]="([0-9a-f]{64})"').Groups[1].Value
@@ -640,7 +641,11 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         if (Test-Path -LiteralPath $sourceSettingsFile -PathType Leaf) {
             Copy-Item -LiteralPath $sourceSettingsFile -Destination (Join-Path $payload 'settings\settings.ini') -Force
         }
-        Copy-Item -LiteralPath (Join-Path $RawSource 'modmenu.json') -Destination (Join-Path $payload 'modmenu.json') -Force
+        Copy-Item -LiteralPath (Join-Path $RawSource 'sm.json') -Destination (Join-Path $payload 'sm.json') -Force
+        $legacyMenu = Join-Path $payload 'modmenu.json'
+        if (Test-Path -LiteralPath $legacyMenu -PathType Leaf) {
+            Remove-Item -LiteralPath $legacyMenu -Force
+        }
         $defaultsReadme = Join-Path $SourceRoot 'settings\defaults\README.md'
         if (Test-Path -LiteralPath $defaultsReadme -PathType Leaf) {
             Copy-Item -LiteralPath $defaultsReadme -Destination (Join-Path $payload 'settings\defaults\README.md') -Force
@@ -850,6 +855,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
         $contractPattern = '^(' + (($releaseContracts | ForEach-Object {[regex]::Escape($_)}) -join '|') + ')$'
         Invoke-Checked 'ctest.exe' @('--test-dir', $contractBuild, '--output-on-failure', '-R', $contractPattern) 'Optional contract tests'
         & (Join-Path $BuildRoot 'build/tests/release-version.ps1') -Root $BuildRoot
+        & (Join-Path $BuildRoot 'build/tests/public-release-keys.ps1') -Root $BuildRoot
         & (Join-Path $BuildRoot 'build/test-package-optional-art.ps1')
         & (Join-Path $BuildRoot 'build/test-package-mappings.ps1')
         & (Join-Path $BuildRoot 'build/tests/vortex-package.ps1')
@@ -879,7 +885,7 @@ GITHUB_TOKEN for the RuneSchema repository does not grant that private access.
     New-Item -ItemType Directory -Path (Join-Path $pluginRoot 'RuneSchema') -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $package.FullName 'RuneSchema\dlls') -Destination (Join-Path $pluginRoot 'RuneSchema\dlls') -Recurse
     Copy-Item -LiteralPath (Join-Path $package.FullName 'RuneSchema\Helpy') -Destination (Join-Path $pluginRoot 'RuneSchema\Helpy') -Recurse
-    Copy-Item -LiteralPath (Join-Path $package.FullName 'RuneSchema\modmenu.json') -Destination (Join-Path $pluginRoot 'RuneSchema\modmenu.json')
+    Copy-Item -LiteralPath (Join-Path $package.FullName 'RuneSchema\sm.json') -Destination (Join-Path $pluginRoot 'RuneSchema\sm.json')
     Write-Host "`n$Version build complete: $DistRoot" -ForegroundColor Green
     Write-Host 'UE4SS storefront packages are distributed separately from RuneSchema build output.' -ForegroundColor DarkGray
 } catch {

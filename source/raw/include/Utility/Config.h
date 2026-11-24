@@ -166,6 +166,7 @@ namespace PS {
         bool allowClientItemGrants = false;
         bool allowClientTeleport = false;
         bool allowPinAccess = false;
+        bool linkSettingsMenuPin = true;
         std::string accessPin{}; // Private server setting; never replicate or log.
         bool allowClientTemporarySpawns = false;
         bool autoAuthorizeConnectingPlayers = false;

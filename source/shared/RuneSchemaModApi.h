@@ -25,6 +25,12 @@ enum RuneSchemaModResult {
 // Any thread. Returns RS_MOD_OK, RS_MOD_INVALID_ARGUMENT or RS_MOD_FAILED.
 typedef int32_t (*RuneSchemaReportModEventV1Fn)(const char* owner,const char* name,double amount,double value,const char* parametersJson);
 
+// Optional RuneSchema_AuthorizeSettingsMenuPlayerV1 export. Game thread, authoritative host only.
+// Trusted Settings Menu passes its native owning controller after verifying the signed PIN request.
+// Saves full Helpy authorization by native character GUID; no PIN or client-selected identity is accepted.
+// 1 = saved/already authorized, 0 = linking disabled, -1 = refused or not saved. Never throws.
+typedef int32_t (RS_MOD_CALL *RuneSchemaAuthorizeSettingsMenuPlayerV1Fn)(void* playerController);
+
 // Evaluate is serialized on a worker. It must not call Unreal or retain the buffers.
 typedef int32_t (RS_MOD_CALL *RuneSchemaModEvaluateFn)(void* providerContext,
     const void* immutableResource,const double* input,uint32_t inputCount,uint64_t generation,

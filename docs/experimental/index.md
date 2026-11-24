@@ -11,3 +11,6 @@ or [their source](https://github.com/gh0sted5456-us/RuneSchema/tree/experimental
 
 Read the [documentation channel procedure](../DOCUMENTATION-CHANNELS.md) before
 adding a guide or promoting a feature.
+
+Local work awaiting server acceptance: [Settings Menu PIN and saved Helpy
+access](SETTINGS-MENU-ACCESS.md).

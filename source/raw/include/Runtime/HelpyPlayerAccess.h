@@ -1,6 +1,9 @@
 #pragma once
 #include "Utility/Config.h"
 #include "SDK/Helper/PlayerStatus.h"
+#include "Runtime/NetworkContext.h"
+#include "Unreal/UnrealInitializer.hpp"
+#include "Unreal/UObjectGlobals.hpp"
 
 namespace PS::HelpyPlayerAccess {
 inline HelpyAuthorizedPlayer Identity(RC::Unreal::UObject* controller){
@@ -16,6 +19,15 @@ inline HelpyAuthorizedPlayer Identity(RC::Unreal::UObject* controller){
     return player;
 }
 inline bool Allowed(std::string_view guid){return HelpyPlayerAuthorization::Contains(PSConfig::Get()->LiveHelpyAuthority().authorizedPlayers,guid);}
+inline void Authorize(RC::Unreal::UObject* controller){
+    namespace AH=DragonWilds::ActorHelper;using namespace RC::Unreal;
+    auto* type=AH::ResolveClass(TEXT("/Script/Dominion.DominionPlayerControllerBase"));
+    if(!IsInGameThread()||!controller||!UObjectGlobals::IsValidObjectForFindXOf(controller)||!type||!controller->IsA(type)
+        ||!Network::OwnsGameplay(Network::Detect(controller).Mode))throw std::runtime_error("Helpy authorization requires the live authoritative player controller.");
+    auto* config=PSConfig::Get();config->RefreshHelpyAuthority();const auto before=config->LiveHelpyAuthority();auto proposed=before;
+    if(HelpyPlayerAuthorization::Remember(proposed.authorizedPlayers,Identity(controller))&&!config->SaveHelpyPlayerAccess(before,proposed))
+        throw std::runtime_error("Helpy authorization could not be saved. Refresh before retrying.");
+}
 inline void Observe(RC::Unreal::UObject* controller){
     if(!controller||!Network::OwnsGameplay(Network::Detect(controller).Mode))return;
     auto* config=PSConfig::Get();const auto& before=config->LiveHelpyAuthority();

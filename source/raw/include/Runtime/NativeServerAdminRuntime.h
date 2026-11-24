@@ -53,7 +53,7 @@ inline std::vector<UObject*> Controllers(UObject* world){
 }
 inline Json Read(UObject* caller,UObject* world){
     Json rows=Json::array();bool canManage=false,canAuthorize=!caller;std::string reason;
-    if(caller)try{canAuthorize=caller->GetWorld()==world&&Owner(caller);}catch(...){}
+    if(caller)try{canAuthorize=NativeServerAdmin::CanAuthorizePlayers(caller->GetWorld()==world,HelpyAuthorized(caller,HelpyPlayerAccess::Identity(caller).characterGuid));}catch(...){}
     try{if(!caller)reason="Local server Helpy can authorize RuneSchema access. Native Admin changes use the owner's connected client.";else{(void)Resolve(caller,true);(void)Resolve(caller,false);canManage=Owner(caller);if(!canManage)reason="Only the native server owner can change admin rights.";}}
     catch(const std::exception& error){reason=error.what();}
     for(auto* controller:Controllers(world)){
@@ -76,7 +76,7 @@ inline Json Handle(UObject* caller,UObject* world,const Json& request){
     if(operation=="Read")return {{"ServerControl",Read(caller,world)},{"Status","Read native server roles. No rights changed."}};
     const bool access=operation=="Authorize"||operation=="Unauthorize"||operation=="AuthorizeAll"||operation=="AutoAuthorize";
     if(access){
-        if(caller&&(caller->GetWorld()!=world||!Owner(caller)))throw std::runtime_error("Player authorization requires local server Helpy or the native owner.");
+        if(caller&&!NativeServerAdmin::CanAuthorizePlayers(caller->GetWorld()==world,HelpyAuthorized(caller,HelpyPlayerAccess::Identity(caller).characterGuid)))throw std::runtime_error("Player authorization requires local server Helpy or a saved Helpy administrator.");
         if(request.at("WorldToken")!=Token(world))throw std::runtime_error("The world changed. Refresh connected players.");
         std::vector<UObject*> targets;
         if(operation=="AuthorizeAll"||(operation=="AutoAuthorize"&&request.at("Enabled").get<bool>()))targets=Controllers(world);

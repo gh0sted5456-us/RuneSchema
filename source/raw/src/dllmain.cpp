@@ -1,6 +1,7 @@
 #include "Runtime/HelpyHudInterfaces.h"
 #include "Runtime/BuildingPolicy/Bridge.h"
 #include "Runtime/HelpyModMenu.h"
+#include "Runtime/HelpyPlayerAccess.h"
 #include "Core/ProcessExitFuture.h"
 #include "Utility/StructuredDiagnostics.h"
 #include "Utility/StructuredDiagnosticB3D.h"
@@ -977,6 +978,17 @@ BOOL APIENTRY DllMain(HMODULE,DWORD reason,LPVOID reserved) {
 }
 extern "C"
 {
+    // Trusted server-side Settings Menu calls this only after its signed PIN check succeeds.
+    RuneSchema_API int32_t RuneSchema_AuthorizeSettingsMenuPlayerV1(void* playerController) noexcept
+    {
+        try {
+            if(!RC::Unreal::IsInGameThread())return -1;
+            auto* config=PS::PSConfig::Get();config->RefreshHelpyAuthority();
+            if(!config->LiveHelpyAuthority().linkSettingsMenuPin)return 0;
+            PS::HelpyPlayerAccess::Authorize(static_cast<RC::Unreal::UObject*>(playerController));
+            return 1;
+        }catch(...){return -1;}
+    }
     RuneSchema_API bool RuneSchema_RegisterPakLoaderRootV1(const wchar_t* path) noexcept
     {
         return PS::PakLoader::Register(path);

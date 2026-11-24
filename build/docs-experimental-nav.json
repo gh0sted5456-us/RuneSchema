@@ -22,6 +22,9 @@
     "Helpy support": "experimental/HELPY-SUPPORT.md"
   },
   {
+    "Settings Menu PIN & Helpy access": "experimental/SETTINGS-MENU-ACCESS.md"
+  },
+  {
     "Helpy & controllers": [
       {
         "Character sheet (in development)": "experimental/CHARACTER-SHEET.md"

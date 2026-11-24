@@ -28,6 +28,7 @@ namespace PS {
     inline nlohmann::json DecodeIniDocument(std::string text) {
         if(text.starts_with("\xEF\xBB\xBF"))text.erase(0,3);
         nlohmann::json document=nlohmann::json::object();
+        const auto defaults=nlohmann::json::parse(StripJsonComments(EncodeSettings(PSConfigSettings{})));
         std::vector<std::string> section;
         std::unordered_set<std::string> assigned;
         std::istringstream input(text);std::string line;size_t number=0;
@@ -76,6 +77,9 @@ namespace PS {
                 if(value.find_first_of("\"[]{}")!=value.npos)throw invalid();
                 parsed=value;
             }
+            // Settings Menu's standard INI writer uses 1/0 for toggles. JSON remains strictly typed.
+            const auto* expected=&defaults;for(const auto& part:section){if(!expected->is_object()||!expected->contains(part)){expected=nullptr;break;}expected=&expected->at(part);}
+            if(expected&&expected->is_object()&&expected->contains(key)&&expected->at(key).is_boolean()&&parsed.is_number_integer()&&(parsed==0||parsed==1))parsed=parsed==1;
             (*object)[key]=std::move(parsed);
         }
         if(assigned.empty())throw std::runtime_error("settings.ini has no settings");

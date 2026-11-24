@@ -20,16 +20,17 @@ int main(int argc,char** argv)try{
         &&initial["Editable"]["/persistence/cleanupOnWorldEntry"]==false);
     if(argc>1){
         std::ifstream file(argv[1]);const auto menu=json::parse(file);
-        Need(menu.at("config").at("file")=="settings/settings.ini"&&menu.at("config").at("format")=="lua");
-        for(const auto& field:menu.at("settings"))if(field.contains("key")){
-            const auto key=field.at("key").get<std::string>();size_t matches=0;
-            for(const auto& [path,value]:initial.at("Editable").items())if(path.substr(path.find_last_of('/')+1)==key){
-                ++matches;Need(value==field.at("default"));
-                if(value.is_boolean())Need(field.at("type")=="toggle");
-                else {Need(field.at("type")=="choice");for(const auto& option:field.at("options"))Need(HelpyShortcut::Find(option.get<std::string>()));}
-            }
-            Need(matches==1);
+        Need(menu.at("config").at("file")=="settings/settings.ini"&&menu.at("config").at("format")=="ini-json"&&menu.at("mirror")==false);
+        for(const auto& tab:menu.at("tabs"))for(const auto& field:tab.at("settings"))if(field.contains("key")){
+            const auto key=field.at("key").get<std::string>();const auto section=field.value("section",tab.value("section",menu.value("section",std::string("RuneSchema"))));
+            const auto path=(section=="RuneSchema"?std::string("/"):"/"+section+"/")+key;
+            Need(initial.at("Editable").contains(path));const auto& value=initial.at("Editable").at(path);Need(value==field.at("default"));
+            Need(key!="accessPin"&&key!="authorizedPlayers");
+            if(value.is_boolean())Need(field.at("type")=="toggle");
+            else{Need(field.at("type")=="choice");for(const auto& option:field.at("options"))Need(HelpyShortcut::Find(option.get<std::string>()));}
         }
+        if(argc>2){const auto written=DecodeSettings(DecodeIniDocument(ConfigFiles::Read(argv[2])).dump());Need(written.advancedLogging&&written.helpyHotkey=="F8"&&!written.helpyAuthority.linkSettingsMenuPin);Need(HelpyPlayerAuthorization::Contains(written.helpyAuthority.authorizedPlayers,"0123456789abcdef0123456789abcdef"));}
+
     }
     const auto original=ConfigFiles::Read(file);
     const auto save=[&](const json& patch,const json& expected){return RuneSchemaSettingsEditor::Save(root,{{"Patch",patch},{"ExpectedContents",expected}});};

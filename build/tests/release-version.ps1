@@ -18,10 +18,10 @@ $pattern = Assignment-Value 'releaseVersionPattern'
 Require ($version -cmatch $pattern) 'The configured release version is invalid'
 $numericVersion = if ($version -cmatch '^1\.0\.0\.J0[0-9A-Z]{4}$') { '1.0.0.0' } else { [regex]::Match($version, '^\d+\.\d+\.\d+(?:\.\d+)?').Value }
 $resourceVersion = $numericVersion.Replace('.', ',')
-foreach ($valid in @('0.8.0', '0.8.0.0', '0.8.0.1', '0.8.0.1b', '1.0.0', '1.0.0.J00001', '1.0.0.J00ABC', '0.7.7.9m', '0.7.7.9e', '0.7.8.0-alpha', '0.7.8.0-alpha.2')) {
+foreach ($valid in @('0.8.0', '0.8.0.0', '0.8.0.1', '0.8.0.1b', '0.9.0.7HF', '1.0.0', '1.0.0.J00001', '1.0.0.J00ABC', '0.7.7.9m', '0.7.7.9e', '0.7.8.0-alpha', '0.7.8.0-alpha.2')) {
     Require ($valid -cmatch $pattern) "Build rejects supported version $valid"
 }
-foreach ($invalid in @('0.8', '0.8.0garbage', '../0.8.0', '0.8.0.0.0', '0.7.7.9M', '0.8.0.1B', '0.8.0.1bb', '0.8.0b', '1.0.0.j00001', '1.0.0.J0001', '1.0.0.J000001', '1.0.0.J0-001', '1.0.1.J00001')) {
+foreach ($invalid in @('0.8', '0.8.0garbage', '../0.8.0', '0.8.0.0.0', '0.7.7.9M', '0.8.0.1B', '0.8.0.1bb', '0.9.0.7hf', '0.9.0.7HFx', '0.8.0b', '1.0.0.j00001', '1.0.0.J0001', '1.0.0.J000001', '1.0.0.J0-001', '1.0.1.J00001')) {
     Require ($invalid -cnotmatch $pattern) "Build accepts invalid version $invalid"
 }
 $packaging = Read-Source 'build/package-licenses.ps1'
@@ -48,5 +48,8 @@ Require ($coreResources.Contains('"FileVersion", "'+$version+'"') -and $coreReso
 foreach ($plugin in @('RuneSchema.Helpy', 'RSNetworking', 'RuneSchema.RegistryBridge', 'RuneSchema.QuestItems')) {
     $manifest = Read-Source "source/plugins/$plugin/plugin.json" | ConvertFrom-Json
     Require ($manifest.Version -eq $version -and $manifest.BuiltForRuneSchema -eq $version) "Plugin $plugin has mismatched release metadata"
+}
+foreach ($path in @('source/raw/plugins/SisterContentPlugin.cpp','source/helpy/source/plugins/helpy/HudPlugin.cpp')) {
+    Require ((Read-Source $path).Contains('"'+$version+'"')) "Native plugin descriptor version differs: $path"
 }
 Write-Output "RuneSchema and RSMK $version release metadata and legacy tag compatibility verified."

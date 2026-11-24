@@ -88,6 +88,11 @@ int RunConfigSettings() {
     Rejects([&]{HelpyGrants::ValidateGrants(batch,repaired.maximumItemCount);});
     auto invalid=identity;invalid.accountName="bad\nname";
     Rejects([&]{HelpyPlayerAuthorization::Remember(authorization.authorizedPlayers,invalid);});
+    assert(DecodeSettings("{}").helpyAuthority.linkSettingsMenuPin);
+    const auto toggles=DecodeSettings(DecodeIniDocument("[RuneSchema]\nadvancedLogging = 1\n[helpyAuthority]\nlinkSettingsMenuPin = 0\n").dump());
+    assert(toggles.advancedLogging&&!toggles.helpyAuthority.linkSettingsMenuPin);
+    Rejects([&]{DecodeSettings(DecodeIniDocument("[RuneSchema]\nadvancedLogging = 2\n").dump());});
+    Rejects([&]{DecodeSettings(R"({"advancedLogging":1})");});
     assert(DecodeSettings("{}").helpyHotkey=="F2");
     assert(DecodeSettings(R"({"helpyHotkey":"f5"})").helpyHotkey=="F5");
     assert(DecodeSettings(R"({"helpyHotkey":"X"})").helpyHotkey=="X");

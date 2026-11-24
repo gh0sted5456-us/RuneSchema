@@ -1,0 +1,123 @@
+{
+  "schema": 1,
+  "id": "RuneSchema",
+  "name": "RuneSchema",
+  "version": "0.9.0.7HF",
+  "description": "RuneSchema settings use the same INI file as Helpy. A successful server PIN check grants saved full Helpy authorization. Each connected player keeps their own personal settings.",
+  "runsOn": "yours",
+  "config": {
+    "file": "settings/settings.ini",
+    "format": "ini-json"
+  },
+  "author": "RSDW Modding Community",
+  "blurb": "RuneSchema settings and saved Helpy authorization.",
+  "mirror": false,
+  "section": "RuneSchema",
+  "tabs": [
+    {
+      "title": "General",
+      "settings": [
+        {
+          "type": "header",
+          "label": "Save cleanup"
+        },
+        {
+          "key": "blanketCleanup",
+          "type": "toggle",
+          "label": "Blanket save cleanup (fallback)",
+          "default": false,
+          "help": "On: the original broad cleanup across supported local saves at a safe load boundary. Off: selected character/world only. Preview alone never authorizes cleanup. Verified backups are mandatory.",
+          "section": "persistence"
+        },
+        {
+          "key": "cleanupOnWorldEntry",
+          "type": "toggle",
+          "label": "Apply cleanup changes at next world entry",
+          "default": false,
+          "help": "On: read the saved cleanup choice at the next character/world entry. Off: retain this session's applied policy until restarting Dragonwilds. Changing a setting does not start a background sweep.",
+          "section": "persistence"
+        },
+        {
+          "key": "allowCorruptCharacterEntry",
+          "type": "toggle",
+          "label": "Save Bypass by default",
+          "default": false,
+          "restart": true,
+          "help": "On: prefer bypass. Off: relaxed native loading followed by fallback after native rejection. Keep backups and disable any standalone bypass. This does not repair damaged data.",
+          "section": "persistence"
+        },
+        {
+          "type": "header",
+          "label": "Helpy shortcut"
+        },
+        {
+          "key": "helpyHotkey",
+          "type": "choice",
+          "label": "Helpy shortcut",
+          "options": [
+            "F1",
+            "F2",
+            "F3",
+            "F4",
+            "F5",
+            "F6",
+            "F7",
+            "F8",
+            "F9",
+            "F10",
+            "F11",
+            "F12"
+          ],
+          "default": "F2",
+          "restart": true,
+          "help": "Settings Menu edits the same shortcut as Helpy. Restart after changing it here, or use Helpy's Quick Settings for immediate rebinding. Avoid keys already used by the game or another mod.",
+          "section": "RuneSchema"
+        },
+        {
+          "type": "header",
+          "label": "Startup and diagnostics",
+          "collapsed": true
+        },
+        {
+          "key": "autoUpdateMappings",
+          "type": "toggle",
+          "label": "Automatic reflection mapping updates",
+          "default": true,
+          "restart": true,
+          "section": "RuneSchema"
+        },
+        {
+          "key": "advancedLogging",
+          "type": "toggle",
+          "label": "Detailed RuneSchema logging",
+          "default": false,
+          "restart": true,
+          "section": "RuneSchema"
+        },
+        {
+          "key": "archiveLogs",
+          "type": "toggle",
+          "label": "Archive RuneSchema logs",
+          "default": false,
+          "restart": true,
+          "section": "RuneSchema"
+        }
+      ]
+    },
+    {
+      "title": "Server access",
+      "section": "helpyAuthority",
+      "intro": "The server remembers authorized characters across restarts. PIN approval grants full Helpy access; revoke it from Helpy’s connected-player controls.",
+      "settings": [
+        {
+          "key": "linkSettingsMenuPin",
+          "type": "toggle",
+          "label": "Settings Menu PIN grants full Helpy access",
+          "runsOn": "host",
+          "default": true,
+          "help": "A verified Settings Menu server PIN unlock also saves this character in RuneSchema’s authorized-player list. The server executes and validates each Helpy request."
+        }
+      ]
+    }
+  ]
+}

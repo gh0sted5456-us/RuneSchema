@@ -323,7 +323,9 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
         if(result!=PS::HelpyRemoteAccess::Sessions::Result::Granted)
             throw std::runtime_error(result==PS::HelpyRemoteAccess::Sessions::Result::RateLimited
                 ?"Too many PIN attempts. Wait one minute before retrying.":"Remote access denied. Check the PIN and the server's opt-in settings.");
-        return status(true,true,"Client-server authority bridged. Requests for your current character are validated and executed by the server.");
+        try{PS::HelpyPlayerAccess::Authorize(controller);}catch(...){PS::HelpyRemoteAccess::Server.Revoke(peerKey);throw;}
+        return PS::HelpyRemoteAccess::AccessStatus(true,true,true,true,true,playerGuid,
+            "Full Helpy authorization saved for this character across server restarts.",policy.maximumItemCount).dump();
     }
     if(action=="InventoryMarks"){
         const auto normalize=[](std::string value){std::string out;for(unsigned char c:value){if(c=='-'||c=='{'||c=='}')continue;if(!std::isxdigit(c))return std::string{};out+=static_cast<char>(std::tolower(c));}return out.size()==32&&out!=std::string(32,'0')?out:std::string{};};

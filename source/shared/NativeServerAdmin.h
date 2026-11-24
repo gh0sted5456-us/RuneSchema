@@ -23,6 +23,7 @@ inline std::string Operation(const Json& request){
     }
     return operation;
 }
+inline bool CanAuthorizePlayers(bool sameWorld,bool helpyAdministrator){return sameWorld&&helpyAdministrator;}
 inline void Authorize(bool nativeOwner,bool targetOwner,bool sameWorld,bool sameTarget){
     if(!nativeOwner)throw std::runtime_error("Only the native server owner may grant or revoke admin. RuneSchema PIN access does not grant this permission.");
     if(!sameWorld||!sameTarget)throw std::runtime_error("The world or player connection changed. Refresh before changing admin rights.");

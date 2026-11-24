@@ -15,9 +15,9 @@ BEGIN
   BEGIN
    VALUE "CompanyName", "RuneSchema Community Team"
    VALUE "FileDescription", "RuneSchema"
-   VALUE "FileVersion", "0.9.0.7"
+   VALUE "FileVersion", "0.9.0.7HF"
    VALUE "ProductName", "RuneSchema"
-   VALUE "ProductVersion", "0.9.0.7"
+   VALUE "ProductVersion", "0.9.0.7HF"
    VALUE "LegalCopyright", "Copyright (c) 2026 RSDW Modding Community"
   END
  END

@@ -39,7 +39,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = "${{ github.ref_name }}"
-          $tagMatch = [regex]::Match($tag, '^v?(\d+\.\d+\.\d+(?:\.\d+(?:[bem]|-alpha(?:\.\d+)?)?)?|1\.0\.0\.J0[0-9A-Z]{4})$')
+          $tagMatch = [regex]::Match($tag, '^v?(\d+\.\d+\.\d+(?:\.\d+(?:[bem]|HF|-alpha(?:\.\d+)?)?)?|1\.0\.0\.J0[0-9A-Z]{4})$')
           if (-not $tagMatch.Success) {
             throw "Unsupported RuneSchema release tag: $tag"
           }
@@ -51,7 +51,7 @@ jobs:
           }
           gh release view $tag 2>$null
           if ($LASTEXITCODE -ne 0) {
-            if ($releaseVersion -match '-alpha(?:\.\d+)?$') {
+            if ($releaseVersion -match '(?:HF|-alpha(?:\.\d+)?)$') {
               gh release create $tag --title "RuneSchema $tag" --generate-notes --prerelease --latest=false
             } else {
               gh release create $tag --title "RuneSchema $tag" --generate-notes

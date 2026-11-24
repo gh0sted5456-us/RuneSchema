@@ -5,7 +5,8 @@ from the same package; install the appropriate stock UE4SS separately.
 
 | Source channel | Version | Status |
 | --- | --- | --- |
-| Main | **0.9.0.7** | [Source](https://github.com/gh0sted5456-us/RuneSchema/tree/main) · [Consolidated changes](RELEASE-0.9.0.7.md) |
+| Main | **0.9.0.7** | [Source](https://github.com/gh0sted5456-us/RuneSchema/tree/main) Â· [Consolidated changes](RELEASE-0.9.0.7.md) |
+| Hotfix prerelease | **0.9.0.7HF** | [Downloads and changes](RELEASE-0.9.0.7HF.md) |
 | Published downloads | Existing releases | [GitHub downloads](https://github.com/gh0sted5456-us/RuneSchema/releases) |
 
 The matching 0.9.0.7 runtime is packaged locally. This source promotion does not publish a new GitHub release; earlier downloadable releases keep their original versions and files. GitHub source archives are for development.

@@ -9,9 +9,21 @@ RuneSchema 0.9.0.7 has been promoted to main. See [the release notes](../RELEASE
 
 <span id="pending-changelog"></span>
 
+## 0.9.0.7HF hotfix candidate
+
+- Settings Menu's verified server PIN unlock saves full Helpy authorization for
+  the connected character using RuneSchema's existing authorized-player list.
+- RuneSchema uses `sm.json` and typed INI editing; private settings are not mirrored.
+- Saved Helpy administrators can manage RuneSchema player authorization in the
+  same world. Native game-owner checks remain separate.
+- Existing settings notifications push updated permissions to connected clients.
+
+See the [hotfix downloads and changelog](../RELEASE-0.9.0.7HF.md) and
+[setup and verification limits](SETTINGS-MENU-ACCESS.md).
+
 ## Changes since 0.8.0.3
 
-### 0.9.0.7: Wiki, plugin tiles, Grand Exchange support, character sheet · November 20–21
+### 0.9.0.7: Wiki, plugin tiles, Grand Exchange support, character sheet Â· November 20â€“21
 
 This candidate collects everything since 0.9.0.3.
 
@@ -21,7 +33,7 @@ This candidate collects everything since 0.9.0.3.
 - Helpy's optional web browser (off by default): a **Browser** tab beside the plugins with an address bar and its own profile. Turning on **Block ads** downloads uBlock Origin Lite from its official GitHub release, checks its SHA-256 and loads it into the browser only. Plugin tabs sit in the middle of the top bar, and the **i** shows each one's notice. See [Web browser in Helpy](../HELPY-BROWSER.md).
 - Plugin workspaces drawn by a companion app, such as Grand Exchange, now show at full opacity. Helpy's **Window opacity** and overlay opacity no longer let the desktop show through them, and Helpy shows its own "Opening..." message until the companion's first frame at the right size arrives.
 - Plugin entries such as Grand Exchange are tiles on Home with their own icon and description, and sidebar rows with their icon, instead of a plain button above the tiles.
-- Plugins can post into Helpy's notifications, with an in-game popup and an **Open** button for their own page. Notices appear under **Notifications → Plugins**; Grand Exchange can use this for sale alerts.
+- Plugins can post into Helpy's notifications, with an in-game popup and an **Open** button for their own page. Notices appear under **Notifications â†’ Plugins**; Grand Exchange can use this for sale alerts.
 - Grand Exchange opens as its own workspace inside Helpy, with **Return to Helpy**. See [Grand Exchange integration](../GRAND-EXCHANGE.md).
 - The character sheet has four pages (Inventory & loadout, Appearance, Skills, Save data) and one draft bar for Review & export and Discard changes. Add Item Bay items to the draft with a quantity. See [Character sheet](CHARACTER-SHEET.md).
 - The Item Bay shows why deliveries to your own character are off or paused by a mod, with **Turn deliveries on** for your own switch, and checks again before sending. See [Helpy delivery flags](HELPY-DELIVERY-FLAGS.md).
@@ -36,17 +48,17 @@ This candidate collects everything since 0.9.0.3.
 - A mod can sign a time-limited **character exception** to its own delivery pauses. See [Character exceptions](HELPY-DELIVERY-FLAGS.md#character-exceptions).
 - Core service `runeschema.item.snapshot`: a read-only, lossless record of one live item, for in-game plugin halves.
 - Plugin server requests (in development): a plugin's in-game half can ask the server it's on to run the same plugin's server half, which can put items into the sender's inventory, a storage component on their character, or a world chest with `runeschema.item.grant`. Grants to a player run only while serving that player's own request; the plugin's own Helpy delivery pause is skipped then, and the player's switch and other mods' pauses still apply. Grand Exchange uses this to deliver on any server that has it installed. See [Plugin server requests and item grants](PLUGIN-SERVER-REQUESTS.md).
-- Core service `runeschema.item.destroy` (in development): removes one exact whole stack through the game's own destroy call, for in-game plugin halves that declare `item.destroy`. Helpy's Inventory workbench uses it for **Destroy stack…**: confirmed twice, your own character keeps its delivery gate, and through a server it needs saved Helpy access or the allowlist and acts only on your own character. `item.destroy` and `item.snapshot` also reach a mod's own storage on the character (`Scope: "Owned"` with its ObjectIdentity), so Grand Exchange can take deposits from its storage on a server; a remote player's character only while serving that player's own request. Failed server-request answers carry a `Reason` (`NotInstalled`, `NotReady`, `Invalid`, `Refused`). See [Exact item destroy](ITEM-DESTROY.md).
+- Core service `runeschema.item.destroy` (in development): removes one exact whole stack through the game's own destroy call, for in-game plugin halves that declare `item.destroy`. Helpy's Inventory workbench uses it for **Destroy stackâ€¦**: confirmed twice, your own character keeps its delivery gate, and through a server it needs saved Helpy access or the allowlist and acts only on your own character. `item.destroy` and `item.snapshot` also reach a mod's own storage on the character (`Scope: "Owned"` with its ObjectIdentity), so Grand Exchange can take deposits from its storage on a server; a remote player's character only while serving that player's own request. Failed server-request answers carry a `Reason` (`NotInstalled`, `NotReady`, `Invalid`, `Refused`). See [Exact item destroy](ITEM-DESTROY.md).
 - Name-only engine hooks share one dispatcher, which cuts per-call overhead.
 
-### Helpy data in AppData, Achievements plugin · November 19
+### Helpy data in AppData, Achievements plugin Â· November 19
 
 - Helpy keeps its own files in `%LOCALAPPDATA%/RSDragonwilds/RuneSchema/core`: settings, theme, item groupings, downloaded artwork, your own backgrounds and fonts, and a copy of the licence bundle. The installed mod now holds only runtime files, plugin DLLs and the single licence bundle in `settings/licenses`.
 - Runtime folders are named for the game binaries: `Win64` for Steam and Epic, `WinGDK` for Game Pass, and `Server` for a dedicated server. The first start moves the older `steam`, `epic`, `gamepass`, `server`, `HELPY`, `runeschema.profile` and `health` folders once, without copying or deleting. A folder in use stays where it is until a later start. See [Runtime folders](../RUNTIME-LAYOUT.md).
 - The dedicated-server apply script is built into Helpy.exe and written to `core/HELPY/tools` when you copy the apply command.
 - Achievements are a Helpy plugin, `RuneSchema.Achievements`. It finds `achievements.json` in UE4SS mods as well as RuneSchema mods, so any mod can award achievements. Turning the plugin off in `plugins.txt` turns achievements off and keeps earned points. See [Mod achievements](../MOD-ACHIEVEMENTS.md).
 
-### Item Bay search fixes · November 17
+### Item Bay search fixes Â· November 17
 
 - Added **Stop search** to the Item Bay controls. Stopping keeps the displayed results, selection, and delivery cart available and cancels further search requests.
 - Fixed repeated searches when the Inventory Workbench or Character Studio Item Bay adopted a saved source, category, or **Show Mod Family** filter. Filter changes are applied and shared before the grid renders.
@@ -74,11 +86,11 @@ This candidate collects everything since 0.9.0.3.
 
 - Interactive live checks continue sooner between slices. Learned-item writes preserve the newest observation, skip redundant settled repeats, and coalesce cached-search index rebuilds across live search slices.
 - Item Bay can browse saved items and icons offline. The search bar groups source, category, family, and display-name filters. The display/internal-name switch preserves the current query, selection, and asset identity.
-- Cached searches reuse prepared indexes and unchanged rows. Live searches reuse the mounted item index, and discoveries with valid asset identities are saved for later searches. Live work and cancellation run off Helpy’s UI thread.
+- Cached searches reuse prepared indexes and unchanged rows. Live searches reuse the mounted item index, and discoveries with valid asset identities are saved for later searches. Live work and cancellation run off Helpyâ€™s UI thread.
 - Downloaded records and icon packs remain available to the cache. Learned-item writes retry in order after a failure. Diagnostics report failed writes and discarded observations. Unchanged cache writes and repeated source-plan copies are reduced.
 - **Refresh search** reruns the query with the active filters. Right-click an item to request a new in-game icon capture or refresh icons for its mod. Mod-wide icon refresh requires **Keep icons between launches**.
 - Search and cache controls retain cached results during updates. Source grouping and name recovery preserve readable labels and distinguish different assets with the same display name. Cooked equipment types help categorize weapons, armor, and ammunition.
-- Select individual items or groups and move them to the cart. **Send to player…** opens a separate quantity and recipient picker for one item while preserving the staged cart.
+- Select individual items or groups and move them to the cart. **Send to playerâ€¦** opens a separate quantity and recipient picker for one item while preserving the staged cart.
 - **Cache enabled mods** runs a sequential queue with pause, resume, stop, and per-mod results. Installed mods and vanilla files can be read in the cache worker. Cache bundles preserve portable item taglines and tips.
 
 ### Mod achievements and Gamer Points
@@ -94,7 +106,7 @@ This candidate collects everything since 0.9.0.3.
 
 ### World map, HUD, and presentation
 
-- The world atlas adds selectable zone close-ups, transport outlines, a coordinate view, and player centering. Scorned Wilderness has its own view. The map includes a named Dragon Gate destination for Rasthin’s Rest.
+- The world atlas adds selectable zone close-ups, transport outlines, a coordinate view, and player centering. Scorned Wilderness has its own view. The map includes a named Dragon Gate destination for Rasthinâ€™s Rest.
 - Helpy adds optional startup artwork and progress, a coordinate HUD, and a HUD layout preview for minimap, coordinates, notifications, and loading artwork. HUD positions can be saved from the preview.
 - Mods can use the shared HUD and presentation interfaces, declare input bindings, and supply an optional owner-only presentation handler for a registered consumable.
 
@@ -103,7 +115,7 @@ This candidate collects everything since 0.9.0.3.
 - RuneSchema adds the CL260223 native dedicated-server filter binding. In an isolated Steam dedicated-server run, the server opened its game port, loaded the world, and requested native filter setup.
 - The authority sends item-grant and access policy when the client connects and pushes policy changes to connected clients. A limit of **0** means no server total per grant request. Existing configured limits still apply.
 - Hosts can configure world PIN access with separate self-delivery and self-teleport permissions, or save grants by character GUID. The server checks request identity, item IDs, quantity, and destination. Correlated results distinguish an accepted request from a completed action.
-- **Mods → Server mods** shows the host’s enabled mods and versions beside local entries, including missing, disabled, version-different, and client-only entries. Authors can supply a download-page link through mod metadata.
+- **Mods â†’ Server mods** shows the hostâ€™s enabled mods and versions beside local entries, including missing, disabled, version-different, and client-only entries. Authors can supply a download-page link through mod metadata.
 - The bundled RSNetworking policy plugin adds opt-in actor policies and larger network payload budgets. The network bridge adds declared character-appearance snapshots and namespaced mod-data channels.
 - The building registry checks compatibility before modded placement by comparing network ID fingerprints while retaining the verified native ID prefix.
 - Item Delivery adds host-configured delivery lists with **Off**, **Deliver Once**, and **Always Deliver**. Its receipt logic binds deliveries to character identity and records completion on the matching save acknowledgement.
@@ -111,11 +123,11 @@ This candidate collects everything since 0.9.0.3.
 ### Mods, authoring, and content registration
 
 - Named `$RuntimeWidget` and `$RuntimeUI` rules filter events before walking the owner hierarchy. Wildcard rules and UI teardown retain their normal handling.
-- Helpy's **Mods → UE4SS mods** list shows **J4S PAKLoader** and **Maxx's Mod Menu** badges on cards and in Compact view. Refresh the inventory after adding a descriptor.
+- Helpy's **Mods â†’ UE4SS mods** list shows **J4S PAKLoader** and **Maxx's Mod Menu** badges on cards and in Compact view. Refresh the inventory after adding a descriptor.
 - RuneSchema and UE4SS share a compact mod-management view with metadata, license inspection, next-launch loader controls, and cache actions. The UE4SS inventory distinguishes external packages and RuneSchema-owned packages.
 - The bundled **RuneSchema.UE4SS.Bridge** lets an enabled standalone UE4SS mod declare and register RuneSchema content, including appearance and mod-data declarations.
-- **Mods → Mod Menu 2** adds a key-gated Helpy editor with legacy callbacks, offline editing for supported settings, optional character tabs, and template import and export. Supported controls include sliders, radial choices, and RGB/RGBA colors. A schema error stays on its own page so valid pages remain available. The existing external Mod Menu keeps precedence when enabled.
-- The runtime includes optional, key-gated Advanced Tooling. Helpy’s authoring tools build and update caches, and the repair tool verifies the matching package, backs up replacements, and preserves user mods, settings, saves, and caches.
+- **Mods â†’ Mod Menu 2** adds a key-gated Helpy editor with legacy callbacks, offline editing for supported settings, optional character tabs, and template import and export. Supported controls include sliders, radial choices, and RGB/RGBA colors. A schema error stays on its own page so valid pages remain available. The existing external Mod Menu keeps precedence when enabled.
+- The runtime includes optional, key-gated Advanced Tooling. Helpyâ€™s authoring tools build and update caches, and the repair tool verifies the matching package, backs up replacements, and preserves user mods, settings, saves, and caches.
 - Cooked registry support expands to table extensions, skill declarations, world components, and guarded host console commands. Mods can declare local profiles, typed templates, and numeric providers. The settings processor handles up to 1,024 combined schema settings, tab keys, and template entries.
 - Cooked world policies add hooks for building support, placement and dismantling, player phasing, material requirements, farming, resource yields, player effects, and enemy spawning. Material policy calls preserve native unlock, quantity, station, and authority checks.
 
@@ -123,7 +135,7 @@ This candidate collects everything since 0.9.0.3.
 
 - RuneSchema reads and parses mod JSON ahead on a bounded worker pool when the host has at least four hardware threads. Loader callbacks and diagnostics still run in file order on the calling thread.
 - Automatic reflection mapping capture now requires a fresh request from RuneSchema Core. Steam and Game Pass both reused their cached mappings on the next startup without writing a new dump.
-- Helpy’s Save Recovery view lists character snapshots with their reason and active mod metadata. World snapshot and restore controls are opt-in. Cleanup stays scoped to the selected save and uses verified backups on supported paths.
+- Helpyâ€™s Save Recovery view lists character snapshots with their reason and active mod metadata. World snapshot and restore controls are opt-in. Cleanup stays scoped to the selected save and uses verified backups on supported paths.
 - Character copy, import, and export follow redirected save roots. Core and Helpy share the resolved AppData root while guarding nested paths. Optional world archive errors are reported separately from verified cleanup backups.
 - Startup discovery reuses mounted-directory results, ownership checks, and ready recipe references. Registry merging reduces duplicate copies. Recipe prefetch stays bounded, malformed plugin order entries leave other plugins available, and temporary reflected map and array values release nested allocations.
 - The core and Helpy reduce repeated transport work, idle cache copies, registry notices, and diagnostic traffic. Helpy recovers its previous render target after a rejected resize and reports the window, graphics error, and source plugin where available.

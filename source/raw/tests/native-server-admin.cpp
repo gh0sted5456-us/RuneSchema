@@ -3,6 +3,10 @@
 #include <functional>
 int main(){
     using namespace PS::NativeServerAdmin;
+    assert(CanAuthorizePlayers(true,true));
+    assert(!CanAuthorizePlayers(false,true));
+    assert(!CanAuthorizePlayers(true,false));
+    assert(!CanAuthorizePlayers(false,false));
     const auto denied=[](const std::function<void()>& call){try{call();return false;}catch(...){return true;}};
     assert(Operation({{"Operation","Read"}})=="Read");
     assert(Operation({{"Operation","AuthorizeAll"},{"WorldToken","1:2"}})=="AuthorizeAll");
