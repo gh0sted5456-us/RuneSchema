@@ -12,6 +12,8 @@ int main(){
         // Direct native loads have no reflected preflight token; rejection fallback still applies.
         assert(BypassRequested(false,bypass,mode)==(SessionRequested(false,bypass,mode)||bypass));
     }
+    // Player state is never accepted after a rejection unless Save Bypass is explicitly on.
+    assert(PlayerStateBypassRequested(true)&&!PlayerStateBypassRequested(false));
     assert(Parse(" 0 ")==false&&Parse("True")==true&&Parse("1")==true);
     assert(!Parse("")&&!Parse("missing")&&!Parse("42")&&!Parse("false; other.command"));
     Lease lease;bool strict=true;int reads=0;std::vector<bool> writes;

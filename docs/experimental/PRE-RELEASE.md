@@ -16,6 +16,7 @@ RuneSchema 0.9.0.7 has been promoted to main. See [the release notes](../RELEASE
 **For players**
 
 - One broken declaration no longer makes a mod's other items disappear from your characters. A bad item path, section or catalogue page is now left out on its own, and everything else in that mod still registers and loads. Previously, one bad entry could unregister every item in that file or catalogue, and the game then dropped those items when your character loaded.
+- A character whose saved state the game refuses is no longer entered with a fresh start. Before, RuneSchema accepted the refusal by default, so the character arrived with default quests and recipes, the opening cinematic played, and the next save wrote that over the real file. Now the character stays out of the world, its save is left alone, and the log shows `[SAVE-ENTRY][PLAYER-STATE][KEPT]`. Only the explicit **Save Bypass** setting enters anyway. See [Loading modes and Save Bypass](../SETTINGS-INI.md#loading-modes-and-save-bypass).
 
 **For mod authors**
 

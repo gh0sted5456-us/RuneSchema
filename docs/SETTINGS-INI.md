@@ -139,6 +139,14 @@ Dedicated servers expose only **Save Bypass** as a loading control, not these
 client modes or character/world selectors. The server still auto-starts its
 configured world. It requests session-long native tolerant loading by default
 and uses acceptance fallback only after native rejection.
+
+Fallback covers the character check only. When the game refuses a character's
+saved state, it has already skipped the later loading steps, so entering anyway
+starts the character with default quests and recipes and the next save writes
+over the real file. RuneSchema leaves that refusal in place and logs
+`[SAVE-ENTRY][PLAYER-STATE][KEPT]`; the character stays out of the world and its
+save is untouched. Only the explicit **Save Bypass** setting enters anyway, so
+keep a backup before turning it on.
 Pruning runs in either case. Client `quickLaunch.mode` is ignored on servers.
 
 Vanilla Load does not disable RuneSchema's registry-based orphan pruning.
