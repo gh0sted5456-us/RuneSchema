@@ -344,6 +344,33 @@ Unresolved IDs can be pruned after their content is disabled or removed and
 the applicable registry has been verified. No orphaned IDs means no cleanup
 write.
 
+## When part of a document is invalid
+
+One mistake no longer hides the rest of a mod. Since the change after 0.9.0.7:
+
+- A bad or duplicate path in `Items`, `Recipes`, `Quests`, `CombatSpells`,
+  `UtilitySpells`, `EquipmentEffects`, `Journals` or `Lore` leaves out that path
+  only. The other paths in the list still register, so items saved on characters
+  keep loading.
+- Any other section that fails its checks (for example a `WorldComponents` class
+  path without `_C`, or a `LoaderDefinitions.Recipes` body) is left out on its own.
+  An unknown section name is left out the same way.
+- In a [shard catalogue](../COOKED-REGISTRY-SHARDS.md), a page that fails on its own
+  (unreadable, wrong owner, bad envelope, empty) is left out; the root and the
+  other pages still register.
+
+Each left-out part is reported as `RS-RGST-016` with the mod, file, part and reason
+(the first 20 per file, then a count). These still refuse everything:
+
+- a document with nothing usable left (the message names the first problem);
+- the 16,384-reference document limit;
+- the catalogue's 64 MiB and 262,144-reference limits;
+- conflicting bodies across pages or documents.
+
+Anything left out also keeps automatic character cleanup off for that session, as
+below, so a partial load never prunes a character. Fix the reported part and
+restart to register it.
+
 A rejected enabled cooked declaration, missing persistent registry binding,
 failed recipe/journal enrollment, or disabled required loader vetoes automatic
 character cleanup for that session. A failed load is **not** evidence of an

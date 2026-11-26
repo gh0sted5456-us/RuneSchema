@@ -3825,6 +3825,18 @@
       "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
     },
     {
+      "code": "RS-RGST-016",
+      "severity": "warning",
+      "title": "Registry declaration left out",
+      "producer": "src/Loader/DragonWildsRegistryLoader.cpp",
+      "legacyCollision": false,
+      "namespace": "structured",
+      "category": "Registry",
+      "anchor": "rs-rgst-016",
+      "url": "https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-016",
+      "troubleshooting": "Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod."
+    },
+    {
       "code": "RS-SPAWN-001",
       "severity": "error",
       "title": "Spawn document root is invalid",

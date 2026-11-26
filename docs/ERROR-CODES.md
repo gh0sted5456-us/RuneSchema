@@ -4,7 +4,7 @@ Find a code from your log to see what happened and what to try next. Use the mes
 
 Open Helpy's **Diagnostics** for an overview, grouped issues and Live Log. You can copy an entry or follow its reference link here. The viewer leaves the original logs unchanged; recent activity includes normal messages, while notifications focus on warnings and errors.
 
-This page contains **101 legacy reference entries**, **227 structured diagnostic entries** and **19 bridge reason codes**. RS-JRN-001, RS-JRN-002 and RS-SPAWN-001 each have an older and a structured meaning. Follow the link from your message, or check its source and namespace to choose the matching entry. Links between the two meanings are included.
+This page contains **101 legacy reference entries**, **228 structured diagnostic entries** and **19 bridge reason codes**. RS-JRN-001, RS-JRN-002 and RS-SPAWN-001 each have an older and a structured meaning. Follow the link from your message, or check its source and namespace to choose the matching entry. Links between the two meanings are included.
 
 Structured reports in `RSDiagLog.jsonl` include their source, context and outcome. Not every operation emits every code. `Unknown` means the cause has not been identified; use the severity in the actual message. `Partial` means some changes may have occurred, and `Deferred` points to later or restart handling. `Skipped` or `Blocked` can describe one step while the rest of the mod continues.
 
@@ -7197,6 +7197,26 @@ Start with the original message and the listed mod, file, target or property. Th
 Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
 
 [Direct link to structured RS-RGST-015](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-015)
+
+</section>
+
+<section class="rs-code-card" data-rs-code="RS-RGST-016" data-rs-namespace="structured" data-rs-severity="warning" markdown="1">
+
+### RS-RGST-016: Registry declaration left out {#rs-rgst-016}
+
+**Structured namespace · Typical level: warning**
+
+**Condition:** Registry declaration left out. Read the actual message and context for the precise rejected, deferred or partial operation.
+
+**Area:** Registry · **Producer:** `src/Loader/DragonWildsRegistryLoader.cpp`
+
+**What to check**
+
+Start with the original message and the listed mod, file, target or property. The first related failure and reported phase/outcome help narrow down the next step. If a reading is unavailable, collect the surrounding messages before changing paths or disabling a mod.
+
+Keep the exact source, mod, file, target/property, phase and outcome when supplied. Missing context or an unknown cause is not a zero reading or a confirmed diagnosis. Review personal identifiers and paths before sharing evidence.
+
+[Direct link to structured RS-RGST-016](https://gh0sted5456-us.github.io/RuneSchema/ERROR-CODES/#rs-rgst-016)
 
 </section>
 

@@ -121,6 +121,22 @@ json AuthorDocument(const json& source) {
     }
     throw std::runtime_error("unsupported registry root; use a compact Id-to-entry map, one entry, an Entries array, or a cooked RegistryJson contract");
 }
+// A declaration left out of an otherwise valid registry document or catalogue: the rest still registers.
+// Save cleanup stays off for this session, so a partial load never prunes anything from a character.
+void ReportDropped(const std::string& owner,const std::string& source,const std::vector<std::pair<std::string,std::string>>& dropped){
+    constexpr std::size_t Detailed=20;
+    std::size_t shown=0;
+    for(const auto& [part,reason]:dropped){
+        PS::RegistryEnrollment::Reject(owner+":"+source+":"+part,reason);
+        if(++shown>Detailed)continue;
+        (void)PS::StructuredDiagnosticB3C::Report("RS-RGST-016","Warning","Skipped","RegistryLoader",
+            "Registry declaration left out",reason,owner,source,part,"Validation");
+        PS::Log<RC::LogLevel::Warning>(STR("Registry file '{}' in mod '{}': left out '{}' ({}). Everything else in the file still registers.\n"),
+            PS::ToWideSafe(source.c_str()),PS::ToWideSafe(owner.c_str()),PS::ToWideSafe(part.c_str()),PS::ToWideSafe(reason.c_str()));
+    }
+    if(shown>Detailed)PS::Log<RC::LogLevel::Warning>(STR("Registry file '{}' in mod '{}': {} more declarations were left out.\n"),
+        PS::ToWideSafe(source.c_str()),PS::ToWideSafe(owner.c_str()),shown-Detailed);
+}
 }
 
 namespace DragonWilds {
@@ -298,6 +314,7 @@ void DragonWildsRegistryLoader::LoadDocument(const json& input,const std::string
     // RSREG asset. Publication is not proof of native identity registration.
     PS::CookedPakRegistryManifest::Manifest nativeManifest;
     if(PS::CookedPakRegistryManifest::Publish(document,owner,source,&nativeManifest)) {
+        ReportDropped(owner,source,nativeManifest.Dropped);
         PS::HelpyCacheSources::DeclareManifest(nativeManifest);
         std::size_t assetCount=0,definitionCount=0;
         for(const auto& lane:nativeManifest.AssetLanes)assetCount+=lane.Paths.size();
@@ -426,6 +443,10 @@ void DragonWildsRegistryLoader::LoadCookedRegistries() {
             }catch(...){m_keys.swap(previousKeys);throw;}
             const auto shardPublished=std::chrono::steady_clock::now();
             for(const auto& manifest:group.Manifests)PS::HelpyCacheSources::DeclareManifest(manifest);
+            ReportDropped(group.Owner,"pak:"+path,group.Dropped);
+            for(const auto& manifest:group.Manifests)ReportDropped(group.Owner,manifest.Source,manifest.Dropped);
+            // A page left out was still seen; it is not "unindexed".
+            for(const auto& [member,reason]:group.Dropped)handled.insert(PS::CookedRegistryShards::Fold(member));
             const auto cacheDeclared=std::chrono::steady_clock::now();
             PS::RegistryEnrollment::RecordDeclaration(group.Owner,"pak:"+path);
             for(const auto& member:group.Paths)handled.insert(PS::CookedRegistryShards::Fold(member));

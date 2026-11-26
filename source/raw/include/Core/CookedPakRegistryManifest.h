@@ -38,6 +38,9 @@ namespace PS::CookedPakRegistryManifest {
         std::vector<ConsoleCommand> ConsoleCommands;
         std::vector<LocalService> LocalServices;
         std::vector<std::string> CacheAssets; // Exact original artwork declarations; never native gameplay registration.
+        // Sections or single paths that failed validation and were left out. The rest of the document
+        // still registers, so one bad declaration never hides a mod's other items. Same input, same result.
+        std::vector<std::pair<std::string,std::string>> Dropped; // {section or "section path", reason}
         std::uint64_t Fingerprint = 0;
     };
 
@@ -92,8 +95,11 @@ namespace PS::CookedPakRegistryManifest {
         }
         inline bool ServiceToken(const std::string& value){return !value.empty()&&value.size()<=96&&value!="."&&value!=".."&&std::all_of(value.begin(),value.end(),[](unsigned char c){return (c>='a'&&c<='z')||(c>='A'&&c<='Z')||(c>='0'&&c<='9')||c=='_'||c=='-'||c=='.';});}
 
+        using Drops=std::vector<std::pair<std::string,std::string>>;
+        // With drops, a malformed, invalid or duplicate row is skipped and recorded; the array shape and
+        // the document limit still fail the whole lane.
         inline std::vector<std::string> ReadPaths(const nlohmann::json& root,
-            const char* field, std::size_t& total,std::set<std::string>* schemaPaths=nullptr)
+            const char* field, std::size_t& total,std::set<std::string>* schemaPaths=nullptr,Drops* drops=nullptr)
         {
             if (!root.contains(field)) return {};
             const auto& value = root.at(field);
@@ -106,17 +112,20 @@ namespace PS::CookedPakRegistryManifest {
             for (const auto& row : value)
             {
                 std::string path;
+                const auto skip=[&](const std::string& reason){
+                    if(!drops)throw std::runtime_error(reason);
+                    drops->emplace_back(std::string(field)+" "+(path.empty()?row.dump().substr(0,160):path.substr(0,256)),reason);
+                };
                 if(row.is_string())path=row.get<std::string>();
                 else if(row.is_object()&&row.size()==2&&row.contains("Path")&&row["Path"].is_string()
                     &&row.contains("Source")&&row["Source"]=="Schema"&&schemaPaths){
-                    path=row["Path"].get<std::string>();schemaPaths->insert(Fold(path));
-                }else throw std::runtime_error(std::string("NativeRegistries.")+field+" requires an object path or {Path, Source: Schema} reference");
-                if (!ValidAssetPath(path))
-                    throw std::runtime_error(std::string("NativeRegistries.") + field
-                        + " contains an invalid cooked asset path");
-                if (!unique.insert(Fold(path)).second)
-                    throw std::runtime_error(std::string("NativeRegistries.") + field
-                        + " contains a duplicate cooked asset path");
+                    path=row["Path"].get<std::string>();
+                }else{skip(std::string("NativeRegistries.")+field+" requires an object path or {Path, Source: Schema} reference");continue;}
+                if (!ValidAssetPath(path)){
+                    skip(std::string("NativeRegistries.") + field + " contains an invalid cooked asset path");continue;}
+                if (!unique.insert(Fold(path)).second){
+                    skip(std::string("NativeRegistries.") + field + " contains a duplicate cooked asset path");continue;}
+                if(row.is_object())schemaPaths->insert(Fold(path));
                 result.push_back(std::move(path));
                 if (++total > 16384)
                     throw std::runtime_error(
@@ -141,25 +150,33 @@ namespace PS::CookedPakRegistryManifest {
             "Journals", "Lore",
             "EquipmentEffects", "WearableMeshData", "MeleeAttackClasses",
             "RangedAttackClasses", "WorldComponents", "ConsoleCommands", "LocalServices", "CacheAssets", "Skills", "SkillPerks", "Enums", "Buildings"}};
-        for (const auto& [key, unused] : native.items())
-        {
-            (void)unused;
-            if (std::ranges::find(Allowed, key) == Allowed.end()&&!PS::NativeDataFamilies::Find(key))
-                throw std::runtime_error("NativeRegistries contains unsupported lane '"
-                    + key + "'");
-        }
-
         Manifest result;
         result.Owner = owner;
         result.Source = source;
         std::size_t total = 0;
+        // A failing section is left out on its own; the document limit still rejects everything.
+        const auto isolate=[&](const std::string& lane,auto&& work){
+            const auto before=total;
+            try{work();}
+            catch(const std::exception& error){
+                if(std::string_view(error.what()).find("document limit")!=std::string_view::npos)throw;
+                total=before;result.Dropped.emplace_back(lane,error.what());
+            }
+        };
+        for (const auto& [key, unused] : native.items())
+        {
+            (void)unused;
+            if (std::ranges::find(Allowed, key) == Allowed.end()&&!PS::NativeDataFamilies::Find(key))
+                result.Dropped.emplace_back(key,"NativeRegistries contains unsupported lane '"+key+"'");
+        }
         for (const auto* lane : {"Items", "Recipes", "Quests", "CombatSpells",
             "UtilitySpells", "EquipmentEffects", "Journals", "Lore"})
-        {
-            auto paths = Detail::ReadPaths(native, lane, total,&result.SchemaPaths);
-            if (!paths.empty()) result.AssetLanes.push_back({lane, std::move(paths)});
-        }
-        for(const auto* lane:{"Skills","SkillPerks","Enums"}){
+            isolate(lane,[&]{
+                // One bad item path drops that path only; the mod's other items still register.
+                auto paths = Detail::ReadPaths(native, lane, total,&result.SchemaPaths,&result.Dropped);
+                if (!paths.empty()) result.AssetLanes.push_back({lane, std::move(paths)});
+            });
+        for(const auto* lane:{"Skills","SkillPerks","Enums"})isolate(lane,[&]{
             auto paths=Detail::ReadPaths(native,lane,total);std::set<std::string> unique;
             for(const auto& path:paths){
                 if(!Detail::OwnedObjectPath(path,owner))throw std::runtime_error(std::string("NativeRegistries.")+lane+" requires full mod-owned cooked object paths");
@@ -167,7 +184,8 @@ namespace PS::CookedPakRegistryManifest {
             }
             std::ranges::sort(paths);
             if(!paths.empty())result.AssetLanes.push_back({lane,std::move(paths)});
-        }
+        });
+        isolate("Buildings",[&]{
         auto buildings=Detail::ReadPaths(native,"Buildings",total);
         std::set<std::string> buildingPaths;
         for(const auto& path:buildings){
@@ -178,7 +196,8 @@ namespace PS::CookedPakRegistryManifest {
                 throw std::runtime_error("Buildings requires unique full cooked object paths, not class or schema references");
         }
         if(!buildings.empty())result.AssetLanes.push_back({"Buildings",std::move(buildings)});
-        for(const auto& family:PS::NativeDataFamilies::Families){
+        });
+        for(const auto& family:PS::NativeDataFamilies::Families)isolate(family.Lane,[&]{
             auto paths=Detail::ReadPaths(native,family.Lane,total);std::set<std::string> unique;
             for(const auto& path:paths){
                 const auto dot=path.find('.',path.find_last_of('/')+1);
@@ -187,18 +206,19 @@ namespace PS::CookedPakRegistryManifest {
                 if(!unique.insert(Detail::Fold(path)).second)throw std::runtime_error("Duplicate cooked object path (case-insensitive)");
             }
             std::ranges::sort(paths);if(!paths.empty())result.AssetLanes.push_back({family.Lane,std::move(paths)});
-        }
-        result.WearableMeshData = Detail::ReadPaths(
-            native, "WearableMeshData", total,&result.SchemaPaths);
-        result.MeleeAttackClasses = Detail::ReadPaths(
-            native, "MeleeAttackClasses", total);
-        result.RangedAttackClasses = Detail::ReadPaths(
-            native, "RangedAttackClasses", total);
-        result.WorldComponents = Detail::ReadPaths(native,"WorldComponents",total);
-        for(const auto& path:result.WorldComponents)
+        });
+        isolate("WearableMeshData",[&]{result.WearableMeshData = Detail::ReadPaths(
+            native, "WearableMeshData", total,&result.SchemaPaths);});
+        isolate("MeleeAttackClasses",[&]{result.MeleeAttackClasses = Detail::ReadPaths(
+            native, "MeleeAttackClasses", total);});
+        isolate("RangedAttackClasses",[&]{result.RangedAttackClasses = Detail::ReadPaths(
+            native, "RangedAttackClasses", total);});
+        isolate("WorldComponents",[&]{auto paths = Detail::ReadPaths(native,"WorldComponents",total);
+        for(const auto& path:paths)
             if(!Detail::OwnedObjectPath(path,owner)||!path.ends_with("_C"))
                 throw std::runtime_error("NativeRegistries.WorldComponents requires mod-owned cooked component class paths ending in _C");
-        if(native.contains("LocalServices")){
+        result.WorldComponents=std::move(paths);});
+        if(native.contains("LocalServices"))isolate("LocalServices",[&]{std::vector<Manifest::LocalService> services;
             const auto& declarations=native.at("LocalServices");std::set<std::string> ids,classes;
             if(!declarations.is_array()||declarations.size()>256)throw std::runtime_error("LocalServices requires at most 256 declarations");
             for(const auto& row:declarations){
@@ -217,10 +237,11 @@ namespace PS::CookedPakRegistryManifest {
                     }
                 }
                 if(!service.Templates&&service.ComputeProviders.empty())throw std::runtime_error("LocalServices must request templates or native compute");
-                result.LocalServices.push_back(std::move(service));if(++total>16384)throw std::runtime_error("Cooked registry exceeds the 16384-reference document limit");
+                services.push_back(std::move(service));if(++total>16384)throw std::runtime_error("Cooked registry exceeds the 16384-reference document limit");
             }
-        }
-        if(native.contains("ConsoleCommands")){
+            result.LocalServices=std::move(services);
+        });
+        if(native.contains("ConsoleCommands"))isolate("ConsoleCommands",[&]{std::vector<Manifest::ConsoleCommand> commands;
             const auto& declarations=native.at("ConsoleCommands");std::set<std::string> ids;
             if(!declarations.is_array()||declarations.size()>256)throw std::runtime_error("ConsoleCommands requires at most 256 declarations");
             for(const auto& entry:declarations){
@@ -231,21 +252,24 @@ namespace PS::CookedPakRegistryManifest {
                 if(id.empty()||id.size()>96||id=="."||id==".."||!std::all_of(id.begin(),id.end(),[](unsigned char c){return (c>='a'&&c<='z')||(c>='A'&&c<='Z')||(c>='0'&&c<='9')||c=='_'||c=='-'||c=='.';})
                     ||!ids.insert(Detail::Fold(id)).second||!Detail::OwnedObjectPath(path,owner)||!path.ends_with("_C"))
                     throw std::runtime_error("ConsoleCommands requires unique token IDs and mod-owned component class paths ending in _C");
-                result.ConsoleCommands.push_back({owner,id,path});
+                commands.push_back({owner,id,path});
                 if(++total>16384)throw std::runtime_error("Cooked registry exceeds the 16384-reference document limit");
             }
-        }
-        result.CacheAssets = Detail::ReadPaths(native,"CacheAssets",total);
-        for(const auto& path:result.CacheAssets){
+            result.ConsoleCommands=std::move(commands);
+        });
+        isolate("CacheAssets",[&]{auto artwork = Detail::ReadPaths(native,"CacheAssets",total);
+        for(const auto& path:artwork){
             const auto dot=path.find('.',path.find_last_of('/')+1);
             if(dot==path.npos||dot==path.size()-1||path.find_first_of("\\:")!=path.npos
                 ||std::any_of(path.begin(),path.end(),[](unsigned char c){return c<32||c==127;}))
                 throw std::runtime_error("NativeRegistries.CacheAssets requires full original artwork object paths");
         }
-        if(document.contains("LoaderDefinitions")){
+        result.CacheAssets=std::move(artwork);});
+        if(document.contains("LoaderDefinitions"))isolate("LoaderDefinitions",[&]{
             const auto& definitions=document.at("LoaderDefinitions");
             if(!definitions.is_object())throw std::runtime_error("LoaderDefinitions must be an object");
-            for(const auto& [lane,entries]:definitions.items()){
+            auto accepted=nlohmann::json::object();
+            for(const auto& [lane,entries]:definitions.items())isolate("LoaderDefinitions."+lane,[&]{
                 if(lane!="Recipes"&&lane!="Journals"&&lane!="Lore"&&lane!="Buildings"&&lane!="DataTables")throw std::runtime_error("Unsupported cooked loader lane: "+lane);
                 if(!entries.is_object()||entries.size()>4096)throw std::runtime_error("Cooked loader lane must be an object with at most 4096 entries");
                 std::set<std::string> unique;
@@ -302,11 +326,13 @@ namespace PS::CookedPakRegistryManifest {
                     }
                     if(++total>16384)throw std::runtime_error("Cooked registry exceeds the 16384-reference document limit");
                 }
-            }
-            result.LoaderDefinitions=definitions;
-        }
+                accepted[lane]=entries;
+            });
+            result.LoaderDefinitions=std::move(accepted);
+        });
         if (!total)
-            throw std::runtime_error("Cooked registry must declare at least one asset or loader definition");
+            throw std::runtime_error(result.Dropped.empty()?"Cooked registry must declare at least one asset or loader definition"
+                :"Nothing in this registry document was usable; first problem: "+result.Dropped.front().second);
 
         std::uint64_t hash = 14695981039346656037ull;
         Detail::Hash(hash, owner);
@@ -327,6 +353,7 @@ namespace PS::CookedPakRegistryManifest {
         if(!result.LocalServices.empty()){Detail::Hash(hash,"LocalServices");for(const auto& service:result.LocalServices){Detail::Hash(hash,service.Id);Detail::Hash(hash,service.Class);Detail::Hash(hash,service.Templates?"Templates":"");for(const auto& provider:service.ComputeProviders)Detail::Hash(hash,provider);}}
         Detail::Hash(hash,result.LoaderDefinitions.dump());
         if(!result.SchemaPaths.empty()){Detail::Hash(hash,"SchemaReferences");for(const auto& path:result.SchemaPaths)Detail::Hash(hash,path);}
+        if(!result.Dropped.empty()){Detail::Hash(hash,"Dropped");for(const auto& [lane,reason]:result.Dropped)Detail::Hash(hash,lane);}
         result.Fingerprint = hash;
         return result;
     }
