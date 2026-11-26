@@ -11,6 +11,16 @@ RuneSchema 0.9.0.7 has been promoted to main. See [the release notes](../RELEASE
 
 ## Changes since 0.8.0.3
 
+### Pending after 0.9.0.7 · November 26
+
+**For players**
+
+- One broken declaration no longer makes a mod's other items disappear from your characters. A bad item path, section or catalogue page is now left out on its own, and everything else in that mod still registers and loads. Previously, one bad entry could unregister every item in that file or catalogue, and the game then dropped those items when your character loaded.
+
+**For mod authors**
+
+- Each left-out part is reported as `RS-RGST-016` with its reason. See [When part of a document is invalid](COOKED-PAK-REGISTRY-MANIFEST.md#when-part-of-a-document-is-invalid).
+
 ### 0.9.0.7: Wiki, plugin tiles, Grand Exchange support, character sheet · November 20–21
 
 This candidate collects everything since 0.9.0.3.

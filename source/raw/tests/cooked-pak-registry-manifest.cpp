@@ -8,6 +8,8 @@
 int main()
 {
     using namespace PS::CookedPakRegistryManifest;
+    // A bad declaration is refused (nothing else usable) or left out with a reason; never silently kept.
+    const auto Refused=[](auto&& parse){try{const auto result=parse();return !result||!result->Dropped.empty();}catch(const std::exception&){return true;}};
     Reset();
     const nlohmann::json document = {
         {"SchemaVersion", 1},
@@ -42,10 +44,10 @@ int main()
     assert(Parse(emptyWorld,"ExampleMod","registry/world.jsonc")->Fingerprint==published.Fingerprint);
     for(const auto* path:{"/Game/Mods/Other/BP.BP_C","/Game/Mods/ExampleMod/BP.BP","/Script/Engine.ActorComponent","/Game/Mods/ExampleMod/BP.BP_C:Sub"}){
         auto invalidWorld=worldOnly;invalidWorld["NativeRegistries"]["WorldComponents"]={path};bool bad=false;
-        try{Parse(invalidWorld,"ExampleMod","registry/world.jsonc");}catch(const std::runtime_error&){bad=true;}assert(bad);
+        bad=Refused([&]{return Parse(invalidWorld,"ExampleMod","registry/world.jsonc");});assert(bad);
     }
     auto duplicateWorld=worldOnly;duplicateWorld["NativeRegistries"]["WorldComponents"].push_back(component);bool badWorld=false;
-    try{Parse(duplicateWorld,"ExampleMod","registry/world.jsonc");}catch(const std::runtime_error&){badWorld=true;}assert(badWorld);
+    badWorld=Refused([&]{return Parse(duplicateWorld,"ExampleMod","registry/world.jsonc");});assert(badWorld);
 
     const nlohmann::json commands={{"NativeRegistries",{{"ConsoleCommands",nlohmann::json::array({{{"Version",1},{"Id","Weather"},{"Class",component}}})}}}};
     const auto command=Parse(commands,"ExampleMod","registry/commands.jsonc");
@@ -60,10 +62,10 @@ int main()
         {{"Version",1},{"Id","Weather"},{"Class",component},{"Owner","Other"}},
         {{"Version",1},{"Id","Weather"},{"Class","/Game/Mods/ExampleMod/BP.BP"}}})){
         auto bad=commands;bad["NativeRegistries"]["ConsoleCommands"][0]=invalid;bool rejected=false;
-        try{Parse(bad,"ExampleMod","registry/commands.jsonc");}catch(const std::runtime_error&){rejected=true;}assert(rejected);
+        rejected=Refused([&]{return Parse(bad,"ExampleMod","registry/commands.jsonc");});assert(rejected);
     }
     auto duplicateCommand=commands;duplicateCommand["NativeRegistries"]["ConsoleCommands"].push_back({{"Version",1},{"Id","weather"},{"Class",component}});
-    bool rejectedCommand=false;try{Parse(duplicateCommand,"ExampleMod","registry/commands.jsonc");}catch(const std::runtime_error&){rejectedCommand=true;}assert(rejectedCommand);
+    bool rejectedCommand=false;rejectedCommand=Refused([&]{return Parse(duplicateCommand,"ExampleMod","registry/commands.jsonc");});assert(rejectedCommand);
 
     const nlohmann::json local={{"NativeRegistries",{{"LocalServices",nlohmann::json::array({{{"Version",1},{"Id","templates"},{"Class","/Game/ExampleMod/Core/BPC_Template.BPC_Template_C"},{"Templates",true}}})}}}};
     const auto localService=Parse(local,"ExampleMod","registry/local.jsonc");assert(localService&&localService->LocalServices.size()==1&&localService->LocalServices[0].Templates);
@@ -75,9 +77,9 @@ int main()
         {{"Version",1},{"Id","t"},{"Class",component}},
         {{"Version",1},{"Id","t"},{"Class",component},{"ComputeProviders",{"Other.Math/Probe"}}},
         {{"Version",1},{"Id","t"},{"Class",component},{"Templates",true},{"Root","C:/other"}}})){
-        auto invalid=local;invalid["NativeRegistries"]["LocalServices"][0]=row;bool rejected=false;try{Parse(invalid,"ExampleMod","registry/local.jsonc");}catch(const std::runtime_error&){rejected=true;}assert(rejected);
+        auto invalid=local;invalid["NativeRegistries"]["LocalServices"][0]=row;bool rejected=false;rejected=Refused([&]{return Parse(invalid,"ExampleMod","registry/local.jsonc");});assert(rejected);
     }
-    auto duplicateLocal=local;duplicateLocal["NativeRegistries"]["LocalServices"].push_back(duplicateLocal["NativeRegistries"]["LocalServices"][0]);bool rejectedLocal=false;try{Parse(duplicateLocal,"ExampleMod","registry/local.jsonc");}catch(const std::runtime_error&){rejectedLocal=true;}assert(rejectedLocal);
+    auto duplicateLocal=local;duplicateLocal["NativeRegistries"]["LocalServices"].push_back(duplicateLocal["NativeRegistries"]["LocalServices"][0]);bool rejectedLocal=false;rejectedLocal=Refused([&]{return Parse(duplicateLocal,"ExampleMod","registry/local.jsonc");});assert(rejectedLocal);
 
     auto artwork=document;artwork["NativeRegistries"]["CacheAssets"]={"/Example/Icons/T_Original.T_Original"};
     const auto loose=Parse(artwork,"ExampleMod","registry/example.jsonc");
@@ -87,10 +89,10 @@ int main()
     assert(loose->AssetLanes.size()==published.AssetLanes.size());
     assert(loose->Fingerprint!=published.Fingerprint);
     auto badArt=artwork;badArt["NativeRegistries"]["CacheAssets"]={"../bad"};
-    bool invalidArt=false;try{Parse(badArt,"ExampleMod","registry/bad.jsonc");}catch(const std::runtime_error&){invalidArt=true;}assert(invalidArt);
+    bool invalidArt=false;invalidArt=Refused([&]{return Parse(badArt,"ExampleMod","registry/bad.jsonc");});assert(invalidArt);
     for(const auto* bad:{"/Example/Icons/NoObject","/Example/Icons/Empty.","/Example/Icons/T.T:Subobject"}){
         badArt=artwork;badArt["NativeRegistries"]["CacheAssets"]={bad};invalidArt=false;
-        try{Parse(badArt,"ExampleMod","registry/bad.jsonc");}catch(const std::runtime_error&){invalidArt=true;}assert(invalidArt);
+        invalidArt=Refused([&]{return Parse(badArt,"ExampleMod","registry/bad.jsonc");});assert(invalidArt);
     }
     assert(Snapshot().size() == 1);
 
@@ -107,22 +109,47 @@ int main()
     assert(Publish(document, "ExampleMod", "pak:/Example.RSREG_Test"));
     assert(Snapshot().size() == 1);
 
+    // One bad item path drops only that path: the document's good items still register.
     auto invalid = document;
     invalid["NativeRegistries"]["Items"].push_back("../bad");
-    bool rejected = false;
-    try { Publish(invalid, "BadMod", "pak:/Bad.RSREG_Bad"); }
-    catch (const std::runtime_error&) { rejected = true; }
-    assert(rejected);
-    assert(Snapshot().size() == 1);
+    Manifest partial;
+    assert(Publish(invalid, "BadMod", "pak:/Bad.RSREG_Bad", &partial));
+    assert(Snapshot().size() == 2);
+    assert(partial.Dropped.size() == 1 && partial.Dropped[0].first == "Items ../bad");
+    assert(partial.AssetLanes[0].Name == "Items" && partial.AssetLanes[0].Paths == std::vector<std::string>{"/Example/Items/ITEM_Test.ITEM_Test"});
+    assert(partial.WearableMeshData.size() == 1 && partial.MeleeAttackClasses.size() == 2); // Other sections are untouched.
+    assert(partial.Fingerprint != Parse(document, "BadMod", "pak:/Bad.RSREG_Bad")->Fingerprint); // A dropped path changes the fingerprint.
 
     auto duplicate = document;
     duplicate["NativeRegistries"]["Items"].push_back(
         "/Example/Items/ITEM_Test.ITEM_Test");
-    rejected = false;
-    try { Publish(duplicate, "BadMod", "pak:/Bad.RSREG_Duplicate"); }
-    catch (const std::runtime_error&) { rejected = true; }
-    assert(rejected);
-    assert(Snapshot().size() == 1);
+    assert(Publish(duplicate, "BadMod", "pak:/Bad.RSREG_Duplicate", &partial));
+    assert(partial.Dropped.size() == 1 && partial.AssetLanes[0].Paths.size() == 1);
+
+    // A failing side section (here WorldComponents) no longer takes the items with it.
+    auto harvesting = document;
+    harvesting["NativeRegistries"]["WorldComponents"] = {"/Example/Blueprints/BP_World.BP_World"};
+    const auto kept = Parse(harvesting, "Example", "registry/harvesting.jsonc");
+    assert(kept && kept->WorldComponents.empty() && kept->Dropped.size() == 1 && kept->Dropped[0].first == "WorldComponents");
+    assert(kept->AssetLanes.size() == 1 && kept->AssetLanes[0].Paths.size() == 1);
+    // Unknown section names are left out the same way.
+    auto unknown = document;unknown["NativeRegistries"]["Teleporters"] = {"/Example/A.A"};
+    const auto withoutUnknown = Parse(unknown, "ExampleMod", "registry/unknown.jsonc");
+    assert(withoutUnknown && withoutUnknown->Dropped.size() == 1 && withoutUnknown->Dropped[0].first == "Teleporters" && withoutUnknown->AssetLanes.size() == 1);
+    // A document whose only content is bad is still refused as a whole, naming the first problem.
+    bool onlyBad = false;
+    try { Parse(nlohmann::json{{"NativeRegistries", {{"Items", {"../bad"}}}}}, "Example", "registry/bad.jsonc"); }
+    catch (const std::runtime_error& error) { onlyBad = std::string(error.what()).find("first problem") != std::string::npos; }
+    assert(onlyBad);
+    // The document-wide limit still refuses everything.
+    auto huge = nlohmann::json::array();for (int i = 0; i < 4096; ++i) huge.push_back("/Example/Items/I" + std::to_string(i) + ".I" + std::to_string(i));
+    nlohmann::json tooMany{{"NativeRegistries", nlohmann::json::object()}};
+    for (const auto* lane : {"Items", "Recipes", "Quests", "CombatSpells", "UtilitySpells"}) tooMany["NativeRegistries"][lane] = huge;
+    bool limited = false;
+    try { Parse(tooMany, "Example", "registry/huge.jsonc"); } catch (const std::runtime_error& error) { limited = std::string(error.what()).find("document limit") != std::string::npos; }
+    assert(limited);
+    // An unchanged, valid document keeps its fingerprint (no change for mods that were already correct).
+    assert(Parse(document, "ExampleMod", "pak:/Example.RSREG_Test")->Fingerprint == published.Fingerprint);
 
     Reset();
     const std::string recipe="/Example/Recipes/RECIPE_Dye.RECIPE_Dye";
@@ -157,14 +184,17 @@ int main()
     Manifest conflictMetadata;
     conflictMetadata=*Parse(conflict,"Example","pak:/Example.RSREG_Duplicate");
     assert(firstMetadata.Fingerprint!=conflictMetadata.Fingerprint);
-    rejected=false;
+    bool rejected=false;
     try{Publish(conflict,"Example","pak:/Example.RSREG_Duplicate");}catch(const std::runtime_error&){rejected=true;}
     assert(rejected&&Definitions("Journals")[0].Body==journalBody);
 
+    // Refused outright when nothing is usable; otherwise the bad section is left out and named.
     const auto rejectDocument=[&](const nlohmann::json& value){
-        const auto before=Snapshot().size();bool failed=false;
-        try{Publish(value,"Bad","pak:/Bad.RSREG_Test");}catch(const std::runtime_error&){failed=true;}
-        assert(failed && Snapshot().size()==before);
+        const auto before=Snapshot().size();bool failed=false;Manifest kept;
+        try{failed=!Publish(value,"Bad","pak:/Bad.RSREG_Test",&kept)||!kept.Dropped.empty();}
+        catch(const std::runtime_error&){failed=true;assert(Snapshot().size()==before);}
+        assert(failed);
+        for(const auto& [lane,reason]:kept.Dropped)if(lane.starts_with("LoaderDefinitions."))assert(!kept.LoaderDefinitions.contains(lane.substr(18)));
     };
     for(const auto* directive:{"$Clone","$Patch","$Target","VendorID","RuneSchemaVendors","VanillaVendors"}){
         auto value=metadata;value["LoaderDefinitions"]["Recipes"][recipe][directive]="not allowed";rejectDocument(value);
@@ -193,9 +223,11 @@ int main()
     assert(Snapshot()[0].AssetLanes.size()==2);
     assert(Publish({{"NativeRegistries",{{"Recipes",{recipe}}}}},"Example","cooked-reference.jsonc"));
     assert(Definitions("Recipes").size()==1&&Definitions("Recipes")[0].Path==recipe);
-    bool runtimeBodyRejected=false;
-    try{Publish({{"NativeRegistries",{{"Recipes",{schemaRef}}}},{"LoaderDefinitions",{{"Recipes",{{runtime,nlohmann::json::object()}}}}}},"Example","runtime-body.jsonc");}catch(const std::exception&){runtimeBodyRejected=true;}
-    assert(runtimeBodyRejected);
+    // Editing a schema-created recipe through LoaderDefinitions is refused; the schema reference itself stays.
+    Manifest runtimeBody;
+    assert(Publish({{"NativeRegistries",{{"Recipes",{schemaRef}}}},{"LoaderDefinitions",{{"Recipes",{{runtime,nlohmann::json::object()}}}}}},"Example","runtime-body.jsonc",&runtimeBody));
+    assert(runtimeBody.Dropped.size()==1&&runtimeBody.Dropped[0].first=="LoaderDefinitions.Recipes"&&runtimeBody.LoaderDefinitions.empty());
+    assert(Definitions("Recipes").size()==1);
     assert(Publish({{"NativeRegistries",{{"Recipes",{runtime}}}}},"Example","cooked-runeschema-namespace.jsonc"));
     assert(Definitions("Recipes").size()==2); // Namespace alone is not provenance.
     Reset();
@@ -205,10 +237,10 @@ int main()
         assert(parsed&&parsed->AssetLanes.size()==1&&parsed->AssetLanes[0].Name==family.Lane);
         for(const auto& bad:nlohmann::json::array({"/SharedPlugin/NoObject","/SharedPlugin/A.","/SharedPlugin/A.A:Child","/Script/Dominion.ItemData",{{"Path","/SharedPlugin/A.A"},{"Source","Schema"}}})){
             auto invalid=declared;invalid["NativeRegistries"][family.Lane]=nlohmann::json::array({bad});bool failed=false;
-            try{Parse(invalid,"DifferentFolderOwner","bad.json");}catch(const std::exception&){failed=true;}assert(failed);
+            failed=Refused([&]{return Parse(invalid,"DifferentFolderOwner","bad.json");});assert(failed);
         }
         auto duplicate=declared;duplicate["NativeRegistries"][family.Lane].push_back("/sharedplugin/content/a.a");bool failed=false;
-        try{Parse(duplicate,"DifferentFolderOwner","duplicate.json");}catch(const std::exception&){failed=true;}assert(failed);
+        failed=Refused([&]{return Parse(duplicate,"DifferentFolderOwner","duplicate.json");});assert(failed);
     }
     assert(!PS::NativeDataFamilies::Find("Skills")&&!PS::NativeDataFamilies::Find("Difficulty")&&!PS::NativeDataFamilies::Find("Entitlements"));
     using Identity=PS::NativeDataFamilies::Identity;
@@ -234,7 +266,7 @@ int main()
     assert(Definitions("Buildings")[0].Body.at("Unlock")==false);
     assert(Definitions("Buildings")[0].Body.at("PersistenceID")=="existing-save-id");
     const auto rejectBuilding=[&](const nlohmann::json& value){bool failed=false;
-        try{Parse(value,"Example","invalid-building.jsonc");}catch(const std::exception&){failed=true;}assert(failed);};
+        failed=Refused([&]{return Parse(value,"Example","invalid-building.jsonc");});assert(failed);};
     auto conflicting=buildingBody;conflicting["AddTo"]["PageIndex"]=1;
     bool conflictRejected=false;
     try{Publish({{"LoaderDefinitions",{{"Buildings",{{building,conflicting}}}}}},"Example","conflict.jsonc");}
@@ -260,8 +292,7 @@ int main()
     Reset();
     for(const auto* lane:{"Items","Recipes","Journals","Lore","WearableMeshData","CacheAssets"}){
         bool duplicateRejected=false;
-        try{Parse({{"NativeRegistries",{{lane,{"/Example/A.A","/example/a.a"}}}}},"Example","duplicate.jsonc");}
-        catch(const std::exception&){duplicateRejected=true;}assert(duplicateRejected);
+        duplicateRejected=Refused([&]{return Parse({{"NativeRegistries",{{lane,{"/Example/A.A","/example/a.a"}}}}},"Example","duplicate.jsonc");});assert(duplicateRejected);
     }
     const std::string mixed="/Example/Mixed.Mixed",lower="/example/mixed.mixed";
     for(const auto* lane:{"Recipes","Journals","Lore","Buildings"}){
@@ -273,8 +304,7 @@ int main()
         try{Publish({{"LoaderDefinitions",{{lane,{{mixed,{{"Unlock",false}}}}}}}},"Example","conflict.jsonc");}
         catch(const std::exception&){conflict=true;}assert(conflict&&Snapshot().size()==before&&Definitions(lane)[0].Body.at("Unlock")==true);
         bool duplicate=false;
-        try{Parse({{"LoaderDefinitions",{{lane,{{mixed,nlohmann::json::object()},{lower,nlohmann::json::object()}}}}}},"Example","aliases.jsonc");}
-        catch(const std::exception&){duplicate=true;}assert(duplicate);
+        duplicate=Refused([&]{return Parse({{"LoaderDefinitions",{{lane,{{mixed,nlohmann::json::object()},{lower,nlohmann::json::object()}}}}}},"Example","aliases.jsonc");});assert(duplicate);
     }
     Reset();
     assert(Publish({{"NativeRegistries",{{"Journals",{mixed}}}}},"Example","journal.jsonc"));
@@ -282,9 +312,8 @@ int main()
     try{Publish({{"LoaderDefinitions",{{"Lore",{{lower,nlohmann::json::object()}}}}}},"Example","lore.jsonc");}
     catch(const std::exception&){crossLane=true;}assert(crossLane&&Snapshot().size()==1);
     bool schemaAlias=false;
-    try{Parse({{"NativeRegistries",{{"Recipes",nlohmann::json::array({{{"Path",mixed},{"Source","Schema"}}})}}},
-        {"LoaderDefinitions",{{"Recipes",{{lower,nlohmann::json::object()}}}}}},"Example","schema-alias.jsonc");}
-    catch(const std::exception&){schemaAlias=true;}assert(schemaAlias);
+    schemaAlias=Refused([&]{return Parse({{"NativeRegistries",{{"Recipes",nlohmann::json::array({{{"Path",mixed},{"Source","Schema"}}})}}},
+        {"LoaderDefinitions",{{"Recipes",{{lower,nlohmann::json::object()}}}}}},"Example","schema-alias.jsonc");});assert(schemaAlias);
     Reset();
     const std::string tableSource="/Example/Tables/DT_Extra.DT_Extra",tableTarget="/Game/Tables/DT_Native.DT_Native";
     const auto tableDocument=[&](const nlohmann::json& body){return nlohmann::json{{"LoaderDefinitions",{{"DataTables",{{tableSource,body}}}}}};};
@@ -293,9 +322,9 @@ int main()
     for(const auto& bad:nlohmann::json::array({nlohmann::json::object(),{{"Target",7}},{{"Target","DT_Native"}},
         {{"Target","/Game/Tables/DT_Native"}},{{"Target","/Game/Tables/A.A:Subobject"}},{{"Target","/Other/Tables/A.A"}},
         {{"Target",tableTarget},{"Replace",true}},{{"Target",tableTarget},{"Unlock",true}}})){
-        bool rejected=false;try{Parse(tableDocument(bad),"Example","bad.jsonc");}catch(const std::exception&){rejected=true;}assert(rejected);
+        bool rejected=false;rejected=Refused([&]{return Parse(tableDocument(bad),"Example","bad.jsonc");});assert(rejected);
     }
-    bool foreign=false;try{Parse(tableDocument({{"Target",tableTarget}}),"OtherOwner","bad.jsonc");}catch(const std::exception&){foreign=true;}assert(foreign);
+    bool foreign=false;foreign=Refused([&]{return Parse(tableDocument({{"Target",tableTarget}}),"OtherOwner","bad.jsonc");});assert(foreign);
     Reset();
     Manifest large;large.Owner="Large";large.Source="large.jsonc";
     constexpr int count=23000;

@@ -18,6 +18,9 @@ struct Group {
     std::string Owner,Root;
     std::vector<std::string> Paths;
     std::vector<CookedPakRegistryManifest::Manifest> Manifests;
+    // Child pages left out because they failed on their own: {path, reason}. The rest of the catalogue
+    // still registers; the catalogue-wide limits and cross-page conflicts still refuse everything.
+    std::vector<std::pair<std::string,std::string>> Dropped;
     Json RootEntries=Json::array();
     std::size_t Bytes=0,References=0;
 };
@@ -120,7 +123,11 @@ inline Group Resolve(const std::string& rootPath,const Asset& root,const std::fu
     append(rootPath,root,false);
     for(const auto& path:children){
         try{auto child=load(path);Envelope(child.Document,true);append(path,child,true);}
-        catch(const std::exception& error){throw std::runtime_error("Registry shard '"+path+"': "+error.what());}
+        catch(const std::exception& error){
+            const std::string message=error.what();
+            if(message.find("catalogue exceeds")!=std::string::npos)throw std::runtime_error("Registry shard '"+path+"': "+message);
+            result.Dropped.emplace_back(path,message);
+        }
     }
     for(const auto* lane:{"Recipes","Journals","Lore","Buildings"})(void)CookedPakRegistryManifest::MergeDefinitions(result.Manifests,lane,true);
     return result;

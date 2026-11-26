@@ -28,10 +28,18 @@ int main(){
     M::Publish(doc,"Shadowmancy","second");Check(M::Snapshot().size()==2);
     auto conflicting=doc;conflicting["NativeRegistries"]["SkillPerks"]={skill};
     Reject([&]{M::Publish(conflicting,"Shadowmancy","third");});Check(M::Snapshot().size()==2);
+    // A bad Skills/SkillPerks/Enums list is left out on its own; the other two still declare.
+    const auto leftOut=[&](const nlohmann::json& invalid,const char* lane){
+        const auto kept=M::Parse(invalid,"Shadowmancy","test");
+        Check(kept&&kept->Dropped.size()==1&&kept->Dropped[0].first==lane&&kept->AssetLanes.size()==2);
+        for(const auto& value:kept->AssetLanes)Check(value.Name!=lane);
+    };
     for(const auto* lane:{"Skills","SkillPerks","Enums"}){
-        auto invalid=doc;invalid["NativeRegistries"][lane]={"/Game/Native/Asset.Asset"};Reject([&]{M::Parse(invalid,"Shadowmancy","test");});
-        invalid=doc;invalid["NativeRegistries"][lane]={{{"Path",skill},{"Source","Schema"}}};Reject([&]{M::Parse(invalid,"Shadowmancy","test");});
-        invalid=doc;invalid["NativeRegistries"][lane]={path,"/game/mods/shadowmancy/enums/e_mode.e_mode"};Reject([&]{M::Parse(invalid,"Shadowmancy","test");});
+        auto invalid=doc;invalid["NativeRegistries"][lane]={"/Game/Native/Asset.Asset"};leftOut(invalid,lane);
+        invalid=doc;invalid["NativeRegistries"][lane]={{{"Path",skill},{"Source","Schema"}}};leftOut(invalid,lane);
+        invalid=doc;invalid["NativeRegistries"][lane]={path,"/game/mods/shadowmancy/enums/e_mode.e_mode"};leftOut(invalid,lane);
+        // Alone in a document, the bad list still refuses the document.
+        Reject([&]{M::Parse({{"NativeRegistries",{{lane,{"/Game/Native/Asset.Asset"}}}}},"Shadowmancy","test");});
     }
     M::Reset();
 }

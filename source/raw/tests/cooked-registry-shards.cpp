@@ -41,7 +41,9 @@ int main()try{
         for(const std::string directory:{"/Game/Mods/Dye/RegistryExtra/","/Game/Gameplay/Registry/","/Plugin/Registry/"})
             Check(RegistryFolderOwner(directory).empty()&&RegistryFolderOwner(directory+"DA_Registry_Test.DA_Registry_Test").empty());
         Reject([&]{Resolve("/Game/Mods/Other/Registry/DA_Registry_Main.DA_Registry_Main",compatible,load);});
-        Reject([&]{Resolve(alias,compatible,[&](const std::string&){return Make(Payload(recipeA),"Ritualist");});});
+        // Pages claiming another owner are left out; nothing of theirs registers.
+        {const auto foreign=Resolve(alias,compatible,[&](const std::string&){return Make(Payload(recipeA),"Ritualist");});
+            Check(foreign.Dropped.size()==2&&foreign.Manifests.empty()&&foreign.Paths.size()==1);}
         Reject([&]{Resolve("/Game/Mods/Dye/Registry/../DA_Registry_Main.DA_Registry_Main",compatible,load);});
         Reject([&]{Resolve("/Game/Mods/Dye/Registry/Shards/Root.Root",compatible,load);});
     }
@@ -55,13 +57,19 @@ int main()try{
     M::PublishBatch(group.Manifests);Check(M::Definitions("Recipes").size()==2);
     const auto count=M::Snapshot().size();M::PublishBatch(group.Manifests);Check(M::Snapshot().size()==count);
     const auto fail=[&](const Asset& index){const auto before=M::Snapshot().size();Reject([&]{const auto candidate=Resolve(rootPath,index,load);M::PublishBatch(candidate.Manifests);});Check(M::Snapshot().size()==before);};
-    assets.erase(b);fail(root);assets[b]=Make(Payload(recipeB));
-    auto wrong=assets[b];wrong.Owner="OtherMod";assets[b]=wrong;fail(root);assets[b]=Make(Payload(recipeB));
-    auto nested=Payload(recipeB);nested["RegistryShards"]={a};assets[b]=Make(nested);fail(root);assets[b]=Make(Payload(recipeB));
-    auto marker=Payload(recipeB);marker.erase("RegistryShard");assets[b]=Make(marker);fail(root);
-    marker=Payload(recipeB);marker["RegistryShard"]=false;assets[b]=Make(marker);fail(root);
-    marker=Payload(recipeB);marker["Entries"].push_back({{"Id","not a native shard"}});assets[b]=Make(marker);fail(root);
-    marker=Payload(recipeB);marker["Unknown"]=true;assets[b]=Make(marker);fail(root);assets[b]=Make(Payload(recipeB));
+    // One bad page drops only that page: the root and the other page still register.
+    const auto dropB=[&](const Asset& index){const auto candidate=Resolve(rootPath,index,load);
+        Check(candidate.Dropped.size()==1&&candidate.Dropped[0].first==b&&candidate.Manifests.size()==1&&candidate.Paths.size()==2
+            &&std::ranges::find(candidate.Paths,b)==candidate.Paths.end());};
+    assets.erase(b);dropB(root);assets[b]=Make(Payload(recipeB));
+    auto wrong=assets[b];wrong.Owner="OtherMod";assets[b]=wrong;dropB(root);assets[b]=Make(Payload(recipeB));
+    auto nested=Payload(recipeB);nested["RegistryShards"]={a};assets[b]=Make(nested);dropB(root);assets[b]=Make(Payload(recipeB));
+    auto marker=Payload(recipeB);marker.erase("RegistryShard");assets[b]=Make(marker);dropB(root);
+    marker=Payload(recipeB);marker["RegistryShard"]=false;assets[b]=Make(marker);dropB(root);
+    marker=Payload(recipeB);marker["Entries"].push_back({{"Id","not a native shard"}});assets[b]=Make(marker);dropB(root);
+    marker=Payload(recipeB);marker["Unknown"]=true;assets[b]=Make(marker);dropB(root);assets[b]=Make(Payload(recipeB));
+    // An empty page (the Dye_Capes_Misc failure on Nov 16) no longer hides the rest of the catalogue.
+    assets[b]=Make({{"SchemaVersion",1},{"Entries",Json::array()},{"RegistryShard",true}});dropB(root);assets[b]=Make(Payload(recipeB));
     auto conflict=Payload(recipeA);conflict["LoaderDefinitions"]["Recipes"][recipeA]["Unlock"]=true;assets[b]=Make(conflict);fail(root);assets[b]=Make(Payload(recipeB));
     for(const auto& path:std::vector<std::string>{"/Other/Registry/RSREG_Dye_0001.RSREG_Dye_0001",
         "/Game/Mods/Other/Registry/Shards/RSREG_Dye_0001.RSREG_Dye_0001",
@@ -98,7 +106,7 @@ int main()try{
     unicode+="\"}";Check(unicode.size()>MaxDocumentBytes);
     Reject([&]{ParseJson(unicode);});
     Reject([]{ParseJson(std::string(70,'[')+"0"+std::string(70,']'));});
-    auto oversized=assets[b];oversized.Bytes=MaxDocumentBytes+1;assets[b]=oversized;fail(root);assets[b]=Make(Payload(recipeB));
+    auto oversized=assets[b];oversized.Bytes=MaxDocumentBytes+1;assets[b]=oversized;dropB(root);assets[b]=Make(Payload(recipeB));
     // Aggregate byte and reference ceilings are independent of per-page caps.
     auto byteRoot=root;byteRoot.Document["RegistryShards"]=Json::array();
     for(int i=0;i<256;++i){auto path=Child("Byte"+std::to_string(i));byteRoot.Document["RegistryShards"].push_back(path);auto value=Make(Payload(recipeA));value.Bytes=MaxDocumentBytes;assets[path]=std::move(value);}fail(byteRoot);
