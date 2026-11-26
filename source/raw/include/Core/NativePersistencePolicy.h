@@ -7,6 +7,9 @@ namespace PS::NativePersistencePolicy {
 inline constexpr const char* Variable="dom.PersistenceStrictMode";
 inline bool SessionRequested(bool dedicated,bool /*bypass*/,std::string_view mode)noexcept{return dedicated||mode!="vanilla";}
 inline bool BypassRequested(bool dedicated,bool bypass,std::string_view mode)noexcept{return bypass||dedicated||mode!="vanilla";}
+// A rejected ProcessPlayerStateLoad has skipped its later stages. Accepting it enters the world with default
+// progress, which the next save writes over the character. Only the explicit Save Bypass setting may do that.
+inline bool PlayerStateBypassRequested(bool bypass)noexcept{return bypass;}
 enum class Outcome { Disabled,Unavailable,AlreadyTolerant,Applied,Failed,Restored,RestoreFailed };
 struct Lease {bool RestoreNeeded=false;};
 inline std::optional<bool> Parse(std::string_view value){

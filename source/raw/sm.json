@@ -43,7 +43,7 @@
           "label": "Save Bypass by default",
           "default": false,
           "restart": true,
-          "help": "On: prefer bypass. Off: relaxed native loading followed by fallback after native rejection. Keep backups and disable any standalone bypass. This does not repair damaged data.",
+          "help": "On: prefer bypass, and also enter a character whose saved state the game refused (it starts with default progress, which the next save keeps). Off: relaxed native loading followed by fallback after a rejected character check; a refused saved state stays out of the world. Keep backups and disable any standalone bypass. This does not repair damaged data.",
           "section": "persistence"
         },
         {

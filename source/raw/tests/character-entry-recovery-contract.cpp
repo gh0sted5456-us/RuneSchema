@@ -72,4 +72,17 @@ int main(int argc, char** argv)
         Need(body.find("if(!first)return;")!=body.npos&&body.find("subsequent loads should")==body.npos,
             "preserve bypass throttling and never promise future loads will not need fallback");
     }
+    {
+        // A rejected player-state load skipped its later stages; only explicit Save Bypass may accept it.
+        const auto start=recovery.find("void CharacterEntryRecovery::AcceptPlayerState(");
+        const auto kept=recovery.find("if(!MayBypassPlayerState()){ReportPlayerStateKept();return;}",start),change=recovery.find("context.rax=",start);
+        Need(kept!=recovery.npos&&kept<change,"player-state rejection must stay in place unless Save Bypass is explicitly on");
+        const auto may=recovery.find("bool MayBypassPlayerState()");
+        const auto mayBody=recovery.substr(may,recovery.find("}}",may)-may);
+        Need(may!=recovery.npos&&mayBody.find("PlayerStateBypassRequested(")!=mayBody.npos&&mayBody.find("allowCorruptCharacterEntry")!=mayBody.npos
+                &&mayBody.find("quickLaunch")==mayBody.npos&&mayBody.find("IsDedicatedServer")==mayBody.npos,
+            "launch mode and dedicated servers must not accept a rejected player state");
+        Need(recovery.find("[SAVE-ENTRY][PLAYER-STATE][KEPT]")!=recovery.npos&&recovery.find("PlayerStateKept.exchange(true)")!=recovery.npos,
+            "a kept player-state rejection is reported once per session");
+    }
 }

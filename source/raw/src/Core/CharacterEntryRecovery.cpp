@@ -20,12 +20,19 @@
 
 using namespace RC;
 namespace {
-std::atomic_bool Reported=false,PlayerStateReported=false;
+std::atomic_bool Reported=false,PlayerStateReported=false,PlayerStateKept=false;
 bool MayBypass()noexcept{try{
     const auto& settings=PS::PSConfig::Get()->GetSettings();
     return PS::NativePersistencePolicy::BypassRequested(PS::Storefront::IsDedicatedServer(),
         settings.persistence.allowCorruptCharacterEntry,settings.quickLaunch.mode);
 }catch(...){return false;}}
+bool MayBypassPlayerState()noexcept{try{
+    return PS::NativePersistencePolicy::PlayerStateBypassRequested(PS::PSConfig::Get()->GetSettings().persistence.allowCorruptCharacterEntry);
+}catch(...){return false;}}
+void ReportPlayerStateKept()noexcept{try{
+    if(PlayerStateKept.exchange(true))return;
+    PS::Log<LogLevel::Warning>(STR("[SAVE-ENTRY][PLAYER-STATE][KEPT] The game could not load this character's saved state and kept it out of the world. RuneSchema left that in place so the character is not entered with default progress and saved over. Save Bypass enters anyway; keep a backup first.\n"));
+}catch(...){}}
 bool StandaloneBypassEnabledOrLoaded() {
     // enabled.txt starts after mods.txt, regardless of a mods.txt :0 entry.
     const auto mods=PS::HostServices::WorkingDirectory()/"Mods";
@@ -114,7 +121,7 @@ void CharacterEntryRecovery::Initialize() {
     State=forced?"Ready: Save Bypass by default":"Armed: automatic fallback after native rejection";
     PS::ConsolidatedLog<LogLevel::Normal>(STR("[RuneSchema] [SAVE-ENTRY][READY] {}. Native work runs first; bypass changes only a rejected return, without replaying a load or repairing data.\n"),forced?STR("Save Bypass by default"):STR("Automatic fallback after native rejection"));
 }
-void CharacterEntryRecovery::Shutdown(){PlayerStateHook={};AcceptanceHook={};Reported=false;PlayerStateReported=false;State="Disabled for this session";}
+void CharacterEntryRecovery::Shutdown(){PlayerStateHook={};AcceptanceHook={};Reported=false;PlayerStateReported=false;PlayerStateKept=false;State="Disabled for this session";}
 bool CharacterEntryRecovery::IsActive() const noexcept{return static_cast<bool>(AcceptanceHook)&&static_cast<bool>(PlayerStateHook);}
 void CharacterEntryRecovery::AcceptCharacter(SafetyHookContext& context) {
     if(context.rax&0xffu)return;
@@ -132,6 +139,7 @@ void CharacterEntryRecovery::AcceptCharacter(SafetyHookContext& context) {
 void CharacterEntryRecovery::AcceptPlayerState(SafetyHookContext& context) {
     if(context.rax&0xffu)return;
     if(!MayBypass())return;
+    if(!MayBypassPlayerState()){ReportPlayerStateKept();return;}
     context.rax=PS::CharacterEntryBypassPlan::AcceptRejected(context.rax);
     const auto token=PS::CharacterLoadAudit::Token();
     if(token)PS::LoadProtectionNotice::Record(PS::CharacterLoadAudit::Current.Character,0,0,true);
