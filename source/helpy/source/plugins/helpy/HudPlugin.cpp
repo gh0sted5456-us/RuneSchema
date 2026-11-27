@@ -12,7 +12,7 @@
 
 namespace {
 using Json=nlohmann::json;
-constexpr RuneSchemaPluginDescriptor Descriptor{sizeof(RuneSchemaPluginDescriptor),1,"RuneSchema.HUD","RuneSchema shared HUD","0.9.0.7HF"};
+constexpr RuneSchemaPluginDescriptor Descriptor{sizeof(RuneSchemaPluginDescriptor),1,"RuneSchema.HUD","RuneSchema shared HUD","0.9.0.8"};
 std::atomic<const RuneSchemaHostApi*> Host=nullptr;
 std::mutex Gate;
 struct Client{std::string Owner;DWORD Pid{};HANDLE Process{},Wake{};std::string LastError;bool UiReady=false;uint32_t Command=RS_HUD_COMMAND_NONE;};

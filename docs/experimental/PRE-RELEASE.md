@@ -1,6 +1,6 @@
 ---
 channel: experimental
-promote_to: RELEASE-0.9.0.7.md
+promote_to: RELEASE-0.9.0.8.md
 ---
 
 # RuneSchema integration changelog
@@ -9,7 +9,10 @@ RuneSchema 0.9.0.7 has been promoted to main. See [the release notes](../RELEASE
 
 <span id="pending-changelog"></span>
 
-## 0.9.0.7HF hotfix candidate
+## 0.9.0.8 pre-release
+
+[Downloads and verification limits](../RELEASE-0.9.0.8.md). This includes the
+0.9.0.7HF settings and saved Helpy authorization changes below.
 
 - Settings Menu's verified server PIN unlock saves full Helpy authorization for
   the connected character using RuneSchema's existing authorized-player list.
@@ -23,7 +26,7 @@ See the [hotfix downloads and changelog](../RELEASE-0.9.0.7HF.md) and
 
 ## Changes since 0.8.0.3
 
-### Pending after 0.9.0.7 · November 26
+### 0.9.0.8: registry isolation and save-entry protection · November 26
 
 **For players**
 

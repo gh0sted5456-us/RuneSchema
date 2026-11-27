@@ -2,8 +2,8 @@
   "SchemaVersion": 1,
   "Id": "RuneSchema.RegistryBridge",
   "Name": "RuneSchema Registry Bridge",
-  "Version": "0.9.0.7HF",
-  "BuiltForRuneSchema": "0.9.0.7HF",
+  "Version": "0.9.0.8",
+  "BuiltForRuneSchema": "0.9.0.8",
   "ConsoleMessage": "RuneSchema shared registry bridge content is available.",
   "Capabilities": [
     "bridge.registry-content"

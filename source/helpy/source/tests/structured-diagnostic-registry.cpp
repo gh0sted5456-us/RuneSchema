@@ -2,7 +2,7 @@
 #include <cassert>
 #include <string_view>
 using namespace PS;
-static_assert(StructuredDiagnosticRegistry::All.size()==227);
+static_assert(StructuredDiagnosticRegistry::All.size()==228);
 static_assert(StructuredDiagnosticRegistry::Find("RS-BLD-001")!=nullptr);
 static_assert(StructuredDiagnosticRegistry::Find("RS-BLD-001")->TypicalSeverity=="Error");
 static_assert(StructuredDiagnosticRegistry::Find("RS-BLD-022")->TypicalSeverity=="Warning");
@@ -10,6 +10,8 @@ static_assert(StructuredDiagnosticRegistry::Find("RS-BLD-023")->TypicalSeverity=
 static_assert(StructuredDiagnosticRegistry::Find("RS-JRN-001")->LegacyCollision);
 static_assert(StructuredDiagnosticRegistry::Find("RS-JRN-002")->LegacyCollision);
 static_assert(StructuredDiagnosticRegistry::Find("RS-SPAWN-001")->LegacyCollision);
+static_assert(StructuredDiagnosticRegistry::Find("RS-RGST-016")!=nullptr);
+static_assert(StructuredDiagnosticRegistry::Find("RS-RGST-016")->TypicalSeverity=="Warning");
 static_assert(StructuredDiagnosticRegistry::Find("RS-MISSING-999")==nullptr);
 int main(){
     std::size_t errors=0,warnings=0,information=0,collisions=0;
@@ -23,5 +25,5 @@ int main(){
         collisions+=row.LegacyCollision;
         assert(StructuredDiagnosticRegistry::Find(row.Code)==&row);
     }
-    assert(errors==151&&warnings==75&&information==1&&collisions==3);
+    assert(errors==151&&warnings==76&&information==1&&collisions==3);
 }

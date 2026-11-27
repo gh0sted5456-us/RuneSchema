@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "RuneSchema",
   "name": "RuneSchema",
-  "version": "0.9.0.7HF",
+  "version": "0.9.0.8",
   "description": "RuneSchema settings use the same INI file as Helpy. A successful server PIN check grants saved full Helpy authorization. Each connected player keeps their own personal settings.",
   "runsOn": "yours",
   "config": {

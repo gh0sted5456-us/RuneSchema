@@ -4,7 +4,7 @@
 #include <string_view>
 namespace PS::StructuredDiagnosticRegistry {
 struct Entry { std::string_view Code, TypicalSeverity, Description, ProducerSite; bool LegacyCollision; };
-inline constexpr std::array<Entry,227> All{{
+inline constexpr std::array<Entry,228> All{{
     {"RS-ASSET-001","Error","Asset target remained unresolved","src/Loader/DragonWildsAssetModLoader.cpp",false},
     {"RS-ASSET-002","Warning","Asset definition has invalid root","src/Loader/DragonWildsAssetModLoader.cpp",false},
     {"RS-ASSET-003","Warning","Asset property modification rejected","src/Loader/DragonWildsAssetModLoader.cpp",false},
@@ -214,6 +214,7 @@ inline constexpr std::array<Entry,227> All{{
     {"RS-RGST-013","Error","Cooked registry lane rejected","src/Misc/DragonWildsDataRegistrar.cpp",false},
     {"RS-RGST-014","Warning","Cooked asset discovery unavailable","src/Misc/DragonWildsDataRegistrar.cpp",false},
     {"RS-RGST-015","Error","Cooked discovery safety cap exceeded","src/Misc/DragonWildsDataRegistrar.cpp",false},
+    {"RS-RGST-016","Warning","Registry declaration left out","src/Loader/DragonWildsRegistryLoader.cpp",false},
     {"RS-SPAWN-001","Error","Spawn document root is invalid","src/Loader/DragonWildsSpawnLoader.cpp",true},
     {"RS-SPAWN-002","Error","Spawn definition was rejected","src/Loader/DragonWildsSpawnLoader.cpp",false},
     {"RS-SPAWN-003","Error","Spawn patch target not loaded","src/Loader/DragonWildsSpawnLoader.cpp",false},

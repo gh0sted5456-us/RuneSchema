@@ -1,8 +1,8 @@
 {
   "SchemaVersion": 1,
   "Id": "RuneSchema.Helpy",
-  "Version": "0.9.0.7HF",
-  "BuiltForRuneSchema": "0.9.0.7HF",
+  "Version": "0.9.0.8",
+  "BuiltForRuneSchema": "0.9.0.8",
   "EntryPoint": "RuneSchema.Helpy.dll",
   "ConsoleMessage": "Helpy is ready. Configure its shortcut, in-game FPS counter and theme reload in Home > Quick settings.",
   "Capabilities": [
