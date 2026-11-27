@@ -1,6 +1,9 @@
 #include "Generator/CharacterNativeData.h"
 #include "Core/CharacterWorkbench.h"
+#include "Core/CharacterSkillEdit.h"
+#include "SDK/Helper/EquipmentDelivery.h"
 #include "SDK/WeakObjectHandle.h"
+#include "Unreal/World.hpp"
 #include "SDK/Structs/FSoftObjectPtr.h"
 #include "SDK/Helper/PropertyHelper.h"
 #include "Unreal/Property/FEnumProperty.hpp"
@@ -26,6 +29,7 @@
 #include <algorithm>
 #include <charconv>
 #include <set>
+#include <format>
 // Native character data read by Helpy's character sheet: appearance choices,
 // skill levels and the inventory page layout. Game-thread only; nothing here
 // spawns actors or touches a live player pawn.
@@ -104,6 +108,52 @@ Json Skills(const Json& draft){
             auto* name=CastField<FTextProperty>(Member(skill,L"Name"));const auto title=name?to_string(DragonWilds::PropertyHelper::GetTextAsString(*name->ContainerPtrToValuePtr<FText>(skill))):to_string(skill->GetName());row.update({{"Resolved",true},{"Name",title},{"Path",to_string(skill->GetPathName())},{"Icon",PS::AssetSearch::PresentationIcon(skill)},{"Level",level},{"MaxLevel",max}});
         }rows.push_back(row);
     }return {{"Items",rows},{"Thresholds",thresholds},{"Native",true}};
+}
+Json SaveSkillLevel(UObject* controller,const Json& request){
+    namespace C=DragonWilds::ReflectedContract;
+    const auto edit=CharacterSkillEdit::Parse(request);
+    EquipmentDelivery::Call authority(controller,L"/Script/Engine.Actor:HasAuthority",1);authority.Invoke();
+    EquipmentDelivery::Call character(controller,L"/Script/Dominion.DominionPlayerControllerBase:GetCharacterGuid",1);character.Invoke();const auto guid=character.Identity();
+    CharacterSkillEdit::RequireOwner(edit,std::format("{:08X}{:08X}{:08X}{:08X}",guid[0],guid[1],guid[2],guid[3]),authority.Bool());
+    auto* pawn=DragonWilds::ActorHelper::GetObjectRef(controller,L"Pawn");if(!pawn||!controller->GetWorld()||pawn->GetWorld()!=controller->GetWorld())throw std::runtime_error("Load the selected character into a world before saving skills");
+    const Json probe={{"GameProgress",{{"Skills",{{"Skills",Json::array({{{"Id",edit.Skill},{"Xp",0}}})}}}}}};
+    const auto native=Skills(probe);const auto& row=native.at("Items").at(0);
+    if(!row.value("Resolved",false)||edit.Level>row.at("MaxLevel").get<int>())throw std::runtime_error("The skill or requested level is unavailable in the native game");
+    const int desired=native.at("Thresholds").at(edit.Level-1).get<int>();
+    auto* data=Load(to_wstring(row.at("Path").get<std::string>()));
+    auto* component=EquipmentDelivery::Owned(controller,L"SkillComponent",L"/Script/Dominion.SkillComponent");
+    auto* field=CastField<FArrayProperty>(Member(component,L"Skills"));auto* inner=field?CastField<FStructProperty>(field->GetInner()):nullptr;
+    auto* type=inner?inner->GetStruct().Get():nullptr;
+    if(!field||field->GetSize()!=sizeof(FScriptArray)||!type||type->GetPropertiesSize()<1||type->GetPropertiesSize()>512||type->GetPathName()!=L"/Script/Dominion.Skill"||inner->GetElementSize()!=type->GetPropertiesSize())throw std::runtime_error("Native skills array contract changed");
+    auto* xp=CastField<FIntProperty>(type->FindProperty(FName(L"CurrentXP",FNAME_Find)));auto* skill=CastField<FObjectProperty>(type->FindProperty(FName(L"SkillData",FNAME_Find)));
+    if(!C::Fits(xp,type->GetPropertiesSize())||xp->GetSize()!=sizeof(int32_t)||!C::Fits(skill,type->GetPropertiesSize())||skill->GetSize()!=sizeof(UObject*)||!skill->GetPropertyClass()||!data->IsA(skill->GetPropertyClass().Get()))throw std::runtime_error("Native skill XP fields changed");
+    auto* array=field->ContainerPtrToValuePtr<FScriptArray>(component);if(!array||array->Num()<1||array->Num()>128||!array->GetData())throw std::runtime_error("Native skills are not loaded");
+    int32_t* target=nullptr;for(int i=0;i<array->Num();++i){auto* record=static_cast<uint8_t*>(array->GetData())+size_t(i)*inner->GetElementSize();if(skill->GetObjectPropertyValue(skill->ContainerPtrToValuePtr<void>(record))==data){if(target)throw std::runtime_error("Native skill identity is ambiguous");target=xp->ContainerPtrToValuePtr<int32_t>(record);}}
+    if(!target||*target<0)throw std::runtime_error("Selected character has no valid native skill XP");
+    Call notify(component,L"/Script/Dominion.SkillComponent:OnRep_Skills");
+    auto* previous=CastField<FArrayProperty>(notify.Prop(L"PreviousSkills"));auto* previousInner=previous?CastField<FStructProperty>(previous->GetInner()):nullptr;
+    if(C::Count(notify.Fn)!=1||!C::Input(previous,notify.Fn)||!previousInner||previousInner->GetStruct().Get()!=type)throw std::runtime_error("Native skill notification contract changed");
+    previous->CopyCompleteValue(notify.Value(L"PreviousSkills"),array);
+    Call levelCheck(component,L"/Script/Dominion.SkillComponent:GetSkillLevel");levelCheck.Obj(L"SkillData",data);(void)levelCheck.Integer();if(C::Count(levelCheck.Fn)!=2)throw std::runtime_error("Native skill level getter changed");
+    auto* persistence=DragonWilds::ActorHelper::GetObjectRef(controller,L"PersistenceSubsystem");Call save(persistence,L"/Script/Dominion.PersistenceSubsystem:SavePlayerState");
+    if(C::Count(save.Fn)!=1||!C::Input(save.Prop(L"DomPC"),save.Fn))throw std::runtime_error("Native character save contract changed");save.Obj(L"DomPC",controller);
+    const WeakObjectHandle controllerIdentity(controller),pawnIdentity(pawn),componentIdentity(component),worldIdentity(controller->GetWorld());
+    const auto stillOwned=[&]{return controllerIdentity.Get()==controller&&pawnIdentity.Get()==pawn&&componentIdentity.Get()==component&&worldIdentity.Get()==controller->GetWorld()
+        &&DragonWilds::ActorHelper::GetObjectRef(controller,L"Pawn")==pawn&&DragonWilds::ActorHelper::GetObjectRef(controller,L"SkillComponent")==component;};
+    if(!stillOwned())throw std::runtime_error("Character changed before applying skills");
+    const int before=*target;
+    // Notify with an owned copy of the previous array; never serialize an old full-character draft.
+    if(before!=desired){*target=desired;notify.Invoke();}
+    if(!stillOwned())throw std::runtime_error("Character changed during skill update; save was not requested");
+    auto* current=field->ContainerPtrToValuePtr<FScriptArray>(component);
+    if(!current||current->Num()<1||current->Num()>128||!current->GetData())throw std::runtime_error("Native skills changed during update");
+    int matched=0;for(int i=0;i<current->Num();++i){auto* record=static_cast<uint8_t*>(current->GetData())+size_t(i)*inner->GetElementSize();if(skill->GetObjectPropertyValue(skill->ContainerPtrToValuePtr<void>(record))==data){++matched;if(*xp->ContainerPtrToValuePtr<int32_t>(record)!=desired)throw std::runtime_error("Native skill XP read-back disagrees; inspect the character before retrying");}}
+    if(matched!=1)throw std::runtime_error("Native skill identity changed during update");
+    levelCheck.Invoke();if(levelCheck.Integer()!=edit.Level)throw std::runtime_error("Skill changed but native level read-back disagrees; inspect the character before retrying");
+    Json result={{"CharacterGuid",edit.Character},{"SkillId",edit.Skill},{"Level",edit.Level},{"XP",desired},{"Applied",true},{"SaveRequested",false}};
+    try{if(!stillOwned())throw std::runtime_error("Character changed before its native save request");save.Invoke();result["SaveRequested"]=true;result["Status"]="Skill applied; native character save requested on its owning platform.";}
+    catch(const std::exception& error){result["Status"]=std::string("Skill applied, but the native save request failed: ")+error.what();}
+    return result;
 }
 Json InventoryLayout(){
     Json result=Json::array();auto* type=Load(L"/Script/Dominion.PagedInventoryWithLogComponent");if(!type->IsA<UClass>())throw std::runtime_error("Native paged inventory class unavailable");TArray<UObject*> components;UECustom::UObjectGlobals::GetObjectsOfClass(static_cast<UClass*>(type),components,true);

@@ -8,6 +8,10 @@ inline Json StudioAppearance=Json::object(),StudioSelected=Json::object(),Studio
 inline Json StudioSkills=Json::object(),StudioSavedLoadout=Json::array(),StudioSections=Json::object(),StudioTransferResult=Json::object();
 inline bool StudioSkillsRequested=false,StudioSectionsRequested=false;
 inline std::map<std::string,int> StudioSkillDrafts;
+inline uint64_t StudioSkillPending=0,StudioSkillGeneration=0,StudioSkillSequence=0x7600000000000000ull;
+inline std::string StudioSkillCharacter,StudioSkillFile,StudioSkillStatus;
+inline std::chrono::steady_clock::time_point StudioSkillStarted{};
+
 inline std::set<std::string> StudioSectionPicks;
 inline std::string StudioBackupPick,StudioTransferTarget;
 inline bool StudioSectionStore=false,StudioCleanConfirm=false,StudioTransferReplace=false;
@@ -34,6 +38,31 @@ inline const Json* StudioCurrentSave(const Json& list,const std::string& guid,co
         if(match)return nullptr;match=&row;
     }return match;
 }
+inline bool StudioSkillAutoSave(){
+    const auto* live=StudioCurrentSave(AuthoringClient::Result("SaveEditorList"),LiveCharacterGuid,LiveCharacterPlatform);
+    return live&&live->value("Path",std::string{})==File&&HelpyPersonalization::Guid(Browser.value("CharacterGuid",std::string{}))==HelpyPersonalization::Guid(LiveCharacterGuid);
+}
+inline void StudioSaveSkill(const std::string& skill,int level){
+    if(StudioSkillPending||!StudioSkillAutoSave())return;
+    const auto id=++StudioSkillSequence;
+    Json request={{"Action","SetSkillLevel"},{"_RequestId",id},{"_Source","HelpyStandalone"},{"Generation",SpawnToolRequests::CurrentGeneration()},
+        {"CharacterGuid",Browser.at("CharacterGuid")},{"SkillId",skill},{"Level",level}};
+    if(SpawnToolRequests::TrySubmit(std::move(request))){StudioSkillPending=id;StudioSkillGeneration=SpawnToolRequests::CurrentGeneration();StudioSkillCharacter=HelpyPersonalization::Guid(Browser.at("CharacterGuid"));StudioSkillFile=File;StudioSkillStarted=std::chrono::steady_clock::now();StudioSkillStatus="Applying skill and requesting a native save…";}
+    else StudioSkillStatus="Game tools are busy; the skill edit was not sent.";
+}
+inline void StudioPollSkill(){
+    if(!StudioSkillPending)return;
+    if(StudioSkillGeneration!=SpawnToolRequests::CurrentGeneration()){StudioSkillPending=0;StudioSkillStatus="World changed; skill save unconfirmed. No automatic retry.";return;}
+    Json receipt;if(SpawnToolRequests::TakeCompleted(StudioSkillPending,receipt)){
+        StudioSkillPending=0;
+        if(StudioSkillFile!=File||StudioSkillCharacter!=HelpyPersonalization::Guid(Browser.value("CharacterGuid",std::string{}))){StudioSkillStatus.clear();return;}
+        StudioSkillStatus=receipt.value("Status",std::string("Skill save unconfirmed; inspect the character before retrying."));
+        const auto result=receipt.value("SkillEdit",Json::object());
+        if(CharacterSkillEdit::Receipt(result)&&result.value("Applied",false)&&HelpyPersonalization::Guid(result.value("CharacterGuid",std::string{}))==StudioSkillCharacter&&StudioSkills.contains("Items")){
+            for(auto& row:StudioSkills["Items"])if(row.at("Id")==result.at("SkillId")){row["Level"]=result.at("Level");row["XP"]=result.at("XP");StudioSkillDrafts.erase(row.at("Id").get<std::string>());}
+        }
+    }else if(std::chrono::steady_clock::now()-StudioSkillStarted>std::chrono::seconds(65)){StudioSkillPending=0;StudioSkillStatus="Skill save result timed out. No automatic retry.";}
+}
 inline void StudioSelectSave(const std::string& path,const std::string& name,const std::string& guid={}){
     if(Opened&&path==File&&(guid.empty()||HelpyPersonalization::Guid(guid)==HelpyPersonalization::Guid(Browser.value("CharacterGuid",std::string{}))))return;
     if(Opened){StudioPendingSave=path;StudioPendingName=name;StudioPendingGuid=guid;StudioSwitchSave=true;return;}
@@ -41,6 +70,7 @@ inline void StudioSelectSave(const std::string& path,const std::string& name,con
     if(!AuthoringClient::Busy()){Json args={{"Path",File},{"CopyOnly",true}};if(!guid.empty())args["CharacterGuid"]=guid;AuthoringClient::Submit("SaveEditorOpen",args);}
 }
 inline void StudioForget(){
+    StudioSkillStatus.clear();
     StudioAppearance=Json::object();StudioAppearanceRequested=false;StudioSkillsRequested=false;StudioSkills=Json::object();StudioSkillDrafts.clear();
     StudioSavedLoadout=Json::array();StudioSections=Json::object();StudioSectionsRequested=false;StudioSectionPicks.clear();StudioBackupPick.clear();StudioCleanConfirm=false;
     StudioTransferResult=Json::object();StudioTransferReplace=false;StudioAddition=Json::object();StudioSelected=Json::object();
@@ -205,15 +235,17 @@ inline void StudioAppearanceControls(){
     StudioPaintKit();
 }
 inline void StudioSkillControls(){
+    StudioPollSkill();const bool autosave=StudioSkillAutoSave();
     if(!StudioSkillsRequested&&!AuthoringClient::Busy())StudioSkillsRequested=AuthoringClient::Submit("SaveEditorSkills");
     if(!StudioSkills.contains("Items")){ImGui::TextDisabled("Resolving skills…");if(StudioSkillsRequested&&HelpyImGuiTheme::SoftButton("Retry"))StudioSkillsRequested=false;return;}
     if(ImGui::BeginTable("##saved-skill-levels",3,ImGuiTableFlags_SizingStretchProp|ImGuiTableFlags_BordersInnerH)){
         ImGui::TableSetupColumn("Skill",ImGuiTableColumnFlags_WidthStretch);ImGui::TableSetupColumn("Level",ImGuiTableColumnFlags_WidthFixed,85);ImGui::TableSetupColumn("",ImGuiTableColumnFlags_WidthFixed,50);
         for(const auto& row:StudioSkills["Items"]){const auto id=row.at("Id").get<std::string>();ImGui::PushID(id.c_str());ImGui::TableNextRow();ImGui::TableNextColumn();const auto at=ImGui::GetCursorScreenPos();const float size=HelpyImGuiTheme::Current.Y(26);const auto icon=row.value("Icon",std::string{});if(!icon.empty())ItemIconCache::Draw(icon,at,{at.x+size,at.y+size},true);ImGui::Dummy({size,size});ImGui::SameLine();ImGui::TextWrapped("%s",row.at("Name").get_ref<const std::string&>().c_str());ImGui::TableNextColumn();
-            if(row.value("Resolved",false)){auto [value,inserted]=StudioSkillDrafts.try_emplace(id,row.at("Level").get<int>());ImGui::SetNextItemWidth(-1);ImGui::InputInt("##level",&value->second,0,0);ImGui::TableNextColumn();ImGui::BeginDisabled(value->second<1||value->second>row.at("MaxLevel").get<int>()||AuthoringClient::Busy());if(HelpyImGuiTheme::SoftButton("Stage"))AuthoringClient::Submit("SaveEditorSkillSet",{{"Id",id},{"Level",value->second},{"Revision",StudioAppearance.at("Revision")}});ImGui::EndDisabled();}
+            if(row.value("Resolved",false)){auto [value,inserted]=StudioSkillDrafts.try_emplace(id,row.at("Level").get<int>());ImGui::SetNextItemWidth(-1);ImGui::BeginDisabled(StudioSkillPending!=0);const bool entered=ImGui::InputInt("##level",&value->second,0,0,ImGuiInputTextFlags_EnterReturnsTrue);const bool finished=ImGui::IsItemDeactivatedAfterEdit();ImGui::EndDisabled();ImGui::TableNextColumn();const bool valid=value->second>=1&&value->second<=row.at("MaxLevel").get<int>();ImGui::BeginDisabled(!valid||AuthoringClient::Busy()||StudioSkillPending!=0);const bool clicked=HelpyImGuiTheme::SoftButton(autosave?"Save":"Stage");ImGui::EndDisabled();if(valid&&!AuthoringClient::Busy()&&!StudioSkillPending){if(autosave&&(clicked||((entered||finished)&&value->second!=row.at("Level").get<int>())))StudioSaveSkill(id,value->second);else if(!autosave&&clicked)AuthoringClient::Submit("SaveEditorSkillSet",{{"Id",id},{"Level",value->second},{"Revision",StudioAppearance.at("Revision")}});}}
             else{ImGui::TextDisabled("Unresolved");ImGui::TableNextColumn();}ImGui::PopID();
         }ImGui::EndTable();
-    }ImGui::TextDisabled("Levels use native XP thresholds · save draft only");
+    }ImGui::TextDisabled(autosave?"Levels use native XP thresholds · Enter or leave the field to apply and request a native save":"Load this character on its own platform for automatic skill saves; offline edits stage a copy.");
+    if(!StudioSkillStatus.empty())ImGui::TextWrapped("%s",StudioSkillStatus.c_str());
 }
 // Saved loadout, read-only: equipment changes belong to the live player's gear menu.
 // Compact: a short strip above the inventory, read with the inventory page.

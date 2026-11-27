@@ -261,7 +261,7 @@ void DragonWildsSpawnLoader::HandleNetworkHelpyMarks(UObject* player,const std::
 std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,const std::string& action,const std::string& payload) {
     if(!player || !player->GetWorld() || !GetGameMode(player->GetWorld()))
         throw std::runtime_error("Helpy authority request did not arrive in an authoritative world");
-    if(action!="GiveItems" && action!="MapTeleport" && action!="HelpyRemoteAccess" && action!="Spawn" && action!="Players" && action!="InventoryMarks" && action!="NativeServerAdmin" && action!="DestroyItem")
+    if(action!="GiveItems" && action!="MapTeleport" && action!="HelpyRemoteAccess" && action!="Spawn" && action!="Players" && action!="InventoryMarks" && action!="NativeServerAdmin" && action!="DestroyItem" && action!="SetSkillLevel")
         throw std::runtime_error("Helpy authority action is not permitted");
     if(payload.empty() || payload.size()>256*1024)
         throw std::runtime_error("Helpy authority payload exceeds the safe bound");
@@ -375,6 +375,15 @@ std::string DragonWildsSpawnLoader::HandleNetworkHelpyAuthority(UObject* player,
     const bool savedAccess=PS::NativeServerAdminRuntime::HelpyAuthorized(controller,playerGuid);
     const bool pinAccess=PS::HelpyRemoteAccess::Server.Allowed(peerKey,worldKey,policy.allowPinAccess,policy.accessPin);
     const bool allowlisted=isAllowlisted();
+    if(action=="SetSkillLevel"){
+        const auto edit=PS::CharacterSkillEdit::Parse(request);
+        PS::CharacterSkillEdit::RequireOwner(edit,playerGuid,savedAccess||allowlisted);
+        const auto revision=request.value("_BridgeRevision",int64_t{});
+        if(payload.size()>2048||revision<=0||!PublishHelpyResult)throw std::runtime_error("Skill save requires a correlated owning-player request");
+        const auto result=PS::CharacterNativeData::SaveSkillLevel(controller,request);
+        PublishHelpyResult(player,revision,{{"SkillEdit",result},{"Status",result.at("Status")}});
+        return "Skill save result sent to the requesting owner connection.";
+    }
     if(action=="DestroyItem"){
         // Saved access or the allowlist, never a PIN alone, and only the sender's own character.
         if(payload.size()>4096)throw std::runtime_error("Destroy request exceeds its size limit");
@@ -750,6 +759,17 @@ void DragonWildsSpawnLoader::PumpSpawnTools(PS::WorkSlice& work) {
     const char* spawnStage="recipient selection";
     try {
         const auto action=request->at("Action").get<std::string>();
+        if(action=="SetSkillLevel"){
+            if(!m_readyWorld||!IsWorldStillLoaded(m_readyWorld)||request->value("Generation",uint64_t{})!=PS::SpawnToolRequests::CurrentGeneration())throw std::runtime_error("World changed; refresh the selected character before saving skills");
+            auto* controller=FindLocalPlayerController();const auto edit=PS::CharacterSkillEdit::Parse(*request);
+            PS::CharacterSkillEdit::RequireOwner(edit,controller?GetPlayerCharacterGuid(controller):std::string{},controller&&controller->GetWorld()==m_readyWorld);
+            if(PS::Network::Detect(m_readyWorld).Mode==PS::Network::Role::Client){
+                if(request->dump().size()>2048||!ForwardHelpyAuthority||!ForwardHelpyAuthority(action,request->dump()))throw std::runtime_error("The server needs the matching RuneSchema skill-save bridge");
+                PS::SpawnToolRequests::Progress("Waiting for the server's skill-save result; no automatic retry.");return;
+            }
+            const auto result=PS::CharacterNativeData::SaveSkillLevel(controller,*request);
+            PS::SpawnToolRequests::Publish({{"SkillEdit",result},{"Status",result.at("Status")}});return;
+        }
         if(action=="NativeServerAdmin"){
             if(!m_readyWorld||!IsWorldStillLoaded(m_readyWorld)||request->value("Generation",uint64_t{})!=PS::SpawnToolRequests::CurrentGeneration())throw std::runtime_error("The current world changed; refresh server controls.");
             (void)PS::NativeServerAdmin::Operation(*request);

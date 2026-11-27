@@ -19,6 +19,8 @@
 #include "SDK/Helper/ReflectedContract.h"
 #include "SDK/Helper/PlayerStatus.h"
 #include "Runtime/NativeServerAdminRuntime.h"
+#include "Generator/CharacterNativeData.h"
+#include "Core/CharacterSkillEdit.h"
 #include "Core/SpawnCatalogSearch.h"
 #include "Generator/HelpyReferencePolicy.h"
 #include "Generator/F2CatalogPlan.h"

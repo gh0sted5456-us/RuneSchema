@@ -95,6 +95,14 @@ int Run(){
         Check(Q::TrySubmit({{"Action","GiveItems"},{"_RequestId",uint64_t{322}}}));Check(Q::Take().has_value());
         Q::Publish({{"Status","After world reset"}});Check(replies==1);
     }
+    {
+        const nlohmann::json skill={{"CharacterGuid","1234567890abcdef1234567890abcdef"},{"SkillId","native-skill"},{"Level",3},{"XP",31},{"Applied",true},{"SaveRequested",true}};
+        const nlohmann::json result={{"Status","Native save requested"},{"SkillEdit",skill}};
+        PS::HelpyRemoteResult::Assembly assembly;
+        auto packet=PS::HelpyRemoteResult::Split(result);Check(packet.size()==1);Check(assembly.Accept(packet[0]).value()==result);
+        auto bad=result;bad["SkillEdit"]["XP"]=-1;bool rejected=false;
+        try{assembly.Accept(PS::HelpyRemoteResult::Split(bad)[0]);}catch(...){rejected=true;}Check(rejected);
+    }
     return 0;
 }
 int main(){try{return Run();}catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

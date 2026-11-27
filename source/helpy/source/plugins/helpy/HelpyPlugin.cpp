@@ -112,7 +112,7 @@ std::pair<uint64_t,nlohmann::json> BuildReceipt(const nlohmann::json& result) {
     if(result.value("_InProgress",false))return {};
     const auto id=result.value("_RequestId",uint64_t{});if(!id)return {};
     nlohmann::json receipt={{"Status",result.value("Status",std::string("Completed."))}};
-    for(const auto* key:{"InventorySnapshot","EquipmentAction","InventoryAction","StorageResult","JournalCatalog","GrantResults","SpawnResult","SpawnDefinition","CloneResult","CloneSource","CloneAppearance","ItemDetails","MapSnapshot","MapBuildings","MapPoint","RecipeExportResult","RecipeWorkspaceCatalog","RecipeWorkspaceSource","ItemOverrideExportResult","KitMetadata","NativeContracts","ServerControl"})
+    for(const auto* key:{"InventorySnapshot","EquipmentAction","InventoryAction","StorageResult","JournalCatalog","GrantResults","SpawnResult","SpawnDefinition","CloneResult","CloneSource","CloneAppearance","ItemDetails","MapSnapshot","MapBuildings","MapPoint","RecipeExportResult","RecipeWorkspaceCatalog","RecipeWorkspaceSource","ItemOverrideExportResult","KitMetadata","NativeContracts","ServerControl","SkillEdit"})
         if(result.contains(key))receipt[key]=result[key];
     return {id,std::move(receipt)};
 }

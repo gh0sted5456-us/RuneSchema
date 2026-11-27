@@ -156,6 +156,7 @@ template<> struct ToolRequest<SpawnToolTag> {
             if(result.contains("JournalCatalog"))receipt["JournalCatalog"]=result["JournalCatalog"];
             if(result.contains("InventorySnapshot"))receipt["InventorySnapshot"]=result["InventorySnapshot"];
             if(result.contains("EquipmentAction"))receipt["EquipmentAction"]=result["EquipmentAction"];
+            if(result.contains("SkillEdit"))receipt["SkillEdit"]=result["SkillEdit"];
             if(result.contains("InventoryAction"))receipt["InventoryAction"]=result["InventoryAction"];
             if(result.contains("StorageResult"))receipt["StorageResult"]=result["StorageResult"];
             if(result.contains("RecipeWorkspaceSource"))receipt["RecipeWorkspaceSource"]=result["RecipeWorkspaceSource"];

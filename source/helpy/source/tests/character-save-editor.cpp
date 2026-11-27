@@ -1,4 +1,5 @@
 #include "Core/CharacterSaveEditor.h"
+#include "Core/CharacterSkillEdit.h"
 #include "Core/XboxCharacterSaves.h"
 #include "Core/NativeInventoryMarkClick.h"
 #include <fstream>
@@ -7,6 +8,16 @@
 using namespace PS::CharacterSaveEditor;
 template<class F>void Reject(F fn){bool caught=false;try{fn();}catch(const std::exception&){caught=true;}assert(caught);}
 int main(){
+    const Json skillRequest={{"CharacterGuid","1234567890abcdef1234567890abcdef"},{"SkillId","native-skill"},{"Level",99}};
+    const auto skillEdit=PS::CharacterSkillEdit::Parse(skillRequest);
+    assert(skillEdit.Character=="1234567890ABCDEF1234567890ABCDEF"&&skillEdit.Skill=="native-skill"&&skillEdit.Level==99);
+    PS::CharacterSkillEdit::RequireOwner(skillEdit,"1234567890abcdef1234567890abcdef",true);
+    Reject([&]{PS::CharacterSkillEdit::RequireOwner(skillEdit,skillEdit.Character,false);});
+    Reject([&]{PS::CharacterSkillEdit::RequireOwner(skillEdit,"2234567890ABCDEF1234567890ABCDEF",true);});
+    for(const auto& bad:Json::array({0,201,1.5,"99",nullptr})){auto request=skillRequest;request["Level"]=bad;Reject([&]{PS::CharacterSkillEdit::Parse(request);});}
+    for(const auto& bad:Json::array({"",std::string(129,'x'),"bad\nidentity"})){auto request=skillRequest;request["SkillId"]=bad;Reject([&]{PS::CharacterSkillEdit::Parse(request);});}
+    auto wrongCharacter=skillRequest;wrongCharacter["CharacterGuid"]=std::string(32,'0');Reject([&]{PS::CharacterSkillEdit::Parse(wrongCharacter);});
+
     PS::NativeInventoryMarkClick click;
     assert(click.Step(true,"stack").empty()&&click.Step(false,"stack").empty());
     assert(click.Step(true,"stack").empty()&&click.Step(false,"stack")=="stack");

@@ -11,9 +11,9 @@ promote_to: CHARACTER-SHEET.md
 # Helpy character sheet
 
 **Players → Save editor** opens a saved copy of one character. Choose a save, or
-leave **Follow current character** on. Edits stage on an isolated copy and are
-exported after review. The live character and the game's save slots are not
-changed.
+leave **Follow current character** on. Appearance, inventory and offline skill edits stage on an isolated copy and are
+exported after review. Those draft operations do not modify the live character
+or the game's save slots.
 
 The **draft bar** above the pages is the one place to finish: it says whether
 the copy has changes that are not exported yet. **Review & export** lists every
@@ -117,3 +117,25 @@ Operators are upper case, so a lower-case `or` or `not` is an ordinary word.
 An unfinished query, such as a missing `)`, still searches what it can. In live
 inventory, plain words now match anywhere in an item's name and details; use
 quotes for the old exact match.
+
+## Skill autosave candidate
+
+For the selected **active** character on its own platform, skill level edits apply
+on Enter or when you leave the field; **Save** is also available. The game uses
+its verified XP thresholds, updates that character's native skills and receives
+a `SavePlayerState` request. Steam/Epic and Game Pass use their own native save
+providers; Helpy does not write WGS blobs or synchronize other platform copies.
+
+Joined clients use RuneSchema's existing owning-player authority bridge. The
+server needs the matching implementation and saved full Helpy authorization or
+allowlist access. Requests are restricted to the sender's current character.
+Replies are correlated once; world/character changes invalidate pending UI
+results and do not trigger retries. The status distinguishes an applied edit
+from a requested native save; a request is not a completed cloud-sync receipt.
+
+Offline/imported copies retain **Stage** and reviewed export. Load the selected
+character on its own platform to use autosave. Other character draft edits
+remain separate and are never applied as a side effect of saving a skill.
+
+This implementation is an unreleased candidate. Native save/reload and perk/UI
+behavior still require disposable-character acceptance on both game platforms.

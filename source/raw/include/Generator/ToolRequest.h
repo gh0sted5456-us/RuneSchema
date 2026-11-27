@@ -162,7 +162,7 @@ template<> struct ToolRequest<SpawnToolTag> {
         for(const auto* key:{"GrantResults","KitMetadata","NativeContracts","ServerControl","SpawnResult","CloneResult",
                 "CloneSource","CloneAppearance","ItemDetails","MapSnapshot","MapBuildings","MapPoint","RecipeExportResult",
                 "RecipeWorkspaceCatalog","JournalCatalog","InventorySnapshot","EquipmentAction","InventoryAction",
-                "StorageResult","RecipeWorkspaceSource","SpawnDefinition","ItemOverrideExportResult"})
+                "StorageResult","RecipeWorkspaceSource","SpawnDefinition","ItemOverrideExportResult","SkillEdit"})
             if(const auto it=fields.find(key);it!=fields.end())receipt[key]=*it->second;
         CatalogMap pushedFields;uint64_t revision=0;
         std::map<uint64_t,nlohmann::json>::node_type oldReceipt;

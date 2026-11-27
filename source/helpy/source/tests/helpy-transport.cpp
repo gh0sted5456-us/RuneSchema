@@ -3,6 +3,7 @@
 #include "../plugins/helpy/HelpyPlugin.cpp"
 #include "Generator/SpawnToolsPanel.h"
 #include "Generator/PlayerInventoryPanel.h"
+#include "Generator/SaveEditorPanel.h"
 #include "Core/MapProjection.h"
 #include "Core/MapSpawnRequest.h"
 #include "Core/ServerModVersions.h"
@@ -258,6 +259,10 @@ int main(){
     json journalReceipt;assert(PS::SpawnToolRequests::TakeCompleted(556,journalReceipt)&&journalReceipt["JournalCatalog"]["Entries"][0]["Pages"][0]=="native text");
     StoreReceipt(&state,BuildReceipt({{"_RequestId",uint64_t(557)},{"InventorySnapshot",{{"PlayerGuid","fixture"},{"Items",json::array({{{"Name","Ash Logs"},{"Count",12}}})}}}}));
     json inventoryReceipt;assert(PS::SpawnToolRequests::TakeCompleted(557,inventoryReceipt)&&inventoryReceipt["InventorySnapshot"]["Items"][0]["Count"]==12);
+    const json skillAck={{"CharacterGuid","1234567890ABCDEF1234567890ABCDEF"},{"SkillId","native-skill"},{"Level",3},{"XP",31},{"Applied",true},{"SaveRequested",true}};
+    StoreReceipt(&state,BuildReceipt({{"_RequestId",uint64_t(558)},{"SkillEdit",skillAck},{"Status","Native save requested"}}));
+    json skillReceipt;assert(PS::SpawnToolRequests::TakeCompleted(558,skillReceipt)&&skillReceipt.at("SkillEdit")==skillAck);
+    assert(!PS::SpawnToolRequests::TakeCompleted(558,skillReceipt));
     PS::RuneSchemaSettingsPanel::Load();assert(PS::RuneSchemaSettingsPanel::Loaded&&SettingsWrites==0);
     PS::RuneSchemaSettingsPanel::Draft["advancedLogging"]=true;PS::RuneSchemaSettingsPanel::Dirty=true;
     assert(PS::RuneSchemaSettingsPanel::Patch()==json({{"/advancedLogging",true}}));
@@ -565,6 +570,25 @@ int main(){
         state.Completed[repair]={{"EquipmentAction",{{"Confirmed",true}}}};state.ToolsWaiting=false;P::Poll();assert(!P::RepairPending&&P::RepairStatus=="Durability restored."&&!P::Open);
         P::RestoreGear(player,item);assert(P::RepairPending);P::RepairStarted-=std::chrono::seconds(16);P::Poll();assert(!P::RepairPending&&P::RepairStatus.find("unconfirmed")!=std::string::npos&&!P::Open);
         state.ToolsWaiting=false;P::RestoreGear(player,item);assert(P::RepairPending);P::RepairGeneration=PS::SpawnToolRequests::CurrentGeneration()+1;P::Poll();assert(!P::RepairPending&&P::RepairStatus.find("World changed")!=std::string::npos&&!P::Open);state.ToolsWaiting=false;
+    }
+    {namespace E=PS::SaveEditorPanel;namespace A=PS::AuthoringClient;
+        const std::string guid="1234567890abcdef1234567890abcdef";
+        A::Results["SaveEditorList"]={{"Files",json::array({{{"Path","steam-character.json"},{"Provider","SteamEpic"},{"CharacterGuid",guid}},{{"Path","xbox-character"},{"Provider","GamePass"},{"CharacterGuid",guid}}})}};
+        E::LiveCharacterGuid=guid;E::LiveCharacterPlatform="Game Pass";E::Browser={{"CharacterGuid",guid}};
+        PS::AuthoringPanel::Copy(E::File,sizeof(E::File),"steam-character.json");assert(!E::StudioSkillAutoSave());
+        PS::AuthoringPanel::Copy(E::File,sizeof(E::File),"xbox-character");assert(E::StudioSkillAutoSave());
+        E::StudioSkills={{"Items",json::array({{{"Id","native-skill"},{"Level",1},{"XP",0}}})}};
+        ThrowHost=false;state.ToolsAvailable=true;state.ToolsWaiting=false;LastSubmission=json::object();
+        E::StudioSaveSkill("native-skill",3);const auto pending=E::StudioSkillPending;
+        assert(pending&&LastSubmission["Action"]=="SetSkillLevel"&&LastSubmission["CharacterGuid"]==guid&&LastSubmission["Level"]==3);
+        const auto once=LastSubmission;E::StudioSaveSkill("native-skill",2);assert(LastSubmission==once&&E::StudioSkillPending==pending);
+        state.Completed[pending]={{"SkillEdit",skillAck},{"Status","Native save requested"}};state.ToolsWaiting=false;E::StudioPollSkill();
+        assert(!E::StudioSkillPending&&E::StudioSkills["Items"][0]["Level"]==3);
+        E::StudioSaveSkill("native-skill",2);const auto stale=E::StudioSkillPending;assert(stale);
+        PS::AuthoringPanel::Copy(E::File,sizeof(E::File),"steam-character.json"); // Same GUID, different provider must not consume the old reply.
+        state.Completed[stale]={{"SkillEdit",skillAck},{"Status","Stale character result"}};state.ToolsWaiting=false;E::StudioPollSkill();
+        assert(!E::StudioSkillPending&&E::StudioSkillStatus.empty()&&E::StudioSkills["Items"][0]["Level"]==3);
+        E::LiveCharacterGuid.clear();E::Browser=json::object();E::StudioSkills=json::object();E::File[0]=0;A::Clear();
     }
     {uint32_t bytes=0;const auto revision=state.ToolsRevision;state.RelayOnly=true;assert(ToolsPush(&state,"not parsed by the game-side relay",nullptr,0,&bytes)==RS_PLUGIN_OK&&state.ToolsRevision==revision);state.RelayOnly=false;assert(ToolsPush(&state,"not JSON",nullptr,0,&bytes)==RS_PLUGIN_FAILED);}
     flushCatalog();if(state.HostRead.valid())state.HostRead.wait();ThrowHost=false;

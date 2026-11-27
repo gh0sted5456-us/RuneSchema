@@ -1,5 +1,6 @@
 #pragma once
 #include "../../../shared/NativeServerAdmin.h"
+#include "Core/CharacterSkillEdit.h"
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
@@ -36,6 +37,7 @@ public:
         if(result.contains("GrantResults")&&(!result["GrantResults"].is_array()||result["GrantResults"].size()>64))
             throw std::runtime_error("Invalid remote grant receipt rows");
         if(result.contains("ServerControl")&&!NativeServerAdmin::Snapshot(result["ServerControl"]))throw std::runtime_error("Invalid server administration snapshot");
+        if(result.contains("SkillEdit")&&!CharacterSkillEdit::Receipt(result["SkillEdit"]))throw std::runtime_error("Invalid skill-save receipt");
         Reset();return result;
     }
 };

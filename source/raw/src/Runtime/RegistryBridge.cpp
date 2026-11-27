@@ -1575,6 +1575,7 @@ void RegistryBridge::PublishHelpyResult(UObject* player,int64_t revision,const n
     if(result.contains("GrantResults"))compact["GrantResults"]=result["GrantResults"];
     if(result.contains("SpawnResult"))compact["SpawnResult"]=result["SpawnResult"];
     if(result.contains("ServerControl"))compact["ServerControl"]=result["ServerControl"];
+    if(result.contains("SkillEdit"))compact["SkillEdit"]=result["SkillEdit"];
     if(result.contains("DestroyResult"))compact["DestroyResult"]=result["DestroyResult"]; // Bounded; never the item snapshot.
     std::vector<nlohmann::json> parts;
     try{parts=PS::HelpyRemoteResult::Split(std::move(compact));}
@@ -1599,7 +1600,7 @@ bool RegistryBridge::RequestAuthority(const std::string& action,const std::strin
         const auto revision=++m_outboundRevision;
         if(action=="Players") {m_helpyRosterComponent.Assign(components[0]);m_helpyRosterRevision=revision;m_helpyRosterGeneration=PS::SpawnToolRequests::Generation.load();m_helpyRosterRequestedAt=std::chrono::steady_clock::now();}
         if(action=="HelpyRemoteAccess") {m_helpyAccessComponent.Assign(components[0]);m_helpyAccessRevision=revision;m_helpyAccessGeneration=PS::SpawnToolRequests::Generation.load();}
-        if(action=="GiveItems"||action=="MapTeleport"||action=="NativeServerAdmin"){
+        if(action=="GiveItems"||action=="MapTeleport"||action=="NativeServerAdmin"||action=="SetSkillLevel"){
             m_helpyMutationComponent.Assign(components[0]);m_helpyMutationRevision=revision;m_helpyMutationGeneration=PS::SpawnToolRequests::Generation.load();
             m_helpyMutationDeadline=std::chrono::steady_clock::now()+std::chrono::seconds(60);m_helpyResultParts.Reset();
         }

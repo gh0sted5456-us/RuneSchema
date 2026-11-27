@@ -12,6 +12,13 @@ int main(){
     SpawnToolRequests::Available=true;SpawnToolRequests::Clear();
     SpawnToolRequests::CatalogProgress({{"Items",Catalog(3)},{"Definitions",json::array({{{"Type","AI"},{"Key","a"}},{{"Type","Resource"},{"Key","r"}},{{"Type","NPC"},{"Key","n"}}})},
         {"ServerMods",json::array({"m"})},{"CatalogReady",true},{"IndexDone",5}});
+    // Skill-save acknowledgements survive the compact one-shot receipt path.
+    assert(SpawnToolRequests::TrySubmit({{"Action","SetSkillLevel"},{"_RequestId",uint64_t(7001)}}));
+    assert(SpawnToolRequests::Take());
+    const json skill={{"CharacterGuid","1234567890ABCDEF1234567890ABCDEF"},{"SkillId","native-skill"},{"Applied",true},{"SaveRequested",true}};
+    SpawnToolRequests::Publish({{"SkillEdit",skill},{"Status","Native save requested"}});
+    json skillReceipt;assert(SpawnToolRequests::TakeCompleted(7001,skillReceipt)&&skillReceipt.at("SkillEdit")==skill);
+    assert(!SpawnToolRequests::TakeCompleted(7001,skillReceipt));
     // Category views match the previous behaviour.
     uint64_t revision=0;json out;
     assert(SpawnToolRequests::ReadQuickIfChanged(revision,0,out)&&out["Items"].size()==3&&!out.contains("Definitions")&&out["_Category"]==0&&out["CatalogReady"]==true&&out["ServerMods"].size()==1);

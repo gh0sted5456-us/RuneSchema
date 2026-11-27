@@ -8,6 +8,8 @@
 #include "Generator/ItemGridPicker.h"
 #include "Generator/ItemBayBrowser.h"
 #include "Core/CharacterWorkbench.h"
+#include "Core/CharacterSkillEdit.h"
+#include "Generator/ToolRequest.h"
 #include "Core/PlayerStatus.h"
 #include "Core/LoadoutEligibility.h"
 #include "Generator/DeliveryFlagsPanel.h"
